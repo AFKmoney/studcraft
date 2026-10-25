@@ -1,9 +1,36 @@
 import type { ReactNode } from "react";
 import { ID, def, type BlockDef } from "./blocks";
 
+// Lego product-style icons (generated). Fallback to SVG if missing.
+const IMAGE_ICONS: Record<number, string> = {
+  [ID.Torch]: "/icons/torch.jpg",
+  [ID.Chest]: "/icons/chest.jpg",
+  [ID.Furnace]: "/icons/furnace.jpg",
+  [ID.Arrow]: "/icons/arrow.jpg",
+  [ID.Diamond]: "/icons/diamond.jpg",
+  [ID.Gold]: "/icons/gold.jpg",
+  [ID.Netherrack]: "/icons/netherbrick.jpg",
+  [ID.RawMeat]: "/icons/meat.jpg",
+  [ID.Fish]: "/icons/fish.jpg",
+  [ID.Bucket]: "/icons/bucket.jpg",
+  // tools / armor / food / blocks will be filled as we generate more
+};
+
 export function ItemIcon({ id, muted = false }: { id: number; muted?: boolean }) {
   if (id <= 0) return null;
   const block = def(id);
+  const img = IMAGE_ICONS[id];
+  if (img && !muted) {
+    return (
+      <img
+        className="item-icon"
+        src={img}
+        alt=""
+        style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 4 }}
+        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+      />
+    );
+  }
   const fill = muted ? "#6b6256" : block.color;
   return (
     <svg className="item-icon" viewBox="0 0 32 32" aria-hidden="true">
