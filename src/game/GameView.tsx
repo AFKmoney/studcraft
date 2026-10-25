@@ -4,6 +4,7 @@ import { BLOCKS, CATALOG, COLORS, ID, def } from "./blocks";
 import type { EnterKind, GameApi, Phase } from "./game";
 import { RECIPES } from "./recipes";
 import { CODEX, PERKS } from "./ranks";
+import { ItemIcon } from "./icons";
 import { SKILLS } from "./skills";
 import type { WorldSlot } from "./save";
 
@@ -155,7 +156,7 @@ function TitleScreen({
             aria-label="World seed"
             onChange={(e) => setSeedText(e.target.value)}
           />
-          <button className="btn" type="button" onClick={roll}>
+          <button className="btn btn-yellow" type="button" onClick={roll}>
             Roll
           </button>
         </label>
@@ -166,7 +167,7 @@ function TitleScreen({
           <button className="btn" onClick={() => onEnter("play", seedText)}>
             Creative
           </button>
-          <button className="btn" onClick={() => onEnter("flat", seedText)}>
+          <button className="btn btn-green" onClick={() => onEnter("flat", seedText)}>
             Baseplate
           </button>
         </div>
@@ -278,23 +279,12 @@ function Hud({ game }: { game: GameApi }) {
         {hud.hotbar.map((item, i) => (
           <button key={i} className={i === hud.slot ? "slot on" : "slot"} onClick={() => game.setSlot(i)}>
             <small>{i + 1}</small>
-            {item.id > 0 && <Brick color={def(item.id).color} />}
+            {item.id > 0 && <ItemIcon id={item.id} />}
             {item.id > 0 && item.count >= 0 && <em>{item.count}</em>}
           </button>
         ))}
       </div>
     </div>
-  );
-}
-
-function Brick({ color }: { color: string }) {
-  return (
-    <span className="brick-icon" style={{ background: color }}>
-      <i />
-      <i />
-      <i />
-      <i />
-    </span>
   );
 }
 
@@ -333,6 +323,10 @@ function PauseMenu({ game }: { game: GameApi }) {
           <label>
             Studs
             <input type="checkbox" checked={s.studs} onChange={(e) => game.setStuds(e.target.checked)} />
+          </label>
+          <label>
+            Realistic
+            <input type="checkbox" checked={s.realistic} onChange={(e) => game.setRealistic(e.target.checked)} />
           </label>
           <label>
             Sound
@@ -422,7 +416,7 @@ function Inventory({ game }: { game: GameApi }) {
           <div className="armor-row">
             {hud.armor.map((id, i) => (
               <button key={i} className="slot" onClick={() => game.armorTap(i)}>
-                {id > 0 ? <Brick color={def(id).color} /> : <small>{["Cap", "Shell", "Legs", "Boots"][i]}</small>}
+                {id > 0 ? <ItemIcon id={id} /> : <small>{["Cap", "Shell", "Legs", "Boots"][i]}</small>}
               </button>
             ))}
           </div>
@@ -432,11 +426,11 @@ function Inventory({ game }: { game: GameApi }) {
             <div className="craft-grid">
               {hud.grid.map((id, i) => (
                 <button key={i} className="slot" onClick={() => game.gridTap(i)} disabled={!bench && i % 3 === 2}>
-                  {id > 0 && <Brick color={def(id).color} />}
+                  {id > 0 && <ItemIcon id={id} />}
                 </button>
               ))}
               <button className="slot out" onClick={() => game.craftTake()}>
-                {hud.craftOut ? <Brick color={def(hud.craftOut.id).color} /> : <small>Out</small>}
+                {hud.craftOut ? <ItemIcon id={hud.craftOut.id} /> : <small>Out</small>}
                 {hud.craftOut && hud.craftOut.n > 1 ? <em>{hud.craftOut.n}</em> : null}
               </button>
             </div>
@@ -446,15 +440,15 @@ function Inventory({ game }: { game: GameApi }) {
         {hud.panel === "furnace" && (
           <div className="craft-grid">
             <button className="slot" onClick={() => game.furnaceTap(0)}>
-              {hud.furnace.in ? <Brick color={def(hud.furnace.in).color} /> : <small>Ore</small>}
+              {hud.furnace.in ? <ItemIcon id={hud.furnace.in} /> : <small>Ore</small>}
               {hud.furnace.inN > 0 && <em>{hud.furnace.inN}</em>}
             </button>
             <button className="slot" onClick={() => game.furnaceTap(1)}>
-              {hud.furnace.fuel ? <Brick color={def(hud.furnace.fuel).color} /> : <small>Fuel</small>}
+              {hud.furnace.fuel ? <ItemIcon id={hud.furnace.fuel} /> : <small>Fuel</small>}
               {hud.furnace.fuelN > 0 && <em>{hud.furnace.fuelN}</em>}
             </button>
             <button className="slot out" onClick={() => game.furnaceTap(2)}>
-              {hud.furnace.out ? <Brick color={def(hud.furnace.out).color} /> : <small>Out</small>}
+              {hud.furnace.out ? <ItemIcon id={hud.furnace.out} /> : <small>Out</small>}
               {hud.furnace.outN > 0 && <em>{hud.furnace.outN}</em>}
             </button>
           </div>
@@ -463,7 +457,7 @@ function Inventory({ game }: { game: GameApi }) {
           <div className="grid-blocks chest">
             {hud.chest.map((cell, i) => (
               <button key={i} onClick={() => game.chestTap(i)}>
-                {cell.id > 0 && <Brick color={def(cell.id).color} />}
+                {cell.id > 0 && <ItemIcon id={cell.id} />}
                 {cell.n > 0 && <span>{cell.n}</span>}
               </button>
             ))}
@@ -524,7 +518,7 @@ function Inventory({ game }: { game: GameApi }) {
                   game.assign(id);
                 }}
               >
-                <Brick color={def(id).color} />
+                <ItemIcon id={id} />
                 {def(id).name}
                 <span>{hud.creative ? "all" : count}</span>
               </button>
@@ -541,8 +535,23 @@ function Inventory({ game }: { game: GameApi }) {
               ))}
             </div>
             {RECIPES.filter((recipe) => book === "all" || recipe.cat === book).map((recipe) => (
-              <button key={recipe.id} className="btn" onClick={() => game.craft(recipe.id)}>
-                {recipe.name} — {recipe.detail}
+              <button key={`${recipe.id}-${recipe.name}`} className="btn recipe" onClick={() => game.craft(recipe.id)}>
+                <span className="recipe-io">
+                  {recipe.need.map(([rid, n]) => (
+                    <span key={rid} className="recipe-bit">
+                      <ItemIcon id={rid} />
+                      {n > 1 ? <em>{n}</em> : null}
+                    </span>
+                  ))}
+                  <span className="recipe-arrow" aria-hidden="true">
+                    →
+                  </span>
+                  <ItemIcon id={recipe.out > 0 ? recipe.out : ID.AxeW} />
+                </span>
+                <span className="recipe-name">
+                  {recipe.name}
+                  <small>{recipe.detail}</small>
+                </span>
               </button>
             ))}
           </div>
@@ -671,7 +680,7 @@ function Ranks({ hud, known }: { hud: GameApi["hud"]; known: Set<number> }) {
           const seen = hud.creative || known.has(entry.id);
           return (
             <li key={entry.id}>
-              <Brick color={seen ? def(entry.id).color : "var(--color-line)"} />
+              <ItemIcon id={entry.id} muted={!seen} />
               <div>
                 <strong>{seen ? def(entry.id).name : "Unknown stud"}</strong>
                 <span>{seen ? entry.where : "Not catalogued yet"}</span>

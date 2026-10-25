@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { BLOCKS, CREATIVE_BAR, ID, def } from "./blocks";
 import { createAudio } from "./audio";
 import { STUD_H, STUD_R, buildChunk, type Surface } from "./mesher";
@@ -88,6 +89,7 @@ export type GameApi = {
     radius: number;
     sound: boolean;
     studs: boolean;
+    realistic: boolean;
     third: boolean;
     mods: { hard: boolean; generous: boolean; peaceful: boolean; spells: boolean };
   };
@@ -124,6 +126,7 @@ export type GameApi = {
   setRadius: (n: number) => void;
   setSound: (on: boolean) => void;
   setStuds: (on: boolean) => void;
+  setRealistic: (on: boolean) => void;
   setThird: (on: boolean) => void;
   deleteSave: () => void;
   subscribe: (fn: () => void) => () => void;
@@ -162,6 +165,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     radius: savedSettings?.radius ?? (narrow ? 2 : 4),
     sound: savedSettings?.sound ?? true,
     studs: savedSettings?.studs ?? true,
+    realistic: savedSettings?.realistic ?? true,
     third: false,
     mods: {
       hard: savedSettings?.mods?.hard ?? false,
@@ -171,6 +175,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     },
   };
   audio.setEnabled(settings.sound);
+  plasticOn = settings.realistic;
 
   const hud: Hud = {
     hotbar: [],
@@ -317,7 +322,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, narrow ? 1.25 : 1.6));
   renderer.setClearColor(0x8ec8f5, 1);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.NoToneMapping;
+  renderer.toneMapping = settings.realistic ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
+  renderer.toneMappingExposure = settings.realistic ? 1.05 : 1;
+  renderer.shadowMap.enabled = settings.realistic;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0x8ec8f5, 28, 72);
@@ -329,7 +337,18 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   const ambient = new THREE.AmbientLight(0xffffff, 0.28);
   const sun = new THREE.DirectionalLight(0xfff4dd, 0.85);
   sun.position.set(40, 80, 20);
-  scene.add(hemi, ambient, sun);
+  sun.castShadow = settings.realistic;
+  sun.shadow.mapSize.set(narrow ? 1024 : 2048, narrow ? 1024 : 2048);
+  sun.shadow.bias = -0.0004;
+  sun.shadow.normalBias = 0.03;
+  const shadowCam = sun.shadow.camera;
+  shadowCam.left = -42;
+  shadowCam.right = 42;
+  shadowCam.top = 42;
+  shadowCam.bottom = -42;
+  shadowCam.near = 0.5;
+  shadowCam.far = 140;
+  scene.add(hemi, ambient, sun, sun.target);
   const sunMesh = new THREE.Mesh(
     new THREE.SphereGeometry(7, 16, 12),
     new THREE.MeshBasicMaterial({ color: 0xffe38a }),
@@ -346,26 +365,107 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     lamps.push(lamp);
   }
 
-  const atlas = buildAtlas();
-  const opaqueMat = new THREE.MeshLambertMaterial({ map: atlas });
-  const glassMat = new THREE.MeshLambertMaterial({
+  const atlases = buildAtlas();
+  const atlas = atlases.color;
+  const aniso = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+  atlas.anisotropy = aniso;
+  atlases.rough.anisotropy = aniso;
+  atlases.normal.anisotropy = aniso;
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const room = new RoomEnvironment();
+  const envTex = pmrem.fromScene(room, 0.04).texture;
+  room.dispose();
+  pmrem.dispose();
+  scene.environment = settings.realistic ? envTex : null;
+  scene.environmentIntensity = settings.realistic ? 0.35 : 1;
+
+  const opaqueLam = new THREE.MeshLambertMaterial({ map: atlas });
+  const glassLam = new THREE.MeshLambertMaterial({
     map: atlas,
     transparent: true,
     opacity: 0.9,
     depthWrite: false,
   });
-  const waterMat = new THREE.MeshLambertMaterial({
+  const waterLam = new THREE.MeshLambertMaterial({
     map: atlas,
     transparent: true,
     opacity: 0.62,
     depthWrite: false,
     side: THREE.DoubleSide,
   });
-  const plantMat = new THREE.MeshLambertMaterial({
+  const plantLam = new THREE.MeshLambertMaterial({
     map: atlas,
     alphaTest: 0.45,
     side: THREE.DoubleSide,
   });
+  const opaqueStd = new THREE.MeshStandardMaterial({
+    map: atlas,
+    roughness: 1,
+    metalness: 0,
+    roughnessMap: atlases.rough,
+    normalMap: atlases.normal,
+    vertexColors: true,
+    envMapIntensity: 0.4,
+  });
+  const glassStd = new THREE.MeshStandardMaterial({
+    map: atlas,
+    roughness: 0.08,
+    metalness: 0,
+    transparent: true,
+    opacity: 0.35,
+    depthWrite: false,
+    envMapIntensity: 0.7,
+    vertexColors: true,
+  });
+  const waterTime = { value: 0 };
+  const waterStd = new THREE.MeshStandardMaterial({
+    map: atlas,
+    roughness: 0.08,
+    metalness: 0,
+    transparent: true,
+    opacity: 0.55,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    envMapIntensity: 0.85,
+    vertexColors: true,
+  });
+  waterStd.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = waterTime;
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec2 vRippleUv;")
+      .replace("#include <uv_vertex>", "#include <uv_vertex>\nvRippleUv = uv;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nuniform float uTime;\nvarying vec2 vRippleUv;")
+      .replace(
+        "#include <normal_fragment_maps>",
+        `#include <normal_fragment_maps>
+        vec2 wuv = vRippleUv * 6.0;
+        float r1 = sin(wuv.x * 3.2 + uTime * 1.4) * cos(wuv.y * 2.6 - uTime * 0.9);
+        float r2 = sin((wuv.x + wuv.y) * 2.1 - uTime * 0.6);
+        normal = normalize(normal + vec3(r1, r2, 0.0) * 0.22);`,
+      )
+      .replace(
+        "#include <opaque_fragment>",
+        `float ndv = clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0);
+        float fres = pow(1.0 - ndv, 2.4);
+        diffuseColor.a = mix(0.38, 0.82, fres);
+        #include <opaque_fragment>`,
+      );
+  };
+  waterStd.customProgramCacheKey = () => "studcraft-water";
+  const plantStd = new THREE.MeshStandardMaterial({
+    map: atlas,
+    roughness: 0.86,
+    metalness: 0,
+    alphaTest: 0.45,
+    side: THREE.DoubleSide,
+    vertexColors: true,
+    envMapIntensity: 0.15,
+  });
+  let opaqueMat: THREE.Material = settings.realistic ? opaqueStd : opaqueLam;
+  let glassMat: THREE.Material = settings.realistic ? glassStd : glassLam;
+  let waterMat: THREE.Material = settings.realistic ? waterStd : waterLam;
+  let plantMat: THREE.Material = settings.realistic ? plantStd : plantLam;
 
   const chunkRoot = new THREE.Group();
   scene.add(chunkRoot);
@@ -392,9 +492,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   const cloudDummy = new THREE.Object3D();
   const clouds = new THREE.InstancedMesh(
     new THREE.BoxGeometry(10, 1.3, 6),
-    new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.88, depthWrite: false }),
+    skin(0xffffff, { transparent: true, opacity: 0.88, depthWrite: false }),
     32,
   );
+  clouds.userData.keepShadow = false;
   const cloudData = Array.from({ length: 32 }, () => ({
     ox: Math.random() * 180 - 90,
     oz: Math.random() * 180 - 90,
@@ -417,13 +518,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   highlight.visible = false;
   scene.add(highlight);
 
-  const ghostMat = new THREE.MeshLambertMaterial({
-    color: 0xffffff,
-    transparent: true,
-    opacity: 0.4,
-    depthWrite: false,
-  });
+  const ghostMat = skin(0xffffff, { transparent: true, opacity: 0.45, depthWrite: false });
   const ghost = new THREE.Group();
+  ghost.userData.keepShadow = false;
   const ghostBody = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.98, 0.98), ghostMat);
   ghost.add(ghostBody);
   const ghostStud = new THREE.Mesh(new THREE.CylinderGeometry(STUD_R, STUD_R, STUD_H, 24), ghostMat);
@@ -432,8 +529,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   ghost.visible = false;
   scene.add(ghost);
 
-  const brickMat = new THREE.MeshLambertMaterial({ color: 0xe23b2f, depthTest: false });
+  const brickMat = skin(0xe23b2f, { depthTest: false });
   const viewBrick = new THREE.Group();
+  viewBrick.userData.keepShadow = false;
   const hand = 0.32;
   viewBrick.add(new THREE.Mesh(new THREE.BoxGeometry(hand, hand, hand), brickMat));
   const handStud = new THREE.Mesh(
@@ -448,6 +546,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
 
   const fig = makeMinifig();
   fig.group.visible = false;
+  if (plasticOn) {
+    fig.group.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (mesh.isMesh) mesh.castShadow = true;
+    });
+  }
   scene.add(fig.group);
 
   type Mob = {
@@ -463,7 +567,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     dead: boolean;
     mesh: THREE.Group;
     legs: THREE.Object3D[];
-    bodyMat?: THREE.MeshLambertMaterial;
+    bodyMat?: THREE.MeshLambertMaterial | THREE.MeshStandardMaterial;
     love?: number;
     baby?: number;
     sheared?: number;
@@ -474,6 +578,79 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     roam?: boolean;
   };
   const mobs: Mob[] = [];
+
+  function wantsShadow(obj: THREE.Object3D) {
+    let cur: THREE.Object3D | null = obj;
+    while (cur) {
+      if (cur.userData.keepShadow === false) return false;
+      cur = cur.parent;
+    }
+    return settings.realistic;
+  }
+
+  function relight() {
+    plasticOn = settings.realistic;
+    renderer.toneMapping = settings.realistic ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
+    renderer.toneMappingExposure = settings.realistic ? 1.05 : 1;
+    renderer.shadowMap.enabled = settings.realistic;
+    scene.environment = settings.realistic ? envTex : null;
+    scene.environmentIntensity = settings.realistic ? 0.35 : 1;
+    sun.castShadow = settings.realistic;
+    opaqueMat = settings.realistic ? opaqueStd : opaqueLam;
+    glassMat = settings.realistic ? glassStd : glassLam;
+    waterMat = settings.realistic ? waterStd : waterLam;
+    plantMat = settings.realistic ? plantStd : plantLam;
+    for (const list of meshes.values()) {
+      for (const mesh of list) {
+        if (mesh.renderOrder === 2) mesh.material = glassMat;
+        else if (mesh.renderOrder === 1) mesh.material = waterMat;
+        else if (mesh.renderOrder === 3) mesh.material = plantMat;
+        else mesh.material = opaqueMat;
+        mesh.castShadow = settings.realistic && mesh.renderOrder !== 1 && mesh.renderOrder !== 3;
+        mesh.receiveShadow = settings.realistic;
+      }
+    }
+    const swapped = new Map<THREE.Material, THREE.Material>();
+    const olds: THREE.Material[] = [];
+    const convert = (mat: THREE.Material) => {
+      const hit = swapped.get(mat);
+      if (hit) return hit;
+      const src = mat as THREE.MeshLambertMaterial & { isMeshStandardMaterial?: boolean };
+      const std = (mat as unknown as THREE.MeshStandardMaterial).isMeshStandardMaterial;
+      if (!src.color || src.map || (!src.isMeshLambertMaterial && !std)) return mat;
+      if (settings.realistic && std) return mat;
+      if (!settings.realistic && src.isMeshLambertMaterial) return mat;
+      const next = skin(src.color.getHex(), {
+        transparent: src.transparent,
+        opacity: src.opacity,
+        depthWrite: src.depthWrite,
+        depthTest: src.depthTest,
+        side: src.side,
+      });
+      if (src.emissive) next.emissive.copy(src.emissive);
+      swapped.set(mat, next);
+      olds.push(mat);
+      return next;
+    };
+    scene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.material || Array.isArray(mesh.material)) return;
+      if ((mesh.material as THREE.MeshLambertMaterial).map) return;
+      mesh.material = convert(mesh.material);
+      const cast = wantsShadow(mesh);
+      mesh.castShadow = cast;
+      mesh.receiveShadow = cast;
+    });
+    for (const mat of olds) mat.dispose();
+    for (const mob of mobs) {
+      mob.mesh.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (mesh.userData.skin === "body" && mesh.material && !Array.isArray(mesh.material)) {
+          mob.bodyMat = mesh.material as THREE.MeshLambertMaterial;
+        }
+      });
+    }
+  }
 
   let worldTime = 0.22;
   let orbit = 0.4;
@@ -551,6 +728,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       radius: settings.radius,
       sound: settings.sound,
       studs: settings.studs,
+      realistic: settings.realistic,
       mods: { ...settings.mods },
     });
   }
@@ -893,7 +1071,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     geo.setAttribute("position", new THREE.Float32BufferAttribute(surf.pos, 3));
     geo.setAttribute("normal", new THREE.Float32BufferAttribute(surf.nor, 3));
     geo.setAttribute("uv", new THREE.Float32BufferAttribute(surf.uv, 2));
+    if (surf.col.length === surf.pos.length) geo.setAttribute("color", new THREE.Float32BufferAttribute(surf.col, 3));
+    if (surf.tan.length * 3 === surf.pos.length * 4) geo.setAttribute("tangent", new THREE.Float32BufferAttribute(surf.tan, 4));
     const mesh = new THREE.Mesh(geo, material);
+    mesh.castShadow = settings.realistic && order !== 1 && order !== 3;
+    mesh.receiveShadow = settings.realistic;
     mesh.renderOrder = order;
     return mesh;
   }
@@ -1576,7 +1758,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
 
   function dropItem(id: number, n: number, x: number, y: number, z: number) {
     if (!id || n <= 0) return;
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.22), new THREE.MeshLambertMaterial({ color: def(id).color }));
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.22), skin(def(id).color));
     mesh.position.set(x, y, z);
     scene.add(mesh);
     drops.push({
@@ -1602,7 +1784,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
 
   function launchArrow(x: number, y: number, z: number, dx: number, dy: number, dz: number, friendly: boolean) {
     const len = Math.hypot(dx, dy, dz) || 1;
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.35), new THREE.MeshLambertMaterial({ color: 0xf4f1ea }));
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.35), skin(0xf4f1ea));
     scene.add(mesh);
     shots.push({ x, y, z, vx: (dx / len) * 18, vy: (dy / len) * 18, vz: (dz / len) * 18, life: 2.4, friendly, mesh });
   }
@@ -3102,12 +3284,29 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const far = settings.radius * CS + 18;
     fog.near = far * 0.42;
     fog.far = far;
-    hemi.intensity = 0.25 + Math.max(0, sunH) * 0.4;
     hemi.color.setHex(sunH > 0 ? 0xcfe6ff : 0x22304e);
-    ambient.intensity = 0.22 + Math.max(0, sunH) * 0.12;
-    sun.intensity = 0.15 + Math.max(0, sunH) * 0.85;
     sun.color.setHex(sunH > 0 ? 0xfff2d2 : 0x6d7eaa);
-    sun.position.set(sunX * 60, sunH * 50 + 8, 24);
+    if (settings.realistic) {
+      hemi.intensity = 0.16 + Math.max(0, sunH) * 0.32;
+      ambient.intensity = 0.22 + Math.max(0, sunH) * 0.05;
+      sun.intensity = 0.08 + Math.max(0, sunH) * 1.85;
+      scene.environmentIntensity = 0.16 + Math.max(0, sunH) * 0.22;
+      const texel = 84 / (narrow ? 1024 : 2048);
+      const px = Math.round(player.x / texel) * texel;
+      const py = Math.round((player.y + 1) / texel) * texel;
+      const pz = Math.round(player.z / texel) * texel;
+      const lift = 48;
+      sun.target.position.set(px, py, pz);
+      sun.position.set(px + sunX * lift, py + Math.max(12, sunH * lift + 18), pz + 14);
+      sun.castShadow = sunH > 0.05;
+      sun.shadow.camera.updateProjectionMatrix();
+    } else {
+      hemi.intensity = 0.25 + Math.max(0, sunH) * 0.4;
+      ambient.intensity = 0.22 + Math.max(0, sunH) * 0.12;
+      sun.intensity = 0.15 + Math.max(0, sunH) * 0.85;
+      sun.position.set(sunX * 60, sunH * 50 + 8, 24);
+      sun.castShadow = false;
+    }
     sunMesh.position.set(player.x + sunX * 150, player.y + sunH * 90 + 10, player.z + 30);
     moonMesh.position.set(player.x - sunX * 150, player.y - sunH * 90 + 16, player.z - 20);
     sunMesh.visible = sunH > -0.1;
@@ -3215,6 +3414,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     timer.update();
     const dt = Math.min(timer.getDelta(), 0.05);
     elapsed += dt;
+    waterTime.value = elapsed;
     const w = canvas.clientWidth || 1;
     const h = canvas.clientHeight || 1;
     const pr = Math.min(window.devicePixelRatio || 1, touchMode ? 1.25 : 1.6);
@@ -3925,6 +4125,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       persistSettings();
       emit();
     },
+    setRealistic(on) {
+      settings.realistic = on;
+      relight();
+      persistSettings();
+      emit();
+    },
     setThird(on) {
       settings.third = on;
       emit();
@@ -4018,12 +4224,22 @@ function radial(x: number, y: number, dz: number) {
   return { x: x * scale, y: y * scale };
 }
 
+let plasticOn = true;
+
+function skin(
+  color: number | string,
+  extra: { transparent?: boolean; opacity?: number; depthWrite?: boolean; depthTest?: boolean; side?: THREE.Side } = {},
+) {
+  if (plasticOn) return new THREE.MeshStandardMaterial({ color, roughness: 0.38, metalness: 0, ...extra });
+  return new THREE.MeshLambertMaterial({ color, ...extra });
+}
+
 function makeMinifig() {
   const group = new THREE.Group();
-  const yellow = new THREE.MeshLambertMaterial({ color: 0xf3d37a });
-  const red = new THREE.MeshLambertMaterial({ color: 0xe23b2f });
-  const blue = new THREE.MeshLambertMaterial({ color: 0x1f5fbf });
-  const black = new THREE.MeshLambertMaterial({ color: 0x241c16 });
+  const yellow = skin(0xf3d37a);
+  const red = skin(0xe23b2f);
+  const blue = skin(0x1f5fbf);
+  const black = skin(0x241c16);
   const legL = pivotBox(0.18, 0.46, 0.22, blue, -0.1, 0.46, 0);
   const legR = pivotBox(0.18, 0.46, 0.22, blue, 0.1, 0.46, 0);
   const torso = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.42, 0.24), red);
@@ -4055,10 +4271,11 @@ function pivotBox(w: number, h: number, d: number, mat: THREE.Material, x: numbe
 
 function makeAnimal(bodyColor: number, face: number, scale: number) {
   const group = new THREE.Group();
-  const bodyMat = new THREE.MeshLambertMaterial({ color: bodyColor });
-  const faceMat = new THREE.MeshLambertMaterial({ color: face });
-  const legMat = new THREE.MeshLambertMaterial({ color: 0x2a241c });
+  const bodyMat = skin(bodyColor);
+  const faceMat = skin(face);
+  const legMat = skin(0x2a241c);
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.42, 0.78), bodyMat);
+  body.userData.skin = "body";
   body.position.y = 0.48;
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.32, 0.32), bodyMat);
   head.position.set(0, 0.72, -0.42);

@@ -1,7 +1,7 @@
 import { ATLAS_COLS, ATLAS_ROWS, ID, def, faceTile } from "./blocks";
 import { CS, HEIGHT, type World } from "./world";
 
-export type Surface = { pos: number[]; nor: number[]; uv: number[] };
+export type Surface = { pos: number[]; nor: number[]; uv: number[]; col: number[]; tan: number[] };
 
 const FACES = [
   { n: [1, 0, 0], v: [[1, 0, 1], [1, 0, 0], [1, 1, 0], [1, 1, 1]] },
@@ -13,7 +13,7 @@ const FACES = [
 ];
 
 function empty(): Surface {
-  return { pos: [], nor: [], uv: [] };
+  return { pos: [], nor: [], uv: [], col: [], tan: [] };
 }
 
 function uvs(tile: number): [number, number, number, number] {
@@ -30,7 +30,7 @@ function uvs(tile: number): [number, number, number, number] {
   return [u0, vBot, u1, vTop];
 }
 
-function pushQuad(s: Surface, v: number[][], n: number[], tile: number) {
+function pushQuad(s: Surface, v: number[][], n: number[], tile: number, shade?: number[]) {
   const [u0, v0, u1, v1] = uvs(tile);
   const uv = [
     [u0, v0],
@@ -38,11 +38,20 @@ function pushQuad(s: Surface, v: number[][], n: number[], tile: number) {
     [u1, v1],
     [u0, v1],
   ];
-  const order = [0, 1, 2, 0, 2, 3];
+  const ao = shade ?? [1, 1, 1, 1];
+  const flip = ao[0] + ao[2] < ao[1] + ao[3];
+  const order = flip ? [1, 2, 3, 1, 3, 0] : [0, 1, 2, 0, 2, 3];
+  const tx = v[1][0] - v[0][0];
+  const ty = v[1][1] - v[0][1];
+  const tz = v[1][2] - v[0][2];
+  const tl = Math.hypot(tx, ty, tz) || 1;
   for (const i of order) {
     s.pos.push(v[i][0], v[i][1], v[i][2]);
     s.nor.push(n[0], n[1], n[2]);
     s.uv.push(uv[i][0], uv[i][1]);
+    const c = ao[i];
+    s.col.push(c, c, c);
+    s.tan.push(tx / tl, ty / tl, tz / tl, 1);
   }
 }
 
@@ -54,6 +63,8 @@ function pushPoly(s: Surface, verts: number[][], normals: number[][], cu: number
     s.pos.push(p[0], p[1], p[2]);
     s.nor.push(n[0], n[1], n[2]);
     s.uv.push(cu, cv);
+    s.col.push(1, 1, 1);
+    s.tan.push(1, 0, 0, 1);
   }
 }
 
@@ -122,6 +133,27 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean)
   const plant = empty();
   const x0 = cx * CS;
   const z0 = cz * CS;
+  const AO = [0.58, 0.74, 0.88, 1];
+
+  function occludes(id: number) {
+    if (!id) return 0;
+    const block = def(id);
+    return block.solid && !block.glass && !block.fluid ? 1 : 0;
+  }
+
+  function shadeAt(x: number, y: number, z: number, nx: number, ny: number, nz: number, vx: number, vy: number, vz: number) {
+    const steps: number[][] = [];
+    if (nx === 0) steps.push([vx === 0 ? -1 : 1, 0, 0]);
+    if (ny === 0) steps.push([0, vy === 0 ? -1 : 1, 0]);
+    if (nz === 0) steps.push([0, 0, vz === 0 ? -1 : 1]);
+    const a = steps[0] ?? [0, 0, 0];
+    const b = steps[1] ?? [0, 0, 0];
+    const s1 = occludes(world.get(x + nx + a[0], y + ny + a[1], z + nz + a[2]));
+    const s2 = occludes(world.get(x + nx + b[0], y + ny + b[1], z + nz + b[2]));
+    const corner = occludes(world.get(x + nx + a[0] + b[0], y + ny + a[1] + b[1], z + nz + a[2] + b[2]));
+    const level = s1 && s2 ? 0 : 3 - (s1 + s2 + corner);
+    return AO[level];
+  }
 
   for (let lz = 0; lz < CS; lz++) {
     for (let lx = 0; lx < CS; lx++) {
@@ -211,7 +243,8 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean)
             y + vy - ny * pull,
             z + vz - nz * pull,
           ]);
-          pushQuad(surf, verts, face.n, tile);
+          const shade = face.v.map(([vx, vy, vz]) => shadeAt(x, y, z, nx, ny, nz, vx, vy, vz));
+          pushQuad(surf, verts, face.n, tile, shade);
           if (fancy && ny > 0 && !self.fluid && self.solid && !n.plant) addStud(surf, x, y, z, faceTile(id, 0));
         }
       }

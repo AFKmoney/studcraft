@@ -11,39 +11,70 @@ function shade(hex: string, amt: number): string {
 
 function paintTop(ctx: CanvasRenderingContext2D, ox: number, oy: number, base: string, rings = false) {
   const S = TILE;
+  const seam = Math.max(2, Math.round(S * 0.047));
   ctx.fillStyle = base;
   ctx.fillRect(ox, oy, S, S);
+  const wash = ctx.createLinearGradient(ox, oy, ox, oy + S);
+  wash.addColorStop(0, "rgba(255,255,255,0.14)");
+  wash.addColorStop(0.45, "rgba(255,255,255,0)");
+  wash.addColorStop(1, "rgba(0,0,0,0.12)");
+  ctx.fillStyle = wash;
+  ctx.fillRect(ox, oy, S, S);
+  ctx.strokeStyle = "rgba(255,255,255,0.06)";
+  ctx.lineWidth = 1;
+  const seed = (ox * 3 + oy) | 0;
+  for (let i = 0; i < 5; i++) {
+    const yy = oy + ((seed + i * 19) % (S - 8)) + 4;
+    ctx.beginPath();
+    ctx.moveTo(ox + 6, yy);
+    ctx.lineTo(ox + S - 6, yy + ((i & 1) === 0 ? 1 : 0));
+    ctx.stroke();
+  }
   ctx.fillStyle = "rgba(255,255,255,0.16)";
   ctx.beginPath();
   ctx.ellipse(ox + S * 0.4, oy + S * 0.36, S * 0.2, S * 0.14, -0.4, 0, Math.PI * 2);
   ctx.fill();
   ctx.strokeStyle = "rgba(0,0,0,0.28)";
-  ctx.lineWidth = S * 0.055;
+  ctx.lineWidth = S * 0.045;
   ctx.beginPath();
   ctx.arc(ox + S / 2, oy + S / 2, S * 0.36, 0, Math.PI * 2);
   ctx.stroke();
   if (rings) {
     ctx.strokeStyle = shade(base, -26);
-    ctx.lineWidth = 2;
+    ctx.lineWidth = Math.max(2, S * 0.02);
     ctx.beginPath();
     ctx.arc(ox + S / 2, oy + S / 2, S * 0.22, 0, Math.PI * 2);
     ctx.stroke();
   }
   ctx.fillStyle = "rgba(0,0,0,0.5)";
-  ctx.fillRect(ox, oy, S, 3);
-  ctx.fillRect(ox, oy + S - 3, S, 3);
-  ctx.fillRect(ox, oy, 3, S);
-  ctx.fillRect(ox + S - 3, oy, 3, S);
+  ctx.fillRect(ox, oy, S, seam);
+  ctx.fillRect(ox, oy + S - seam, S, seam);
+  ctx.fillRect(ox, oy, seam, S);
+  ctx.fillRect(ox + S - seam, oy, seam, S);
 }
 
 function paintSide(ctx: CanvasRenderingContext2D, ox: number, oy: number, base: string, cap?: string) {
   const S = TILE;
   ctx.fillStyle = base;
   ctx.fillRect(ox, oy, S, S);
+  const wash = ctx.createLinearGradient(ox, oy, ox + S, oy + S);
+  wash.addColorStop(0, "rgba(255,255,255,0.08)");
+  wash.addColorStop(1, "rgba(0,0,0,0.1)");
+  ctx.fillStyle = wash;
+  ctx.fillRect(ox, oy, S, S);
   ctx.fillStyle = shade(base, 26);
   ctx.fillRect(ox, oy, S, S * 0.12);
   ctx.fillStyle = shade(base, -32);
   ctx.fillRect(ox, oy + S * 0.18, S, S * 0.08);
+  ctx.strokeStyle = "rgba(255,255,255,0.045)";
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 3; i++) {
+    const yy = oy + S * (0.34 + i * 0.16);
+    ctx.beginPath();
+    ctx.moveTo(ox + 4, yy);
+    ctx.lineTo(ox + S - 4, yy);
+    ctx.stroke();
+  }
   ctx.fillStyle = "rgba(0,0,0,0.22)";
   ctx.fillRect(ox, oy + S * 0.86, S, S * 0.14);
   ctx.fillRect(ox, oy, S * 0.06, S);
@@ -52,12 +83,13 @@ function paintSide(ctx: CanvasRenderingContext2D, ox: number, oy: number, base: 
     ctx.fillStyle = cap;
     ctx.fillRect(ox, oy, S, S * 0.26);
     ctx.fillStyle = "rgba(255,255,255,0.22)";
-    ctx.fillRect(ox, oy, S, 3);
+    ctx.fillRect(ox, oy, S, Math.max(2, S * 0.04));
   }
 }
 
 function paintBottom(ctx: CanvasRenderingContext2D, ox: number, oy: number, base: string) {
   const S = TILE;
+  const seam = Math.max(2, Math.round(S * 0.047));
   ctx.fillStyle = shade(base, -8);
   ctx.fillRect(ox, oy, S, S);
   ctx.fillStyle = shade(base, -48);
@@ -70,10 +102,10 @@ function paintBottom(ctx: CanvasRenderingContext2D, ox: number, oy: number, base
   ctx.arc(ox + S / 2, oy + S / 2, S * 0.3, 0, Math.PI * 2);
   ctx.stroke();
   ctx.fillStyle = "rgba(0,0,0,0.45)";
-  ctx.fillRect(ox, oy, S, 3);
-  ctx.fillRect(ox, oy + S - 3, S, 3);
-  ctx.fillRect(ox, oy, 3, S);
-  ctx.fillRect(ox + S - 3, oy, 3, S);
+  ctx.fillRect(ox, oy, S, seam);
+  ctx.fillRect(ox, oy + S - seam, S, seam);
+  ctx.fillRect(ox, oy, seam, S);
+  ctx.fillRect(ox + S - seam, oy, seam, S);
 }
 
 function paintGlass(ctx: CanvasRenderingContext2D, ox: number, oy: number) {
@@ -197,7 +229,29 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
   else paintSide(ctx, ox, oy, block.side, block.id === ID.Grass ? block.top : undefined);
 }
 
-export function buildAtlas(): THREE.CanvasTexture {
+function hash01(n: number) {
+  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+function finish(canvas: HTMLCanvasElement, colorSpace: THREE.ColorSpace) {
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = colorSpace;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true;
+  tex.anisotropy = 4;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+export type BrickAtlases = {
+  color: THREE.CanvasTexture;
+  rough: THREE.CanvasTexture;
+  normal: THREE.CanvasTexture;
+};
+
+export function buildAtlas(): BrickAtlases {
   const canvas = document.createElement("canvas");
   canvas.width = ATLAS_COLS * TILE;
   canvas.height = ATLAS_ROWS * TILE;
@@ -210,14 +264,73 @@ export function buildAtlas(): THREE.CanvasTexture {
       const tile = block.id * 4 + face;
       const col = tile % ATLAS_COLS;
       const row = Math.floor(tile / ATLAS_COLS);
+      if (row >= ATLAS_ROWS) continue;
       paintSpecial(ctx, block, col * TILE, row * TILE, face);
     }
   }
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  tex.generateMipmaps = false;
-  tex.needsUpdate = true;
-  return tex;
+
+  const T = 32;
+  const rw = ATLAS_COLS * T;
+  const rh = ATLAS_ROWS * T;
+  const roughCanvas = document.createElement("canvas");
+  roughCanvas.width = rw;
+  roughCanvas.height = rh;
+  const normalCanvas = document.createElement("canvas");
+  normalCanvas.width = rw;
+  normalCanvas.height = rh;
+  const rctx = roughCanvas.getContext("2d", { alpha: true });
+  const nctx = normalCanvas.getContext("2d", { alpha: true });
+  if (!rctx || !nctx) throw new Error("Could not build brick maps");
+  const roughPx = rctx.createImageData(rw, rh);
+  const normalPx = nctx.createImageData(rw, rh);
+  for (const block of BLOCKS) {
+    if (!block) continue;
+    for (let face = 0; face < 4; face++) {
+      const tile = block.id * 4 + face;
+      const col = tile % ATLAS_COLS;
+      const row = Math.floor(tile / ATLAS_COLS);
+      if (row >= ATLAS_ROWS) continue;
+      const ox = col * T;
+      const oy = row * T;
+      for (let py = 0; py < T; py++) {
+        for (let px = 0; px < T; px++) {
+          const i = ((oy + py) * rw + (ox + px)) * 4;
+          const nse = hash01(block.id * 17 + face * 131 + px * 13 + py * 29);
+          const seam = px < 2 || py < 2 || px > T - 3 || py > T - 3;
+          let rough = 0.3 + (nse - 0.5) * 0.1;
+          if (seam) rough += 0.14;
+          const dx = (px + 0.5) / T - 0.5;
+          const dy = (py + 0.5) / T - 0.5;
+          const dist = Math.hypot(dx, dy);
+          if (face === 0 && dist > 0.28 && dist < 0.4) rough -= 0.08;
+          const g = Math.max(0, Math.min(255, rough * 255));
+          roughPx.data[i] = g;
+          roughPx.data[i + 1] = g;
+          roughPx.data[i + 2] = g;
+          roughPx.data[i + 3] = 255;
+          let nx = (nse - 0.5) * 0.05;
+          let ny = (hash01(nse * 91.3) - 0.5) * 0.05;
+          let nz = 1;
+          if (face === 0) {
+            const groove = Math.exp(-((dist - 0.34) * (dist - 0.34)) / 0.0011);
+            nx += dx * groove * 0.55;
+            ny += -dy * groove * 0.55;
+          }
+          const len = Math.hypot(nx, ny, nz) || 1;
+          normalPx.data[i] = Math.max(0, Math.min(255, (nx / len) * 127 + 128));
+          normalPx.data[i + 1] = Math.max(0, Math.min(255, (ny / len) * 127 + 128));
+          normalPx.data[i + 2] = Math.max(0, Math.min(255, (nz / len) * 127 + 128));
+          normalPx.data[i + 3] = 255;
+        }
+      }
+    }
+  }
+  rctx.putImageData(roughPx, 0, 0);
+  nctx.putImageData(normalPx, 0, 0);
+
+  return {
+    color: finish(canvas, THREE.SRGBColorSpace),
+    rough: finish(roughCanvas, THREE.LinearSRGBColorSpace),
+    normal: finish(normalCanvas, THREE.LinearSRGBColorSpace),
+  };
 }

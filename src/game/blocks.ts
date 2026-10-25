@@ -723,7 +723,7 @@ export function faceTile(id: number, face: 0 | 1 | 2 | 3): number {
 
 export const ATLAS_COLS = 16;
 export const ATLAS_ROWS = 32;
-export const TILE = 64;
+export const TILE = 128;
 
 export const CATALOG = [
   ID.Grass,

@@ -52,6 +52,7 @@ export type SettingsSave = {
   radius: number;
   sound: boolean;
   studs: boolean;
+  realistic?: boolean;
   mods?: { hard: boolean; generous: boolean; peaceful: boolean; spells: boolean };
 };
 
