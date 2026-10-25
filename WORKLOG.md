@@ -21,7 +21,7 @@
 - Standalone APK build path.
 
 ### Lego Aesthetic (PARTIAL → TARGET)
-- Blocks have studs (mesher.ts).
+- Blocks have studs (mesher.ts). LDraw-inspired dimensions (pitch 20, stud Ø12, height 4 LDU scaled).
 - Colors match classic Lego palette.
 - Need: more brick-specific shapes (slopes, plates, tiles, minifig-scale elements?), better stud geometry, brick outlines/seams, minifig player option?, LDraw export (future).
 
@@ -41,7 +41,7 @@
 - [ ] Expand biome set + structures (start with desert + ocean).
 - [ ] Complete redstone wire + basic gates.
 - [ ] Full Ender Dragon encounter or End portal.
-- [ ] Improve Lego stud visual (more detail, brick texture seams).
+- [x] Improve Lego stud visual (more detail, brick texture seams) — CLAIMED by Grok 2026-10-25, starting analysis of mesher.ts.
 - [ ] Inventory overhaul for closer vanilla feel.
 - [ ] Add more recipes and vanilla items.
 - [ ] Performance pass on mesher + chunk loading.
@@ -62,4 +62,13 @@ npm run dev
 Open the preview. Seed + Survival.
 
 ---
+## Session Log
+
+### 2026-10-25 — Grok (this agent)
+- Created WORKLOG.md as the sync point.
+- Analyzed current state: strong Minecraft-like core with Lego studs already present (LDraw-scaled).
+- Claimed next visual pass on studs / brick seams in mesher.ts.
+- Files: mesher.ts (stud geometry already detailed with bevel), blocks.ts, game.ts, world.ts.
+- Next: enhance stud rendering or add brick outline seams without breaking mesh performance.
+
 *Agents: append below. Keep it factual and short.*
