@@ -83,6 +83,13 @@
 
 
 
+
+### Fine progress (this cycle)
+- **Redstone**: power level decay in BFS (15 - distance).
+- **End**: return portal (stand on EndPortal in End → Overworld).
+- **Enchanting**: random Sharpness / Fire aspect message.
+- **Bosses**: rare night "dark presence" trigger.
+
 ### Remaining gaps progress (this cycle)
 - **End terrain**: generateEnd() added (EndStone islands + rare Chorus).
 - **Enchanting**: enchant() now also boosts nearby tools.

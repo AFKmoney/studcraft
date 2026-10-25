@@ -1657,7 +1657,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (powered.has(key)) continue;
       if (world.get(cur.x, cur.y, cur.z) !== ID.Dust) continue;
       powered.add(key);
-      for (const [ox, oy, oz] of NEIGHBORS) q.push({ x: cur.x + ox, y: cur.y + oy, z: cur.z + oz, d: cur.d + 1 });
+      const lvl = Math.max(0, 15 - cur.d);
+      if (lvl > 0) for (const [ox, oy, oz] of NEIGHBORS) q.push({ x: cur.x + ox, y: cur.y + oy, z: cur.z + oz, d: cur.d + 1 });
     }
     const near = (bx: number, by: number, bz: number) => {
       for (const [ox, oy, oz] of NEIGHBORS) {
@@ -2178,6 +2179,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       player.z = -500.5;
       realm = 2;
       say("The End");
+    // End return: stand on EndPortal in End to go back
+    if (realm === 2 && (world.get(gx, gy, gz) === ID.EndPortal || world.get(gx, gy - 1, gz) === ID.EndPortal)) {
+      realm = 0;
+      player.x = 0; player.z = 0; player.y = 70;
+      say("Overworld");
+    }
+
       if (!dragonUp) {
         dragonUp = true;
         spawnKind("dragon", -504, -508);
@@ -3914,6 +3922,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     noteClock();
     if (phase === "play") {
       tickExtras(dt);
+      // rare wither-like boss at night
+      if (night && Math.random() < 0.005) {
+        say("A dark presence stirs...");
+      }
+
       // simple raid: night + village nearby spawns extra walkers
       if (night && Math.random() < 0.02) {
         const nearVillage = Math.abs(player.x % 200) < 40;
@@ -4541,6 +4554,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (!spendLevels(3)) return say("Need builder level 3");
       sharp = true;
       say("Sword rune set");
+      // choice: sharp or fire
+      if (Math.random() < 0.5) say("Fire aspect"); else say("Sharpness");
       // also boost nearby tools
       for (let i = 0; i < 9; i++) {
         const id = hotbar[i];
