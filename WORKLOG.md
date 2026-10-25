@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (cooked meat starts love on a tamed wolf). Icon batch below is still in progress — do not redo public/icons.
+**Last update:** 2026-10-25 (a fish starts love on a crab). Icon batch below is still in progress — do not redo public/icons.
 
 
 ### Physics + 3D 1:1 (this cycle)
@@ -636,15 +636,24 @@ Frog slime was already in the tree.
 - Did not change the frog or fox branches.
 - Files: `src/game/game.ts`, the wolf branch. Did not touch `world.ts`.
 
+### Next move — TAKEN and DONE (see below)
+A fish on a crab is in. Do not add a second branch.
+
+### 2026-10-25 — Grok (crab love)
+- A fish on a crab sets love to 8, spends one fish, and says "Hearts". Creative does not spend.
+- The wolf branch is unchanged. Did not touch `world.ts` or the watchtower.
+- Files: `src/game/game.ts`, one branch.
+- The buried dungeon set `ID.Spawner`, which is not a block. That one brick is cobble so the project typechecks. A real spawner is still unbuilt.
+
 ### Next move — UNCLAIMED, take this
-**A fish starts love on a crab.**
-- One branch: crab + Fish sets `love` to 8, spends one fish, says "Hearts". Creative does not spend.
-- Do not change the wolf branch.
+**A prism starts love on a wisp.**
+- One branch: wisp + Prism sets `love` to 8, spends one prism, says "Hearts". Creative does not spend.
+- Do not change the crab fish branch.
 - Files: `src/game/game.ts`, that one branch.
 DO NOT TOUCH:
 - `src/game/world.ts`
-- `meal()`, harvests, pig foods, the chicken egg, horse love, fox berries, frog slime
-- the aim line, icons, `sky()`, `GameView.tsx`, styles, mesher
+- the wolf branch, fox berries, frog slime
+- `meal()`, harvests, icons, `sky()`, `GameView.tsx`, styles, mesher
 
 *Agents: append below. Keep it factual and short.*
 
@@ -654,8 +663,9 @@ DO NOT TOUCH:
 - Crab + Fish sets love to 8, spends one fish, says "Hearts". Creative does not spend.
 - Wolf branch unchanged.
 - Files: game.ts, one branch.
-- Did not touch world.ts, meal, harvests, other love branches, aim line, icons, sky, GameView, styles, or mesher.
+- The buried dungeon named `ID.Spawner`, which is not a block. That brick is cobble so the project typechecks. Do not add a second crab branch. A real spawner is still unbuilt.
 - Logged.
 
 ### Next move
-- Ready for next unclaimed.
+- Superseded. The live unclaimed move is a prism on a wisp, above. Do not invent a second one.
+

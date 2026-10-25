@@ -1087,7 +1087,7 @@ function stampDungeon(world: World, x: number, y: number, z: number) {
     }
   }
   world.set(x, y, z, ID.Chest);
-  world.set(x + 1, y, z, ID.Spawner);
+  world.set(x + 1, y, z, ID.Cobble);
 }
 
 function stampWreck(world: World, x: number, y: number, z: number) {
