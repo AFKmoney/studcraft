@@ -16,6 +16,11 @@
 
 
 
+
+### Structures (this cycle)
+- Added rare ruined well (cobble + water) in overworld generation.
+- Block icons + recipes for Basalt/Calcite/Tuff complete.
+
 ### Recipes for new blocks (this cycle)
 - Basalt, Calcite, Tuff now craftable (4 stone/sand/cobble → 4).
 - Block icon coverage complete (all put() blocks mapped).

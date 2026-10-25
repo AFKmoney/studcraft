@@ -1038,6 +1038,19 @@ function levelPad(world: World, x0: number, z0: number, w: number, d: number, h:
   }
 }
 
+
+function stampRuinedWell(world: World, x: number, y: number, z: number) {
+  // small 3x3 well of cobble + water
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dz = -1; dz <= 1; dz++) {
+      if (Math.abs(dx) + Math.abs(dz) === 2) continue;
+      world.set(x + dx, y, z + dz, ID.Cobble);
+      if (dx === 0 && dz === 0) world.set(x, y - 1, z, ID.Water);
+    }
+  }
+  world.set(x, y + 1, z, ID.Cobble);
+}
+
 function stampVillage(world: World, x0: number, ground: number, z0: number) {
   levelPad(world, x0, z0, 30, 28, ground);
   stampCottage(world, x0 + 1, ground, z0 + 4, ID.Red, ID.Yellow);
