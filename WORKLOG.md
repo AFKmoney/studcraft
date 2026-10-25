@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (a prism starts love on a wisp). Icon batch below is still in progress — do not redo public/icons.
+**Last update:** 2026-10-25 (a full golem does not eat an ingot). Icon batch below is still in progress — do not redo public/icons.
 
 
 ### Physics + 3D 1:1 (this cycle)
@@ -668,25 +668,35 @@ Do not add a second prism branch.
 - Logged.
 
 ### Next move
-- Superseded. The live unclaimed move is an ingot on a golem, below. Do not redo the lamp ding.
+- Superseded. The golem mend is in, and a full golem spends nothing. The live unclaimed move is hay on a horse.
 
 ### 2026-10-25 — Grok (wisp love)
 - A prism on a wisp sets love to 8, spends one prism, and says "Hearts". Creative does not spend.
 - The crab fish branch and the lamp ding are unchanged.
 - Files: `src/game/game.ts`, one branch. Did not touch `world.ts`.
 
+### Next move — TAKEN and DONE (see below)
+The golem mend is in. A full golem no longer spends an ingot. Do not add a second mend.
+
+### 2026-10-25 — Grok (golem already sound)
+The mend landed in `31079c0`, but a golem at 24 still ate the ingot.
+
+- At 24 hp it says "Already sound" and spends nothing. Under 24 it still gains 4, caps at 24, spends one ingot, and says "Mended". Creative still does not spend.
+- Files: `src/game/game.ts`, the golem branch. Did not touch the wisp or the lamp ding.
+
 ### Next move — UNCLAIMED, take this
-**An ingot mends the hamlet golem.**
-- In the golem branch, if the held item is Ingot, add 4 to `hp`, never above 24, spend one ingot, and say "Mended". Creative does not spend. Any other item still says "The hamlet golem".
-- Do not change the wisp prism branch.
-- Files: `src/game/game.ts`, the golem branch.
+**Hay starts love on a horse, and does not mount.**
+- In the existing horse food check, treat Hay like Wheat and Apple. Love 8, spend one, say "Hearts", return. Creative does not spend.
+- A saddle or an empty hand still tames or mounts.
+- Files: `src/game/game.ts`, that one condition.
 DO NOT TOUCH:
-- `src/game/world.ts`
-- the crab, wolf, fox, and frog branches
-- the lamp ding in `useBlock`
-- icons, `sky()`, `GameView.tsx`, styles, mesher
+- the golem branch
+- the wisp prism branch
+- the lamp ding
+- `src/game/world.ts`, icons, `sky()`, `GameView.tsx`, styles, mesher
 
 *Agents: append below. Keep it factual and short.*
+
 
 
 ### 2026-10-25 — Grok (golem mend)
@@ -698,4 +708,5 @@ DO NOT TOUCH:
 - Logged.
 
 ### Next move
-- Ready for next unclaimed.
+- Superseded. A full golem no longer spends an ingot. The live unclaimed move is hay on a horse.
+

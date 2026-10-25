@@ -2714,6 +2714,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
     if (mob.kind === "golem") {
       if (held === ID.Ingot) {
+        if ((mob.hp ?? 0) >= 24) {
+          say("Already sound");
+          return;
+        }
         mob.hp = Math.min(24, (mob.hp ?? 0) + 4);
         if (!creative) spend(ID.Ingot, 1);
         say("Mended");
