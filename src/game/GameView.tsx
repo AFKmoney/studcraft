@@ -440,7 +440,7 @@ function Inventory({ game }: { game: GameApi }) {
                 {hud.craftOut && hud.craftOut.n > 1 ? <em>{hud.craftOut.n}</em> : null}
               </button>
             </div>
-        <p className="fine">Shift-click (PC) or long-press (mobile) moves a stack between the bar and the bin.</p>
+        <p className="fine">Shift-click (PC), long-press or double-tap (mobile) moves a stack between the bar and the bin.</p>
           </>
         )}
         {hud.panel === "furnace" && (
@@ -522,10 +522,19 @@ function Inventory({ game }: { game: GameApi }) {
                 onClick={(e) => {
                   if (e.shiftKey) {
                     game.shiftStack(id);
-                  } else {
-                    game.hold(id);
-                    game.assign(id);
+                    return;
                   }
+                  // double-tap (mobile hybrid) also moves the stack
+                  const now = Date.now();
+                  const last = (e.currentTarget as HTMLButtonElement).dataset.tap ?? "0";
+                  if (now - Number(last) < 320) {
+                    game.shiftStack(id);
+                    (e.currentTarget as HTMLButtonElement).dataset.tap = "0";
+                    return;
+                  }
+                  (e.currentTarget as HTMLButtonElement).dataset.tap = String(now);
+                  game.hold(id);
+                  game.assign(id);
                 }}
                 onPointerDown={() => {
                   const start = Date.now();

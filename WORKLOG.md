@@ -285,3 +285,13 @@ DO NOT TOUCH:
 
 ### Next move
 - Mobile inventory gestures (swipe / double-tap) or more farming polish.
+
+### 2026-10-25 — Grok (mobile inventory double-tap)
+- Added double-tap on catalog items to move the stack (same as shift-click / long-press).
+- Hybrid: PC keeps shift-click, mobile gets long-press + double-tap.
+- Updated the fine-print hint in the inventory.
+- Files: GameView.tsx.
+- Logged.
+
+### Next move
+- More farming polish or hotbar swipe on mobile.
