@@ -195,6 +195,9 @@ export const ID = {
   RedTorch: 193,
   RedTorchOn: 194,
   Repeater: 195,
+  Comparator: 215,
+  Observer: 216,
+  ObserverOn: 217,
   Pumpkin: 196,
   Melon: 197,
   Mushroom: 198,
@@ -759,6 +762,26 @@ put(
     dust: true,
   }),
 );
+put(
+  b(ID.Comparator, "Comparator", "#8e959c", "#e23b2f", "#4a4038", "#2a2218", {
+    solid: false,
+    hard: 0.2,
+    dust: true,
+  }),
+);
+put(
+  b(ID.Observer, "Observer", "#6e767e", "#c5ccd3", "#4a4038", "#2a2218", {
+    hard: 0.4,
+    solid: true,
+  }),
+);
+put(
+  b(ID.ObserverOn, "Observer pulse", "#f5c518", "#ffe14a", "#4a4038", "#2a2218", {
+    hard: 0.4,
+    solid: true,
+    drop: ID.Observer,
+  }),
+);
 put(b(ID.Pumpkin, "Pumpkin", "#e07a20", "#f07820", "#c45a10", "#8d3e08", { hard: 0.45 }));
 put(b(ID.Melon, "Melon", "#3aaa4c", "#2f7d3a", "#c45a32", "#8d3e18", { hard: 0.5 }));
 put(
@@ -935,6 +958,8 @@ export const CATALOG = [
   ID.Piston,
   ID.RedTorch,
   ID.Repeater,
+  ID.Comparator,
+  ID.Observer,
   ID.Hard,
   ID.Farmland,
   ID.Red,

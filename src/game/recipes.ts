@@ -100,6 +100,8 @@ export const RECIPES: Recipe[] = [
   r("piston", "Pusher", "1 ingot + 4 cobble + 1 dust", [[I, 1], [C, 4], [ID.Dust, 1]], ID.Piston, 1),
   r("red-torch", "Red torch", "1 dust + 1 stick", [[ID.Dust, 1], [S, 1]], ID.RedTorch, 1),
   r("repeater", "Repeater", "2 red torches + 1 dust + 3 cobble", [[ID.RedTorch, 2], [ID.Dust, 1], [C, 3]], ID.Repeater, 1),
+  r("comparator", "Comparator", "1 red torch + 1 quartz + 3 cobble", [[ID.RedTorch, 1], [ID.White, 1], [C, 3]], ID.Comparator, 1),
+  r("observer", "Observer", "6 cobble + 2 dust + 1 quartz", [[C, 6], [ID.Dust, 2], [ID.White, 1]], ID.Observer, 1),
   r("hard", "Kiln brick", "4 cobble + 1 coal", [[C, 4], [ID.Coal, 1]], ID.Hard, 1),
   r("tnt", "Blast brick", "4 dust + 1 blast dust", [[ID.Dust, 4], [ID.Powder, 1]], ID.TNT, 1),
   r("fence", "Fences", "6 sticks → 3", [[S, 6]], ID.Fence, 3),

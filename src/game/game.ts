@@ -1668,9 +1668,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   }
 
   function recompute(x: number, y: number, z: number) {
-    const R = 8;
+    const R = 10;
     const powered = new Set<string>();
     const q: { x: number; y: number; z: number; d: number }[] = [];
+    // sources: levers, plates, red torches that are on, observers pulsing
     for (let dy = -R; dy <= R; dy++) {
       for (let dz = -R; dz <= R; dz++) {
         for (let dx = -R; dx <= R; dx++) {
@@ -1678,8 +1679,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           const by = y + dy;
           const bz = z + dz;
           if (by < 1 || by >= HEIGHT - 1) continue;
-          if (world.get(bx, by, bz) !== ID.LeverOn && world.get(bx, by, bz) !== ID.PlateOn) continue;
-          for (const [ox, oy, oz] of NEIGHBORS) q.push({ x: bx + ox, y: by + oy, z: bz + oz, d: 1 });
+          const id = world.get(bx, by, bz);
+          if (id === ID.LeverOn || id === ID.PlateOn || id === ID.RedTorchOn || id === ID.ObserverOn) {
+            for (const [ox, oy, oz] of NEIGHBORS) q.push({ x: bx + ox, y: by + oy, z: bz + oz, d: 1 });
+          }
         }
       }
     }
@@ -1688,14 +1691,15 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (!cur || cur.d > 15) continue;
       const key = cur.x + "," + cur.y + "," + cur.z;
       if (powered.has(key)) continue;
-      if (world.get(cur.x, cur.y, cur.z) !== ID.Dust) continue;
+      const id = world.get(cur.x, cur.y, cur.z);
+      if (id !== ID.Dust && id !== ID.Repeater && id !== ID.Comparator) continue;
       powered.add(key);
       for (const [ox, oy, oz] of NEIGHBORS) q.push({ x: cur.x + ox, y: cur.y + oy, z: cur.z + oz, d: cur.d + 1 });
     }
     const near = (bx: number, by: number, bz: number) => {
       for (const [ox, oy, oz] of NEIGHBORS) {
         const id = world.get(bx + ox, by + oy, bz + oz);
-        if (id === ID.LeverOn || id === ID.PlateOn) return true;
+        if (id === ID.LeverOn || id === ID.PlateOn || id === ID.RedTorchOn || id === ID.ObserverOn) return true;
         if (powered.has(bx + ox + "," + (by + oy) + "," + (bz + oz))) return true;
       }
       return false;
@@ -1708,10 +1712,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           const bz = z + dz;
           if (by < 1 || by >= HEIGHT - 1) continue;
           const id = world.get(bx, by, bz);
+          // lamps
           if (id === ID.Lamp || id === ID.LampOn) {
             const next = near(bx, by, bz) ? ID.LampOn : ID.Lamp;
             if (next !== id && world.set(bx, by, bz, next)) markDirtyAt(bx, bz);
           }
+          // pistons
           if (id === ID.Piston) {
             const key = bx + "," + by + "," + bz;
             const on = near(bx, by, bz);
@@ -1726,6 +1732,17 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
               }
             }
             if (!on) pistonHot.delete(key);
+          }
+          // red torch NOT gate
+          if (id === ID.RedTorch || id === ID.RedTorchOn) {
+            const poweredIn = near(bx, by, bz);
+            const next = poweredIn ? ID.RedTorch : ID.RedTorchOn;
+            if (next !== id && world.set(bx, by, bz, next)) markDirtyAt(bx, bz);
+          }
+          // observer: short pulse on any nearby change (simplified)
+          if (id === ID.Observer || id === ID.ObserverOn) {
+            const next = near(bx, by, bz) ? ID.ObserverOn : ID.Observer;
+            if (next !== id && world.set(bx, by, bz, next)) markDirtyAt(bx, bz);
           }
         }
       }
@@ -1889,7 +1906,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (!world.set(px, py, pz, held)) return;
     markDirtyAt(px, pz);
     if (!creative) spend(held, 1);
-    if (held === ID.Dust || held === ID.Lever || held === ID.Lamp || held === ID.Piston) recompute(px, py, pz);
+    if (held === ID.Dust || held === ID.Lever || held === ID.Lamp || held === ID.Piston || held === ID.RedTorch || held === ID.Repeater || held === ID.Comparator || held === ID.Observer) recompute(px, py, pz);
     if (held === ID.Torch) bumpQuest("place", "torch");
     burst(px + 0.5, py + 0.8, pz + 0.5, heldDef.color, 6);
     audio.place();

@@ -142,3 +142,20 @@ shading, mobile UI, QA, APK packaging. Everything below verified with
 - Files: src/game/game.ts (initial shadow setup + sky() update).
 - Commit: 0bdb3e1 "Improve directional shadow quality and stability".
 - Compatible with Muse's previous shadow/HUD/sky work; did not touch mesher or materials beyond light params.
+
+### 2026-10-25 — Grok (redstone path)
+- Claimed and implemented basic redstone expansion.
+- Added Comparator (ID 215) and Observer / ObserverOn (216/217).
+- Recipes: comparator (red torch + white + cobble), observer (cobble + dust + white).
+- Enhanced recompute():
+  - Sources now include RedTorchOn and ObserverOn.
+  - Dust, Repeater, Comparator propagate power.
+  - RedTorch acts as NOT gate (unpowered when adjacent power, lit otherwise).
+  - Observer pulses when near power (simplified).
+  - Lamps and pistons still react.
+- Place of new components triggers recompute.
+- Files: blocks.ts, recipes.ts, game.ts.
+- Did not touch mesher (other agent claim).
+
+### Next move
+- Ready for next gap. Suggest "Full Ender Dragon encounter or End portal" or "Expand biome set + structures (desert + ocean)".
