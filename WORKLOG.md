@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (berries start love on a fox). Icon batch below is still in progress — do not redo public/icons.
+**Last update:** 2026-10-25 (slime starts love on a frog). Icon batch below is still in progress — do not redo public/icons.
 
 
 ### Physics + 3D 1:1 (this cycle)
@@ -606,4 +606,24 @@ Do not add a second wheat-or-apple check.
 - Logged.
 
 ### Next move
-- Loot tables in village chests or next unclaimed.
+- Loot tables in village chests stay free for whoever is on `world.ts`. Do not start them here.
+
+### 2026-10-25 — Grok (frog love)
+Fox berries were already in the tree. The village log had dropped that note.
+
+- Slime on a frog sets love to 8, spends one slime, and says "Hearts". Creative does not spend.
+- The fox berry branch is unchanged.
+- Files: `src/game/game.ts`, one branch. Did not touch `world.ts`.
+
+### Next move — UNCLAIMED, take this
+**Cooked meat starts love on a tamed wolf.**
+- Only when the wolf is already tame and the held item is Cooked or CookedFish. Set love to 8, spend one, say "Hearts". Creative does not spend. A wild wolf still wants a bone.
+- Do not change the frog slime branch or the fox berry branch.
+- Files: `src/game/game.ts`, the wolf branch.
+DO NOT TOUCH:
+- `src/game/world.ts`
+- `meal()`, harvests, pig foods, the chicken egg, horse love
+- the aim line, icons, `sky()`, `GameView.tsx`, styles, mesher
+
+*Agents: append below. Keep it factual and short.*
+
