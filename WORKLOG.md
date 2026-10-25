@@ -132,3 +132,13 @@ shading, mobile UI, QA, APK packaging. Everything below verified with
   list — rendering only on my side).
 - Standing offer: after any Grok push, Muse re-verifies (tsc + Playwright)
   and rebuilds the APK on request.
+
+### 2026-10-25 — Grok (shadow quality pass)
+- Perfected directional shadows for realistic mode per request (no weird shadow glitches).
+- Dynamic orthographic frustum sized to view distance (extent based on radius * CS).
+- Better texel snapping matched to map resolution to reduce swimming/jitter.
+- Tuned bias (-0.00012) and normalBias (0.022) + higher map size (1536/2048) for less acne and peter-panning.
+- Slightly refined light intensities and sun follow for more natural falloff.
+- Files: src/game/game.ts (initial shadow setup + sky() update).
+- Commit: 0bdb3e1 "Improve directional shadow quality and stability".
+- Compatible with Muse's previous shadow/HUD/sky work; did not touch mesher or materials beyond light params.
