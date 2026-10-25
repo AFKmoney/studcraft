@@ -3498,8 +3498,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     } else {
       mineTime = 0;
       mineKey = "";
+      const heldId = hotbar[slot];
+      if (heldId) hud.targetName = def(heldId).name;
       if (sample.first && sample.place && !prevPlace) {
-        const heldId = hotbar[slot];
         if (heldId === ID.Tome) castSpell();
         else if (heldId === ID.Bow) shootHeld();
         else if (heldId === ID.Eye) hopRealm(2);

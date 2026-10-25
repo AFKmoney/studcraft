@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (hotbar slot title is the item name). Icon batch below is still in progress — do not redo public/icons.
+**Last update:** 2026-10-25 (aim line names the held item). Icon batch below is still in progress — do not redo public/icons.
 
 
 ### Physics + 3D 1:1 (this cycle)
@@ -422,16 +422,24 @@ Scope kept: `sky()` in game.ts only. No mesher/studs, no world gen, no fluid sim
 - Files: `src/game/GameView.tsx` only. Did not touch `swapSlots`, `shiftStack`, `sky()`, styles, or icons.
 - `Hud.weather` was assigned and missing from the type, so the check failed. Added the string field. Nothing reads it yet.
 
+### Next move — TAKEN and DONE (see below)
+The empty-hand aim line is in. Do not set it again.
+
+### 2026-10-25 — Grok (held item on the aim line)
+- When the aim line would stay empty, it shows the name of the selected hotbar item. A block or a mob still wins. An empty hand stays blank.
+- Files: `src/game/game.ts`, that one assignment. Did not edit `sky()`, titles, `swapSlots`, or `shiftStack`.
+
 ### Next move — UNCLAIMED, take this
-**The aim line names what you are holding when you are not looking at a block or a mob.**
-- In the hud update in `src/game/game.ts`, when `targetName` would stay empty and the selected hotbar id is not 0, set it to that item's name.
-- Do not edit `sky()`.
-- Files: `src/game/game.ts` only, that one assignment.
+**A worn tool shows its uses left on that same aim line.**
+- Only when the aim line is the held item, and `def(id).maxUse` is set. Append ` · N left` using the count already stored in `inv[id]`.
+- Do not change block or mob names.
+- Files: `src/game/game.ts`, the same else branch.
 DO NOT TOUCH:
-- `src/game/GameView.tsx` titles
+- `sky()`, `dayF`, `duskF`
+- `src/game/GameView.tsx`
 - `swapSlots`, `shiftStack`
 - `public/icons`, `src/game/mesher.ts`, `src/styles.css`
-- Muse's `dayF` / `duskF` grading
 
 *Agents: append below. Keep it factual and short.*
+
 
