@@ -698,6 +698,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   type Mob = {
     burn?: number;
     burnAcc?: number;
+    slowT?: number;
     mad?: boolean;
     tpT?: number;
     convT?: number;
@@ -839,6 +840,15 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let sinceSleep = 0;
   let speedT = 0;
   let strengthT = 0;
+  let regenT = 0;
+  let fireResT = 0;
+  let jumpT = 0;
+  let gillT = 0;
+  let invisT = 0;
+  let poisonT = 0;
+  let slowT = 0;
+  let healAcc = 0;
+  let poisonAcc = 0;
   let fireT = 0;
   let realm = 0;
   let portalCd = 0;
@@ -866,6 +876,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     fire?: boolean;
     pow?: number;
     flame?: boolean;
+    splash?: number;
   };
   const shots: Shot[] = [];
   type Drop = { id: number; n: number; x: number; y: number; z: number; vy: number; mesh: THREE.Mesh };
@@ -938,7 +949,19 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const wyrm = mobs.find((m) => m.kind === "dragon" && !m.dead);
     hud.boss = wyrm ? "End Wyrm" : "";
     hud.bossHp = wyrm ? Math.max(0, Math.min(1, wyrm.hp / (wyrm.maxHp ?? wyrm.hp))) : 0;
-    hud.effect = [speedT > 0 ? "Dash" : "", strengthT > 0 ? "Might" : "", fireT > 0 ? "Fire" : "", enchSummary(hotbar[slot]) ? "Rune" : ""]
+    hud.effect = [
+      speedT > 0 ? "Dash" : "",
+      strengthT > 0 ? "Might" : "",
+      regenT > 0 ? "Regen" : "",
+      fireResT > 0 ? "Ward" : "",
+      jumpT > 0 ? "Leap" : "",
+      gillT > 0 ? "Gill" : "",
+      invisT > 0 ? "Veil" : "",
+      poisonT > 0 ? "Venom" : "",
+      slowT > 0 ? "Tar" : "",
+      fireT > 0 ? "Fire" : "",
+      enchSummary(hotbar[slot]) ? "Rune" : "",
+    ]
       .filter(Boolean)
       .join(" ");
     hud.heldEnch = enchSummary(hotbar[slot]);
@@ -2205,8 +2228,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
     if (held === ID.Boat) return launchRide("boat", hit);
     if (held === ID.Cart) return launchRide("cart", hit);
-    if (held === ID.PotionHeal || held === ID.PotionSpeed || held === ID.PotionStr || held === ID.Focus || held === ID.Milk || held === ID.Gapple) {
+    if (held === ID.PotionHeal || held === ID.PotionSpeed || held === ID.PotionStr || held === ID.Focus || held === ID.Milk || held === ID.Gapple || held === ID.PotionRegen || held === ID.PotionFire || held === ID.PotionLeap || held === ID.PotionGill || held === ID.PotionVeil || held === ID.PotionVenom || held === ID.PotionTar) {
       return drink(held);
+    }
+    if (held === ID.SplashVenom || held === ID.SplashTar) {
+      throwSplash(held);
+      return;
     }
     if (held === ID.EnderPearl) {
       pearlHop();
@@ -2357,6 +2384,42 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     shots.push({ x, y, z, vx: (dx / len) * 11, vy: (dy / len) * 11, vz: (dz / len) * 11, life: 3.6, friendly: false, mesh, fire: true });
   }
 
+  function launchSplash(x: number, y: number, z: number, dx: number, dy: number, dz: number, splash: number) {
+    const len = Math.hypot(dx, dy, dz) || 1;
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.22, 0.16), skin(splash === ID.SplashVenom ? 0x3aaa4c : 0x4a3424));
+    scene.add(mesh);
+    shots.push({ x, y, z, vx: (dx / len) * 13, vy: (dy / len) * 13, vz: (dz / len) * 13, life: 2.2, friendly: true, mesh, splash });
+  }
+
+  function throwSplash(id: number) {
+    if (!creative) {
+      if ((inv[id] ?? 0) <= 0) return say("Nothing to throw");
+      spend(id, 1);
+    }
+    const dx = -Math.sin(player.yaw) * Math.cos(player.pitch);
+    const dy = Math.sin(player.pitch);
+    const dz = -Math.cos(player.yaw) * Math.cos(player.pitch);
+    launchSplash(player.x, player.y + 1.5, player.z, dx, dy + 0.25, dz, id);
+    audio.place();
+  }
+
+  function applySplash(id: number, x: number, y: number, z: number) {
+    const venom = id === ID.SplashVenom;
+    burst(x, y, z, venom ? "#3aaa4c" : "#4a3424", 14);
+    for (const m of mobs) {
+      if (m.dead || m.kind === "boat" || m.kind === "cart") continue;
+      if (Math.hypot(m.x - x, m.z - z) < 2.8 && Math.abs(m.y + 0.6 - y) < 2.2) {
+        if (venom) m.burn = Math.max(m.burn ?? 0, 6);
+        else m.slowT = Math.max(m.slowT ?? 0, 9);
+      }
+    }
+    if (Math.hypot(player.x - x, player.z - z) < 2.4 && Math.abs(player.y + 1 - y) < 2.2) {
+      if (venom) poisonT = Math.max(poisonT, 12);
+      else slowT = Math.max(slowT, 8);
+    }
+    audio.hit();
+  }
+
   function shootHeld() {
     if ((inv[ID.Arrow] ?? 0) <= 0 && !creative) return say("Need arrows");
     if (!creative) spend(ID.Arrow, 1);
@@ -2400,6 +2463,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       speedT = 0;
       strengthT = 0;
       fireT = 0;
+      regenT = 0;
+      fireResT = 0;
+      jumpT = 0;
+      gillT = 0;
+      invisT = 0;
+      poisonT = 0;
+      slowT = 0;
       if (!creative) spend(id, 1);
       say("Cleared");
       return;
@@ -2428,6 +2498,49 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       fireT = 0;
       if (!creative) spend(id, 1);
       say("Gold apple");
+      return;
+    }
+    if (id === ID.PotionRegen) {
+      regenT = 30;
+      if (!creative) spend(id, 1);
+      say("Regen");
+      return;
+    }
+    if (id === ID.PotionFire) {
+      fireResT = 150;
+      fireT = 0;
+      if (!creative) spend(id, 1);
+      say("Fire ward");
+      return;
+    }
+    if (id === ID.PotionLeap) {
+      jumpT = 60;
+      if (!creative) spend(id, 1);
+      say("Leap");
+      return;
+    }
+    if (id === ID.PotionGill) {
+      gillT = 150;
+      if (!creative) spend(id, 1);
+      say("Gills");
+      return;
+    }
+    if (id === ID.PotionVeil) {
+      invisT = 60;
+      if (!creative) spend(id, 1);
+      say("Veiled");
+      return;
+    }
+    if (id === ID.PotionVenom) {
+      poisonT = 20;
+      if (!creative) spend(id, 1);
+      say("Venom — why would you drink that?");
+      return;
+    }
+    if (id === ID.PotionTar) {
+      slowT = 30;
+      if (!creative) spend(id, 1);
+      say("Tarred");
       return;
     }
     if (id === ID.Focus) {
@@ -2771,6 +2884,29 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     sinceSleep += dt;
     speedT = Math.max(0, speedT - dt);
     strengthT = Math.max(0, strengthT - dt);
+    regenT = Math.max(0, regenT - dt);
+    fireResT = Math.max(0, fireResT - dt);
+    jumpT = Math.max(0, jumpT - dt);
+    gillT = Math.max(0, gillT - dt);
+    invisT = Math.max(0, invisT - dt);
+    slowT = Math.max(0, slowT - dt);
+    if (fireResT > 0) fireT = 0;
+    if (regenT > 0) {
+      healAcc += dt;
+      while (healAcc >= 2) {
+        healAcc -= 2;
+        health = Math.min(20, health + 1);
+      }
+    }
+    if (poisonT > 0) {
+      poisonT = Math.max(0, poisonT - dt);
+      poisonAcc += dt;
+      while (poisonAcc >= 1.2) {
+        poisonAcc -= 1.2;
+        // Venom never quite kills, the Minecraft rule.
+        if (health > 1) hurt(1);
+      }
+    }
     if (fireT > 0) {
       fireT -= dt;
       if (Math.floor(fireT * 2) !== Math.floor((fireT + dt) * 2)) hurt(1);
@@ -2948,6 +3084,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         for (const m of mobs) {
           if (m.dead || m.kind === "boat" || m.kind === "cart") continue;
           if (Math.hypot(m.x - s.x, m.z - s.z) < 0.7 && Math.abs(m.y + 0.6 - s.y) < 1) {
+            if (s.splash) {
+              dead = true;
+              break;
+            }
             let hit = 4 + (strengthT > 0 ? 2 : 0) + (s.pow ?? 0);
             if (m.kind === "dragon" && crystalsLeft() > 0) hit = Math.max(1, Math.ceil(hit * 0.5));
             m.hp -= hit;
@@ -2964,6 +3104,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         if (s.fire) fireT = Math.max(fireT, 3);
         dead = true;
       }
+      if (dead && s.splash) applySplash(s.splash, s.x, s.y, s.z);
       if (dead) scene.remove(s.mesh);
       else shots[w++] = s;
     }
@@ -3863,6 +4004,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       const dx = player.x - m.x;
       const dz = player.z - m.z;
       const d = Math.hypot(dx, dz);
+      // A veiled player is simply not seen beyond arm's reach.
+      const seen = invisT <= 0 || d < 2.5;
+      if ((m.slowT ?? 0) > 0) m.slowT = (m.slowT ?? 0) - dt;
       if (m.kind === "boat" || m.kind === "cart") {
         m.mesh.position.set(m.x, m.y + (settings.studs ? STUD_H : 0), m.z);
         m.mesh.rotation.y = m.yaw;
@@ -4038,10 +4182,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         !!foe ||
         flyer ||
         piglinMad ||
-        ((m.kind === "enderman" || m.kind === "bee") && !!m.mad && d < 20) ||
-        ((m.kind === "witch" || m.kind === "drowned") && d < 15) ||
+        ((m.kind === "enderman" || m.kind === "bee") && !!m.mad && d < 20 && seen) ||
+        ((m.kind === "witch" || m.kind === "drowned") && d < 15 && seen) ||
         ((m.kind === "creeper" || m.kind === "walker" || m.kind === "skelly" || m.kind === "spider" || m.kind === "wisp" || m.kind === "slime") &&
-          d < (m.kind === "skelly" ? 18 : m.kind === "slime" ? 12 : 16));
+          d < (m.kind === "skelly" ? 18 : m.kind === "slime" ? 12 : 16) &&
+          seen);
       if (foe) m.yaw = Math.atan2(-(foe.x - m.x), -(foe.z - m.z));
       else if ((m.kind === "wolf" || m.kind === "cat") && m.tame && d > 3.2 && d < 32) m.yaw = Math.atan2(-dx, -dz);
       else if (chase) m.yaw = Math.atan2(-dx, -dz);
@@ -4092,12 +4237,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         dragonTick(m, dt, d);
       } else if (flyer) {
         const alt = m.kind === "dragon" ? 7 : 4;
-        const sp = m.kind === "dragon" ? 3.4 : 2.1;
+        const sp = (m.kind === "dragon" ? 3.4 : 2.1) * ((m.slowT ?? 0) > 0 ? 0.45 : 1);
         m.x += -Math.sin(m.yaw) * sp * dt;
         m.z += -Math.cos(m.yaw) * sp * dt;
         const want = groundY(m.x, m.z) + alt;
         m.y += (want - m.y) * Math.min(1, dt * 2);
-        if (m.kind !== "dragon" && m.kind !== "wither" && m.cool <= 0 && d < 24 && phase === "play") {
+        if (m.kind !== "dragon" && m.kind !== "wither" && m.cool <= 0 && d < 24 && phase === "play" && seen) {
           if (m.kind === "blaze") {
             launchFireball(m.x, m.y + 0.4, m.z, dx, player.y + 1 - m.y, dz);
             m.cool = 2.2;
@@ -4129,7 +4274,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           m.z += -Math.cos(m.yaw) * sp * dt;
           m.y = groundY(m.x, m.z);
         }
-        const speed = foe ? 2.7 : chase ? (m.kind === "spider" ? 3.1 : m.kind === "slime" ? 1.35 : m.kind === "walker" ? 2.15 : 2.4) : ((m.kind === "wolf" || m.kind === "cat") && m.tame && d > 4) ? 2.35 : m.kind === "bee" || m.kind === "bat" ? 1.7 : 1.05;
+        const speed = (foe ? 2.7 : chase ? (m.kind === "spider" ? 3.1 : m.kind === "slime" ? 1.35 : m.kind === "walker" ? 2.15 : 2.4) : ((m.kind === "wolf" || m.kind === "cat") && m.tame && d > 4) ? 2.35 : m.kind === "bee" || m.kind === "bat" ? 1.7 : 1.05) * ((m.slowT ?? 0) > 0 ? 0.45 : 1);
         const fx = -Math.sin(m.yaw);
         const fz = -Math.cos(m.yaw);
         const nx = m.x + fx * speed * dt;
@@ -4203,7 +4348,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         audio.hit();
         if (foe.hp <= 0) killMob(foe);
       }
-      if (m.kind === "skelly" && d < 16 && d > 3 && phase === "play" && m.cool <= 0) {
+      if (m.kind === "skelly" && d < 16 && d > 3 && phase === "play" && m.cool <= 0 && seen) {
         launchArrow(m.x, m.y + 1, m.z, dx, 0.2, dz, false);
         m.cool = 1.5;
       }
@@ -4213,7 +4358,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           m.hp = Math.min(13, m.hp + 3);
           m.cool = 2.6;
           burst(m.x, m.y + 1.2, m.z, "#3aaa4c", 6);
-        } else if (d < 14 && d > 3) {
+        } else if (d < 14 && d > 3 && seen) {
           launchArrow(m.x, m.y + 1.2, m.z, dx, 0.25, dz, false);
           m.cool = 1.9;
         }
@@ -4434,7 +4579,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       player.vy -= 28 * dt;
       if (player.vy < -32) player.vy = -32;
       if (jumpEdge && player.coyote > 0) {
-        player.vy = 8.45;
+        player.vy = jumpT > 0 ? 11.8 : 8.45;
         player.grounded = false;
         player.coyote = 0;
         audio.jump();
@@ -4445,10 +4590,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const onIce = def(world.get(Math.floor(player.x), Math.floor(player.y - 0.08), Math.floor(player.z))).slip && !grippy;
     const onSoul = def(world.get(Math.floor(player.x), Math.floor(player.y - 0.08), Math.floor(player.z))).slow;
     const speed =
-      (flying ? (sample.sneak ? 4.5 : 12) : (sample.sneak ? 1.7 : sample.sprint ? 7.1 : 4.35) * (bodyWater ? 0.55 : 1)) *
+      (flying ? (sample.sneak ? 4.5 : 12) : (sample.sneak ? 1.7 : sample.sprint ? 7.1 : 4.35) * (bodyWater ? (gillT > 0 ? 0.92 : 0.55) : 1)) *
       (onSoul ? 0.45 : 1) *
       (sample.sprint && rankLv >= 12 ? 1.12 : 1) *
-      (speedT > 0 ? 1.35 : 1);
+      (speedT > 0 ? 1.35 : 1) *
+      (slowT > 0 ? 0.5 : 1);
     const gliding = !flying && !player.grounded && (inv[ID.Elytra] ?? 0) > 0 && sample.jump && player.vy < 0;
     if (gliding) player.vy = Math.max(player.vy, -1.5);
     const fx = -Math.sin(player.yaw);
@@ -4717,7 +4863,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         if (heldId === ID.Tome) castSpell();
         else if (heldId === ID.Bow) shootHeld();
         else if (heldId === ID.Eye) hopRealm(2);
-        else if (heldId === ID.PotionHeal || heldId === ID.PotionSpeed || heldId === ID.PotionStr || heldId === ID.Focus || heldId === ID.Milk || heldId === ID.Gapple) drink(heldId);
+        else if (heldId === ID.PotionHeal || heldId === ID.PotionSpeed || heldId === ID.PotionStr || heldId === ID.Focus || heldId === ID.Milk || heldId === ID.Gapple || heldId === ID.PotionRegen || heldId === ID.PotionFire || heldId === ID.PotionLeap || heldId === ID.PotionGill || heldId === ID.PotionVeil || heldId === ID.PotionVenom || heldId === ID.PotionTar) drink(heldId);
+        else if (heldId === ID.SplashVenom || heldId === ID.SplashTar) throwSplash(heldId);
         else if (heldId === ID.EnderPearl) pearlHop();
         else if (def(heldId).food) eat();
       }
@@ -5735,16 +5882,35 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     },
     brew(kind) {
       if (kind === "focus" && !gate(6)) return;
-      const need = kind === "heal" ? ID.Apple : kind === "speed" ? ID.Wart : kind === "focus" ? ID.Amber : ID.Blaze;
-      const out = kind === "heal" ? ID.PotionHeal : kind === "speed" ? ID.PotionSpeed : kind === "focus" ? ID.Focus : ID.PotionStr;
-      if (!creative && (inv[ID.Bottle] ?? 0) < 1) return say("Need a bottle");
-      if (!creative && (inv[need] ?? 0) < 1) return say("Need " + def(need).name.toLowerCase());
+      // from = the vessel item, need = the ingredient, out = the result.
+      // Classics go bottle -> brew in one step; chain brews start from a
+      // base brew; splashes finish a finished brew with powder.
+      const R: Record<string, { from: number; need: number; out: number }> = {
+        heal: { from: ID.Bottle, need: ID.Apple, out: ID.PotionHeal },
+        speed: { from: ID.Bottle, need: ID.Wart, out: ID.PotionSpeed },
+        focus: { from: ID.Bottle, need: ID.Amber, out: ID.Focus },
+        might: { from: ID.Bottle, need: ID.Blaze, out: ID.PotionStr },
+        base: { from: ID.Bottle, need: ID.Wart, out: ID.BaseBrew },
+        regen: { from: ID.BaseBrew, need: ID.Fang, out: ID.PotionRegen },
+        fireward: { from: ID.BaseBrew, need: ID.Cinder, out: ID.PotionFire },
+        leap: { from: ID.BaseBrew, need: ID.Feather, out: ID.PotionLeap },
+        gill: { from: ID.BaseBrew, need: ID.Fish, out: ID.PotionGill },
+        veil: { from: ID.BaseBrew, need: ID.Frost, out: ID.PotionVeil },
+        venom: { from: ID.BaseBrew, need: ID.MushroomRed, out: ID.PotionVenom },
+        tar: { from: ID.BaseBrew, need: ID.Slime, out: ID.PotionTar },
+        splashvenom: { from: ID.PotionVenom, need: ID.Powder, out: ID.SplashVenom },
+        splashtar: { from: ID.PotionTar, need: ID.Powder, out: ID.SplashTar },
+      };
+      const r = R[kind];
+      if (!r) return;
+      if (!creative && (inv[r.from] ?? 0) < 1) return say("Need " + def(r.from).name.toLowerCase());
+      if (!creative && (inv[r.need] ?? 0) < 1) return say("Need " + def(r.need).name.toLowerCase());
       if (!creative) {
-        spend(ID.Bottle, 1);
-        spend(need, 1);
+        spend(r.from, 1);
+        spend(r.need, 1);
       }
-      addInv(out, 1);
-      say(def(out).name);
+      addInv(r.out, 1);
+      say(def(r.out).name);
       emit();
     },
     trade(i) {

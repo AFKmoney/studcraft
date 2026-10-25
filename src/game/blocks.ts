@@ -269,6 +269,16 @@ export const ID = {
   Sign: 267,
   EnderPearl: 268,
   InkSac: 269,
+  BaseBrew: 270,
+  PotionRegen: 271,
+  PotionFire: 272,
+  PotionLeap: 273,
+  PotionGill: 274,
+  PotionVeil: 275,
+  PotionVenom: 276,
+  PotionTar: 277,
+  SplashVenom: 278,
+  SplashTar: 279,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -755,6 +765,16 @@ put(b(ID.ChromeBrick, "Chrome brick", "#d5dee6", "#f4f7fa", "#b7c4ce", "#8e9aa6"
 item(ID.Tin, "Tin", "#d5ddd0");
 item(ID.EnderPearl, "Ender pearl", "#2a9a86");
 item(ID.InkSac, "Ink sac", "#23232e");
+item(ID.BaseBrew, "Base brew", "#b7c4b0");
+item(ID.PotionRegen, "Regen brew", "#e26a8a");
+item(ID.PotionFire, "Ward brew", "#f07820");
+item(ID.PotionLeap, "Leap brew", "#8ec8f5");
+item(ID.PotionGill, "Gill brew", "#2a7ac0");
+item(ID.PotionVeil, "Veil brew", "#8a8f98");
+item(ID.PotionVenom, "Venom brew", "#3aaa4c");
+item(ID.PotionTar, "Tar brew", "#4a3424");
+item(ID.SplashVenom, "Venom splash", "#3aaa4c");
+item(ID.SplashTar, "Tar splash", "#4a3424");
 item(ID.Copper, "Copper", "#e07a3d");
 item(ID.Bronze, "Bronze", "#cd7f32");
 item(ID.Amber, "Amber", "#ffbf3a");
@@ -1209,6 +1229,16 @@ export const CATALOG = [
   ID.Sign,
   ID.EnderPearl,
   ID.InkSac,
+  ID.BaseBrew,
+  ID.PotionRegen,
+  ID.PotionFire,
+  ID.PotionLeap,
+  ID.PotionGill,
+  ID.PotionVeil,
+  ID.PotionVenom,
+  ID.PotionTar,
+  ID.SplashVenom,
+  ID.SplashTar,
 ];
 
 export const COLORS = [ID.Red, ID.Orange, ID.Yellow, ID.Green, ID.Blue, ID.Azure, ID.Pink, ID.White, ID.Black];

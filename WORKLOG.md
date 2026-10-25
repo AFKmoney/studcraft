@@ -984,3 +984,24 @@ ALREADY existed (seeded, cross-chunk). What was actually missing:
 - Note: chunk data is generated on demand and only player edits are saved, so
   untouched stone regenerates with veins/entrances; edited areas keep their edits.
 - NEXT (Muse): item 5 - full brewing (effects, splash, ingredient chain).
+
+## 2026-10-25 — v2.7 battle order item 5: full brewing (Muse)
+
+Brewing grew from 4 one-step brews to a real alchemy system (10 new items, 270-279):
+- **Ingredient chain**: Bottle + wart -> **Base brew**; base + ingredient -> effect:
+  fang = Regen (heal over time), cinder = Fire Ward (lava/fire can't hurt you),
+  feather = Leap (jump 8.45 -> 11.8), fish = Gill (swim at 0.92 instead of 0.55),
+  frost = Veil (invisibility: mobs only notice you within 2.5 blocks - chases,
+  arrows and throws all check it), red mushroom = Venom, slime = Tar (half speed).
+  The 4 classic brews keep their one-step recipes.
+- **Splash potions**: finished Venom/Tar brew + powder -> throwable splash. Real
+  arcing projectile; on impact an AoE burst: venom sets mobs burning with poison
+  (and poisons you if you stand in it), tar slows mobs to 45 % for 9 s.
+- **Effect engine**: 7 new timers beside Dash/Might (regen, fire-resist, leap,
+  gill, veil, poison, slow) - all shown in the HUD effect line, all cleared by
+  milk. Venom follows the Minecraft rule: it cannot take your last heart.
+  Mob slowT scales both ground speed and flyer speed.
+- QA: kettle panel shows the whole chain; base -> regen -> venom -> splash clicks
+  all brewed; Regen brew drunk -> "Regen" active; venom splash thrown at own
+  feet -> "Venom" active ~4 s later. 0 errors, tsc 0.
+- NEXT (Muse): item 6 - biome variants + zoned Nether.

@@ -852,6 +852,36 @@ function StationScreen({ game }: { game: GameApi }) {
               <button className="btn big" onClick={() => game.brew("focus")}>
                 🧪 Bottle + amber → focus brew · level 6
               </button>
+              <button className="btn btn-primary big" onClick={() => game.brew("base")}>
+                ⚗️ Bottle + wart → base brew — every chain brew starts here
+              </button>
+              <button className="btn big" onClick={() => game.brew("regen")}>
+                Base + fang → regen brew (heal over time)
+              </button>
+              <button className="btn big" onClick={() => game.brew("fireward")}>
+                Base + cinder → ward brew (fire can't touch you)
+              </button>
+              <button className="btn big" onClick={() => game.brew("leap")}>
+                Base + feather → leap brew (jump higher)
+              </button>
+              <button className="btn big" onClick={() => game.brew("gill")}>
+                Base + fish → gill brew (swim like one)
+              </button>
+              <button className="btn big" onClick={() => game.brew("veil")}>
+                Base + frost → veil brew (mobs stop seeing you)
+              </button>
+              <button className="btn big" onClick={() => game.brew("venom")}>
+                Base + red mushroom → venom brew
+              </button>
+              <button className="btn big" onClick={() => game.brew("tar")}>
+                Base + slime → tar brew (heavy feet)
+              </button>
+              <button className="btn big" onClick={() => game.brew("splashvenom")}>
+                💥 Venom brew + powder → venom splash (throw it)
+              </button>
+              <button className="btn big" onClick={() => game.brew("splashtar")}>
+                💥 Tar brew + powder → tar splash (throw it)
+              </button>
             </div>
           )}
           {hud.panel === "trade" && (

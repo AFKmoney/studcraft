@@ -50,7 +50,7 @@ function glyph(block: BlockDef, fill: string): ReactNode {
   if (block.work === "bench") return <Bench fill={fill} />;
   if (block.work === "bed") return <Bed fill={fill} />;
   if (block.work === "anvil") return <Anvil fill={fill} />;
-  if (block.work === "enchant" || block.work === "brew" || block.id === ID.Bottle || block.name.includes("brew")) return <Flask fill={fill} />;
+  if (block.work === "enchant" || block.work === "brew" || block.id === ID.Bottle || block.name.includes("brew") || block.name.includes("splash")) return <Flask fill={fill} />;
   if (block.id === ID.EnderPearl) return <Drop fill={fill} />;
   if (block.id === ID.Arrow) return <Dart fill={fill} />;
   if (block.id === ID.Stick || block.id === ID.Rod) return <Rod fill={fill} />;
