@@ -126,7 +126,7 @@ function addStud(s: Surface, x: number, y: number, z: number, tile: number) {
   }
 }
 
-export function buildChunk(world: World, cx: number, cz: number, fancy: boolean) {
+export function buildChunk(world: World, cx: number, cz: number, fancy: boolean, detail = true) {
   const opaque = empty();
   const glass = empty();
   const water = empty();
@@ -142,6 +142,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean)
   }
 
   function shadeAt(x: number, y: number, z: number, nx: number, ny: number, nz: number, vx: number, vy: number, vz: number) {
+    if (!detail) return 1;
     const steps: number[][] = [];
     if (nx === 0) steps.push([vx === 0 ? -1 : 1, 0, 0]);
     if (ny === 0) steps.push([0, vy === 0 ? -1 : 1, 0]);

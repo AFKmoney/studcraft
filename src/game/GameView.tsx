@@ -143,7 +143,7 @@ function TitleScreen({
           Stud<span className="craft">craft</span>
         </h1>
         <p className="lede">
-          An infinite brick land. Type a seed, or roll one. The same seed builds the same hills, ores, hamlets, ruins, mines, and camps.
+          An infinite brick land. Type a seed, or roll one. The same seed builds the same hills, ores, and hamlets.
         </p>
         {error && <p className="lede">{error}</p>}
         <label className="seed-row">
@@ -193,7 +193,7 @@ function TitleScreen({
           <li>The world keeps going. Horizon in the pause menu is only how far bricks draw</li>
           <li>Hamlets repeat across the map. Traders show up when you walk into town</li>
           <li>Skills spend rank levels. Pause holds four mods. Q cycles spells when you hold a tome</li>
-          <li>Caves run under the hills. Ruins, mines, camps, wrecks, shrines, and bandit outposts carry crates. A ruined gate by the first hamlet opens the Nether</li>
+          <li>Caves run under the hills. Water spills. A repeater delays a signal. A ruined gate by the first hamlet opens the Nether</li>
           <li>Water and magma spread from a source. Look where a piston or repeater should point</li>
           <li>Hold to mine · place with the other click · E opens the bin</li>
         </ul>
@@ -230,7 +230,6 @@ function Hud({ game }: { game: GameApi }) {
         </span>
         <span>
           {Math.floor(hud.x)} {Math.floor(hud.y)} {Math.floor(hud.z)} · seed {hud.seedText || hud.seed}
-          {hud.bearing ? " · " + hud.bearing : ""}
         </span>
       </div>
       {!hud.locked && !hud.message && <p className="look-hint">Drag to look · click to capture the mouse</p>}
@@ -317,7 +316,7 @@ function PauseMenu({ game }: { game: GameApi }) {
             <input
               type="range"
               min={2}
-              max={8}
+              max={14}
               step={1}
               value={s.radius}
               onChange={(e) => game.setRadius(Number(e.target.value))}

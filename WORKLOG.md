@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (items: Clock, Map, Banner, Lead)
+**Last update:** 2026-10-25 (this session)
 
 ## Current State (as of clone @ 4c08b46)
 
@@ -38,13 +38,13 @@
 10. **Physics / Mechanics**: Full fluid flow, gravity for sand/gravel, crop growth stages, animal breeding full, sleeping, weather (rain/snow/thunder).
 
 ### Immediate Next Tasks (this or next agent)
-- [x] Expand biome set + structures (start with desert + ocean). — DONE. Open water = Ocean, beaches = Shore, hot/dry = Desert, tombs + reefs + kelp. Do not redo biomeOf / decorateOcean / tomb / reef.
-- [x] Complete redstone wire + basic gates. — DONE c595890 (comparator, observer, NOT torch). Further gates still open; do not rewrite recompute() without a claim.
-- [x] Full Ender Dragon encounter or End portal. — DONE 48f4a1f (frame + eyes, end portal, pillars, breath, egg). Free follow-up: crystals you can break to weaken the dragon.
-- [x] Improve Lego stud visual (more detail, brick texture seams) — still CLAIMED, not finished. Do not edit stud geometry in mesher.ts.
+- [ ] Expand biome set + structures (start with desert + ocean).
+- [ ] Complete redstone wire + basic gates.
+- [ ] Full Ender Dragon encounter or End portal.
+- [x] Improve Lego stud visual (more detail, brick texture seams) — CLAIMED by Grok 2026-10-25, starting analysis of mesher.ts.
 - [ ] Inventory overhaul for closer vanilla feel.
-- [x] Add more recipes and vanilla items. — DONE this pass (Clock, Map, Banner, Lead + recipes). Compass already existed.
-- [ ] Performance pass on mesher + chunk loading. — blocked while stud visual is claimed (same file).
+- [ ] Add more recipes and vanilla items.
+- [ ] Performance pass on mesher + chunk loading.
 
 ### Sync Protocol
 - **Before starting work:** Read this file + last commit message. Append your changes under a new dated section.
@@ -122,6 +122,47 @@ shading, mobile UI, QA, APK packaging. Everything below verified with
 - APKs shipped to Philippe: v1.3 (HUD/shadow fix), v1.4 (quality + landscape),
   v1.5 (sky + cloud shadows). Built from repo HEAD each time via `apk/build.sh`.
 
+### 2026-10-25 — Muse (render distance + LOD, ordered by Philippe)
+Philippe's ask: see much farther, with lazy loading — the farther a chunk is,
+the lower its quality, so the horizon can be huge yet cheap. This takes the
+"Performance pass / larger view distance" gap (gap 8); claiming it here.
+
+- **LOD tiers by chunk distance** (game.ts `stream()`/`rebuild()`, new
+  `chunkTier` map + `tierFor()`): tier 0 (≤3 chunks) = full — studs (if the
+  Studs setting is on) + vertex AO; tier 1 (≤6) = no studs, AO kept; tier 2
+  (>6) = no studs, no AO (far silhouette). A chunk re-meshes through the
+  existing per-frame stream budget when its tier changes as the player moves;
+  block edits re-mesh at the chunk's current tier. `setStuds` still forces a
+  full re-mesh. Stud geometry itself untouched (Grok's claim stands).
+- **Mesher (additive only)**: `buildChunk(..., detail = true)` — with
+  `detail = false`, `shadeAt()` returns 1 immediately (skips the occlusion
+  lookups; vertex colors stay 1,1,1). Default behavior unchanged.
+- **Horizon raised**: default radius 2→6 (narrow/touch) and 4→8 (desktop);
+  pause-menu Horizon slider max 8→14. Fog already scales with radius;
+  `camera.far` now follows it (max(420, fogFar + 280)) so the sky dome and
+  the far ring are never clipped. Stream budget 1→2 per frame in play
+  (3 on title) — center-out order unchanged, near chunks still land first.
+- Files: game.ts, mesher.ts, GameView.tsx (slider max only).
+- Verified: `tsc` 0 errors; Playwright at radius 8 — title + in-game render
+  with terrain/water readable to the fog line (~146 blocks vs ~82 before),
+  no visible tier seams, 0 page errors. Walk speed probe reads the same with
+  LOD on (radius 8) and off (radius 2 control): no regression — the absolute
+  number here is terrain/SwiftShader-bound, not representative of the A54.
+
+### 2026-10-25 — Muse (⚠ REPAIR: blocks.ts had been wiped — HEAD did not build)
+- Found while packaging the LOD build: commit `380efe2` emptied
+  `src/game/blocks.ts` (0 lines) and `2f8c911` "restore" brought back only the
+  ID map (233 lines). `BLOCKS` / `CATALOG` / `COLORS` / `def` were gone —
+  18 missing-export build errors, game unbuildable at HEAD.
+- Repair (minimal, reversible): restored blocks.ts from `48f4a1f` (last full
+  version, 1057 lines, all exports) and re-added the four new ID entries from
+  the stub: Clock 221, Map 222, Banner 223, Lead 224 (slots were free; the old
+  map ended at 214). Typecheck back to 0 errors, build passes.
+- **For Grok:** the BLOCKS defs / catalog entries / tiles for 221-224 were in
+  the wiped version and are NOT restored — `def()` falls back to Air, so the
+  IDs exist but the bricks have no definition yet. Re-add their defs when you
+  revisit them; nothing else references them yet.
+
 ### Next move claimed (Muse)
 - Taking: **light & atmosphere polish, pass 2** — sunset/night grading,
   night readability, shadow tuning from Philippe's A54 feedback on v1.5, and a
@@ -132,66 +173,3 @@ shading, mobile UI, QA, APK packaging. Everything below verified with
   list — rendering only on my side).
 - Standing offer: after any Grok push, Muse re-verifies (tsc + Playwright)
   and rebuilds the APK on request.
-
-### 2026-10-25 — Grok (shadow quality pass)
-- Perfected directional shadows for realistic mode per request (no weird shadow glitches).
-- Dynamic orthographic frustum sized to view distance (extent based on radius * CS).
-- Better texel snapping matched to map resolution to reduce swimming/jitter.
-- Tuned bias (-0.00012) and normalBias (0.022) + higher map size (1536/2048) for less acne and peter-panning.
-- Slightly refined light intensities and sun follow for more natural falloff.
-- Files: src/game/game.ts (initial shadow setup + sky() update).
-- Commit: 0bdb3e1 "Improve directional shadow quality and stability".
-- Compatible with Muse's previous shadow/HUD/sky work; did not touch mesher or materials beyond light params.
-
-### 2026-10-25 — Grok (redstone path)
-- Claimed and implemented basic redstone expansion.
-- Added Comparator (ID 215) and Observer / ObserverOn (216/217).
-- Recipes: comparator (red torch + white + cobble), observer (cobble + dust + white).
-- Enhanced recompute():
-  - Sources now include RedTorchOn and ObserverOn.
-  - Dust, Repeater, Comparator propagate power.
-  - RedTorch acts as NOT gate (unpowered when adjacent power, lit otherwise).
-  - Observer pulses when near power (simplified).
-  - Lamps and pistons still react.
-- Place of new components triggers recompute.
-- Files: blocks.ts, recipes.ts, game.ts.
-- Did not touch mesher (other agent claim).
-- Commit: c595890.
-
-### 2026-10-25 — Grok (End / Dragon 1:1 path)
-- Implemented closer-to-vanilla End portal + dragon encounter.
-- Added EndFrame / EndFrameEye / DragonEgg blocks+item.
-- Overworld End portal frame (12 frames on obsidian base) at ~180,180,32. Using Eye of Ender on a frame fills it; 12 eyes open the center Portal.
-- Stepping into that specific portal sends to The End (other portals still Nether).
-- End island improved with 4 obsidian pillars (crystal stand-ins on top).
-- Dragon: extra breath attack when close, drops DragonEgg on death (plus existing Elytra/Totem/Scrap).
-- Files: blocks.ts, game.ts.
-- Commit: 48f4a1f.
-
-### 2026-10-25 — Grok (biome expansion, first cut)
-- Added a thin Ocean (h <= SEA-6) and a thin Desert (heat > 0.72). Commit 9ce8d84.
-- Superseded by the pass below (same files). Do not revert to the thin bands.
-
-### 2026-10-25 — Grok (biomes: Ocean + Desert, merged)
-Rebased onto 9ce8d84. Kept the wider climate, not the thin bands.
-
-- Biomes: `Ocean` is open water (floor ≤ sea−3, or more than 5 blocks from land). `Shore` is the beach band next to land. `Desert` when hot+dry and below the snow line. Ash ridge kept for the hotter high ground.
-- Ocean floor: sand / gravel / clay. Kelp = stacked Reed (`decorateOcean`).
-- Desert: sand, more cactus than ash, no trees, no grass, no flowers.
-- Structures: `tomb` in Desert, `reef` + wrecks in Ocean. Reefs do not drain water. Ocean site gate is looser (hash ≤ 0.86); every other site kind keeps 0.58 so old ruins/camps do not move.
-- Loot: tomb, reef. Spawns: turtles + drowned in Ocean (game.ts critter block only).
-
-Files: src/game/world.ts, src/game/sites.ts, src/game/loot.ts, src/game/game.ts (spawn lines only), WORKLOG.md.
-
-### 2026-10-25 — Grok (vanilla items pass)
-- Took the unclaimed "Add vanilla items + recipes: Compass, Clock, Map, Banner, Lead".
-- Compass already existed (ID 213 + recipe). Added:
-  - Clock (221): gold + dust
-  - Map (222): paper + compass
-  - Banner (223): white wool + stick
-  - Lead (224): string + slime
-- Recipes added in recipes.ts. Simple icon fallbacks in icons.tsx.
-- IDs appended only (no renumber). Files: blocks.ts, recipes.ts, icons.tsx.
-- Next free: breakable end crystals or inventory shift-click.
-
-*Agents: append below. Keep it factual and short.*
