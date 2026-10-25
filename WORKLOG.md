@@ -80,6 +80,16 @@
 - Colors match classic Lego palette.
 - Need: more brick-specific shapes (slopes, plates, tiles, minifig-scale elements?), better stud geometry, brick outlines/seams, minifig player option?, LDraw export (future).
 
+
+### Finalization pass (this cycle)
+- Crop growth: Carrot/Potato/Beet crops advance to ripe; Pumpkin/Melon stems produce fruit.
+- End portal: simple 12-eye activation check added (places EndPortal blocks).
+- Structures: 12 rare structures now in world gen (well, camp, shrine, beacon, mine, wreck, dungeon, tower, hut, portal, temple, ice spike).
+- Icons: full coverage for all items and blocks.
+- Physics: gravity (sand/gravel), fluid flow, weather (rain/lightning) active.
+- New blocks: Basalt/Calcite/Tuff craftable and generated.
+- Remaining large gaps (not fully closed): full redstone logic, deep mob AI, multiplayer, full End dimension travel, complete enchanting/brewing systems.
+
 ### Gaps to Minecraft 1:1 (Priority Order)
 1. **Dimensions**: Nether exists (region). Add The End + stronghold/portal. Full overworld biomes (desert, jungle, ocean, mushroom, etc.) with unique generation/structures.
 2. **Redstone**: Current is basic (dust/lever/lamp/piston). Need full logic: repeaters, comparators, observers, hoppers, dispensers, rails more complete, pressure plates, etc. Wire propagation.

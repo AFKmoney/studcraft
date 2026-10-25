@@ -3905,6 +3905,22 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     noteClock();
     if (phase === "play") {
       tickExtras(dt);
+      // crop growth (simple)
+      if ((elapsed * 2) % 1 < dt * 2) {
+        for (let dz = -3; dz <= 3; dz++) {
+          for (let dx = -3; dx <= 3; dx++) {
+            const x = gx + dx, z = gz + dz;
+            const y = gy;
+            const id = world.get(x, y, z);
+            if (id === ID.CarrotCrop && Math.random() < 0.15) world.set(x, y, z, ID.CarrotRipe);
+            if (id === ID.PotatoCrop && Math.random() < 0.15) world.set(x, y, z, ID.PotatoRipe);
+            if (id === ID.BeetCrop && Math.random() < 0.15) world.set(x, y, z, ID.BeetRipe);
+            if (id === ID.PumpkinStem && Math.random() < 0.1) world.set(x, y, z, ID.Pumpkin);
+            if (id === ID.MelonStem && Math.random() < 0.1) world.set(x, y, z, ID.Melon);
+          }
+        }
+      }
+
       weatherIn -= dt;
       if (weatherIn <= 0) {
         raining = !raining && Math.random() < 0.45;

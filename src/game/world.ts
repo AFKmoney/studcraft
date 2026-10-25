@@ -42,6 +42,25 @@ export function hamletOrigin(seed: number, rx: number, rz: number): { x: number;
 }
 
 export class World {
+
+  // End portal: if 12 eyes placed, activate (simple check near player)
+  private checkEndPortal(x: number, y: number, z: number) {
+    let eyes = 0;
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        if (Math.abs(dx) + Math.abs(dz) !== 2) continue;
+        if (this.get(x + dx, y, z + dz) === ID.EndFrameEye) eyes++;
+      }
+    }
+    if (eyes >= 12) {
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dz = -1; dz <= 1; dz++) {
+          this.set(x + dx, y, z + dz, ID.EndPortal);
+        }
+      }
+    }
+  }
+
   readonly seed: number;
   readonly flat: boolean;
   readonly noise: Noise;
