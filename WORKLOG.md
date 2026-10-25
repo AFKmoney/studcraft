@@ -546,3 +546,14 @@ DO NOT TOUCH:
 
 *Agents: append below. Keep it factual and short.*
 
+
+### 2026-10-25 — Grok (bone meal on veg shoots)
+- Took the unclaimed "Bone meal steps a vegetable shoot one stage".
+- In meal(): CarrotCrop → CarrotRipe, PotatoCrop → PotatoRipe, BeetCrop → BeetRipe.
+- Wheat stages, stems, and harvests left unchanged.
+- Files: game.ts (meal only).
+- Did not touch useBlock harvests, Basalt/Calcite/Tuff, aim line, icons, world, sky, GameView, styles, or mesher.
+- Logged.
+
+### Next move
+- Ready for next unclaimed.

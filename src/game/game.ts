@@ -2020,6 +2020,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (id === ID.Crop || id === ID.Crop1 || id === ID.Crop2) {
       const next = id === ID.Crop ? ID.Crop1 : id === ID.Crop1 ? ID.Crop2 : ID.CropRipe;
       world.set(hit.x, hit.y, hit.z, next);
+    } else if (id === ID.CarrotCrop || id === ID.PotatoCrop || id === ID.BeetCrop) {
+      const next = id === ID.CarrotCrop ? ID.CarrotRipe : id === ID.PotatoCrop ? ID.PotatoRipe : ID.BeetRipe;
+      world.set(hit.x, hit.y, hit.z, next);
     } else if (id === ID.PumpkinStem) world.set(hit.x, hit.y, hit.z, ID.Pumpkin);
     else if (id === ID.MelonStem) world.set(hit.x, hit.y, hit.z, ID.Melon);
     else if (id === ID.Sapling) growTree(hit.x, hit.y, hit.z);
