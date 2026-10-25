@@ -101,7 +101,6 @@ export type GameApi = {
   respawn: () => void;
   toggleInventory: () => void;
   setSlot: (i: number) => void;
-  swapSlots: (a: number, b: number) => void;
   assign: (id: number) => void;
   hold: (id: number) => void;
   shiftStack: (id: number) => void;
@@ -2001,8 +2000,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (id === ID.Crop || id === ID.Crop1 || id === ID.Crop2) {
       const next = id === ID.Crop ? ID.Crop1 : id === ID.Crop1 ? ID.Crop2 : ID.CropRipe;
       world.set(hit.x, hit.y, hit.z, next);
-    } else if (id === ID.PumpkinStem) world.set(hit.x, hit.y, hit.z, ID.Pumpkin);
-    else if (id === ID.MelonStem) world.set(hit.x, hit.y, hit.z, ID.Melon);
+    }
     else if (id === ID.Sapling) growTree(hit.x, hit.y, hit.z);
     else if (id === ID.Cane && world.get(hit.x, hit.y + 1, hit.z) === ID.Air) world.set(hit.x, hit.y + 1, hit.z, ID.Cane);
     else if (id === ID.Grass || id === ID.Dirt) {
@@ -3572,25 +3570,46 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const day = 0x8ec8f5;
     const hor = 0xf0a06a;
     const night = 0x10182e;
-    const fogHex = sunH > 0 ? lerpHex(hor, day, Math.min(1, sunH * 1.5)) : lerpHex(hor, night, Math.min(1, -sunH * 1.15));
+    // Atmosphere pass 2: continuous blend factors replace the binary
+    // sunH > 0 switches that popped at the horizon. dayF eases day<->night,
+    // duskF peaks while the sun skims the horizon (golden hour).
+    const dayF = THREE.MathUtils.smoothstep(sunH, -0.08, 0.25);
+    const duskF = Math.max(0, 1 - Math.abs(sunH) / 0.3);
+    let fogHex = sunH > 0 ? lerpHex(hor, day, Math.min(1, sunH * 1.5)) : lerpHex(hor, night, Math.min(1, -sunH * 1.15));
+    if (duskF > 0) fogHex = lerpHex(fogHex, 0xf07840, duskF * 0.22);
     renderer.setClearColor(fogHex, 1);
     const fog = scene.fog as THREE.Fog;
     fog.color.setHex(fogHex);
     const far = settings.radius * CS + 18;
     fog.near = far * 0.42;
     fog.far = far;
+    // Underwater: when the camera's eye block is a fluid, collapse the fog
+    // into a dense tint (the dome colors are bent to match below).
+    const eyeDef = def(world.get(Math.floor(camera.position.x), Math.floor(camera.position.y), Math.floor(camera.position.z)));
+    const submerged = !!eyeDef.fluid;
+    const uwHex = eyeDef.id === ID.Lava ? 0xc7430d : 0x14507a;
+    if (submerged) {
+      fog.color.setHex(uwHex);
+      renderer.setClearColor(uwHex, 1);
+      fog.near = 0.5;
+      fog.far = eyeDef.id === ID.Lava ? 7 : 24;
+    }
     const camFar = Math.max(420, far + 280);
     if (camera.far !== camFar) {
       camera.far = camFar;
       camera.updateProjectionMatrix();
     }
-    hemi.color.setHex(sunH > 0 ? 0xcfe6ff : 0x22304e);
-    sun.color.setHex(sunH > 0 ? 0xfff2d2 : 0x6d7eaa);
+    // Continuous light grading: hemisphere eases into night blue, the sun
+    // warms to deep amber at the horizon and becomes steel-blue moonlight
+    // after dark (its position already parks it above the scene at night).
+    hemi.color.setHex(lerpHex(0x22304e, 0xcfe6ff, dayF));
+    const sunDay = lerpHex(0xffb35c, 0xfff2d2, Math.min(1, Math.max(0, sunH * 2.4)));
+    sun.color.setHex(lerpHex(0x7d90bd, sunDay, dayF));
     if (settings.realistic) {
-      hemi.intensity = 0.28 + Math.max(0, sunH) * 0.32;
-      ambient.intensity = 0.28 + Math.max(0, sunH) * 0.07;
-      sun.intensity = 0.1 + Math.max(0, sunH) * 1.75;
-      scene.environmentIntensity = 0.3 + Math.max(0, sunH) * 0.25;
+      hemi.intensity = 0.34 + dayF * 0.26;
+      ambient.intensity = 0.3 + dayF * 0.05;
+      sun.intensity = 0.22 + dayF * (0.35 + 0.65 * Math.min(1, Math.max(0, sunH * 1.6))) * 1.65;
+      scene.environmentIntensity = 0.36 + dayF * 0.19;
       const texel = 60 / (narrow ? 1024 : 2048);
       const px = Math.round(player.x / texel) * texel;
       const py = Math.round((player.y + 1) / texel) * texel;
@@ -3598,12 +3617,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       const lift = 48;
       sun.target.position.set(px, py, pz);
       sun.position.set(px + sunX * lift, py + Math.max(12, sunH * lift + 18), pz + 14);
-      sun.castShadow = sunH > 0.05;
+      sun.castShadow = sunH > -0.02;
+      sun.shadow.intensity = THREE.MathUtils.clamp((sunH + 0.02) / 0.12, 0.15, 1);
       sun.shadow.camera.updateProjectionMatrix();
     } else {
-      hemi.intensity = 0.25 + Math.max(0, sunH) * 0.4;
-      ambient.intensity = 0.22 + Math.max(0, sunH) * 0.12;
-      sun.intensity = 0.15 + Math.max(0, sunH) * 0.85;
+      hemi.intensity = 0.3 + dayF * 0.35;
+      ambient.intensity = 0.24 + dayF * 0.1;
+      sun.intensity = 0.22 + dayF * 0.78;
       sun.position.set(sunX * 60, sunH * 50 + 8, 24);
       sun.castShadow = false;
     }
@@ -3614,8 +3634,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     (stars.material as THREE.PointsMaterial).opacity = Math.max(0, Math.min(1, -sunH * 1.4));
     stars.position.set(player.x, 0, player.z);
     const zenHex = sunH > 0 ? lerpHex(0x2c4a73, 0x2a6ad4, Math.min(1, sunH * 1.6)) : lerpHex(0x2c4a73, 0x030612, Math.min(1, -sunH * 1.2));
-    skyU.topColor.value.setHex(zenHex);
-    skyU.horizonColor.value.setHex(fogHex);
+    if (submerged) {
+      skyU.topColor.value.setHex(lerpHex(uwHex, 0x000000, 0.35));
+      skyU.horizonColor.value.setHex(uwHex);
+    } else {
+      skyU.topColor.value.setHex(zenHex);
+      skyU.horizonColor.value.setHex(fogHex);
+    }
     skyU.sunDirection.value.set(sunX, sunH, 0.18).normalize();
     skyU.uGlow.value = THREE.MathUtils.clamp(sunH * 1.8 + 0.25, 0, 1);
     skyDome.position.set(player.x, player.y, player.z);
@@ -4205,16 +4230,6 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     },
     setSlot(i) {
       slot = (i + 9) % 9;
-      emit();
-    },
-    swapSlots(a, b) {
-      a = (a + 9) % 9;
-      b = (b + 9) % 9;
-      if (a === b) return;
-      const tmp = hotbar[a];
-      hotbar[a] = hotbar[b];
-      hotbar[b] = tmp;
-      slot = b;
       emit();
     },
     assign(id) {
