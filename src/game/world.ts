@@ -1039,6 +1039,16 @@ function levelPad(world: World, x0: number, z0: number, w: number, d: number, h:
 }
 
 
+
+function stampCamp(world: World, x: number, y: number, z: number) {
+  // small camp: campfire + logs around
+  world.set(x, y, z, ID.Campfire);
+  world.set(x + 1, y, z, ID.Log);
+  world.set(x - 1, y, z, ID.Log);
+  world.set(x, y, z + 1, ID.Log);
+  world.set(x, y, z - 1, ID.Log);
+}
+
 function stampRuinedWell(world: World, x: number, y: number, z: number) {
   // small 3x3 well of cobble + water
   for (let dx = -1; dx <= 1; dx++) {

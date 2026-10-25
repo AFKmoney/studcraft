@@ -19,6 +19,7 @@
 
 ### Structures (this cycle)
 - Added rare ruined well (cobble + water) in overworld generation.
+- Added rare camp (campfire + logs).
 - Block icons + recipes for Basalt/Calcite/Tuff complete.
 
 ### Recipes for new blocks (this cycle)
