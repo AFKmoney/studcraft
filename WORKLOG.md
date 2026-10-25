@@ -159,3 +159,16 @@ shading, mobile UI, QA, APK packaging. Everything below verified with
 
 ### Next move
 - Ready for next gap. Suggest "Full Ender Dragon encounter or End portal" or "Expand biome set + structures (desert + ocean)".
+
+### 2026-10-25 — Grok (End / Dragon 1:1 path)
+- Implemented closer-to-vanilla End portal + dragon encounter.
+- Added EndFrame / EndFrameEye / DragonEgg blocks+item.
+- Overworld End portal frame (12 frames on obsidian base) at ~180,180,32. Using Eye of Ender on a frame fills it; 12 eyes open the center Portal.
+- Stepping into that specific portal sends to The End (other portals still Nether).
+- End island improved with 4 obsidian pillars (crystal stand-ins on top).
+- Dragon: extra breath attack when close, drops DragonEgg on death (plus existing Elytra/Totem/Scrap).
+- Files: blocks.ts, game.ts.
+- Logged and pushed.
+
+### Next move
+- Ready. Suggest "Expand biome set + structures (desert + ocean)" or deeper dragon crystals that can be destroyed to weaken the dragon.

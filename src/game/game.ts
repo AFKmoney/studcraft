@@ -1825,6 +1825,40 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       return;
     }
     if (held === ID.Eye) {
+      // seek or activate nearest End frame
+      const gx = Math.floor(player.x);
+      const gz = Math.floor(player.z);
+      let best: { x: number; y: number; z: number; d: number } | null = null;
+      for (let dz = -16; dz <= 16; dz++) for (let dx = -16; dx <= 16; dx++) {
+        for (let dy = -4; dy <= 6; dy++) {
+          const x = gx + dx, y = Math.floor(player.y) + dy, z = gz + dz;
+          if (world.get(x, y, z) === ID.EndFrame) {
+            const d = dx*dx + dz*dz;
+            if (!best || d < best.d) best = { x, y, z, d };
+          }
+        }
+      }
+      if (best) {
+        world.set(best.x, best.y, best.z, ID.EndFrameEye);
+        markDirtyAt(best.x, best.z);
+        spend(ID.Eye, 1);
+        say("Eye set");
+        // check if 12 eyes
+        let eyes = 0;
+        for (let dz = -6; dz <= 6; dz++) for (let dx = -6; dx <= 6; dx++) {
+          if (world.get(best.x + dx, best.y, best.z + dz) === ID.EndFrameEye) eyes++;
+        }
+        if (eyes >= 12) {
+          // open portal in center
+          for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+            world.set(best.x + dx, best.y, best.z + dz, ID.Portal);
+          }
+          say("Portal open");
+          markDirtyAt(best.x, best.z);
+        }
+        return;
+      }
+      // fallback: teleport if already in End or no frame nearby
       hopRealm(2);
       return;
     }
@@ -2075,6 +2109,23 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
     world.set(488, 29, 488, ID.Portal);
     world.set(488, 30, 488, ID.Portal);
+    // Overworld End portal frame near origin offset
+    const fx = 180, fz = 180, fy = 32;
+    const ring = [
+      [-2,-2],[-1,-2],[0,-2],[1,-2],[2,-2],
+      [2,-1],[2,0],[2,1],[2,2],
+      [1,2],[0,2],[-1,2],[-2,2],
+      [-2,1],[-2,0],[-2,-1]
+    ];
+    for (const [ox, oz] of ring) {
+      world.set(fx + ox, fy, fz + oz, ID.EndFrame);
+      world.set(fx + ox, fy - 1, fz + oz, ID.Obsidian);
+    }
+    // pillars in End
+    for (const [px, pz] of [[-510,-510],[-498,-510],[-510,-498],[-498,-498]]) {
+      for (let y = 49; y <= 62; y++) world.set(px, y, pz, ID.Obsidian);
+      world.set(px, 63, pz, ID.PrismOre); // crystal stand-in
+    }
     fill(-520, 48, -520, -488, 48, -488, ID.EndStone);
     fill(-518, 49, -518, -490, 56, -490, ID.Air);
     world.set(-504, 49, -504, ID.Portal);
@@ -2217,7 +2268,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       plateKey = "";
     }
     if (nextPlate) plateKey = nextPlate;
-    if (world.get(gx, gy, gz) === ID.Portal || world.get(gx, gy + 1, gz) === ID.Portal) hopRealm(realm === 0 ? 1 : 0);
+    if (world.get(gx, gy, gz) === ID.Portal || world.get(gx, gy + 1, gz) === ID.Portal) {
+      if (Math.abs(gx - 180) < 8 && Math.abs(gz - 180) < 8) hopRealm(2);
+      else hopRealm(realm === 0 ? 1 : 0);
+    }
     for (const [ox, , oz] of NEIGHBORS) {
       if (world.get(gx + ox, gy, gz + oz) === ID.Cactus || world.get(gx + ox, gy + 1, gz + oz) === ID.Cactus) {
         hurt(1);
@@ -2672,7 +2726,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
                           : mob.kind === "phantom"
                             ? [ID.Feather]
                             : mob.kind === "dragon"
-                              ? [ID.Elytra, ID.Totem, ID.Scrap]
+                              ? [ID.Elytra, ID.Totem, ID.Scrap, ID.DragonEgg]
                               : mob.kind === "frog"
                                 ? [ID.Slime]
                                 : mob.kind === "fox"
@@ -3047,6 +3101,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           bite(5);
           m.cool = 1.1;
           audio.hit();
+        }
+        if (m.kind === "dragon" && d < 8 && phase === "play" && m.cool <= 0 && Math.random() < 0.15) {
+          bite(2);
+          say("Dragon breath");
+          m.cool = 2.4;
         }
       } else {
         if (m.kind === "wolf" && m.tame && !foe && d > 28) {

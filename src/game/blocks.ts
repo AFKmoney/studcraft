@@ -61,6 +61,9 @@ export const ID = {
   Netherrack: 87,
   Lava: 88,
   EndStone: 89,
+  EndFrame: 218,
+  EndFrameEye: 219,
+  DragonEgg: 220,
   EmeraldOre: 90,
   Enchanter: 91,
   Anvil: 92,
@@ -565,6 +568,9 @@ put(
   }),
 );
 put(b(ID.EndStone, "Pale brick", "#efe6b8", "#f7f1cc", "#ddd4a4", "#c8be8e", { hard: 1.5, tough: true, need: 1 }));
+put(b(ID.EndFrame, "End frame", "#2a1848", "#3d2868", "#1a1030", "#100818", { hard: 6, tough: true, need: 4 }));
+put(b(ID.EndFrameEye, "End frame (eye)", "#7a4ad4", "#c084fc", "#2a1848", "#1a1030", { hard: 6, tough: true, need: 4, drop: ID.EndFrame }));
+item(ID.DragonEgg, "Dragon egg", "#1a1030");
 put(b(ID.EmeraldOre, "Trade ore", "#3aaa4c", "#7dcca0", "#8e959c", "#6e767e", { hard: 1.8, tough: true, need: 3, drop: ID.Emerald }));
 put(b(ID.Enchanter, "Rune table", "#2a1848", "#7a4ad4", "#6b3e22", "#c4924a", { hard: 1.2, work: "enchant" }));
 put(b(ID.Anvil, "Anvil", "#6e767e", "#c5ccd3", "#4a4038", "#2a2a2a", { hard: 2, tough: true, need: 1, work: "anvil" }));
@@ -1007,6 +1013,8 @@ export const CATALOG = [
   ID.Rail,
   ID.Obsidian,
   ID.Portal,
+  ID.EndFrame,
+  ID.DragonEgg,
   ID.Enchanter,
   ID.Anvil,
   ID.Brew,
