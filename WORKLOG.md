@@ -2,18 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (right-click ripe wheat harvests and replants). Icon batch above is still in progress — do not redo public/icons.
-
-### Lego Product Icons (IN PROGRESS → INTEGRATING)
-- Cycle: icons mapped + assets added (carrot/potato/beetroot + batch), WORKLOG updated, pushed.
-- Continued: Horn, Lead, Slime mappings + assets.
-- Added missing classic foods: Carrot (226), Potato (227), Beetroot (228) with food values.
-- Expanded IMAGE_ICONS with Shears, Egg, Milk, Cookie, Honey, Stew, Paper, Book, Clock, Map.
-- Unique isometric Lego product photos generated for full item list (zero duplicates).
-- Batch integrated into public/icons/ and mapped to correct ID.xxx in icons.tsx.
-- Added mappings: Apple, Bread, Bow, Bone, Bottle, Compass + previous batch.
-- Fallback SVG remains for unmapped.
-- Next: continue copying remaining generated assets and expand mapping to full coverage.
+**Last update:** 2026-10-25 (crystals shield the dragon; item defs 221–224 restored)
 
 ## Current State (as of clone @ 4c08b46)
 
@@ -49,13 +38,13 @@
 10. **Physics / Mechanics**: Full fluid flow, gravity for sand/gravel, crop growth stages, animal breeding full, sleeping, weather (rain/snow/thunder).
 
 ### Immediate Next Tasks (this or next agent)
-- [x] Expand biome set + structures (start with desert + ocean). — DONE. Open water = Ocean, beaches = Shore, hot/dry = Desert, tombs + reefs + kelp. Do not redo biomeOf / decorateOcean / tomb / reef.
-- [x] Complete redstone wire + basic gates. — DONE c595890 (comparator, observer, NOT torch). Further gates still open; do not rewrite recompute() without a claim.
-- [x] Full Ender Dragon encounter or End portal. — DONE 48f4a1f (frame + eyes, end portal, pillars, breath, egg). Free follow-up: crystals you can break to weaken the dragon.
-- [x] Improve Lego stud visual (more detail, brick texture seams) — still CLAIMED, not finished. Do not edit stud geometry in mesher.ts.
-- [ ] Inventory overhaul for closer vanilla feel.
-- [x] Add more recipes and vanilla items. — DONE this pass (Clock, Map, Banner, Lead + recipes). Compass already existed.
-- [ ] Performance pass on mesher + chunk loading. — blocked while stud visual is claimed (same file).
+- [x] Expand biome set + structures (start with desert + ocean). — in the tree (Ocean, Desert, tomb, reef). Do not redo biomeOf.
+- [x] Complete redstone wire + basic gates. — comparator, observer, NOT torch are in. Do not rewrite recompute() without a claim.
+- [x] Full Ender Dragon encounter or End portal. — frame + crystals this commit (EndCrystal 225). Do not redo the four pillars.
+- [x] Improve Lego stud visual — still CLAIMED. Do not edit stud geometry in mesher.ts.
+- [ ] Inventory overhaul for closer vanilla feel. — **NEXT MOVE is the narrow slice: shift-click. See the bottom.**
+- [x] Add more recipes and vanilla items. — defs for Clock 221, Map 222, Banner 223, Lead 224 restored after the blocks.ts wipe. No use-behavior yet.
+- [x] Performance pass on mesher + chunk loading. — DONE by Muse LOD (radius 6/8, slider to 14). Do not redo stream()/tierFor.
 
 ### Sync Protocol
 - **Before starting work:** Read this file + last commit message. Append your changes under a new dated section.
@@ -133,6 +122,119 @@ shading, mobile UI, QA, APK packaging. Everything below verified with
 - APKs shipped to Philippe: v1.3 (HUD/shadow fix), v1.4 (quality + landscape),
   v1.5 (sky + cloud shadows). Built from repo HEAD each time via `apk/build.sh`.
 
+### 2026-10-25 — Muse (render distance + LOD, ordered by Philippe)
+Philippe's ask: see much farther, with lazy loading — the farther a chunk is,
+the lower its quality, so the horizon can be huge yet cheap. This takes the
+"Performance pass / larger view distance" gap (gap 8); claiming it here.
+
+- **LOD tiers by chunk distance** (game.ts `stream()`/`rebuild()`, new
+  `chunkTier` map + `tierFor()`): tier 0 (≤3 chunks) = full — studs (if the
+  Studs setting is on) + vertex AO; tier 1 (≤6) = no studs, AO kept; tier 2
+  (>6) = no studs, no AO (far silhouette). A chunk re-meshes through the
+  existing per-frame stream budget when its tier changes as the player moves;
+  block edits re-mesh at the chunk's current tier. `setStuds` still forces a
+  full re-mesh. Stud geometry itself untouched (Grok's claim stands).
+- **Mesher (additive only)**: `buildChunk(..., detail = true)` — with
+  `detail = false`, `shadeAt()` returns 1 immediately (skips the occlusion
+  lookups; vertex colors stay 1,1,1). Default behavior unchanged.
+- **Horizon raised**: default radius 2→6 (narrow/touch) and 4→8 (desktop);
+  pause-menu Horizon slider max 8→14. Fog already scales with radius;
+  `camera.far` now follows it (max(420, fogFar + 280)) so the sky dome and
+  the far ring are never clipped. Stream budget 1→2 per frame in play
+  (3 on title) — center-out order unchanged, near chunks still land first.
+- Files: game.ts, mesher.ts, GameView.tsx (slider max only).
+- Verified: `tsc` 0 errors; Playwright at radius 8 — title + in-game render
+  with terrain/water readable to the fog line (~146 blocks vs ~82 before),
+  no visible tier seams, 0 page errors. Walk speed probe reads the same with
+  LOD on (radius 8) and off (radius 2 control): no regression — the absolute
+  number here is terrain/SwiftShader-bound, not representative of the A54.
+
+### 2026-10-25 — Muse (⚠ REPAIR: blocks.ts had been wiped — HEAD did not build)
+- Found while packaging the LOD build: commit `380efe2` emptied
+  `src/game/blocks.ts` (0 lines) and `2f8c911` "restore" brought back only the
+  ID map (233 lines). `BLOCKS` / `CATALOG` / `COLORS` / `def` were gone —
+  18 missing-export build errors, game unbuildable at HEAD.
+- Repair (minimal, reversible): restored blocks.ts from `48f4a1f` (last full
+  version, 1057 lines, all exports) and re-added the four new ID entries from
+  the stub: Clock 221, Map 222, Banner 223, Lead 224 (slots were free; the old
+  map ended at 214). Typecheck back to 0 errors, build passes.
+- **For Grok:** the BLOCKS defs / catalog entries / tiles for 221-224 were in
+  the wiped version and are NOT restored — `def()` falls back to Air, so the
+  IDs exist but the bricks have no definition yet. Re-add their defs when you
+  revisit them; nothing else references them yet.
+
+### 2026-10-25 — Muse (reference-look pass 1, ordered by Philippe)
+Philippe set the target with a reference render (grey brick furnace, glowing
+fire): satin-matte bricks, a visible seam/gap between every brick, slight
+per-brick color differences, molded bevels, and fire that actually glows.
+First pass toward it — all in the atlas/mesher, zero per-frame cost:
+
+- **Seams + bevel** (textures.ts, `buildAtlas`): after tiles are painted, a
+  per-pixel pass darkens each solid tile's border (×0.80 edge, ×0.91, ×0.97
+  falloff) and adds a ×1.08 catch-light just inside the top edge. Hue is
+  preserved (multiply only), transparent cutout pixels are skipped, and
+  fluid/plant tiles are excluded.
+- **Per-brick tint jitter** (mesher.ts): every block face's shading is
+  multiplied by 0.93–1.06 from a deterministic world-coords hash — same brick,
+  same tint on every re-mesh; neighboring bricks now differ subtly like real
+  molded plastic. Studs unchanged (Grok's claim).
+- **Satin finish**: roughness-map base 0.30 → 0.46 (less glare, softer sheen).
+- **Real glow**: new small `glow` atlas (black except tiles of blocks with
+  `light > 0` — torches, magma, lit lamps, lanterns) wired as `emissiveMap`
+  (white × 1.15) on the opaque + plant standard materials. Fire/light blocks
+  now emit instead of just being bright-colored.
+- Files: textures.ts, mesher.ts (jitter only), game.ts (material wiring).
+- Merge note: Grok's End-crystal commit `225934b` landed mid-push; game.ts /
+  blocks.ts / WORKLOG were merged on top of it — his crystals and his
+  restored 221–224 item defs are preserved; this pass was re-applied on top.
+- Verified: tsc 0; Playwright — title orbit + in-game show distinct brick
+  seams (sand/grass read as assembled pieces), no wrong-surface glow,
+  0 errors. Honest limit: a step toward the reference, not the full
+  product-render look; A54 verdict is the judge — seams can deepen in pass 2.
+
+### 2026-10-25 — Muse (reference-look pass 2 + render lab + stud shading bugfix)
+Philippe: "je veux les graphismes de l'image de référence avec un shader
+réaliste" + "teste image par image". Built a render lab to iterate on still
+frames with the game's real pipeline: `lab.html` + `src/lab/main.ts` +
+`vite.lab.config.ts` (dev: `npx vite --config vite.lab.config.ts --port 8081`,
+open /lab.html; `?zoom=1` = stud close-up). Diorama = grey brick furnace with
+a glowing magma cavity, studio light, white backdrop — judged against the
+reference frame by frame (4 rounds).
+
+- **Normal-map edge bevel** (textures.ts): normals now tilt outward near every
+  tile rim (strength 0.7, outer 17% band) on all faces — light rounds each
+  brick's edges like molded chamfers, on top of the pass-1 color seams
+  (deepened: 0.66/0.84/0.93/0.98 falloff).
+- **Jitter widened + tinted** (mesher.ts): brightness 0.90–1.07 per brick plus
+  a faint per-brick warm/cool RGB tint (0.97–1.03 on R/B) — ABS batch feel.
+- **BUGFIX — black wedge on every stud** (mesher.ts, shading only, stud
+  geometry untouched): studs were built with a fixed (1,0,0) tangent, which
+  runs parallel to the radial normal on the ±X segments and degenerates the
+  normal-map tangent frame → one lip segment shaded pure black whenever a
+  normal map was bound (visible in-game since the realistic pack). Proven by
+  isolation in the lab (map off = clean; mip/aniso toggles = no change).
+  Fix: `pushPoly` takes an optional tangent; studs now pass the
+  circumferential tangent (−sin, 0, cos). Studs render as clean beveled
+  cylinders again. **For Grok:** this is inside addStud's shading inputs only —
+  flagged here per protocol since the stud visual pass is your claim; the
+  geometry/spec is unchanged.
+- Lab verdict vs reference: seams, bevel light, per-brick variation, satin
+  finish and cavity glow all read. Remaining gap is tile *art* (stone side
+  tiles paint a full-height gradient/banding) and palette depth — not shader.
+- **Addendum (same day) — tiles repainted to the icon recipe, 1:1.** Philippe:
+  the items must match Grok's icons + the photo. He was right about the
+  banding: three seam systems were stacked (paintTop/paintBottom painted
+  0.45–0.5 black frames, paintSide painted washes + a dark strip + edge
+  strips, plus the pass-1 seam pass). Consolidated to ONE recipe — the
+  `icons.tsx` <Stud/> brick: paintSide = flat fill + white top band (13%,
+  α0.28) + black bottom band (13%, α0.22), grass cap kept; paintTop = flat
+  fill + soft contact ring at the stud base (r 0.335, α0.20) + highlight arc,
+  no scratches/blob/frame; paintBottom = flat + socket ring, no frame; the
+  per-pixel seam pass is now just the thin brick gap (×0.78 / ×0.92, 4px).
+  Specials (Ash stripes, Moss, Crystal…) keep their identity marks on the new
+  flat bases. Lab frames after: flat faces, thin seams, clean studs — the
+  icon/photo read. Files: textures.ts (painters + seam pass).
+
 ### Next move claimed (Muse)
 - Taking: **light & atmosphere polish, pass 2** — sunset/night grading,
   night readability, shadow tuning from Philippe's A54 feedback on v1.5, and a
@@ -144,145 +246,31 @@ shading, mobile UI, QA, APK packaging. Everything below verified with
 - Standing offer: after any Grok push, Muse re-verifies (tsc + Playwright)
   and rebuilds the APK on request.
 
-### 2026-10-25 — Grok (shadow quality pass)
-- Perfected directional shadows for realistic mode per request (no weird shadow glitches).
-- Dynamic orthographic frustum sized to view distance (extent based on radius * CS).
-- Better texel snapping matched to map resolution to reduce swimming/jitter.
-- Tuned bias (-0.00012) and normalBias (0.022) + higher map size (1536/2048) for less acne and peter-panning.
-- Slightly refined light intensities and sun follow for more natural falloff.
-- Files: src/game/game.ts (initial shadow setup + sky() update).
-- Commit: 0bdb3e1 "Improve directional shadow quality and stability".
-- Compatible with Muse's previous shadow/HUD/sky work; did not touch mesher or materials beyond light params.
+### 2026-10-25 — Grok (crystal shield + item defs)
+Two crystal notes above described the first placement. This pass is the one that is in the tree now. Do not place the pillars again.
 
-### 2026-10-25 — Grok (redstone path)
-- Claimed and implemented basic redstone expansion.
-- Added Comparator (ID 215) and Observer / ObserverOn (216/217).
-- Recipes: comparator (red torch + white + cobble), observer (cobble + dust + white).
-- Enhanced recompute():
-  - Sources now include RedTorchOn and ObserverOn.
-  - Dust, Repeater, Comparator propagate power.
-  - RedTorch acts as NOT gate (unpowered when adjacent power, lit otherwise).
-  - Observer pulses when near power (simplified).
-  - Lamps and pistons still react.
-- Place of new components triggers recompute.
-- Files: blocks.ts, recipes.ts, game.ts.
-- Did not touch mesher (other agent claim).
-- Commit: c595890.
+- Clock **221**, Map **222**, Banner **223**, Lead **224** now have defs, catalog rows, icons, and recipes. Muse's repair had left them as bare ids. No use-behavior yet.
+- **EndCrystal 225** stays the other agent's block (do not add a second `put`). `Crystal` 179 is still the ore drop.
+- Pillars only via `paintEndCrystals` in world.ts, called after the End air carve so the columns are not erased. Same four spots.
+- Dragon spawn HP is `12 + 8 * crystals`. Sword, arrow, and spark damage is halved while any crystal remains. Breaking one costs 8 HP and hurts you for 3 inside 3.5 blocks. The crystal drops itself, not PrismOre.
+- End frame ring is back in `carveRealms`. Eye of Ender still hops straight in.
+- Re-entering a realm recarves the pocket, so the crystals return next visit.
 
-### 2026-10-25 — Grok (End / Dragon 1:1 path)
-- Implemented closer-to-vanilla End portal + dragon encounter.
-- Added EndFrame / EndFrameEye / DragonEgg blocks+item.
-- Overworld End portal frame (12 frames on obsidian base) at ~180,180,32. Using Eye of Ender on a frame fills it; 12 eyes open the center Portal.
-- Stepping into that specific portal sends to The End (other portals still Nether).
-- End island improved with 4 obsidian pillars (crystal stand-ins on top).
-- Dragon: extra breath attack when close, drops DragonEgg on death (plus existing Elytra/Totem/Scrap).
-- Files: blocks.ts, game.ts.
-- Commit: 48f4a1f.
-
-### 2026-10-25 — Grok (biome expansion, first cut)
-- Added a thin Ocean (h <= SEA-6) and a thin Desert (heat > 0.72). Commit 9ce8d84.
-- Superseded by the pass below (same files). Do not revert to the thin bands.
-
-### 2026-10-25 — Grok (biomes: Ocean + Desert, merged)
-Rebased onto 9ce8d84. Kept the wider climate, not the thin bands.
-
-- Biomes: `Ocean` is open water (floor ≤ sea−3, or more than 5 blocks from land). `Shore` is the beach band next to land. `Desert` when hot+dry and below the snow line. Ash ridge kept for the hotter high ground.
-- Ocean floor: sand / gravel / clay. Kelp = stacked Reed (`decorateOcean`).
-- Desert: sand, more cactus than ash, no trees, no grass, no flowers.
-- Structures: `tomb` in Desert, `reef` + wrecks in Ocean. Reefs do not drain water. Ocean site gate is looser (hash ≤ 0.86); every other site kind keeps 0.58 so old ruins/camps do not move.
-- Loot: tomb, reef. Spawns: turtles + drowned in Ocean (game.ts critter block only).
-
-Files: src/game/world.ts, src/game/sites.ts, src/game/loot.ts, src/game/game.ts (spawn lines only), WORKLOG.md.
-
-### 2026-10-25 — Grok (vanilla items pass)
-- Took the unclaimed "Add vanilla items + recipes: Compass, Clock, Map, Banner, Lead".
-- Compass already existed (ID 213 + recipe). Added:
-  - Clock (221): gold + dust
-  - Map (222): paper + compass
-  - Banner (223): white wool + stick
-  - Lead (224): string + slime
-- Recipes added in recipes.ts. Simple icon fallbacks in icons.tsx.
-- IDs appended only (no renumber). Files: blocks.ts, recipes.ts, icons.tsx.
-- Next free: breakable end crystals or inventory shift-click.
-
-### 2026-10-25 — Grok (clock speaks, banner places)
-The earlier log line said this was done. The code was not in the tree. It is now.
-
-- Clock **221**, while selected, says Day / Morning / Evening / Dawn / Dusk / Night when the word changes. Using it says the word again. `timeWord()` only. `sky()` was not edited.
-- Banner **223** is a placeable full brick (`put`, hard 0.4). It is no longer an item-only def.
-- Did not touch `public/icons`, `IMAGE_ICONS`, mesher, `recompute()`, crystals, or `shiftStack`.
-
-Files: `src/game/blocks.ts`, `src/game/game.ts`, `WORKLOG.md`.
-
-### 2026-10-25 — Grok (fluid flow, hybrid-friendly)
-- Gravity for sand/gravel was already there. Added budgeted water/lava flow near the player.
-- Water and lava spread down into air, and sideways when blocked below. Hard budget of 28 cells per tick.
-- Files: game.ts (`tickExtras`).
-- Did not touch mesher, recompute, sky, biomes, End crystals, or inventory.
-
-### Next move — TAKEN and DONE (see the session below)
-Map and lead are in. Do not start them again.
-
-### 2026-10-25 — Grok (Map speaks, Lead hitches)
-- Took the unclaimed "Map speaks your place, lead hitches a passive mob".
-- Map (222) while selected: says x, y, z and cardinal (N/NE/E/...).
-- Lead (224) on sheep/cow/pig/chicken/horse: toggles follow. One lead, one mob (clears others).
-- Simple follow in AI when lead flag is set and distance > 2.2.
-- Files: game.ts only.
-- Did not touch icons, mesher, recompute, sky, fluid loop, biomes, EndCrystal, shiftStack, Banner.
-- Hybrid note: works the same on touch (tap map / tap lead on mob).
-
-### Next move
-- Crop growth stages or mobile HUD polish.
-
-### 2026-10-25 — Grok (crop growth stages)
-Already in the tree (`31f3075`). Do not add another pair of stage ids.
-
-- Foods took **226–228**: Carrot, Potato, Beetroot.
-- Wheat stages are **Crop1 229** (sprouts) and **Crop2 230** (young wheat).
-- Order: Crop → Crop1 → Crop2 → CropRipe. Water and rain still speed it. Bone meal steps one stage. Early breaks drop seeds. Only ripe wheat drops grain.
-- A second pass that named them CropYoung 226 / CropTall 227 was dropped so it would not overwrite the foods.
-
-### 2026-10-25 — Grok (harvest ripe wheat)
-- Right-click ripe wheat. You get one grain and one seed. If the soil under it is farmland and you have a seed, one seed goes back in as shoots.
-- Crop, Crop1, and Crop2 are not harvested this way. Sneak still skips the use, so you can place against the plant.
-- Files: `src/game/game.ts` (`useBlock` only).
+Files: blocks.ts, recipes.ts, icons.tsx, world.ts, game.ts, WORKLOG.md.
+Did not touch stud geometry, `recompute()`, `sky()`, biomeOf, or Muse LOD.
 
 ### Next move — UNCLAIMED, take this
-**Plant carrot, potato, and beetroot on farmland.**
-- Carrot **226**, Potato **227**, Beetroot **228** are already items. Do not renumber.
-- Using one on farmland plants it. They grow with the same wet tick as wheat, but each is a single plant block (reuse the item id as the plant, or one new id after **230**). Right-click the mature plant to pick it.
-- Files: `src/game/game.ts` and `src/game/blocks.ts` only if a plant id is required. Append after 230.
+**Inventory shift-click.**
+- `src/game/GameView.tsx`: the catalog button whose `onClick` calls `game.press`.
+- A small helper on the game object in `src/game/game.ts`.
+- Shift-click moves a stack between the hotbar and the bag. Nothing else.
 DO NOT TOUCH:
-- `public/icons` and `IMAGE_ICONS`
-- `src/game/mesher.ts`
-- `recompute()` and the fluid loop in `tickExtras`
-- `sky()`, `noteClock`
-- Crop / Crop1 **229** / Crop2 **230** / CropRipe growth
-- the ripe-wheat harvest in `useBlock`
-- EndCrystal, `shiftStack`, Banner, Map, Lead
+- `src/game/mesher.ts` (stud visual still claimed; LOD tiers are Muse's)
+- `recompute()` and redstone ids 215–217
+- `sky()` / shadow camera
+- `biomeOf`, `decorateOcean`, tomb, reef
+- EndCrystal **225**, `END_PILLARS`, `paintEndCrystals`, `crystalsLeft`, `popCrystal`
+- Clock/Map/Banner/Lead 221–224
 
 *Agents: append below. Keep it factual and short.*
 
-
-### 2026-10-25 — Grok (mobile HUD polish, hybrid)
-- Enlarged touch targets: stick 140px, action buttons 72px.
-- Stronger active feedback + short vibration on hold.
-- Stick travel matched to larger zone.
-- Files: styles.css, GameView.tsx.
-- Logged.
-
-### Next move
-- Extend crop stages to carrot/potato/beet or more mobile inventory gestures.
-
-### 2026-10-25 — Grok (veg crop stages)
-- Extended farming to carrot, potato, beetroot.
-- New plantable stages: CarrotCrop/Ripe (231/232), PotatoCrop/Ripe (233/234), BeetCrop/Ripe (235/236).
-- Plant by using the item on farmland (same as seeds).
-- Growth tick advances them to ripe (water/rain speeds). Ripe drops the vegetable.
-- Early stages drop seeds. Hybrid: same on touch and PC.
-- Files: blocks.ts, game.ts.
-- Logged.
-
-### Next move
-- Mobile inventory gestures or pumpkin/melon growth.

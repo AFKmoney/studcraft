@@ -10,34 +10,22 @@ function shade(hex: string, amt: number): string {
 }
 
 function paintTop(ctx: CanvasRenderingContext2D, ox: number, oy: number, base: string, rings = false) {
+  // Icon recipe (icons.tsx Stud / the reference photo): FLAT color field.
+  // The only drawing is the soft contact ring where the geometry stud sits
+  // (stud radius = 0.30 of the tile) and, for logs, the growth rings.
+  // Seams/bevel come from the atlas seam pass + normal map, not the tile.
   const S = TILE;
-  const seam = Math.max(2, Math.round(S * 0.047));
   ctx.fillStyle = base;
   ctx.fillRect(ox, oy, S, S);
-  const wash = ctx.createLinearGradient(ox, oy, ox, oy + S);
-  wash.addColorStop(0, "rgba(255,255,255,0.14)");
-  wash.addColorStop(0.45, "rgba(255,255,255,0)");
-  wash.addColorStop(1, "rgba(0,0,0,0.12)");
-  ctx.fillStyle = wash;
-  ctx.fillRect(ox, oy, S, S);
-  ctx.strokeStyle = "rgba(255,255,255,0.06)";
-  ctx.lineWidth = 1;
-  const seed = (ox * 3 + oy) | 0;
-  for (let i = 0; i < 5; i++) {
-    const yy = oy + ((seed + i * 19) % (S - 8)) + 4;
-    ctx.beginPath();
-    ctx.moveTo(ox + 6, yy);
-    ctx.lineTo(ox + S - 6, yy + ((i & 1) === 0 ? 1 : 0));
-    ctx.stroke();
-  }
-  ctx.fillStyle = "rgba(255,255,255,0.16)";
+  ctx.strokeStyle = "rgba(0,0,0,0.20)";
+  ctx.lineWidth = S * 0.028;
   ctx.beginPath();
-  ctx.ellipse(ox + S * 0.4, oy + S * 0.36, S * 0.2, S * 0.14, -0.4, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = "rgba(0,0,0,0.28)";
-  ctx.lineWidth = S * 0.045;
+  ctx.arc(ox + S / 2, oy + S / 2, S * 0.335, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(255,255,255,0.20)";
+  ctx.lineWidth = S * 0.014;
   ctx.beginPath();
-  ctx.arc(ox + S / 2, oy + S / 2, S * 0.36, 0, Math.PI * 2);
+  ctx.arc(ox + S / 2, oy + S / 2, S * 0.315, Math.PI * 1.05, Math.PI * 1.55);
   ctx.stroke();
   if (rings) {
     ctx.strokeStyle = shade(base, -26);
@@ -46,39 +34,20 @@ function paintTop(ctx: CanvasRenderingContext2D, ox: number, oy: number, base: s
     ctx.arc(ox + S / 2, oy + S / 2, S * 0.22, 0, Math.PI * 2);
     ctx.stroke();
   }
-  ctx.fillStyle = "rgba(0,0,0,0.5)";
-  ctx.fillRect(ox, oy, S, seam);
-  ctx.fillRect(ox, oy + S - seam, S, seam);
-  ctx.fillRect(ox, oy, seam, S);
-  ctx.fillRect(ox + S - seam, oy, seam, S);
 }
 
 function paintSide(ctx: CanvasRenderingContext2D, ox: number, oy: number, base: string, cap?: string) {
+  // Icon recipe, 1:1 with icons.tsx <Stud/>: flat fill, a white top band
+  // (13%, alpha 0.28) and a black bottom band (13%, alpha 0.22). No washes,
+  // no scratch lines, no edge strips — the atlas seam pass + the normal-map
+  // bevel supply the molded relief, exactly like the reference photo.
   const S = TILE;
   ctx.fillStyle = base;
   ctx.fillRect(ox, oy, S, S);
-  const wash = ctx.createLinearGradient(ox, oy, ox + S, oy + S);
-  wash.addColorStop(0, "rgba(255,255,255,0.08)");
-  wash.addColorStop(1, "rgba(0,0,0,0.1)");
-  ctx.fillStyle = wash;
-  ctx.fillRect(ox, oy, S, S);
-  ctx.fillStyle = shade(base, 26);
-  ctx.fillRect(ox, oy, S, S * 0.12);
-  ctx.fillStyle = shade(base, -32);
-  ctx.fillRect(ox, oy + S * 0.18, S, S * 0.08);
-  ctx.strokeStyle = "rgba(255,255,255,0.045)";
-  ctx.lineWidth = 1;
-  for (let i = 0; i < 3; i++) {
-    const yy = oy + S * (0.34 + i * 0.16);
-    ctx.beginPath();
-    ctx.moveTo(ox + 4, yy);
-    ctx.lineTo(ox + S - 4, yy);
-    ctx.stroke();
-  }
+  ctx.fillStyle = "rgba(255,255,255,0.28)";
+  ctx.fillRect(ox, oy, S, S * 0.13);
   ctx.fillStyle = "rgba(0,0,0,0.22)";
-  ctx.fillRect(ox, oy + S * 0.86, S, S * 0.14);
-  ctx.fillRect(ox, oy, S * 0.06, S);
-  ctx.fillRect(ox + S * 0.94, oy, S * 0.06, S);
+  ctx.fillRect(ox, oy + S * 0.87, S, S * 0.13);
   if (cap) {
     ctx.fillStyle = cap;
     ctx.fillRect(ox, oy, S, S * 0.26);
@@ -88,8 +57,9 @@ function paintSide(ctx: CanvasRenderingContext2D, ox: number, oy: number, base: 
 }
 
 function paintBottom(ctx: CanvasRenderingContext2D, ox: number, oy: number, base: string) {
+  // Underside: flat darker field + the socket ring (kept — it is the brick's
+  // underside identity). No painted frame; the seam pass handles borders.
   const S = TILE;
-  const seam = Math.max(2, Math.round(S * 0.047));
   ctx.fillStyle = shade(base, -8);
   ctx.fillRect(ox, oy, S, S);
   ctx.fillStyle = shade(base, -48);
@@ -101,11 +71,6 @@ function paintBottom(ctx: CanvasRenderingContext2D, ox: number, oy: number, base
   ctx.beginPath();
   ctx.arc(ox + S / 2, oy + S / 2, S * 0.3, 0, Math.PI * 2);
   ctx.stroke();
-  ctx.fillStyle = "rgba(0,0,0,0.45)";
-  ctx.fillRect(ox, oy, S, seam);
-  ctx.fillRect(ox, oy + S - seam, S, seam);
-  ctx.fillRect(ox, oy, seam, S);
-  ctx.fillRect(ox + S - seam, oy, seam, S);
 }
 
 function paintGlass(ctx: CanvasRenderingContext2D, ox: number, oy: number) {
@@ -301,11 +266,10 @@ export function buildAtlas(): BrickAtlases {
         for (let py = 0; py < TILE; py++) {
           for (let px = 0; px < TILE; px++) {
             const edge = Math.min(px, py, TILE - 1 - px, TILE - 1 - py);
-            if (edge > 7) continue;
+            if (edge > 4) continue;
             const i = ((oy + py) * W + (ox + px)) * 4;
             if (d[i + 3] < 200) continue;
-            let m = edge < 2 ? 0.8 : edge < 4 ? 0.91 : 0.97;
-            if (py >= 2 && py < 5) m *= 1.08;
+            let m = edge < 2 ? 0.78 : edge < 4 ? 0.92 : 1;
             d[i] *= m;
             d[i + 1] *= m;
             d[i + 2] *= m;
@@ -389,6 +353,20 @@ export function buildAtlas(): BrickAtlases {
             const groove = Math.exp(-((dist - 0.34) * (dist - 0.34)) / 0.0011);
             nx += dx * groove * 0.55;
             ny += -dy * groove * 0.55;
+          }
+          // Molded edge bevel: normals tilt outward near the tile rim, so
+          // light rounds every brick edge like the reference render's
+          // chamfered plastic. dx/dy are centered tile coords (-0.5..0.5).
+          {
+            const ax = Math.abs(dx);
+            const ay = Math.abs(dy);
+            const m = Math.max(ax, ay);
+            if (m > 0.33) {
+              const t = Math.min(1, (m - 0.33) / 0.17);
+              const s = t * t * 0.7;
+              nx += Math.sign(dx) * s * (ax >= ay ? 1 : 0.3);
+              ny += -Math.sign(dy) * s * (ay >= ax ? 1 : 0.3);
+            }
           }
           const len = Math.hypot(nx, ny, nz) || 1;
           normalPx.data[i] = Math.max(0, Math.min(255, (nx / len) * 127 + 128));

@@ -30,7 +30,7 @@ function uvs(tile: number): [number, number, number, number] {
   return [u0, vBot, u1, vTop];
 }
 
-function pushQuad(s: Surface, v: number[][], n: number[], tile: number, shade?: number[]) {
+function pushQuad(s: Surface, v: number[][], n: number[], tile: number, shade?: number[], tint?: number[]) {
   const [u0, v0, u1, v1] = uvs(tile);
   const uv = [
     [u0, v0],
@@ -50,7 +50,8 @@ function pushQuad(s: Surface, v: number[][], n: number[], tile: number, shade?: 
     s.nor.push(n[0], n[1], n[2]);
     s.uv.push(uv[i][0], uv[i][1]);
     const c = ao[i];
-    s.col.push(c, c, c);
+    if (tint) s.col.push(c * tint[0], c * tint[1], c * tint[2]);
+    else s.col.push(c, c, c);
     s.tan.push(tx / tl, ty / tl, tz / tl, 1);
   }
 }
@@ -63,8 +64,9 @@ function hashBlock(x: number, y: number, z: number) {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
 }
 
-function pushPoly(s: Surface, verts: number[][], normals: number[][], cu: number, cv: number) {
+function pushPoly(s: Surface, verts: number[][], normals: number[][], cu: number, cv: number, tan?: number[]) {
   const order = verts.length === 3 ? [0, 1, 2] : [0, 1, 2, 0, 2, 3];
+  const t = tan ?? [1, 0, 0, 1];
   for (const i of order) {
     const p = verts[i];
     const n = normals[i];
@@ -72,7 +74,7 @@ function pushPoly(s: Surface, verts: number[][], normals: number[][], cu: number
     s.nor.push(n[0], n[1], n[2]);
     s.uv.push(cu, cv);
     s.col.push(1, 1, 1);
-    s.tan.push(1, 0, 0, 1);
+    s.tan.push(t[0], t[1], t[2], t[3]);
   }
 }
 
@@ -128,8 +130,12 @@ function addStud(s: Surface, x: number, y: number, z: number, tile: number) {
   }
   for (let i = 0; i < STUD_N; i++) {
     const j = (i + 1) % STUD_N;
-    pushPoly(s, [bot[i], mid[i], mid[j], bot[j]], [radial[i], radial[i], radial[j], radial[j]], cu, cv);
-    pushPoly(s, [mid[i], top[i], top[j], mid[j]], [radial[i], lip[i], lip[j], radial[j]], cu, cv);
+    // Tangent = circumferential direction, perpendicular to the radial
+    // normal. A fixed (1,0,0) tangent goes parallel to the normal on the
+    // +x segments and degenerates the normal-map frame -> black wedge.
+    const tan = [-STUD_SIN[i], 0, STUD_COS[i], 1];
+    pushPoly(s, [bot[i], mid[i], mid[j], bot[j]], [radial[i], radial[i], radial[j], radial[j]], cu, cv, tan);
+    pushPoly(s, [mid[i], top[i], top[j], mid[j]], [radial[i], lip[i], lip[j], radial[j]], cu, cv, tan);
     pushPoly(s, [[cx, y1, cz], top[j], top[i]], [up, up, up], cu, cv);
   }
 }
@@ -254,10 +260,16 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
           ]);
           const shade = face.v.map(([vx, vy, vz]) => shadeAt(x, y, z, nx, ny, nz, vx, vy, vz));
           // Per-brick color variation (like real molded bricks: no two pieces
-          // are exactly the same shade). Multiplies the AO/face shading.
-          const jit = 0.93 + hashBlock(x0 + x, y, z0 + z) * 0.13;
+          // are exactly the same shade). Multiplies the AO/face shading, plus
+          // a faint warm/cool tint per brick (ABS batch variation).
+          const jit = 0.9 + hashBlock(x0 + x, y, z0 + z) * 0.17;
           for (let i = 0; i < shade.length; i++) shade[i] *= jit;
-          pushQuad(surf, verts, face.n, tile, shade);
+          const tint = [
+            0.97 + hashBlock(x0 + x + 511, y, z0 + z) * 0.06,
+            1,
+            0.97 + hashBlock(x0 + x, y + 977, z0 + z) * 0.06,
+          ];
+          pushQuad(surf, verts, face.n, tile, shade, tint);
           if (fancy && ny > 0 && !self.fluid && self.solid && !n.plant) addStud(surf, x, y, z, faceTile(id, 0));
         }
       }
