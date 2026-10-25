@@ -168,6 +168,11 @@ export class World {
               else if (id === ID.Stone && y >= 3 && y <= 18 && hash3(x, y, z, this.seed + 74) > 0.9986) id = ID.ChromeOre;
               else if (id === ID.Stone && y >= 2 && y <= 14 && hash3(x, y, z, this.seed + 75) > 0.999) id = ID.SapphireOre;
               else if (id === ID.Stone && y >= 2 && y <= 10 && hash3(x, y, z, this.seed + 76) > 0.99935) id = ID.PrismOre;
+              // rare new blocks near surface
+              if (id === ID.Stone && y >= h - 6 && y < h && hash3(x, y, z, this.seed + 90) > 0.997) {
+                const pick = hash3(x, y, z, this.seed + 91) % 3;
+                id = pick === 0 ? ID.Basalt : pick === 1 ? ID.Calcite : ID.Tuff;
+              }
               else if (id === ID.Stone && y >= 4 && y <= 12 && hash3(x, y, z, this.seed + 78) > 0.9992) id = ID.ResinOre;
               else if (id === ID.Stone && y >= 6 && y <= 24 && hash3(x, y, z, this.seed + 81) > 0.9988) id = ID.CrystalOre;
             }
