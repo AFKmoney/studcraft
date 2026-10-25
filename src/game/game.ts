@@ -17,6 +17,7 @@ export type Phase = "title" | "play" | "pause" | "inventory" | "dead";
 export type EnterKind = "play" | "survival" | "flat" | "continue";
 
 export type Hud = {
+  fps: number;
   hotbar: { id: number; count: number }[];
   slot: number;
   offhand: number;
@@ -86,6 +87,8 @@ export type TouchState = {
   place: boolean;
 };
 
+export type Quality = "auto" | "high" | "balanced" | "performance";
+
 export type GameApi = {
   canvas: HTMLCanvasElement;
   hud: Hud;
@@ -96,6 +99,7 @@ export type GameApi = {
     sound: boolean;
     studs: boolean;
     realistic: boolean;
+    quality: Quality;
     third: boolean;
     mods: { hard: boolean; generous: boolean; peaceful: boolean; spells: boolean };
   };
@@ -103,6 +107,8 @@ export type GameApi = {
   hasSave: boolean;
   enter: (kind: EnterKind, worldId?: string) => void;
   resume: () => void;
+  pauseGame: () => void;
+  setQuality: (q: Quality) => void;
   quit: () => void;
   respawn: () => void;
   toggleInventory: () => void;
@@ -174,6 +180,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     sound: savedSettings?.sound ?? true,
     studs: savedSettings?.studs ?? true,
     realistic: savedSettings?.realistic ?? true,
+    quality: (savedSettings?.quality as Quality | undefined) ?? "auto",
     third: false,
     mods: {
       hard: savedSettings?.mods?.hard ?? false,
@@ -186,6 +193,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   plasticOn = settings.realistic;
 
   const hud: Hud = {
+    fps: 0,
     hotbar: [],
     slot: 0,
     offhand: 0,
@@ -677,6 +685,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     path?: { x: number; z: number }[] | null;
     pathI?: number;
     pathT?: number;
+    phase?: number;
+    tickAcc?: number;
+    shadowT?: number;
     mode?: string;
     modeT?: number;
     bossT?: number;
@@ -694,6 +705,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   }
 
   function relight() {
+    applyQuality();
     plasticOn = settings.realistic;
     renderer.toneMapping = settings.realistic ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
     renderer.toneMappingExposure = settings.realistic ? 1.08 : 1;
@@ -838,6 +850,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       sound: settings.sound,
       studs: settings.studs,
       realistic: settings.realistic,
+      quality: settings.quality,
       mods: { ...settings.mods },
     });
   }
@@ -845,6 +858,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   const pub = { phase: "title" as Phase, hasSave: hasSaveFlag };
 
   function snapshot() {
+    hud.fps = fpsShown;
     hud.hotbar = hotbar.map((id) => ({ id, count: creative ? -1 : (inv[id] ?? 0) }));
     hud.offhand = offhand;
     hud.slot = slot;
@@ -1254,7 +1268,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   }
 
   function stream(budget: number) {
-    const r = settings.radius;
+    const r = effRadius();
     const cx = Math.floor(player.x / CS);
     const cz = Math.floor(player.z / CS);
     const need: { cx: number; cz: number; d: number; key: string }[] = [];
@@ -3050,6 +3064,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       y,
       z,
       yaw: Math.random() * Math.PI * 2,
+      phase: Math.random() * Math.PI * 2,
       hp:
         kind === "dragon"
           ? 140 + crystalsLeft() * 15
@@ -3536,6 +3551,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   }
 
   function updateMobs(dt: number) {
+    const baseDt = dt;
     const ang = worldTime * Math.PI * 2;
     const night = Math.sin(ang) < -0.12;
     if (phase === "play" && !creative && night && !settings.mods.peaceful) {
@@ -3616,6 +3632,43 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         m.mesh.position.set(m.x, m.y + (settings.studs ? STUD_H : 0), m.z);
         m.mesh.rotation.y = m.yaw;
         continue;
+      }
+      // Perf tiers: passive animals far away despawn, mid-range ones
+      // freeze between thinks, far ones stop thinking entirely. Near
+      // animals always run at full rate.
+      dt = baseDt;
+      if (d > 44 && m.kind !== "dragon" && m.kind !== "wither" && m.kind !== "ghast") {
+        const passive = m.kind === "sheep" || m.kind === "cow" || m.kind === "pig" || m.kind === "chicken" || m.kind === "fox" || m.kind === "crab" || m.kind === "frog";
+        if (d > 64 && passive && !m.tame && !m.lead && !(m.baby && m.baby > 0) && m.homeX === undefined) {
+          m.dead = true;
+          scene.remove(m.mesh);
+          continue;
+        }
+        m.mesh.position.set(m.x, m.y + (settings.studs ? STUD_H : 0), m.z);
+        m.mesh.rotation.y = m.yaw;
+        continue;
+      }
+      if (d > 26) {
+        m.tickAcc = (m.tickAcc ?? 0) + baseDt;
+        if (m.tickAcc < 0.066) {
+          m.mesh.position.set(m.x, m.y + (settings.studs ? STUD_H : 0), m.z);
+          m.mesh.rotation.y = m.yaw;
+          continue;
+        }
+        dt = Math.min(m.tickAcc, 0.12);
+        m.tickAcc = 0;
+      }
+      // Distant animals stop casting shadows (a real cost per mob).
+      m.shadowT = (m.shadowT ?? 0) - dt;
+      if (m.shadowT <= 0) {
+        m.shadowT = 0.8;
+        const wantShadow = d < 30;
+        if ((m.mesh.userData.shadowOn ?? true) !== wantShadow) {
+          m.mesh.userData.shadowOn = wantShadow;
+          m.mesh.traverse((o) => {
+            if ((o as THREE.Mesh).isMesh) o.castShadow = wantShadow;
+          });
+        }
       }
       if ((m.love ?? 0) > 0) {
         m.love = (m.love ?? 0) - dt;
@@ -3717,7 +3770,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         const hx = m.homeX - m.x;
         const hz = m.homeZ - m.z;
         const hd = Math.hypot(hx, hz);
-        if (hd > 12) {
+        if (hd > 24) {
           m.x = m.homeX;
           m.z = m.homeZ;
           m.y = groundY(m.x, m.z);
@@ -3767,14 +3820,31 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         const nx = m.x + fx * speed * dt;
         const nz = m.z + fz * speed * dt;
         const gy = groundY(nx, nz);
+        // Water: land animals refuse deep water instead of walking
+        // the lake bed. Swimmers (crab, frog, slime) ride the surface.
+        const swimmer = m.kind === "crab" || m.kind === "frog" || m.kind === "slime";
+        let floorY = gy;
+        let inWater = false;
+        if (def(world.get(Math.floor(nx), Math.floor(gy), Math.floor(nz))).fluid) {
+          let top = Math.floor(gy);
+          while (def(world.get(Math.floor(nx), top, Math.floor(nz))).fluid) top++;
+          if (top - gy >= 1) {
+            inWater = true;
+            floorY = top;
+          }
+        }
         const blocked =
           solidAt(Math.floor(nx), Math.floor(gy + 0.1), Math.floor(nz)) ||
-          solidAt(Math.floor(nx), Math.floor(gy + 1.1), Math.floor(nz));
+          solidAt(Math.floor(nx), Math.floor(gy + 1.1), Math.floor(nz)) ||
+          (!inWater && floorY - m.y > 1.3) ||
+          (inWater && !swimmer);
         if (blocked) m.yaw += 1.4;
         else {
           m.x = nx;
           m.z = nz;
-          m.y = gy;
+          // One-block steps snap up; drops ease down, so animals
+          // never teleport off cliffs, onto roofs or into treetops.
+          m.y = floorY < m.y ? Math.max(floorY, m.y - 13 * dt) : floorY;
         }
       }
       if ((m.kind === "walker" || m.kind === "spider" || m.kind === "wisp" || m.kind === "slime" || piglinMad) && d < 1.35 && phase === "play" && m.cool <= 0) {
@@ -3804,7 +3874,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         m.fuse = Math.max(0, m.fuse - dt * 2);
         if (m.bodyMat) m.bodyMat.emissive.setHex(m.charged ? 0x7ee0ff : 0x000000);
       }
-      const stride = Math.sin(elapsed * (m.kind === "slime" ? 6 : 8));
+      const stride = Math.sin(elapsed * (m.kind === "slime" ? 6 : 8) + (m.phase ?? 0));
       for (let i = 0; i < m.legs.length; i++) {
         const part = m.legs[i];
         if (!part) continue;
@@ -3813,6 +3883,25 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       const bounce = m.kind === "slime" ? Math.abs(stride) * (0.18 + (m.size ?? 1) * 0.22) : m.kind === "frog" ? Math.abs(stride) * 0.2 : Math.abs(stride) * 0.04;
       m.mesh.rotation.y = m.yaw;
       m.mesh.position.set(m.x, m.y + (settings.studs ? STUD_H : 0) + bounce, m.z);
+    }
+    // Separation: animals never stack inside each other.
+    for (let i = 0; i < mobs.length; i++) {
+      const a = mobs[i];
+      if (a.dead || a.kind === "boat" || a.kind === "cart") continue;
+      for (let j = i + 1; j < mobs.length; j++) {
+        const b = mobs[j];
+        if (b.dead || b.kind === "boat" || b.kind === "cart") continue;
+        const sx = b.x - a.x;
+        const sz = b.z - a.z;
+        const d2 = sx * sx + sz * sz;
+        if (d2 > 0.36 || d2 === 0) continue;
+        const dist = Math.sqrt(d2);
+        const push = ((0.6 - dist) / dist) * 0.5;
+        a.x -= sx * push;
+        a.z -= sz * push;
+        b.x += sx * push;
+        b.z += sz * push;
+      }
     }
   }
 
@@ -4328,7 +4417,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     renderer.setClearColor(fogHex, 1);
     const fog = scene.fog as THREE.Fog;
     fog.color.setHex(fogHex);
-    const far = settings.radius * CS + 18;
+    const far = effRadius() * CS + 18;
     fog.near = far * 0.42;
     fog.far = far;
     // Underwater: when the camera's eye block is a fluid, collapse the fog
@@ -4488,6 +4577,28 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let viewH = 0;
   let viewPR = 0;
   let prScale = 1;
+  // Quality ladder (Philippe's law: no lag on the A54). Manual modes
+  // fix the caps; "auto" starts at the balanced profile on touch and
+  // steps down under sustained load - pixel ratio, then the shadow
+  // pass, then draw distance - and climbs back when frames are cheap.
+  let qLevel = 0;
+  let qBad = 0;
+  let qGood = 0;
+  let fpsShown = 0;
+  function qualityCaps(): { pr: number; shadows: boolean; radius: number } {
+    const q = settings.quality;
+    if (q === "performance") return { pr: touchMode ? 1.25 : 1.5, shadows: false, radius: 5 };
+    if (q === "balanced") return { pr: touchMode ? 1.5 : 1.75, shadows: qLevel < 2, radius: 6 };
+    if (q === "high") return { pr: touchMode ? 1.75 : 2, shadows: true, radius: 99 };
+    if (touchMode) return { pr: 1.5, shadows: qLevel < 2, radius: qLevel >= 3 ? 5 : 6 };
+    return { pr: 2, shadows: qLevel < 2, radius: 99 };
+  }
+  function applyQuality() {
+    sun.castShadow = qualityCaps().shadows && settings.realistic;
+  }
+  function effRadius() {
+    return Math.max(3, Math.min(settings.radius, qualityCaps().radius));
+  }
   let fpsAcc = 0;
   let fpsFrames = 0;
   let fpsWindow = 0;
@@ -4503,6 +4614,14 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     fpsWindow += dt;
     if (fpsWindow >= 1.5) {
       const avg = fpsAcc / Math.max(1, fpsFrames);
+      fpsShown = Math.round(1 / Math.max(avg, 0.001));
+      if (settings.quality === "auto" || settings.quality === "balanced") {
+        if (avg > 0.026) { qBad++; qGood = 0; }
+        else if (avg < 0.0125) { qGood++; qBad = 0; }
+        else { qBad = 0; qGood = 0; }
+        if (qBad >= 2 && qLevel < 3) { qLevel++; qBad = 0; applyQuality(); }
+        else if (qGood >= 4 && qLevel > 0) { qLevel--; qGood = 0; applyQuality(); }
+      }
       if (avg > 0.024 && prScale > 0.6) prScale = Math.max(0.6, prScale - 0.15);
       else if (avg < 0.0125 && prScale < 1) prScale = Math.min(1, prScale + 0.1);
       fpsAcc = 0;
@@ -4511,7 +4630,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
     const w = canvas.clientWidth || 1;
     const h = canvas.clientHeight || 1;
-    const pr = Math.min(window.devicePixelRatio || 1, touchMode ? 1.75 : 2) * prScale;
+    const pr = Math.min(window.devicePixelRatio || 1, qualityCaps().pr) * prScale;
     if (w !== viewW || h !== viewH || pr !== viewPR) {
       viewW = w;
       viewH = h;
@@ -4674,6 +4793,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
   }
 
+  applyQuality();
   renderer.setAnimationLoop(frame);
   stream(2);
   spawnSheep();
@@ -4928,6 +5048,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       }
       bootNew(false, true);
       beginPlay();
+    },
+    pauseGame() {
+      if (phase !== "play") return;
+      phase = "pause";
+      emit();
     },
     resume() {
       if (phase !== "pause") return;
@@ -5278,6 +5403,15 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     setStuds(on) {
       settings.studs = on;
       for (const key of meshes.keys()) dirty.add(key);
+      persistSettings();
+      emit();
+    },
+    setQuality(q) {
+      settings.quality = q;
+      qLevel = 0;
+      qBad = 0;
+      qGood = 0;
+      applyQuality();
       persistSettings();
       emit();
     },

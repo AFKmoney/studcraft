@@ -7,6 +7,7 @@ import tailwindcss from "@tailwindcss/vite";
 // once loaded (saves live in localStorage).
 export default defineConfig({
   root: "standalone",
+  publicDir: "../public/icons-160",
   base: "./",
   plugins: [react(), tailwindcss()],
   build: {

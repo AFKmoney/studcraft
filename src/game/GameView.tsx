@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Drumstick, Droplets, Heart } from "lucide-react";
 import { BLOCKS, CATALOG, COLORS, ID, def } from "./blocks";
 import type { EnterKind, GameApi, Phase } from "./game";
-import { RECIPES } from "./recipes";
+import { RECIPES, type Recipe } from "./recipes";
 import { CODEX, PERKS } from "./ranks";
 import { ItemIcon } from "./icons";
 import { SKILLS } from "./skills";
@@ -120,6 +120,8 @@ function TitleScreen({
     }
   });
   const slots = game?.slots ?? [];
+  const [showOptions, setShowOptions] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   useEffect(() => {
     try {
       sessionStorage.setItem("studcraft-pending-seed", seedText);
@@ -170,7 +172,20 @@ function TitleScreen({
           <button className="btn btn-green" onClick={() => onEnter("flat", seedText)}>
             Baseplate
           </button>
+          {game && !showOptions && (
+            <button className="btn" onClick={() => setShowOptions(true)}>
+              Options
+            </button>
+          )}
         </div>
+        {game && showOptions && (
+          <>
+            <SettingsPanel game={game} />
+            <button className="btn btn-primary" onClick={() => setShowOptions(false)}>
+              Done
+            </button>
+          </>
+        )}
         {slots.length > 0 && (
           <>
             <p className="eyebrow">Saved seeds</p>
@@ -188,7 +203,14 @@ function TitleScreen({
             </ul>
           </>
         )}
-        <ul className="hints">
+        {!showHelp && (
+            <button className="btn" onClick={() => setShowHelp(true)}>
+              How to play
+            </button>
+          )}
+          {showHelp && (
+            <>
+              <ul className="hints">
           <li>WASD move · Space jump · double-tap Space flies in creative</li>
           <li>The world keeps going. Horizon in the pause menu is only how far bricks draw</li>
           <li>Hamlets repeat across the map. Traders show up when you walk into town</li>
@@ -197,6 +219,11 @@ function TitleScreen({
           <li>Water and magma spread from a source. Look where a piston or repeater should point</li>
           <li>Hold to mine · place with the other click · E opens the bin</li>
         </ul>
+              <button className="btn" onClick={() => setShowHelp(false)}>
+                Hide help
+              </button>
+            </>
+          )}
         <p className="fine">
           {booting ? "Stacking the first bricks…" : "An original brick sandbox. Not a toy brand, not a block game."}
         </p>
@@ -369,84 +396,119 @@ function Hud({ game }: { game: GameApi }) {
   );
 }
 
-function PauseMenu({ game }: { game: GameApi }) {
+function GraphicsSettings({ game }: { game: GameApi }) {
   const s = game.settings;
   return (
+    <div className="settings">
+      <label>
+        Quality
+        <span className="seg">
+          {(["auto", "high", "balanced", "performance"] as const).map((q) => (
+            <button key={q} type="button" className={s.quality === q ? "on" : ""} onClick={() => game.setQuality(q)}>
+              {q}
+            </button>
+          ))}
+        </span>
+      </label>
+      <label>
+        Speed
+        <span className="fps-read">{game.hud.fps} fps</span>
+      </label>
+      <label>
+        Horizon {s.radius}
+        <input type="range" min={2} max={14} step={1} value={s.radius} onChange={(e) => game.setRadius(Number(e.target.value))} />
+      </label>
+      <label>
+        Studs
+        <input type="checkbox" checked={s.studs} onChange={(e) => game.setStuds(e.target.checked)} />
+      </label>
+      <label>
+        Realistic
+        <input type="checkbox" checked={s.realistic} onChange={(e) => game.setRealistic(e.target.checked)} />
+      </label>
+    </div>
+  );
+}
+
+function GameplaySettings({ game }: { game: GameApi }) {
+  const s = game.settings;
+  return (
+    <div className="settings">
+      <label>
+        Look
+        <input type="range" min={0.4} max={2.2} step={0.1} value={s.sens} onChange={(e) => game.setSens(Number(e.target.value))} />
+      </label>
+      <label>
+        Sound
+        <input type="checkbox" checked={s.sound} onChange={(e) => game.setSound(e.target.checked)} />
+      </label>
+      <label>
+        Outside view
+        <input type="checkbox" checked={s.third} onChange={(e) => game.setThird(e.target.checked)} />
+      </label>
+    </div>
+  );
+}
+
+function ModSettings({ game }: { game: GameApi }) {
+  const s = game.settings;
+  return (
+    <div className="settings">
+      <label>
+        Hard nights
+        <input type="checkbox" checked={s.mods.hard} onChange={(e) => game.setMod("hard", e.target.checked)} />
+      </label>
+      <label>
+        Generous parts
+        <input type="checkbox" checked={s.mods.generous} onChange={(e) => game.setMod("generous", e.target.checked)} />
+      </label>
+      <label>
+        Peaceful bricks
+        <input type="checkbox" checked={s.mods.peaceful} onChange={(e) => game.setMod("peaceful", e.target.checked)} />
+      </label>
+      <label>
+        Spellcraft
+        <input type="checkbox" checked={s.mods.spells} onChange={(e) => game.setMod("spells", e.target.checked)} />
+      </label>
+    </div>
+  );
+}
+
+function SettingsPanel({ game }: { game: GameApi }) {
+  return (
+    <>
+      <h3 className="sect">Graphics</h3>
+      <GraphicsSettings game={game} />
+      <h3 className="sect">Gameplay</h3>
+      <GameplaySettings game={game} />
+      <h3 className="sect">World mods</h3>
+      <ModSettings game={game} />
+    </>
+  );
+}
+
+function PauseMenu({ game }: { game: GameApi }) {
+  return (
     <div className="menu-wrap">
-      <section className="card">
+      <section className="card pause-card">
         <p className="eyebrow">Paused</p>
         <h1>
           Stud<span className="craft">craft</span>
         </h1>
-        <div className="settings">
-          <label>
-            Look
-            <input
-              type="range"
-              min={0.4}
-              max={2.2}
-              step={0.1}
-              value={s.sens}
-              onChange={(e) => game.setSens(Number(e.target.value))}
-            />
-          </label>
-          <label>
-            Horizon {s.radius}
-            <input
-              type="range"
-              min={2}
-              max={14}
-              step={1}
-              value={s.radius}
-              onChange={(e) => game.setRadius(Number(e.target.value))}
-            />
-          </label>
-          <label>
-            Studs
-            <input type="checkbox" checked={s.studs} onChange={(e) => game.setStuds(e.target.checked)} />
-          </label>
-          <label>
-            Realistic
-            <input type="checkbox" checked={s.realistic} onChange={(e) => game.setRealistic(e.target.checked)} />
-          </label>
-          <label>
-            Sound
-            <input type="checkbox" checked={s.sound} onChange={(e) => game.setSound(e.target.checked)} />
-          </label>
-          <label>
-            Outside view
-            <input type="checkbox" checked={s.third} onChange={(e) => game.setThird(e.target.checked)} />
-          </label>
-          <label>
-            Hard nights
-            <input type="checkbox" checked={s.mods.hard} onChange={(e) => game.setMod("hard", e.target.checked)} />
-          </label>
-          <label>
-            Generous parts
-            <input type="checkbox" checked={s.mods.generous} onChange={(e) => game.setMod("generous", e.target.checked)} />
-          </label>
-          <label>
-            Peaceful bricks
-            <input type="checkbox" checked={s.mods.peaceful} onChange={(e) => game.setMod("peaceful", e.target.checked)} />
-          </label>
-          <label>
-            Spellcraft
-            <input type="checkbox" checked={s.mods.spells} onChange={(e) => game.setMod("spells", e.target.checked)} />
-          </label>
-        </div>
-        <div className="stack">
-          <button className="btn btn-primary" onClick={() => game.resume()}>
-            Resume
+        <div className="stack pause-actions">
+          <button className="btn btn-primary big" onClick={() => game.resume()}>
+            ▶ Resume
           </button>
           <button className="btn" onClick={() => game.toggleInventory()}>
-            Brick bin
+            🎒 Brick bin
           </button>
           <button className="btn" onClick={() => game.quit()}>
             Save and quit
           </button>
         </div>
+        <SettingsPanel game={game} />
         <p className="fine">
-          Seed {game.hud.seedText || game.hud.seed}. The land does not end. Horizon is only the draw distance. Far bricks unload, and the same seed rebuilds them.
+          Seed {game.hud.seedText || game.hud.seed}. The land does not end. Horizon is only the draw distance.
         </p>
         <button className="btn" onClick={() => game.copySeed()}>
           Copy seed
@@ -456,137 +518,9 @@ function PauseMenu({ game }: { game: GameApi }) {
   );
 }
 
-function Inventory({ game }: { game: GameApi }) {
-  const hud = game.hud;
-  const bench = hud.panel === "bench";
-  const [page, setPage] = useState<"bin" | "ranks" | "quests" | "skills">("bin");
-  const [book, setBook] = useState<"all" | "build" | "tools" | "magic" | "gear" | "food">("all");
-  const known = new Set(hud.found);
+function BinGrid({ game, hud }: { game: GameApi; hud: GameApi["hud"] }) {
   return (
-    <div className="sheet-wrap">
-      <section className="card sheet">
-        <p className="eyebrow">
-          {page === "quests" ? "Hamlet board" : page === "ranks" ? "Builder rank" : page === "skills" ? "Skill tree" : hud.panel === "bag" ? "Brick bin" : hud.panel}
-        </p>
-        <h1>
-          {page === "ranks" ? hud.rank : page === "quests" ? "Quest board" : page === "skills" ? `${hud.skillPoints} points` : hud.panel === "trade" ? hud.trader || "Trader" : hud.panel === "furnace" ? "Kiln" : "Press & place"}
-        </h1>
-        <div className="rank-tabs">
-          <button className={page === "bin" ? "btn on" : "btn"} onClick={() => setPage("bin")}>
-            Bin
-          </button>
-          <button className={page === "ranks" ? "btn on" : "btn"} onClick={() => setPage("ranks")}>
-            Ranks
-          </button>
-          <button className={page === "quests" ? "btn on" : "btn"} onClick={() => setPage("quests")}>
-            Quests
-          </button>
-          <button className={page === "skills" ? "btn on" : "btn"} onClick={() => setPage("skills")}>
-            Skills
-          </button>
-        </div>
-        {page === "ranks" ? (
-          <Ranks hud={hud} known={known} />
-        ) : page === "quests" ? (
-          <QuestList hud={hud} onClaim={(id) => game.claim(id)} />
-        ) : page === "skills" ? (
-          <SkillTree hud={hud} onUnlock={(id) => game.unlock(id)} />
-        ) : (
-          <>
-        {hud.panel !== "trade" && (
-          <div className="armor-row">
-            {hud.armor.map((id, i) => (
-              <button key={i} className="slot" onClick={() => game.armorTap(i)}>
-                {id > 0 ? <ItemIcon id={id} /> : <small>{["Cap", "Shell", "Legs", "Boots"][i]}</small>}
-              </button>
-            ))}
-          </div>
-        )}
-        {(hud.panel === "bag" || hud.panel === "bench") && (
-          <>
-            <div className="craft-grid">
-              {hud.grid.map((id, i) => (
-                <button key={i} className="slot" onClick={() => game.gridTap(i)} disabled={!bench && i % 3 === 2}>
-                  {id > 0 && <ItemIcon id={id} />}
-                </button>
-              ))}
-              <button className="slot out" onClick={() => game.craftTake()}>
-                {hud.craftOut ? <ItemIcon id={hud.craftOut.id} /> : <small>Out</small>}
-                {hud.craftOut && hud.craftOut.n > 1 ? <em>{hud.craftOut.n}</em> : null}
-              </button>
-            </div>
-        <p className="fine">Shift-click (PC), long-press or double-tap (mobile) moves a stack between the bar and the bin.</p>
-          </>
-        )}
-        {hud.panel === "furnace" && (
-          <div className="craft-grid">
-            <button className="slot" onClick={() => game.furnaceTap(0)}>
-              {hud.furnace.in ? <ItemIcon id={hud.furnace.in} /> : <small>Ore</small>}
-              {hud.furnace.inN > 0 && <em>{hud.furnace.inN}</em>}
-            </button>
-            <button className="slot" onClick={() => game.furnaceTap(1)}>
-              {hud.furnace.fuel ? <ItemIcon id={hud.furnace.fuel} /> : <small>Fuel</small>}
-              {hud.furnace.fuelN > 0 && <em>{hud.furnace.fuelN}</em>}
-            </button>
-            <button className="slot out" onClick={() => game.furnaceTap(2)}>
-              {hud.furnace.out ? <ItemIcon id={hud.furnace.out} /> : <small>Out</small>}
-              {hud.furnace.outN > 0 && <em>{hud.furnace.outN}</em>}
-            </button>
-          </div>
-        )}
-        {hud.panel === "chest" && (
-          <div className="grid-blocks chest">
-            {hud.chest.map((cell, i) => (
-              <button key={i} onClick={() => game.chestTap(i)}>
-                {cell.id > 0 && <ItemIcon id={cell.id} />}
-                {cell.n > 0 && <span>{cell.n}</span>}
-              </button>
-            ))}
-          </div>
-        )}
-        {hud.panel === "enchant" && (
-          <button className="btn btn-primary" onClick={() => game.enchant()}>
-            Spend 3 levels — rune the blade
-          </button>
-        )}
-        {hud.panel === "anvil" && (
-          <div className="stack">
-            <button className="btn btn-primary" onClick={() => game.mend()}>
-              Spend 1 ingot — mend the held tool
-            </button>
-            <button className="btn" onClick={() => game.temper()}>
-              Spend 1 level — temper the held tool
-            </button>
-          </div>
-        )}
-        {hud.panel === "brew" && (
-          <div className="stack">
-            <button className="btn" onClick={() => game.brew("heal")}>
-              Bottle + apple → mend brew
-            </button>
-            <button className="btn" onClick={() => game.brew("speed")}>
-              Bottle + wart → dash brew
-            </button>
-            <button className="btn" onClick={() => game.brew("might")}>
-              Bottle + ember rod → might brew
-            </button>
-            <button className="btn" onClick={() => game.brew("focus")}>
-              Bottle + amber → focus brew · level 6
-            </button>
-          </div>
-        )}
-        {hud.panel === "trade" && (
-          <div className="stack">
-            <p className="lede">{hud.traderBlurb}</p>
-            {hud.offers.map((offer, i) => (
-              <button key={i} className="btn" onClick={() => game.trade(i)}>
-                {offer.pn} {offer.payName} → {offer.on} {offer.outName}
-              </button>
-            ))}
-            {hud.trader === "Clerk" && <QuestList hud={hud} onClaim={(id) => game.claim(id)} />}
-          </div>
-        )}
-        <div className="grid-blocks">
+    <div className="grid-blocks">
           {CATALOG.map((id) => {
             const count = hud.creative ? -1 : (hud.inv[id] ?? 0);
             const empty = !hud.creative && count <= 0;
@@ -627,70 +561,317 @@ function Inventory({ game }: { game: GameApi }) {
             );
           })}
         </div>
-        {(hud.panel === "bag" || hud.panel === "bench") && (
-          <div className="recipes">
-            <div className="rank-tabs book-tabs">
-              {(["all", "build", "tools", "magic", "gear", "food"] as const).map((cat) => (
-                <button key={cat} className={book === cat ? "btn on" : "btn"} onClick={() => setBook(cat)}>
-                  {cat === "all" ? "All" : cat[0].toUpperCase() + cat.slice(1)}
-                </button>
-              ))}
-            </div>
-            {RECIPES.filter((recipe) => book === "all" || recipe.cat === book).map((recipe) => (
-              <button key={`${recipe.id}-${recipe.name}`} className="btn recipe" onClick={() => game.craft(recipe.id)}>
-                <span className="recipe-io">
-                  {recipe.need.map(([rid, n]) => (
-                    <span key={rid} className="recipe-bit">
-                      <ItemIcon id={rid} />
-                      {n > 1 ? <em>{n}</em> : null}
-                    </span>
-                  ))}
-                  <span className="recipe-arrow" aria-hidden="true">
-                    →
-                  </span>
-                  <ItemIcon id={recipe.out > 0 ? recipe.out : ID.AxeW} />
-                </span>
-                <span className="recipe-name">
-                  {recipe.name}
-                  <small>{recipe.detail}</small>
-                </span>
+  );
+}
+
+function BinPage({ game }: { game: GameApi }) {
+  const hud = game.hud;
+  return (
+    <>
+      <p className="sect">Armor — tap a piece to swap with the held brick</p>
+      <div className="armor-row">
+            {hud.armor.map((id, i) => (
+              <button key={i} className="slot" onClick={() => game.armorTap(i)}>
+                {id > 0 ? <ItemIcon id={id} /> : <small>{["Cap", "Shell", "Legs", "Boots"][i]}</small>}
               </button>
             ))}
           </div>
-        )}
-        <p className="lede" style={{ marginTop: 12 }}>
-          Shift-click a brick to move it between the bar and the bag. Color press spends one spare brick. Cursor: {hud.cursor ? def(hud.cursor).name : "empty"}.
-        </p>
-        <div className="colors">
-          {COLORS.map((id) => (
-            <button
-              key={id}
-              style={{ background: def(id).color }}
-              aria-label={def(id).name}
-              onClick={(e) => (e.shiftKey ? game.shiftStack(id) : game.press(id))}
-            />
+      <p className="sect">Bricks — tap to hold, long-press or double-tap moves a stack</p>
+      <BinGrid game={game} hud={hud} />
+      <p className="lede">Cursor: {hud.cursor ? def(hud.cursor).name : "empty"}.</p>
+      <p className="sect">Color press — spends one spare brick</p>
+      <div className="colors">
+        {COLORS.map((id) => (
+          <button
+            key={id}
+            style={{ background: def(id).color }}
+            aria-label={def(id).name}
+            onClick={(e) => (e.shiftKey ? game.shiftStack(id) : game.press(id))}
+          />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function CraftPage({ game }: { game: GameApi }) {
+  const hud = game.hud;
+  const bench = hud.panel === "bench";
+  const [book, setBook] = useState<"all" | "build" | "tools" | "magic" | "gear" | "food">("all");
+  const [sel, setSel] = useState("");
+  const [showGrid, setShowGrid] = useState(false);
+  const list = RECIPES.filter((recipe) => book === "all" || recipe.cat === book);
+  const recipe = list.find((entry) => entry.id === sel) ?? list[0];
+  const afford = (entry: Recipe, times = 1) => hud.creative || entry.need.every(([id, n]) => (hud.inv[id] ?? 0) >= n * times);
+  return (
+    <>
+      <div className="chips">
+        {(["all", "build", "tools", "magic", "gear", "food"] as const).map((cat) => (
+          <button key={cat} className={book === cat ? "chip on" : "chip"} onClick={() => setBook(cat)}>
+            {cat === "all" ? "All" : cat[0].toUpperCase() + cat.slice(1)}
+          </button>
+        ))}
+      </div>
+      <div className="craft-layout">
+        <div className="recipe-list">
+          {list.map((entry) => (
+            <button key={entry.id + "-" + entry.name} className={recipe && entry.id === recipe.id ? "recipe-row on" : "recipe-row"} onClick={() => setSel(entry.id)}>
+              <span className="recipe-ic">
+                <ItemIcon id={entry.out > 0 ? entry.out : ID.AxeW} />
+              </span>
+              <span className="recipe-tx">
+                <strong>{entry.name}</strong>
+                <small>{entry.detail}</small>
+              </span>
+              <span className={afford(entry) ? "dot ok" : "dot"} aria-hidden="true" />
+            </button>
           ))}
         </div>
-        <button className="btn btn-primary" onClick={() => game.toggleInventory()}>
-          Close
-        </button>
-          </>
+        {recipe && (
+          <div className="recipe-detail">
+            <div className="rd-head">
+              <span className="rd-ic">
+                <ItemIcon id={recipe.out > 0 ? recipe.out : ID.AxeW} />
+              </span>
+              <div>
+                <strong>{recipe.name}</strong>
+                <small>
+                  {recipe.detail} · makes {recipe.n}
+                  {recipe.lvl ? ` · level ${recipe.lvl}` : ""}
+                  {recipe.skill ? ` · ${recipe.skill} skill` : ""}
+                </small>
+              </div>
+            </div>
+            {recipe.shape && recipe.w && recipe.h ? (
+              <div className="shape-grid" style={{ gridTemplateColumns: `repeat(${recipe.w}, 34px)` }}>
+                {recipe.shape.map((id, i) => (
+                  <span key={i} className={id > 0 ? "shape-cell" : "shape-cell empty"}>
+                    {id > 0 && <ItemIcon id={id} />}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            <div className="need-chips">
+              {recipe.need.map(([id, n]) => {
+                const have = hud.creative ? n : (hud.inv[id] ?? 0);
+                return (
+                  <span key={id} className={have >= n ? "need ok" : "need miss"}>
+                    <ItemIcon id={id} /> {def(id).name} {have}/{n}
+                  </span>
+                );
+              })}
+            </div>
+            <div className="craft-actions">
+              <button className="btn btn-primary big" disabled={!afford(recipe)} onClick={() => game.craft(recipe.id)}>
+                ⚒️ Craft
+              </button>
+              {!recipe.special && (
+                <button
+                  className="btn big"
+                  disabled={!afford(recipe, 5)}
+                  onClick={() => {
+                    for (let i = 0; i < 5; i++) game.craft(recipe.id);
+                  }}
+                >
+                  ×5
+                </button>
+              )}
+            </div>
+          </div>
         )}
-        {page === "ranks" && (
-          <button className="btn btn-primary" onClick={() => game.toggleInventory()}>
-            Close
+      </div>
+      <button className="btn grid-toggle" onClick={() => setShowGrid(!showGrid)}>
+        {showGrid ? "Hide the manual grid" : "Manual grid — tap bricks into the pattern yourself"}
+      </button>
+      {showGrid && (
+        <>
+          <div className="craft-grid">
+            {hud.grid.map((id, i) => (
+              <button key={i} className="slot" onClick={() => game.gridTap(i)} disabled={!bench && i % 3 === 2}>
+                {id > 0 && <ItemIcon id={id} />}
+              </button>
+            ))}
+            <button className="slot out" onClick={() => game.craftTake()}>
+              {hud.craftOut ? <ItemIcon id={hud.craftOut.id} /> : <small>Out</small>}
+              {hud.craftOut && hud.craftOut.n > 1 ? <em>{hud.craftOut.n}</em> : null}
+            </button>
+          </div>
+          <p className="fine">{bench ? "Workbench grid: all 9 cells." : "Pocket grid: 2×2. A workbench unlocks the full 3×3."} Tap the output to take it.</p>
+        </>
+      )}
+    </>
+  );
+}
+
+function StationScreen({ game }: { game: GameApi }) {
+  const hud = game.hud;
+  const titles: Record<string, string> = {
+    furnace: "Kiln",
+    chest: "Chest",
+    enchant: "Rune table",
+    anvil: "Anvil",
+    brew: "Brew stand",
+    trade: hud.trader || "Trader",
+  };
+  return (
+    <div className="sheet-wrap">
+      <section className="card sheet hub">
+        <header className="sheet-head">
+          <div>
+            <p className="eyebrow">Station</p>
+            <h1>{titles[hud.panel] ?? hud.panel}</h1>
+          </div>
+          <button className="btn x" aria-label="Close" onClick={() => game.toggleInventory()}>
+            ✕
           </button>
-        )}
-        {page === "quests" && (
-          <button className="btn btn-primary" onClick={() => game.toggleInventory()}>
-            Close
+        </header>
+        <div className="hub-body">
+          {hud.panel === "furnace" && (
+            <>
+              <div className="station-slots">
+                <figure>
+                  <button className="slot big" onClick={() => game.furnaceTap(0)}>
+                    {hud.furnace.in ? <ItemIcon id={hud.furnace.in} /> : <small>Ore</small>}
+                    {hud.furnace.inN > 0 && <em>{hud.furnace.inN}</em>}
+                  </button>
+                  <figcaption>Ore</figcaption>
+                </figure>
+                <span className="station-arrow">🔥</span>
+                <figure>
+                  <button className="slot big" onClick={() => game.furnaceTap(1)}>
+                    {hud.furnace.fuel ? <ItemIcon id={hud.furnace.fuel} /> : <small>Fuel</small>}
+                    {hud.furnace.fuelN > 0 && <em>{hud.furnace.fuelN}</em>}
+                  </button>
+                  <figcaption>Fuel</figcaption>
+                </figure>
+                <span className="station-arrow">→</span>
+                <figure>
+                  <button className="slot big out" onClick={() => game.furnaceTap(2)}>
+                    {hud.furnace.out ? <ItemIcon id={hud.furnace.out} /> : <small>Out</small>}
+                    {hud.furnace.outN > 0 && <em>{hud.furnace.outN}</em>}
+                  </button>
+                  <figcaption>Out</figcaption>
+                </figure>
+              </div>
+              <div className="cook-bar">
+                <span style={{ width: `${Math.round(hud.furnace.cook * 100)}%` }} />
+              </div>
+              <p className="fine">Hold a brick below, then tap a slot to load it. Tap Out to collect.</p>
+              <BinGrid game={game} hud={hud} />
+            </>
+          )}
+          {hud.panel === "chest" && (
+            <>
+              <div className="grid-blocks chest">
+                {hud.chest.map((cell, i) => (
+                  <button key={i} onClick={() => game.chestTap(i)}>
+                    {cell.id > 0 && <ItemIcon id={cell.id} />}
+                    {cell.n > 0 && <span>{cell.n}</span>}
+                  </button>
+                ))}
+              </div>
+              <p className="fine">Tap a chest cell, then a brick below — or the other way round.</p>
+              <BinGrid game={game} hud={hud} />
+            </>
+          )}
+          {hud.panel === "enchant" && (
+            <button className="btn btn-primary big" onClick={() => game.enchant()}>
+              ✨ Spend 3 levels — rune the blade
+            </button>
+          )}
+          {hud.panel === "anvil" && (
+            <div className="stack">
+              <button className="btn btn-primary big" onClick={() => game.mend()}>
+                🔨 Spend 1 ingot — mend the held tool
+              </button>
+              <button className="btn big" onClick={() => game.temper()}>
+                Spend 1 level — temper the held tool
+              </button>
+            </div>
+          )}
+          {hud.panel === "brew" && (
+            <div className="stack">
+              <button className="btn big" onClick={() => game.brew("heal")}>
+                🧪 Bottle + apple → mend brew
+              </button>
+              <button className="btn big" onClick={() => game.brew("speed")}>
+                🧪 Bottle + wart → dash brew
+              </button>
+              <button className="btn big" onClick={() => game.brew("might")}>
+                🧪 Bottle + ember rod → might brew
+              </button>
+              <button className="btn big" onClick={() => game.brew("focus")}>
+                🧪 Bottle + amber → focus brew · level 6
+              </button>
+            </div>
+          )}
+          {hud.panel === "trade" && (
+            <div className="stack">
+              <p className="lede">{hud.traderBlurb}</p>
+              {hud.offers.map((offer, i) => (
+                <button key={i} className="btn big" onClick={() => game.trade(i)}>
+                  {offer.pn} {offer.payName} → {offer.on} {offer.outName}
+                </button>
+              ))}
+              {hud.trader === "Clerk" && <QuestList hud={hud} onClaim={(id) => game.claim(id)} />}
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function Inventory({ game }: { game: GameApi }) {
+  const hud = game.hud;
+  const station =
+    hud.panel === "furnace" || hud.panel === "chest" || hud.panel === "enchant" || hud.panel === "anvil" || hud.panel === "brew" || hud.panel === "trade";
+  const [page, setPage] = useState<"bin" | "craft" | "ranks" | "quests" | "skills">("bin");
+  const known = new Set(hud.found);
+  if (station) return <StationScreen game={game} />;
+  const titles = {
+    bin: "Brick bin",
+    craft: "Crafting",
+    ranks: hud.rank,
+    quests: "Quest board",
+    skills: `${hud.skillPoints} skill points`,
+  };
+  const tabs = [
+    { id: "bin", icon: "🎒", label: "Bin" },
+    { id: "craft", icon: "⚒️", label: "Craft" },
+    { id: "ranks", icon: "🏅", label: "Ranks" },
+    { id: "quests", icon: "📜", label: "Quests" },
+    { id: "skills", icon: "🌟", label: "Skills" },
+  ] as const;
+  return (
+    <div className="sheet-wrap">
+      <section className="card sheet hub">
+        <header className="sheet-head">
+          <div>
+            <p className="eyebrow">
+              {page === "ranks" ? "Builder rank" : page === "quests" ? "Hamlet board" : page === "skills" ? "Skill tree" : hud.panel === "bench" ? "Workbench" : "Backpack"}
+            </p>
+            <h1>{titles[page]}</h1>
+          </div>
+          <button className="btn x" aria-label="Close" onClick={() => game.toggleInventory()}>
+            ✕
           </button>
-        )}
-        {page === "skills" && (
-          <button className="btn btn-primary" onClick={() => game.toggleInventory()}>
-            Close
-          </button>
-        )}
+        </header>
+        <div className="hub-body">
+          {page === "bin" && <BinPage game={game} />}
+          {page === "craft" && <CraftPage game={game} />}
+          {page === "ranks" && <Ranks hud={hud} known={known} />}
+          {page === "quests" && <QuestList hud={hud} onClaim={(id) => game.claim(id)} />}
+          {page === "skills" && <SkillTree hud={hud} onUnlock={(id) => game.unlock(id)} />}
+        </div>
+        <nav className="hub-tabs">
+          {tabs.map((tab) => (
+            <button key={tab.id} className={page === tab.id ? "on" : ""} onClick={() => setPage(tab.id)}>
+              <span>{tab.icon}</span>
+              {tab.label}
+            </button>
+          ))}
+        </nav>
       </section>
     </div>
   );
@@ -849,6 +1030,18 @@ function TouchControls({ game }: { game: GameApi }) {
       >
         <div className="stick-knob" style={{ left: knob.x, top: knob.y }} />
       </div>
+      <button
+        className="touch-pause"
+        aria-label="Pause and options"
+        onClick={() => {
+          game.touch.mine = false;
+          game.touch.place = false;
+          game.touch.jump = false;
+          game.pauseGame();
+        }}
+      >
+        ⏸
+      </button>
       <div className="touch-actions">
         <HoldButton label="Mine" onHold={(v) => (game.touch.mine = v)} />
         <HoldButton label="Place" onHold={(v) => (game.touch.place = v)} />

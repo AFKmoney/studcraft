@@ -6,6 +6,7 @@ import tailwindcss from "@tailwindcss/vite";
 // Android WebView can run it straight from file:///android_asset/ offline.
 export default defineConfig({
   root: "standalone-apk",
+  publicDir: "../public/icons-160",
   base: "./",
   plugins: [react(), tailwindcss()],
   build: {

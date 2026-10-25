@@ -58,6 +58,7 @@ export type SettingsSave = {
   sound: boolean;
   studs: boolean;
   realistic?: boolean;
+  quality?: string;
   mods?: { hard: boolean; generous: boolean; peaceful: boolean; spells: boolean };
 };
 
