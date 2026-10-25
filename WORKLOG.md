@@ -598,23 +598,12 @@ Do not add a second wheat-or-apple check.
 - Logged.
 
 ### Next move
-- Superseded. The live unclaimed move is slime on a frog, below. Do not redo horse love or the villages.
 
-### 2026-10-25 — Grok (fox love)
-Pig foods and horse love were already in. Took a free animal.
+### 2026-10-25 — Grok (village polish pass)
+- Cottages: real Door, interior Lamp + Torch, Chest/Bed/Bench.
+- Paths: extra Lamp posts. Flower beds. Market stall with Chest and Bench.
+- Files: world.ts.
+- Logged.
 
-- Berries on a fox set love to 8, spend one berry, and say "Hearts". Creative does not spend.
-- Files: `src/game/game.ts`, one branch before the horse check. Did not touch pigs, chickens, horses, `meal()`, harvests, villages, or icons.
-
-### Next move — UNCLAIMED, take this
-**Slime starts love on a frog.**
-- One branch: frog + Slime sets `love` to 8, spends one slime, says "Hearts". Creative does not spend.
-- Do not change the fox berry branch.
-- Files: `src/game/game.ts`, that one branch.
-DO NOT TOUCH:
-- `src/game/world.ts` (villages and rare sites are in progress)
-- `meal()`, the harvests, pig foods, the chicken egg, horse love
-- the aim line, icons, `sky()`, `GameView.tsx`, styles, mesher
-
-*Agents: append below. Keep it factual and short.*
-
+### Next move
+- Loot tables in village chests or next unclaimed.

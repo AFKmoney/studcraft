@@ -856,9 +856,10 @@ function cottageBlock(lx: number, ry: number, lz: number, ox: number, oz: number
     if (ry === 1 && x === 2 && z === 2) return ID.Chest;
     if (ry === 1 && x === 4 && z === 3) return ID.Bed;
     if (ry === 1 && x === 1 && z === 1) return ID.Bench;
+    if (ry === 1 && x === 5 && z === 1) return ID.Lamp;
     return -1;
   }
-  if (z === 0 && x === 3 && ry <= 2) return ID.Air;
+  if (z === 0 && x === 3 && ry <= 2) return ID.Door;
   if (ry === 2 && (x === 0 || x === W - 1) && (z === 2 || z === 3)) return ID.Glass;
   return wall;
 }
@@ -1181,6 +1182,27 @@ function stampVillage(world: World, x0: number, ground: number, z0: number) {
   for (let z = 0; z < 28; z++) {
     if (world.get(x0 + 14, ground, z0 + z) === ID.Grass) world.set(x0 + 14, ground, z0 + z, ID.Cobble);
   }
+  // path lamps
+  for (const [x, z] of [[7, 2], [21, 2], [7, 16], [21, 16], [14, 8], [14, 20]]) {
+    world.set(x0 + x, ground + 1, z0 + z, ID.Cobble);
+    world.set(x0 + x, ground + 2, z0 + z, ID.Lamp);
+  }
+  // flower beds
+  for (let i = 0; i < 4; i++) {
+    world.set(x0 + 6 + i, ground, z0 + 6, ID.Farmland);
+    world.set(x0 + 6 + i, ground + 1, z0 + 6, i % 2 ? ID.Flower : ID.FlowerRed);
+  }
+  // small market stall
+  const mx = x0 + 15;
+  const mz = z0 + 10;
+  for (let x = 0; x < 4; x++) {
+    world.set(mx + x, ground, mz, ID.Planks);
+    world.set(mx + x, ground + 2, mz, ID.Planks);
+  }
+  world.set(mx, ground + 1, mz, ID.Log);
+  world.set(mx + 3, ground + 1, mz, ID.Log);
+  world.set(mx + 1, ground + 1, mz, ID.Chest);
+  world.set(mx + 2, ground + 1, mz, ID.Bench);
   return {
     sheep: penSheep(x0, z0),
     folk: folkLayout(x0, z0),
@@ -1211,7 +1233,7 @@ function stampCottage(world: World, x0: number, ground: number, z0: number, wall
         if (!edge) continue;
         const door = z === 0 && x === 3 && y <= 2;
         const window = y === 2 && (x === 0 || x === W - 1) && (z === 2 || z === 3);
-        const id = door ? ID.Air : window ? ID.Glass : wall;
+        const id = door ? ID.Door : window ? ID.Glass : wall;
         if (id === ID.Air) {
           const cur = world.get(x0 + x, ground + y, z0 + z);
           if (cur !== ID.Air) world.set(x0 + x, ground + y, z0 + z, ID.Air);
@@ -1231,8 +1253,11 @@ function stampCottage(world: World, x0: number, ground: number, z0: number, wall
     }
   }
   world.set(x0 + 3, ground, z0 - 1, ID.Planks);
-  world.set(x0 + 2, ground + 1, z0 + 2, ID.Orange);
-  world.set(x0 + 4, ground + 1, z0 + 3, ID.Yellow);
+  world.set(x0 + 2, ground + 1, z0 + 2, ID.Chest);
+  world.set(x0 + 4, ground + 1, z0 + 3, ID.Bed);
+  world.set(x0 + 1, ground + 1, z0 + 1, ID.Bench);
+  world.set(x0 + 5, ground + 1, z0 + 1, ID.Lamp);
+  world.set(x0 + 3, ground + 2, z0 + 4, ID.Torch);
 }
 
 function stampWell(world: World, x0: number, ground: number, z0: number) {
