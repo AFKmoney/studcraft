@@ -133,7 +133,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean)
   const plant = empty();
   const x0 = cx * CS;
   const z0 = cz * CS;
-  const AO = [0.58, 0.74, 0.88, 1];
+  const AO = [0.66, 0.8, 0.91, 1];
 
   function occludes(id: number) {
     if (!id) return 0;

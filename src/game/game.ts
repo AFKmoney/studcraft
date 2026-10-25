@@ -328,7 +328,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   renderer.toneMapping = settings.realistic ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
   renderer.toneMappingExposure = settings.realistic ? 1.05 : 1;
   renderer.shadowMap.enabled = settings.realistic;
-  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0x8ec8f5, 28, 72);
@@ -342,13 +342,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   sun.position.set(40, 80, 20);
   sun.castShadow = settings.realistic;
   sun.shadow.mapSize.set(narrow ? 1024 : 2048, narrow ? 1024 : 2048);
-  sun.shadow.bias = -0.0004;
-  sun.shadow.normalBias = 0.03;
+  sun.shadow.bias = -0.0002;
+  sun.shadow.normalBias = 0.06;
   const shadowCam = sun.shadow.camera;
-  shadowCam.left = -42;
-  shadowCam.right = 42;
-  shadowCam.top = 42;
-  shadowCam.bottom = -42;
+  shadowCam.left = -30;
+  shadowCam.right = 30;
+  shadowCam.top = 30;
+  shadowCam.bottom = -30;
   shadowCam.near = 0.5;
   shadowCam.far = 140;
   scene.add(hemi, ambient, sun, sun.target);
@@ -408,7 +408,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     roughnessMap: atlases.rough,
     normalMap: atlases.normal,
     vertexColors: true,
-    envMapIntensity: 0.4,
+    envMapIntensity: 0.55,
   });
   const glassStd = new THREE.MeshStandardMaterial({
     map: atlas,
@@ -3374,11 +3374,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     hemi.color.setHex(sunH > 0 ? 0xcfe6ff : 0x22304e);
     sun.color.setHex(sunH > 0 ? 0xfff2d2 : 0x6d7eaa);
     if (settings.realistic) {
-      hemi.intensity = 0.16 + Math.max(0, sunH) * 0.32;
-      ambient.intensity = 0.22 + Math.max(0, sunH) * 0.05;
-      sun.intensity = 0.08 + Math.max(0, sunH) * 1.85;
-      scene.environmentIntensity = 0.16 + Math.max(0, sunH) * 0.22;
-      const texel = 84 / (narrow ? 1024 : 2048);
+      hemi.intensity = 0.28 + Math.max(0, sunH) * 0.32;
+      ambient.intensity = 0.28 + Math.max(0, sunH) * 0.07;
+      sun.intensity = 0.1 + Math.max(0, sunH) * 1.75;
+      scene.environmentIntensity = 0.3 + Math.max(0, sunH) * 0.25;
+      const texel = 60 / (narrow ? 1024 : 2048);
       const px = Math.round(player.x / texel) * texel;
       const py = Math.round((player.y + 1) / texel) * texel;
       const pz = Math.round(player.z / texel) * texel;

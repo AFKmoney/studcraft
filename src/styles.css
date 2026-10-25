@@ -702,24 +702,39 @@ h1 {
 }
 
 .show-touch .hotbar {
-  bottom: calc(148px + env(safe-area-inset-bottom));
-}
-
-.show-touch .hearts,
-.show-touch .oxygen {
-  bottom: calc(250px + env(safe-area-inset-bottom));
-}
-
-.show-touch .hunger {
-  bottom: calc(272px + env(safe-area-inset-bottom));
+  bottom: calc(6px + env(safe-area-inset-bottom));
+  width: min(470px, 98vw);
+  border-width: 8px;
+  padding: 4px;
+  gap: 4px;
 }
 
 .show-touch .xp-track {
-  bottom: calc(230px + env(safe-area-inset-bottom));
+  bottom: calc(78px + env(safe-area-inset-bottom));
+  width: min(470px, 98vw);
+  height: 8px;
 }
 
 .show-touch .mana-track {
-  bottom: calc(248px + env(safe-area-inset-bottom));
+  bottom: calc(90px + env(safe-area-inset-bottom));
+  width: min(470px, 98vw);
+  height: 8px;
+}
+
+.show-touch .hearts {
+  bottom: calc(104px + env(safe-area-inset-bottom));
+}
+
+.show-touch .hunger {
+  bottom: calc(104px + env(safe-area-inset-bottom));
+  left: auto;
+  right: 12px;
+}
+
+.show-touch .oxygen {
+  bottom: calc(126px + env(safe-area-inset-bottom));
+  left: 12px;
+  right: auto;
 }
 
 @media (pointer: coarse), (max-width: 900px) {
@@ -728,24 +743,57 @@ h1 {
   }
 
   .hotbar {
-    bottom: calc(148px + env(safe-area-inset-bottom));
-  }
-
-  .hearts,
-  .oxygen {
-    bottom: calc(250px + env(safe-area-inset-bottom));
-  }
-
-  .hunger {
-    bottom: calc(272px + env(safe-area-inset-bottom));
+    bottom: calc(6px + env(safe-area-inset-bottom));
+    width: min(470px, 98vw);
+    border-width: 8px;
+    padding: 4px;
+    gap: 4px;
   }
 
   .xp-track {
-    bottom: calc(230px + env(safe-area-inset-bottom));
+    bottom: calc(78px + env(safe-area-inset-bottom));
+    width: min(470px, 98vw);
+    height: 8px;
   }
 
   .mana-track {
-    bottom: calc(248px + env(safe-area-inset-bottom));
+    bottom: calc(90px + env(safe-area-inset-bottom));
+    width: min(470px, 98vw);
+    height: 8px;
+  }
+
+  .hearts {
+    bottom: calc(104px + env(safe-area-inset-bottom));
+  }
+
+  .hunger {
+    bottom: calc(104px + env(safe-area-inset-bottom));
+    left: auto;
+    right: 12px;
+  }
+
+  .oxygen {
+    bottom: calc(126px + env(safe-area-inset-bottom));
+    left: 12px;
+    right: auto;
+  }
+
+  .sheet {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    overflow-y: auto;
+  }
+
+  .sheet .btn,
+  .book-tabs .btn {
+    min-height: 44px;
+  }
+
+  .book-tabs {
+    gap: 6px;
   }
 
   .title-wrap .card {
@@ -764,6 +812,80 @@ h1 {
 
   .grid-blocks {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (pointer: coarse) and (max-height: 500px) {
+  .hotbar {
+    width: min(400px, 72vw);
+  }
+
+  .xp-track {
+    bottom: calc(72px + env(safe-area-inset-bottom));
+    width: min(400px, 72vw);
+  }
+
+  .mana-track {
+    bottom: calc(83px + env(safe-area-inset-bottom));
+    width: min(400px, 72vw);
+  }
+
+  .hearts,
+  .hunger {
+    bottom: calc(96px + env(safe-area-inset-bottom));
+  }
+
+  .oxygen {
+    bottom: calc(116px + env(safe-area-inset-bottom));
+  }
+
+  .stick-zone {
+    width: 96px;
+    height: 96px;
+  }
+
+  .touch-actions button {
+    width: 56px;
+    height: 56px;
+  }
+
+  .touch-layer {
+    height: 132px;
+  }
+}
+
+@media (pointer: coarse) and (max-width: 699px) {
+  .show-touch .hotbar,
+  .hotbar {
+    bottom: calc(138px + env(safe-area-inset-bottom));
+    width: min(470px, 96vw);
+  }
+
+  .show-touch .xp-track,
+  .xp-track {
+    bottom: calc(200px + env(safe-area-inset-bottom));
+    width: min(470px, 96vw);
+  }
+
+  .show-touch .mana-track,
+  .mana-track {
+    bottom: calc(212px + env(safe-area-inset-bottom));
+    width: min(470px, 96vw);
+  }
+
+  .show-touch .hearts,
+  .hearts {
+    bottom: calc(226px + env(safe-area-inset-bottom));
+  }
+
+  .show-touch .hunger,
+  .hunger {
+    bottom: calc(226px + env(safe-area-inset-bottom));
+  }
+
+  .show-touch .oxygen,
+  .oxygen {
+    bottom: calc(248px + env(safe-area-inset-bottom));
   }
 }
 
