@@ -325,6 +325,11 @@ function Hud({ game }: { game: GameApi }) {
             key={i}
             className={i === hud.slot ? "slot on" : "slot"}
             onClick={(e) => (e.shiftKey && item.id > 0 ? game.shiftStack(item.id) : game.setSlot(i))}
+            onContextMenu={(e) => {
+              if (item.id <= 0) return;
+              e.preventDefault();
+              game.shiftStack(item.id);
+            }}
           >
             <small>{i + 1}</small>
             {item.id > 0 && <ItemIcon id={item.id} />}

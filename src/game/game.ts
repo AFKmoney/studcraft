@@ -4464,10 +4464,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     shiftStack(id) {
       if (!id) return;
       if (!creative && (inv[id] ?? 0) <= 0) return say("You don't have that");
-      // Clear any existing copies on the bar first
-      for (let i = 0; i < 9; i++) if (hotbar[i] === id) hotbar[i] = 0;
       const on = hotbar.indexOf(id);
       if (on >= 0) {
+        for (let i = 0; i < 9; i++) if (hotbar[i] === id) hotbar[i] = 0;
         say(def(id).name + " back in the bag");
       } else {
         const empty = hotbar.indexOf(0);

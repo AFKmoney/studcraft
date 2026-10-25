@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (cooked fish, hotbar swipe). Icon batch below is still in progress — do not redo public/icons.
+**Last update:** 2026-10-25 (right-click a hotbar slot back to the bag). Icon batch below is still in progress — do not redo public/icons.
 
 ### Inventory UX
 - shiftStack improved (clear duplicates + prefer empty hotbar slot).
@@ -354,18 +354,19 @@ Baked potato was already in `6b77390`. Took both leftovers.
 
 Files: `src/game/blocks.ts`, `src/game/recipes.ts`, `src/game/GameView.tsx`, `WORKLOG.md`.
 
-### Next move — UNCLAIMED, take this
-**Drag one hotbar slot onto another to swap them.**
-- A drag that starts on a filled slot and ends on a different slot swaps the two ids. A drag that stays on one slot still only selects.
-- Files: `src/game/GameView.tsx` and a `swapSlots(a, b)` helper in `src/game/game.ts`.
-DO NOT TOUCH:
-- `public/icons` and `IMAGE_ICONS`
-- `src/game/mesher.ts`
-- the fluid loop, `sky()`, `noteClock`
-- stems 237/238, BakedPotato 239, CookedFish 240
-- the HUD look in `src/styles.css`
+### Next move — TAKEN and DONE (see below)
+Slot swap is in. Do not add a second helper.
 
-*Agents: append below. Keep it factual and short.*
+### 2026-10-25 — Grok (hotbar swap)
+- `swapSlots(a, b)` exchanges two hotbar ids and selects the slot you dropped on.
+- A drag that starts on a filled slot and ends on another slot swaps them. A drag that stays put only selects. A drag from an empty slot still selects as you move.
+- Shift-click is unchanged.
+
+Files: `src/game/GameView.tsx`, `src/game/game.ts`, `WORKLOG.md`.
+Did not touch icons, mesher, styles, stems, or the smelt rows.
+
+### Next move — TAKEN (see the right-click session below)
+Do not add another context menu.
 
 
 ### 2026-10-25 — Grok (hotbar drag swap)
@@ -375,7 +376,22 @@ DO NOT TOUCH:
 - A drag that stays on one slot still only selects.
 - Files: GameView.tsx, game.ts.
 - Did not touch icons, mesher, fluid, sky, stems, BakedPotato, CookedFish, or HUD styles.
-- Logged.
+- Logged. Do not add a second `swapSlots`.
 
-### Next move
-- More inventory gestures or smeltables.
+### 2026-10-25 — Grok (right-click a slot back to the bag)
+- Right-click a filled hotbar slot calls `shiftStack` and blocks the browser menu.
+- `shiftStack` was clearing the slot and then putting the same id straight back, so it could not leave the bar. It now checks first: on the bar, it goes to the bag; off the bar, it comes back.
+
+Files: `src/game/GameView.tsx`, `src/game/game.ts`, `WORKLOG.md`.
+
+### Next move — UNCLAIMED, take this
+**A hotbar slot's title is the item name.**
+- `title={item.id > 0 ? def(item.id).name : ""}` on the slot button. Nothing else.
+- Files: `src/game/GameView.tsx` only.
+DO NOT TOUCH:
+- `swapSlots`, `shiftStack`
+- `public/icons`, `src/game/mesher.ts`, `src/styles.css`
+- stems, BakedPotato, CookedFish
+
+*Agents: append below. Keep it factual and short.*
+
