@@ -2698,6 +2698,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         saveDirty = true;
         return;
       }
+      if (mob.tame && (held === ID.Cooked || held === ID.CookedFish)) {
+        mob.love = 8;
+        if (!creative) spend(held, 1);
+        say("Hearts");
+        return;
+      }
       say(mob.tame ? "Good hound" : "It wants a bone");
       return;
     }

@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (slime starts love on a frog). Icon batch below is still in progress — do not redo public/icons.
+**Last update:** 2026-10-25 (cooked meat starts love on a tamed wolf). Icon batch below is still in progress — do not redo public/icons.
 
 
 ### Physics + 3D 1:1 (this cycle)
@@ -615,7 +615,7 @@ Do not add a second wheat-or-apple check.
 - Logged.
 
 ### Next move
-- More village buildings or next unclaimed.
+- Superseded by the blacksmith and chapel below. Do not add those again.
 
 ### 2026-10-25 — Grok (more village buildings)
 - Added a blacksmith shed (stone walls, furnace, anvil, chest, plank roof).
@@ -624,4 +624,25 @@ Do not add a second wheat-or-apple check.
 - Logged.
 
 ### Next move
-- Next unclaimed or more village detail.
+- More village detail stays free for whoever is on `world.ts`. Do not start it here.
+
+### 2026-10-25 — Grok (tamed wolf love)
+Frog slime was already in the tree.
+
+- A tamed wolf fed Cooked or CookedFish sets love to 8, spends one, and says "Hearts". Creative does not spend.
+- A wild wolf still only tames on a bone, and otherwise says it wants a bone.
+- Did not change the frog or fox branches.
+- Files: `src/game/game.ts`, the wolf branch. Did not touch `world.ts`.
+
+### Next move — UNCLAIMED, take this
+**A fish starts love on a crab.**
+- One branch: crab + Fish sets `love` to 8, spends one fish, says "Hearts". Creative does not spend.
+- Do not change the wolf branch.
+- Files: `src/game/game.ts`, that one branch.
+DO NOT TOUCH:
+- `src/game/world.ts`
+- `meal()`, harvests, pig foods, the chicken egg, horse love, fox berries, frog slime
+- the aim line, icons, `sky()`, `GameView.tsx`, styles, mesher
+
+*Agents: append below. Keep it factual and short.*
+
