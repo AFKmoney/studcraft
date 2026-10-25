@@ -13,7 +13,8 @@
 - Next: continue mapping remaining generated assets to full coverage.
 - Added: PotionHeal, PotionSpeed, Gapple, Feather, String, Saddle, Shield.
 - Added: DragonEgg, Ingot, Stick, Seeds, Wheat, WaterBucket, Cooked, Rod, PotionStr, Emerald, Boat, Cart.
-- Added remaining: Elytra, Totem, Scrap, Blaze, Wart, Powder, LavaBucket, Tin, Copper, Bronze, Amber, Chrome, Core, Focus, Fur, Fang, Wisp, Crystal, Wax, Frost, Cinder, Antler, IceSheet, GravelBar, WaxSeal, MelonCut.
+- Added remaining: Elytra, Totem, Scrap, Blaze, Wart, Powder, LavaBucket, Tin, Copper, Bronze, Amber, Chrome, Core, Focus, Fur, Fang, Wisp, Crystal, Wax, Frost, Cinder, Antler, IceSheet, GravelBar, WaxSeal, MelonCut, BakedPotato.
+- Full item() coverage in IMAGE_ICONS.
 
 
 ## Current State (as of clone @ 4c08b46)
