@@ -765,6 +765,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let fishT = -1;
   let spawnerAcc = 0;
   let dragonUp = false;
+  let won = false;
   let mount: Mob | null = null;
   let returnSpot = { x: 0, y: 80, z: 0 };
   let noteStep = 0;
@@ -895,7 +896,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const readyQ = hud.quests.find((q) => q.ready);
     const openQ = hud.quests.find((q) => !q.done);
     hud.questTrack = readyQ ? readyQ.name + " · ready" : openQ ? openQ.name + " " + openQ.n + "/" + openQ.need : "Board clear";
-    hud.won = false;
+    hud.won = won;
     hud.skills = [...skills];
     hud.skillPoints = creative ? 99 : Math.max(0, rankLv - skills.size);
     const maxMana = manaMaxFor(skills);
@@ -1033,6 +1034,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     realm = 0;
     realmsReady = false;
     dragonUp = false;
+    won = false;
     fuses.length = 0;
   }
 
@@ -1161,6 +1163,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       const wolf = spawnKind("wolf", pet.x, pet.z);
       wolf.tame = true;
     }
+    won = !!data.won;
+    if (won) dragonUp = true;
     stream(narrow ? 6 : 10);
   }
 
@@ -2204,7 +2208,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       player.z = -500.5;
       realm = 2;
       say("The End");
-      if (!dragonUp) {
+      if (!dragonUp && !won) {
         dragonUp = true;
         spawnKind("dragon", -504, -508);
       }
@@ -2961,7 +2965,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (settings.mods.generous && (mob.kind === "frog" || mob.kind === "fox" || mob.kind === "crab" || mob.kind === "wisp")) extra.push(drops[0]);
       for (const drop of extra) dropItem(drop, 1, mob.x, mob.y + 0.7, mob.z);
     }
-    if (mob.kind === "dragon") dragonUp = false;
+    if (mob.kind === "dragon") {
+      won = true;
+      dragonUp = true;
+      say("The wyrm falls. Step on the portal to go home.", 6400);
+      saveDirty = true;
+    }
     burst(mob.x, mob.y + 0.5, mob.z, drops.length ? def(drops[0]).color : "#3aaa4c", 12);
     audio.break();
     gainXp(MOB_XP[mob.kind] ?? 2);
@@ -3345,6 +3354,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       skills: [...skills],
       mana,
       spell: spellIx,
+      won,
       pets: mobs.filter((m) => m.kind === "wolf" && m.tame && !m.dead).map((m) => ({ x: m.x, z: m.z })),
     };
   }

@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (the buried dungeon has a spawner). Icon batch below is still in progress — do not redo public/icons.
+**Last update:** 2026-10-25 (the wyrm kill finishes the run again). Icon batch below is still in progress — do not redo public/icons.
 
 
 ### Physics + 3D 1:1 (this cycle)
@@ -802,14 +802,28 @@ DO NOT TOUCH:
 - A frame snippet that named `night` and `gx` outside their function was not kept. The wither summon on soul sand stays.
 - Files: `src/game/blocks.ts`, `src/game/world.ts`, `src/game/game.ts`.
 
+### Next move — TAKEN and DONE (see below)
+The spawner drop was already right. Do not add a second drop rule.
+
+### 2026-10-25 — Grok (spawner drop)
+- Id **246** has `need: 1`. A pick of tier 1 or more (`canDrop`) puts the cage in the bag. A bare hand breaks it and drops nothing.
+- A placed cage is the same block, so the 8 second timer already sees it. The timer was not changed.
+
+### 2026-10-25 — Grok (the run can end)
+The progress commits had left `hud.won` stuck false.
+
+- Killing the End wyrm sets `won`, says "The wyrm falls. Step on the portal to go home.", saves it, and does not spawn another wyrm.
+- A new world clears `won`. The readout shows "The End is yours".
+- Files: `src/game/game.ts` only. Did not touch the spawner timer, WitherSkull **244**, or NetherStar **245**.
+
 ### Next move — UNCLAIMED, take this
-**Mining the spawner with a pick puts it in the bag, and placing it keeps the same timer.**
-- The id is **246**, not 244. Confirm a pick of tier 1 or more drops it, and a bare hand does not.
-- Do not add another block id. Do not change the 8 second / two walker rule.
-- Files: `src/game/game.ts` only if the drop is wrong. Otherwise write that it already drops and leave the rule.
+**Do not add a second ending.** The survival run ends when the wyrm dies. The portal home is the one already in the End.
+- If that portal does not send you to the overworld, fix only that hop. Do not spawn a second wyrm after `won`.
+- Files: `src/game/game.ts`, the portal check only.
 DO NOT TOUCH:
+- the spawner timer and id **246**
 - WitherSkull **244**, NetherStar **245**
-- the wither summon, offhand, hoppers
-- icons, `sky()`, styles, mesher
+- offhand, hoppers, icons, `sky()`, styles, mesher
 
 *Agents: append below. Keep it factual and short.*
+
