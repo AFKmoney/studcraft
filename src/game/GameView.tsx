@@ -213,6 +213,15 @@ function slotLabel(slot: WorldSlot) {
 function Hud({ game }: { game: GameApi }) {
   const hud = game.hud;
   const hearts = 10;
+  const swipeAt = useRef(-1);
+  const pickSlot = (bar: HTMLDivElement, x: number) => {
+    const rect = bar.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const i = Math.min(8, Math.max(0, Math.floor(((x - rect.left) / rect.width) * 9)));
+    if (i === swipeAt.current) return;
+    swipeAt.current = i;
+    game.setSlot(i);
+  };
   return (
     <div className={hud.health > 0 && hud.health <= 6 && !hud.creative ? "hud hurt" : "hud"}>
       <div className="top-readout">
@@ -286,7 +295,19 @@ function Hud({ game }: { game: GameApi }) {
           <em>{hud.spell ? `${hud.spell} · ${Math.floor(hud.mana)}/${hud.manaMax}` : "No spell"}</em>
         </div>
       )}
-      <div className="hotbar">
+      <div
+        className="hotbar"
+        onPointerDown={(e) => {
+          if (e.shiftKey || e.button !== 0) return;
+          swipeAt.current = -1;
+          e.currentTarget.setPointerCapture(e.pointerId);
+          pickSlot(e.currentTarget, e.clientX);
+        }}
+        onPointerMove={(e) => {
+          if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+          pickSlot(e.currentTarget, e.clientX);
+        }}
+      >
         {hud.hotbar.map((item, i) => (
           <button
             key={i}

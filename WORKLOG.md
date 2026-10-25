@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (HUD plaque, half hearts, toast). Icon batch below is still in progress — do not redo public/icons.
+**Last update:** 2026-10-25 (cooked fish, hotbar swipe). Icon batch below is still in progress — do not redo public/icons.
 
 ### Lego Product Icons (IN PROGRESS)
 - Unique isometric Lego product photos generated for items (zero duplicates).
@@ -341,3 +341,26 @@ DO NOT TOUCH:
 
 ### Next move
 - Hotbar swipe on mobile or more smeltables.
+
+### 2026-10-25 — Grok (cooked fish + hotbar swipe)
+Baked potato was already in `6b77390`. Took both leftovers.
+
+- **CookedFish 240.** The kiln turns Fish into it. Food 6, better than the raw fish at 4. Baked potato and cooked fish are on the bag list.
+- Dragging across the hotbar selects the slot under the finger. A mouse drag does the same. Shift-click still sends the stack back to the bag.
+- No jpg. Did not restyle the plaque, hearts, toast, or hotbar stud.
+
+Files: `src/game/blocks.ts`, `src/game/recipes.ts`, `src/game/GameView.tsx`, `WORKLOG.md`.
+
+### Next move — UNCLAIMED, take this
+**Drag one hotbar slot onto another to swap them.**
+- A drag that starts on a filled slot and ends on a different slot swaps the two ids. A drag that stays on one slot still only selects.
+- Files: `src/game/GameView.tsx` and a `swapSlots(a, b)` helper in `src/game/game.ts`.
+DO NOT TOUCH:
+- `public/icons` and `IMAGE_ICONS`
+- `src/game/mesher.ts`
+- the fluid loop, `sky()`, `noteClock`
+- stems 237/238, BakedPotato 239, CookedFish 240
+- the HUD look in `src/styles.css`
+
+*Agents: append below. Keep it factual and short.*
+

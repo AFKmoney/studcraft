@@ -299,6 +299,7 @@ export const SMELT: Record<number, number> = {
   [ID.ResinOre]: ID.Resin,
   [ID.PrismOre]: ID.Prism,
   [ID.Potato]: ID.BakedPotato,
+  [ID.Fish]: ID.CookedFish,
 };
 
 export function fuelTime(id: number): number {
