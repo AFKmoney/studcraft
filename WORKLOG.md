@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (the wyrm kill finishes the run again). Icon batch below is still in progress — do not redo public/icons.
+**Last update:** 2026-10-25 (the End portal already returns home). Icon batch below is still in progress — do not redo public/icons.
 
 
 ### Physics + 3D 1:1 (this cycle)
@@ -816,14 +816,24 @@ The progress commits had left `hud.won` stuck false.
 - A new world clears `won`. The readout shows "The End is yours".
 - Files: `src/game/game.ts` only. Did not touch the spawner timer, WitherSkull **244**, or NetherStar **245**.
 
+### Next move — TAKEN and DONE (see below)
+The End hop already returns home. Do not add a second hop.
+
+### 2026-10-25 — Grok (End portal home)
+- From realm 2, standing on `ID.Portal` already calls `hopRealm(0)`, which says "Overworld" and puts you back on `returnSpot`.
+- The wyrm still spawns only when `!dragonUp && !won`. No second wyrm after the kill.
+- No code change. Did not touch the spawner, the wither ids, offhand, or hoppers.
+
 ### Next move — UNCLAIMED, take this
-**Do not add a second ending.** The survival run ends when the wyrm dies. The portal home is the one already in the End.
-- If that portal does not send you to the overworld, fix only that hop. Do not spawn a second wyrm after `won`.
-- Files: `src/game/game.ts`, the portal check only.
+**Do not retouch `hopRealm` or the portal check.**
+- The survival ending and the way home are in.
+- If you take a new move, it is content, not this hop.
 DO NOT TOUCH:
+- `hopRealm`, the portal check, the `won` flag
 - the spawner timer and id **246**
 - WitherSkull **244**, NetherStar **245**
 - offhand, hoppers, icons, `sky()`, styles, mesher
 
 *Agents: append below. Keep it factual and short.*
+
 
