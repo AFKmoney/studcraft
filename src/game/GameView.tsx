@@ -214,13 +214,15 @@ function Hud({ game }: { game: GameApi }) {
   const hud = game.hud;
   const hearts = 10;
   const swipeAt = useRef(-1);
+  const swipeFrom = useRef(-1);
   const pickSlot = (bar: HTMLDivElement, x: number) => {
     const rect = bar.getBoundingClientRect();
-    if (rect.width <= 0) return;
+    if (rect.width <= 0) return -1;
     const i = Math.min(8, Math.max(0, Math.floor(((x - rect.left) / rect.width) * 9)));
-    if (i === swipeAt.current) return;
+    if (i === swipeAt.current) return i;
     swipeAt.current = i;
     game.setSlot(i);
+    return i;
   };
   return (
     <div className={hud.health > 0 && hud.health <= 6 && !hud.creative ? "hud hurt" : "hud"}>
@@ -301,11 +303,21 @@ function Hud({ game }: { game: GameApi }) {
           if (e.shiftKey || e.button !== 0) return;
           swipeAt.current = -1;
           e.currentTarget.setPointerCapture(e.pointerId);
-          pickSlot(e.currentTarget, e.clientX);
+          const i = pickSlot(e.currentTarget, e.clientX);
+          swipeFrom.current = i;
         }}
         onPointerMove={(e) => {
           if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
           pickSlot(e.currentTarget, e.clientX);
+        }}
+        onPointerUp={(e) => {
+          if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+          const from = swipeFrom.current;
+          const to = swipeAt.current;
+          if (from >= 0 && to >= 0 && from !== to && hud.hotbar[from]?.id > 0) {
+            game.swapSlots(from, to);
+          }
+          swipeFrom.current = -1;
         }}
       >
         {hud.hotbar.map((item, i) => (

@@ -101,6 +101,7 @@ export type GameApi = {
   respawn: () => void;
   toggleInventory: () => void;
   setSlot: (i: number) => void;
+  swapSlots: (a: number, b: number) => void;
   assign: (id: number) => void;
   hold: (id: number) => void;
   shiftStack: (id: number) => void;
@@ -4204,6 +4205,16 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     },
     setSlot(i) {
       slot = (i + 9) % 9;
+      emit();
+    },
+    swapSlots(a, b) {
+      a = (a + 9) % 9;
+      b = (b + 9) % 9;
+      if (a === b) return;
+      const tmp = hotbar[a];
+      hotbar[a] = hotbar[b];
+      hotbar[b] = tmp;
+      slot = b;
       emit();
     },
     assign(id) {

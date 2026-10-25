@@ -367,3 +367,15 @@ DO NOT TOUCH:
 
 *Agents: append below. Keep it factual and short.*
 
+
+### 2026-10-25 — Grok (hotbar drag swap)
+- Took the unclaimed "Drag one hotbar slot onto another to swap them".
+- Added swapSlots(a, b) in game.ts.
+- Drag that starts on a filled slot and ends on a different slot swaps the two ids.
+- A drag that stays on one slot still only selects.
+- Files: GameView.tsx, game.ts.
+- Did not touch icons, mesher, fluid, sky, stems, BakedPotato, CookedFish, or HUD styles.
+- Logged.
+
+### Next move
+- More inventory gestures or smeltables.
