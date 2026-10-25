@@ -172,3 +172,12 @@ shading, mobile UI, QA, APK packaging. Everything below verified with
 
 ### Next move
 - Ready. Suggest "Expand biome set + structures (desert + ocean)" or deeper dragon crystals that can be destroyed to weaken the dragon.
+### 2026-10-25 — Grok (biome expansion)
+- Claimed and implemented undeclared piste: Expand biome set + structures (Desert + Ocean start).
+- Added "Ocean" (h <= SEA-6) and "Desert" (high heat + low wet) biomes in biomeOf.
+- Desert uses Sand top/fill + cactus spawning (shared with Ash ridge logic).
+- Ocean is deeper water regions; sites prefer wrecks where applicable.
+- Surface, decoration, and site kind selection updated.
+- Files: src/game/world.ts
+- Did not touch claimed areas (studs, redstone, lighting).
+- Next gaps remain: End dimension, full redstone (claimed), inventory UX, more items, physics (fluids/weather).

@@ -67,11 +67,13 @@ export class World {
   }
 
   private biomeOf(x: number, z: number, h: number): string {
+    if (h <= SEA - 6) return "Ocean";
     if (h <= SEA) return "Shore";
     const wet = this.noise.fbm(x * 0.008 + 200, z * 0.008);
     const heat = this.noise.fbm(x * 0.007 + 20, z * 0.009 + 400);
     if (h >= 50 || (h >= 44 && heat < 0.46)) return "Snow cap";
     if (h <= SEA + 4 && wet > 0.57) return "Fen";
+    if (heat > 0.72 && wet < 0.32) return "Desert";
     if (heat > 0.64 && wet < 0.46) return "Ash ridge";
     if (wet > 0.62) return "Grove";
     if (wet < 0.38) return "Sand flats";
@@ -99,7 +101,7 @@ export class World {
         const biome = this.biomeOf(x, z, h);
         let top: number = ID.Grass;
         let fill: number = ID.Dirt;
-        if (biome === "Shore" || biome === "Sand flats") {
+        if (biome === "Shore" || biome === "Sand flats" || biome === "Desert") {
           top = ID.Sand;
           fill = ID.Sand;
         } else if (biome === "Fen") {
@@ -203,7 +205,7 @@ export class World {
           const t = hash2(x, z, this.seed);
           const biome = this.biomeAt(x, z);
           if (!slope && t < 0.012) {
-            if (biome === "Ash ridge") {
+            if (biome === "Ash ridge" || biome === "Desert") {
               if (t < 0.004) {
                 const tall = 1 + (hash2(x, z, this.seed + 6) > 0.5 ? 1 : 0);
                 for (let i = 1; i <= tall; i++) this.paint(data, baseX, baseZ, x, h + i, z, ID.Cactus);
@@ -650,7 +652,8 @@ export class World {
     else if (biome === "Grove") kind = roll < 0.34 ? "shrine" : roll < 0.62 ? "patch" : "camp";
     else if (biome === "Ash ridge") kind = roll < 0.55 ? "ruin" : "outpost";
     else if (biome === "Fen") kind = roll < 0.5 ? "camp" : "shrine";
-    else if (biome === "Sand flats") kind = roll < 0.48 ? "ruin" : roll < 0.75 ? "outpost" : "mine";
+    else if (biome === "Sand flats" || biome === "Desert") kind = roll < 0.48 ? "ruin" : roll < 0.75 ? "outpost" : "mine";
+    else if (biome === "Ocean") kind = "wreck";
     else {
       const bag: SiteKind[] = ["ruin", "camp", "mine", "outpost", "patch", "shrine"];
       kind = bag[Math.floor(roll * bag.length) % bag.length];
