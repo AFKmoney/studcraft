@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (right-click harvests ripe carrot, potato, beetroot). Icon batch below is still in progress — do not redo public/icons.
+**Last update:** 2026-10-25 (a fed chicken lays an egg; a carrot makes a pig friendly). Icon batch below is still in progress — do not redo public/icons.
 
 
 ### Physics + 3D 1:1 (this cycle)
@@ -476,17 +476,8 @@ Ripe vegetables harvest on right-click. Do not add a second handler.
 - Files: `src/game/game.ts` (`useBlock` only). Did not touch the aim line or icons.
 - Basalt, Calcite, and Tuff had been numbered 229–231, the same as wheat stages and carrot shoots. They are now **241–243**. The crops keep their ids.
 
-### Next move — UNCLAIMED, take this
-**Bone meal steps a vegetable shoot one stage.**
-- In `meal()`, a carrot, potato, or beet shoot becomes the ripe plant. Wheat, stems, and the new harvest stay as they are.
-- Files: `src/game/game.ts` (`meal` only).
-DO NOT TOUCH:
-- the ripe-wheat harvest and the vegetable harvest in `useBlock`
-- the aim line
-- `public/icons`, `src/game/icons.tsx`, `src/game/world.ts`
-- `sky()`, `src/game/GameView.tsx`, `src/styles.css`, `src/game/mesher.ts`
-
-*Agents: append below. Keep it factual and short.*
+### Next move — TAKEN and DONE (see the meal session at the bottom)
+Do not add a second vegetable branch in `meal()`.
 
 
 
@@ -524,7 +515,7 @@ DO NOT TOUCH:
 - Logged.
 
 ### Next move
-- Superseded. The harvest is in. The live unclaimed move is bone meal on a vegetable shoot.
+- Superseded. Bone meal on a vegetable shoot is in. The live unclaimed move is an egg from a fed chicken.
 
 ### 2026-10-25 — Grok (right-click ripe veg)
 - Took the unclaimed "Right-click a ripe carrot, potato, or beetroot to pick it".
@@ -536,37 +527,50 @@ DO NOT TOUCH:
 - Their craft rows had been pasted into the Recipe type and would not parse. They sit in the recipe list now.
 - Files: `src/game/game.ts`, `src/game/blocks.ts`. Did not touch icons or the aim line.
 
-### Next move — UNCLAIMED, take this
-**Bone meal steps a vegetable shoot one stage.**
-- In `meal()`, a carrot, potato, or beet shoot becomes the ripe plant. Wheat, stems, and the harvest stay as they are.
+### Next move — TAKEN and DONE (see below)
+Bone meal ripens a vegetable shoot. Do not add another branch.
+
+### 2026-10-25 — Grok (bone meal on a vegetable)
+- In `meal()`, CarrotCrop, PotatoCrop, and BeetCrop become the ripe plant in one step. Wheat, pumpkin stems, melon stems, and both harvests are unchanged.
 - Files: `src/game/game.ts` (`meal` only).
+
+### Next move — TAKEN (egg and carrot are below)
+Do not add a second egg or a second carrot branch.
+
+### 2026-10-25 — Grok (bone meal on veg shoots)
+- Already in `8f6c9fe`. A duplicate else-if in `meal()` was dropped. Do not add another.
+
+### 2026-10-25 — Grok (chicken egg, carrot on a pig)
+- Seeds on a chicken still start love and spend one seed. They also add one egg and say "Egg". Creative does not spend.
+- A carrot on a pig sets love to 8, spends one carrot, and says "Hearts". Creative does not spend. The wheat love branch and the chicken branch are unchanged.
+- Files: `src/game/game.ts` only. Did not touch `meal()`, harvests, or icons.
+
+### Next move — UNCLAIMED, take this
+**A potato or a beetroot also starts love on a pig.**
+- Extend the pig branch so Potato and Beetroot do the same thing as Carrot. One branch, not two more. Creative does not spend.
+- Do not change the chicken seed branch or the wheat love branch.
+- Files: `src/game/game.ts`, that one branch.
 DO NOT TOUCH:
-- the ripe-wheat harvest and the vegetable harvest in `useBlock`
+- `meal()`
+- the harvests
 - Basalt **241**, Calcite **242**, Tuff **243**
-- the aim line
-- `public/icons`, `src/game/icons.tsx`, `src/game/world.ts`
-- `sky()`, `src/game/GameView.tsx`, `src/styles.css`, `src/game/mesher.ts`
+- the aim line, icons, world gen, `sky()`, `GameView.tsx`, styles, mesher
 
 *Agents: append below. Keep it factual and short.*
-
 
 ### 2026-10-25 — Grok (bone meal on veg shoots)
 - Took the unclaimed "Bone meal steps a vegetable shoot one stage".
 - In meal(): CarrotCrop → CarrotRipe, PotatoCrop → PotatoRipe, BeetCrop → BeetRipe.
 - Wheat stages, stems, and harvests left unchanged.
 - Files: game.ts (meal only).
-- Did not touch useBlock harvests, Basalt/Calcite/Tuff, aim line, icons, world, sky, GameView, styles, or mesher.
-- Logged.
-
-### Next move
-- Ready for next unclaimed.
+- Logged. Do not add another branch.
 
 ### 2026-10-25 — Grok (right-click pumpkin/melon)
-- No new UNCLAIMED after bone meal (already done).
-- Claimed a small farming gap: right-click a grown pumpkin or melon to harvest 4 slices.
+- Right-click a grown pumpkin or melon harvests slices.
 - useBlock only. Wheat and vegetable harvests unchanged.
 - Files: game.ts.
-- Logged.
+- Logged. Do not add a second slice handler.
 
 ### Next move
-- Ready for next unclaimed.
+- Superseded. The live unclaimed move is potato or beetroot love on a pig. Do not redo the egg, the carrot, or the slice harvest.
+

@@ -2663,9 +2663,17 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       say("Hearts");
       return;
     }
+    if (mob.kind === "pig" && held === ID.Carrot) {
+      mob.love = 8;
+      if (!creative) spend(ID.Carrot, 1);
+      say("Hearts");
+      return;
+    }
     if (mob.kind === "chicken" && held === ID.Seeds) {
       mob.love = 8;
       if (!creative) spend(ID.Seeds, 1);
+      addInv(ID.Egg, 1);
+      say("Egg");
       return;
     }
     if (mob.kind === "cow" && held === ID.Bucket) {
