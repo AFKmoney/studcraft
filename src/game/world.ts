@@ -234,26 +234,60 @@ export class World {
     }
 
     if (!this.flat) {
-      const veins = new Set<number>([
-        ID.TinOre,
-        ID.CopperOre,
-        ID.AmberOre,
-        ID.ChromeOre,
-        ID.SapphireOre,
-        ID.ResinOre,
-        ID.PrismOre,
-      ]);
-      for (let lz = 0; lz < CS; lz++) {
-        for (let lx = 0; lx < CS; lx++) {
-          for (let y = 2; y < HEIGHT - 2; y++) {
-            const ore = data[idx(lx, y, lz)];
-            if (!veins.has(ore)) continue;
-            const loose = ore === ID.TinOre || ore === ID.CopperOre ? 0.32 : ore === ID.AmberOre ? 0.58 : 0.74;
-            if (lx + 1 < CS && data[idx(lx + 1, y, lz)] === ID.Stone && hash3(baseX + lx, y, baseZ + lz, this.seed + ore) > loose) {
-              data[idx(lx + 1, y, lz)] = ore;
+      // Ore veins: every ore starts as scattered seed blocks in the
+      // column pass; here each seed grows into its stone neighbours so
+      // ores come in veins, not singles. Growth always starts from a
+      // snapshot (seeds, then the first ring) so veins stay bounded -
+      // letting grown cells regrow in the same scan would percolate
+      // whole regions into ore. Common ores grow fatter than rare ones.
+      const P: Record<number, number> = {
+        [ID.Coal]: 0.3,
+        [ID.IronOre]: 0.28,
+        [ID.TinOre]: 0.32,
+        [ID.CopperOre]: 0.32,
+        [ID.Gold]: 0.2,
+        [ID.Hard]: 0.18,
+        [ID.CrystalOre]: 0.16,
+        [ID.AmberOre]: 0.16,
+        [ID.Diamond]: 0.14,
+        [ID.EmeraldOre]: 0.12,
+        [ID.ChromeOre]: 0.1,
+        [ID.SapphireOre]: 0.1,
+        [ID.ResinOre]: 0.1,
+        [ID.PrismOre]: 0.1,
+      };
+      const DIRS = [
+        [1, 0, 0],
+        [-1, 0, 0],
+        [0, 1, 0],
+        [0, -1, 0],
+        [0, 0, 1],
+        [0, 0, -1],
+      ] as const;
+      for (let ring = 0; ring < 2; ring++) {
+        // Snapshot the current ore cells of each kind first.
+        const sources = new Map<number, [number, number, number][]>();
+        for (let lz = 0; lz < CS; lz++) {
+          for (let lx = 0; lx < CS; lx++) {
+            for (let y = 2; y < HEIGHT - 2; y++) {
+              const ore = data[idx(lx, y, lz)];
+              if (P[ore] === undefined) continue;
+              if (!sources.has(ore)) sources.set(ore, []);
+              sources.get(ore)!.push([lx, y, lz]);
             }
-            if (lz + 1 < CS && data[idx(lx, y, lz + 1)] === ID.Stone && hash3(baseX + lx, y + 3, baseZ + lz, this.seed + ore) > loose + 0.12) {
-              data[idx(lx, y, lz + 1)] = ore;
+          }
+        }
+        for (const [ore, cells] of sources) {
+          const p = ring === 0 ? P[ore] : P[ore] * 0.55;
+          for (const [lx, y, lz] of cells) {
+            for (let d = 0; d < 6; d++) {
+              const nx = lx + DIRS[d][0];
+              const ny = y + DIRS[d][1];
+              const nz = lz + DIRS[d][2];
+              if (nx < 0 || nx >= CS || nz < 0 || nz >= CS || ny < 2 || ny >= HEIGHT - 2) continue;
+              const ni = idx(nx, ny, nz);
+              if (data[ni] !== ID.Stone) continue;
+              if (hash3(baseX + nx, ny * 3 + d, baseZ + nz, this.seed + ore + ring * 131) > 1 - p) data[ni] = ore;
             }
           }
         }
@@ -376,6 +410,9 @@ export class World {
           const iy = Math.floor(y);
           const roll = hash3(ox, s, oz, this.seed + 926);
           const rad = roll > 0.86 ? 3 : roll > 0.5 ? 2 : 1;
+          // A worm running near its ceiling sometimes punches a shaft
+          // to the surface: a natural cave entrance. Never under the sea.
+          const entrance = iy >= ceiling - 2 && this.heightAt(ix, iz) > SEA + 2 && hash3(ox, s, oz, this.seed + 927) > 0.992;
           for (let dy = -rad; dy <= rad; dy++) {
             for (let dz = -rad; dz <= rad; dz++) {
               for (let dx = -rad; dx <= rad; dx++) {
@@ -390,6 +427,15 @@ export class World {
                 if (cur === ID.Bedrock || cur === ID.Air || cur === ID.Water || cur === ID.Lava) continue;
                 data[i] = ID.Air;
               }
+            }
+          }
+          if (entrance) {
+            for (let sy = iy; sy <= this.heightAt(ix, iz); sy++) {
+              const i = at(ix, sy, iz);
+              if (i < 0) continue;
+              const cur = data[i];
+              if (cur === ID.Bedrock || cur === ID.Water || cur === ID.Lava) continue;
+              data[i] = ID.Air;
             }
           }
           if (s === len - 1 && iy < 12) {

@@ -3843,6 +3843,14 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           const [x, z] = spot();
           spawnKind("bat", x, z);
         }
+        // Underground the bats come to you: when the surface is far
+        // above the player's head, keep a few bats around in the dark.
+        if (groundY(player.x, player.z) > player.y + 5 && alive("bat") < 3) {
+          const [x, z] = spot();
+          const bat = spawnKind("bat", x, z);
+          bat.y = player.y + 1.5 + Math.random() * 2;
+          bat.mesh.position.set(bat.x, bat.y, bat.z);
+        }
         if ((biome === "Ocean" || biome === "Shore") && alive("squid") < 3) {
           const [x, z] = spot();
           if (def(world.get(Math.floor(x), Math.floor(groundY(x, z)), Math.floor(z))).fluid) spawnKind("squid", x, z);
@@ -3936,7 +3944,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         scene.remove(m.mesh);
         continue;
       }
-      if ((m.kind === "creeper" || m.kind === "phantom" || m.kind === "wisp" || m.kind === "bat") && !night) {
+      if ((m.kind === "creeper" || m.kind === "phantom" || m.kind === "wisp") && !night) {
+        m.dead = true;
+        scene.remove(m.mesh);
+        continue;
+      }
+      // Surface bats vanish at dawn; cave bats keep the dark.
+      if (m.kind === "bat" && !night && groundY(m.x, m.z) <= m.y + 5) {
         m.dead = true;
         scene.remove(m.mesh);
         continue;

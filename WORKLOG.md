@@ -962,3 +962,25 @@ Seven new creatures, all built on the existing LEGO mob systems (22 -> 29 kinds)
   (enderman close-up, drowned, squid); bat day-despawn verified; enderman look-aggro
   verified ("It saw you looking").
 - NEXT (Muse): item 4 - procedural caves + ore veins.
+
+## 2026-10-25 — v2.6 battle order item 4: caves + ore veins (Muse)
+
+Correction to the 1:1 audit first: tunnel worms, ravines and 3D-noise cave pockets
+ALREADY existed (seeded, cross-chunk). What was actually missing:
+- **Veins for every ore.** Coal/iron/gold/diamond/emerald/hard/crystal spawned as
+  isolated single blocks; only the 7 newer ores had a small +x/+z growth pass. Now a
+  snapshot growth pass (seeds -> ring 1 -> weaker ring 2, all 6 directions, per-ore
+  probability) grows every ore into veins: coal/iron ~2 per seed, diamond ~1.5.
+  QA caught the first version percolating (in-scan regrowth turned 30 % of the
+  underground into coal) - the snapshot design is the fix, verified by volume scan:
+  48x48x41 around seed-23 spawn: coal 3557 (biggest cluster 43), iron 2031,
+  gold 642, diamond 135 (biggest 8), tin 857, copper 792.
+- **Cave entrances.** Worms were capped below the surface, so caves had no natural
+  openings. A worm running near its ceiling now sometimes punches a 1-wide shaft to
+  the surface (never under the sea). Scan found 3 entrances within +-56 of spawn.
+  The cave network itself measures 22.8k connected air cells in the scan volume.
+- **Cave bats.** Bats now gather around the player underground (and no longer
+  despawn at dawn when they are in the dark below).
+- Note: chunk data is generated on demand and only player edits are saved, so
+  untouched stone regenerates with veins/entrances; edited areas keep their edits.
+- NEXT (Muse): item 5 - full brewing (effects, splash, ingredient chain).
