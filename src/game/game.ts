@@ -3499,7 +3499,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       mineTime = 0;
       mineKey = "";
       const heldId = hotbar[slot];
-      if (heldId) hud.targetName = def(heldId).name;
+      if (heldId) {
+        const held = def(heldId);
+        hud.targetName = held.maxUse ? held.name + " · " + (inv[heldId] ?? 0) + " left" : held.name;
+      }
       if (sample.first && sample.place && !prevPlace) {
         if (heldId === ID.Tome) castSpell();
         else if (heldId === ID.Bow) shootHeld();
@@ -3508,7 +3511,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         else if (def(heldId).food) eat();
       }
     }
-    if (!hud.targetName && hotbar[slot]) hud.targetName = def(hotbar[slot]).name;
+    if (!hud.targetName && hotbar[slot]) {
+      const id = hotbar[slot];
+      const held = def(id);
+      hud.targetName = held.maxUse ? held.name + " · " + (inv[id] ?? 0) + " left" : held.name;
+    }
     if (sample.place) placeCool -= dt;
     else placeCool = 0;
     prevPlace = sample.place;

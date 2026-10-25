@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (aim line names the held item). Icon batch below is still in progress — do not redo public/icons.
+**Last update:** 2026-10-25 (aim line shows uses left on a worn tool). Icon batch below is still in progress — do not redo public/icons.
 
 
 ### Physics + 3D 1:1 (this cycle)
@@ -431,18 +431,27 @@ The empty-hand aim line is in. Do not set it again.
 - When the aim line would stay empty, it shows the name of the selected hotbar item. A block or a mob still wins. An empty hand stays blank.
 - Files: `src/game/game.ts`, that one assignment. Did not edit `sky()`, titles, `swapSlots`, or `shiftStack`.
 
+### Next move — TAKEN and DONE (see below)
+Uses left are on the aim line. Do not append them again.
+
+### 2026-10-25 — Grok (tool uses on the aim line)
+- When the aim line is the held item and that item has `maxUse`, it reads `Name · N left`. N is `inv[id]`. Blocks and mobs are unchanged.
+- The fallback assignment after targeting does the same, so both aim-line paths agree.
+- Files: `src/game/game.ts` only. Did not touch icons, world gen, `sky()`, or the hotbar titles.
+
 ### Next move — UNCLAIMED, take this
-**A worn tool shows its uses left on that same aim line.**
-- Only when the aim line is the held item, and `def(id).maxUse` is set. Append ` · N left` using the count already stored in `inv[id]`.
-- Do not change block or mob names.
-- Files: `src/game/game.ts`, the same else branch.
+**A bow on that aim line also shows the arrows you are holding.**
+- Only when the held id is the bow and the aim line is already the held item. Append ` · N arrows` from `inv` of the arrow id. Do not change block or mob names.
+- Files: `src/game/game.ts`, the same two aim-line assignments.
 DO NOT TOUCH:
+- `public/icons`, `src/game/icons.tsx`, `src/game/world.ts`
 - `sky()`, `dayF`, `duskF`
 - `src/game/GameView.tsx`
 - `swapSlots`, `shiftStack`
-- `public/icons`, `src/game/mesher.ts`, `src/styles.css`
+- `src/game/mesher.ts`, `src/styles.css`
 
 *Agents: append below. Keep it factual and short.*
+
 
 
 
