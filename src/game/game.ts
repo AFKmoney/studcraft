@@ -1440,6 +1440,14 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (canDrop && skills.has("yield") && ORE_XP[id] && Math.random() < 0.3) addInv(block.drop || id, 1);
       if (id === ID.Stone || id === ID.Cobble) oreEar(x, y, z);
     }
+    if (id === ID.EndCrystal) {
+      const dragon = mobs.find((m) => m.kind === "dragon" && !m.dead);
+      if (dragon) {
+        dragon.hp = Math.max(1, (dragon.hp ?? 20) - 6);
+        say("Crystal shattered — dragon weakened");
+      }
+      addInv(ID.PrismOre, 1);
+    }
     if (id === ID.Log) bumpQuest("break", "log");
     if (id === ID.Moss) bumpQuest("break", "moss");
     if (id === ID.Snow) bumpQuest("break", "snow");
@@ -1991,6 +1999,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     world.set(-504, 49, -504, ID.Portal);
     world.set(-504, 50, -504, ID.Portal);
     for (let i = 0; i < 6; i++) world.set(-516 + i * 3, 49, -506, ID.PrismOre);
+    for (const [px, pz] of [[-510,-510],[-498,-510],[-510,-498],[-498,-498]]) {
+      for (let y = 49; y <= 62; y++) world.set(px, y, pz, ID.Obsidian);
+      world.set(px, 63, pz, ID.EndCrystal);
+    }
     for (let cz = Math.floor(468 / CS); cz <= Math.floor(508 / CS); cz++) {
       for (let cx = Math.floor(468 / CS); cx <= Math.floor(508 / CS); cx++) dirty.add(cx + "," + cz);
     }

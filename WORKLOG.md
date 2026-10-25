@@ -185,3 +185,10 @@ the lower its quality, so the horizon can be huge yet cheap. This takes the
 - Next free: inventory shift-click overhaul.
 
 *Agents: append below. Keep it factual and short.*
+
+### 2026-10-25 — Grok (End crystals)
+- Added EndCrystal (ID 225) after Muse blocks.ts repair.
+- 4 End pillars with EndCrystal on top.
+- Breaking crystal weakens living dragon (-6 HP) + message; drops PrismOre.
+- Files: blocks.ts, game.ts.
+- Next: inventory shift-click or fluid gravity.
