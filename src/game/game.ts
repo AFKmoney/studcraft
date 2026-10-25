@@ -101,6 +101,7 @@ export type GameApi = {
   respawn: () => void;
   toggleInventory: () => void;
   setSlot: (i: number) => void;
+  swapSlots: (a: number, b: number) => void;
   assign: (id: number) => void;
   hold: (id: number) => void;
   shiftStack: (id: number) => void;
@@ -2000,7 +2001,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (id === ID.Crop || id === ID.Crop1 || id === ID.Crop2) {
       const next = id === ID.Crop ? ID.Crop1 : id === ID.Crop1 ? ID.Crop2 : ID.CropRipe;
       world.set(hit.x, hit.y, hit.z, next);
-    }
+    } else if (id === ID.PumpkinStem) world.set(hit.x, hit.y, hit.z, ID.Pumpkin);
+    else if (id === ID.MelonStem) world.set(hit.x, hit.y, hit.z, ID.Melon);
     else if (id === ID.Sapling) growTree(hit.x, hit.y, hit.z);
     else if (id === ID.Cane && world.get(hit.x, hit.y + 1, hit.z) === ID.Air) world.set(hit.x, hit.y + 1, hit.z, ID.Cane);
     else if (id === ID.Grass || id === ID.Dirt) {
@@ -4230,6 +4232,16 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     },
     setSlot(i) {
       slot = (i + 9) % 9;
+      emit();
+    },
+    swapSlots(a, b) {
+      a = (a + 9) % 9;
+      b = (b + 9) % 9;
+      if (a === b) return;
+      const tmp = hotbar[a];
+      hotbar[a] = hotbar[b];
+      hotbar[b] = tmp;
+      slot = b;
       emit();
     },
     assign(id) {

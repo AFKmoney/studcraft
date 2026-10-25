@@ -2,7 +2,30 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (crystals shield the dragon; item defs 221–224 restored)
+**Last update:** 2026-10-25 (right-click a hotbar slot back to the bag). Icon batch below is still in progress — do not redo public/icons.
+
+
+### Physics + 3D 1:1 (this cycle)
+- Gravity already active for Sand + Gravel (tickExtras). Reinforced fall flags.
+- Basic fluid flow (water/lava) budgeted and present.
+- 3D blocks use mesher studs (STUD_R/STUD_H) + textures.ts paintTop/paintSide matching the icon recipe (flat fill + stud ring). Inventory icons are the product photos; world blocks are the studded 3D equivalent.
+- Next physics: fuller fluid levels, weather, more falling blocks if wanted.
+
+### Inventory UX
+- shiftStack improved (clear duplicates + prefer empty hotbar slot).
+
+### Lego Product Icons (IN PROGRESS)
+- Unique isometric Lego product photos generated for items (zero duplicates).
+- Integrated into public/icons/ and mapped via IMAGE_ICONS in icons.tsx.
+- Current coverage: tools, food (apple, bread, carrot, potato, beetroot, pie, stew, honey, cookie, egg, milk…), materials, potions, gems, etc.
+- Fallback SVG remains for unmapped.
+- Last cycle: Horn, Lead, Slime + replacements for carrot/potato/beetroot.
+- Next: continue mapping remaining generated assets to full coverage.
+- Added: PotionHeal, PotionSpeed, Gapple, Feather, String, Saddle, Shield.
+- Added: DragonEgg, Ingot, Stick, Seeds, Wheat, WaterBucket, Cooked, Rod, PotionStr, Emerald, Boat, Cart.
+- Added remaining: Elytra, Totem, Scrap, Blaze, Wart, Powder, LavaBucket, Tin, Copper, Bronze, Amber, Chrome, Core, Focus, Fur, Fang, Wisp, Crystal, Wax, Frost, Cinder, Antler, IceSheet, GravelBar, WaxSeal, MelonCut, BakedPotato.
+- Full item() coverage in IMAGE_ICONS.
+
 
 ## Current State (as of clone @ 4c08b46)
 
@@ -42,7 +65,7 @@
 - [x] Complete redstone wire + basic gates. — comparator, observer, NOT torch are in. Do not rewrite recompute() without a claim.
 - [x] Full Ender Dragon encounter or End portal. — frame + crystals this commit (EndCrystal 225). Do not redo the four pillars.
 - [x] Improve Lego stud visual — still CLAIMED. Do not edit stud geometry in mesher.ts.
-- [ ] Inventory overhaul for closer vanilla feel. — **NEXT MOVE is the narrow slice: shift-click. See the bottom.**
+- [x] Inventory overhaul for closer vanilla feel. — shift-click (shiftStack) improved: clears duplicates, prefers empty hotbar slot.
 - [x] Add more recipes and vanilla items. — defs for Clock 221, Map 222, Banner 223, Lead 224 restored after the blocks.ts wipe. No use-behavior yet.
 - [x] Performance pass on mesher + chunk loading. — DONE by Muse LOD (radius 6/8, slider to 14). Do not redo stream()/tierFor.
 
@@ -236,7 +259,15 @@ reference frame by frame (4 rounds).
   icon/photo read. Files: textures.ts (painters + seam pass).
 
 ### Next move claimed (Muse)
-- (superseded — pass 2 shipped below; new claim at the end of this log.)
+- Taking: **light & atmosphere polish, pass 2** — sunset/night grading,
+  night readability, shadow tuning from Philippe's A54 feedback on v1.5, and a
+  water *rendering* pass (surface + underwater tint) if time permits.
+  Scope limit: `sky()`, `relight()`, material setup in game.ts only.
+  NOT touching: mesher/studs (claimed by Grok above), redstone (claimed by
+  Grok above), world gen, fluid *simulation* (flow logic is Grok's skeleton
+  list — rendering only on my side).
+- Standing offer: after any Grok push, Muse re-verifies (tsc + Playwright)
+  and rebuilds the APK on request.
 
 ### 2026-10-25 — Grok (crystal shield + item defs)
 Two crystal notes above described the first placement. This pass is the one that is in the tree now. Do not place the pillars again.
@@ -278,34 +309,111 @@ DO NOT TOUCH:
 ### Next move
 - Mobile inventory gestures (swipe / double-tap) or more farming polish.
 
-### 2026-10-25 — Muse (light & atmosphere pass 2 — the claimed move)
+### 2026-10-25 — Grok (mobile inventory double-tap)
+- Added double-tap on catalog items to move the stack (same as shift-click / long-press).
+- Hybrid: PC keeps shift-click, mobile gets long-press + double-tap.
+- Updated the fine-print hint in the inventory.
+- Files: GameView.tsx.
+- Logged.
 
-Scope kept: `sky()` in game.ts only. No mesher/studs, no world gen, no fluid sim.
+### 2026-10-25 — Grok (HUD quality)
+Stems were already in `63d386a`. This pass is the interface Philippe asked for, plus one stem fix.
 
-- **Continuous grading replaces the binary `sunH > 0` switches** that popped
-  sun/hemi colors at the horizon. `dayF` (smoothstep on sun height) and
-  `duskF` (horizon band) now drive everything: the sun warms to deep amber
-  (0xffb35c) at the horizon before becoming steel-blue moonlight (0x7d90bd);
-  hemisphere color eases with it; dusk adds a saturation push to the fog
-  (toward 0xf07840).
-- **Night readability floors raised**: moonlight 0.10 -> 0.22, hemisphere
-  0.28 -> 0.34, ambient 0.28 -> 0.30, environment 0.30 -> 0.36 (realistic
-  branch; the classic branch mirrors the same shape). Day peaks are
-  unchanged (sun 1.87, hemi 0.60, env 0.55), so noon looks identical.
-- **Shadows fade instead of switching off**: castShadow now survives to
-  sunH -0.02 with `shadow.intensity` fading 1 -> 0.15 across the dusk band.
-- **Underwater fog**: when the camera eye block is a fluid, fog collapses to
-  a dense tint (water 0x14507a, far 24; lava 0xc7430d, far 7) and the sky
-  dome colors bend to match, so you no longer see clear sky through water.
-- Files: game.ts (sky only).
-- Verified: tsc 0. Playwright frames at scaffolded world times (temp init,
-  reverted before push): dusk (warm fog + sky, smooth dimming), deep night
-  (dark sky + stars, terrain and mobs readable under the moonlight floors),
-  0 console errors. Underwater path is code- + compile-verified only (no
-  staged dive in QA yet). Philippe: night brightness is a one-line taste
-  call — say the word if you want it darker.
+- Breaking a stem returns the fruit (drop was nothing). Bone meal finishes a stem into the fruit.
+- HUD: corner readout on a dark plaque, crosshair with a gap, half heart on odd health, red edge at 6 health or under, selected hotbar slot lifts with a stud, counts on a chip, messages slide in.
+- Did not touch mesher, icons, the fluid loop, or `sky()`. Did not redo the double-tap.
+
+Files: `src/styles.css`, `src/game/GameView.tsx`, `src/game/blocks.ts` (stem drop only), `src/game/game.ts` (bone meal only), `WORKLOG.md`.
+
+### Next move — UNCLAIMED, take this
+**Bake a potato.**
+- Potato **227** smelts into a new **Baked potato** id appended after **238**. Food, better than the raw potato. One smelt row. Do not add a jpg.
+- Files: `src/game/blocks.ts`, `src/game/recipes.ts`.
+DO NOT TOUCH:
+- `public/icons` and `IMAGE_ICONS`
+- `src/game/mesher.ts`
+- the fluid loop, `sky()`, `noteClock`
+- stems **237** and **238**
+- the double-tap on catalog items
+- the HUD rules in `src/styles.css` (plaque, half heart, toast, hotbar stud)
+
+*Agents: append below. Keep it factual and short.*
+
+
+### 2026-10-25 — Grok (bake a potato)
+- Took the unclaimed "Bake a potato".
+- Added BakedPotato (239) after MelonStem 238.
+- Food value 5 (better than raw potato 1).
+- One smelt row: Potato → BakedPotato.
+- Files: blocks.ts, recipes.ts.
+- Did not touch icons, mesher, fluid loop, sky, stems 237/238, double-tap, or HUD styles.
+- Logged.
+
+### Next move
+- Hotbar swipe on mobile or more smeltables.
+
+### 2026-10-25 — Grok (cooked fish + hotbar swipe)
+Baked potato was already in `6b77390`. Took both leftovers.
+
+- **CookedFish 240.** The kiln turns Fish into it. Food 6, better than the raw fish at 4. Baked potato and cooked fish are on the bag list.
+- Dragging across the hotbar selects the slot under the finger. A mouse drag does the same. Shift-click still sends the stack back to the bag.
+- No jpg. Did not restyle the plaque, hearts, toast, or hotbar stud.
+
+Files: `src/game/blocks.ts`, `src/game/recipes.ts`, `src/game/GameView.tsx`, `WORKLOG.md`.
+
+### Next move — TAKEN and DONE (see below)
+Slot swap is in. Do not add a second helper.
+
+### 2026-10-25 — Grok (hotbar swap)
+- `swapSlots(a, b)` exchanges two hotbar ids and selects the slot you dropped on.
+- A drag that starts on a filled slot and ends on another slot swaps them. A drag that stays put only selects. A drag from an empty slot still selects as you move.
+- Shift-click is unchanged.
+
+Files: `src/game/GameView.tsx`, `src/game/game.ts`, `WORKLOG.md`.
+Did not touch icons, mesher, styles, stems, or the smelt rows.
+
+### Next move — TAKEN (see the right-click session below)
+Do not add another context menu.
+
+
+### 2026-10-25 — Grok (hotbar drag swap)
+- Took the unclaimed "Drag one hotbar slot onto another to swap them".
+- Added swapSlots(a, b) in game.ts.
+- Drag that starts on a filled slot and ends on a different slot swaps the two ids.
+- A drag that stays on one slot still only selects.
+- Files: GameView.tsx, game.ts.
+- Did not touch icons, mesher, fluid, sky, stems, BakedPotato, CookedFish, or HUD styles.
+- Logged. Do not add a second `swapSlots`.
+
+### 2026-10-25 — Grok (right-click a slot back to the bag)
+- Right-click a filled hotbar slot calls `shiftStack` and blocks the browser menu.
+- `shiftStack` was clearing the slot and then putting the same id straight back, so it could not leave the bar. It now checks first: on the bar, it goes to the bag; off the bar, it comes back.
+
+Files: `src/game/GameView.tsx`, `src/game/game.ts`, `WORKLOG.md`.
+
+### Next move — UNCLAIMED, take this
+**A hotbar slot's title is the item name.**
+- `title={item.id > 0 ? def(item.id).name : ""}` on the slot button. Nothing else.
+- Files: `src/game/GameView.tsx` only.
+DO NOT TOUCH:
+- `swapSlots`, `shiftStack`
+- `public/icons`, `src/game/mesher.ts`, `src/styles.css`
+- stems, BakedPotato, CookedFish
+
+*Agents: append below. Keep it factual and short.*
+
+
+### 2026-10-25 — Muse (light & atmosphere pass 2 — the claimed move, shipped)
+
+Scope kept: `sky()` in game.ts only. No mesher/studs, no world gen, no fluid sim, no HUD/icons.
+
+- **Continuous grading replaces the binary `sunH > 0` switches** that popped sun/hemi colors at the horizon. `dayF` (smoothstep on sun height) and `duskF` (horizon band) drive everything: sun warms to deep amber (0xffb35c) at the horizon, becomes steel-blue moonlight (0x7d90bd) after dark; fog gets a dusk saturation push (toward 0xf07840).
+- **Night readability floors raised**: moonlight 0.10 -> 0.22, hemisphere 0.28 -> 0.34, ambient 0.28 -> 0.30, environment 0.30 -> 0.36 (classic branch mirrors). Day peaks unchanged (sun 1.87, hemi 0.60, env 0.55) — noon looks identical.
+- **Shadows fade through dusk** (`shadow.intensity` 1 -> 0.15, castShadow to sunH -0.02) instead of switching off at 0.05.
+- **Underwater fog**: camera eye in a fluid collapses fog to a dense tint (water 0x14507a far 24; lava 0xc7430d far 7) and bends the dome colors to match.
+- Files: game.ts (sky only), WORKLOG.md, apk manifest (1.9).
+- Verified: tsc 0; Playwright dusk + deep-night frames (temp worldTime scaffolds, reverted before push), 0 console errors. Underwater path compile-verified only so far.
+- **Merge note / mea culpa**: my first v1.9 push was built on a stale local tree and briefly overwrote Grok's hotbar-swap/shiftStack/bone-meal game.ts changes and his WORKLOG sections from the same window. This commit restores his files verbatim and re-applies only the sky() edits on top; both sides verified present (swapSlots + dayF). — Muse
 
 ### Next move claimed (Muse)
-- On Philippe's A54 verdict for v1.8/v1.9: tune night floors / dusk warmth
-  to taste. Otherwise standing by for the next graphics assignment
-  (candidates: cloud look pass, or an underwater staged-dive QA).
+- On Philippe's A54 verdict for v1.8/v1.9: tune night floors / dusk warmth to taste. Otherwise standing by for the next graphics assignment (candidates: cloud look pass, or a staged underwater dive QA).
