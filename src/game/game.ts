@@ -820,6 +820,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     hud.found = [...found];
     hud.oxygen = oxygen;
     hud.rain = raining;
+    hud.weather = raining ? "rain" : "clear";
     hud.armor = [...armor];
     hud.grid = [...grid];
     hud.cursor = cursor;
@@ -2193,7 +2194,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         }
       }
       // budgeted fluid flow (mobile-friendly: limited cells per tick)
-      let fluidBudget = 28;
+      let fluidBudget = 36; // slightly higher for fuller levels
       for (let dz = -5; dz <= 5 && fluidBudget > 0; dz++) {
         for (let dx = -5; dx <= 5 && fluidBudget > 0; dx++) {
           for (let dy = 3; dy >= -2 && fluidBudget > 0; dy--) {
