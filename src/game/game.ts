@@ -2000,7 +2000,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (id === ID.Crop || id === ID.Crop1 || id === ID.Crop2) {
       const next = id === ID.Crop ? ID.Crop1 : id === ID.Crop1 ? ID.Crop2 : ID.CropRipe;
       world.set(hit.x, hit.y, hit.z, next);
-    }
+    } else if (id === ID.PumpkinStem) world.set(hit.x, hit.y, hit.z, ID.Pumpkin);
+    else if (id === ID.MelonStem) world.set(hit.x, hit.y, hit.z, ID.Melon);
     else if (id === ID.Sapling) growTree(hit.x, hit.y, hit.z);
     else if (id === ID.Cane && world.get(hit.x, hit.y + 1, hit.z) === ID.Air) world.set(hit.x, hit.y + 1, hit.z, ID.Cane);
     else if (id === ID.Grass || id === ID.Dirt) {

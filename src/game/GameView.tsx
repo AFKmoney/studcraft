@@ -214,7 +214,7 @@ function Hud({ game }: { game: GameApi }) {
   const hud = game.hud;
   const hearts = 10;
   return (
-    <div className="hud">
+    <div className={hud.health > 0 && hud.health <= 6 && !hud.creative ? "hud hurt" : "hud"}>
       <div className="top-readout">
         <strong>{hud.biome}</strong>
         <span>
@@ -233,7 +233,12 @@ function Hud({ game }: { game: GameApi }) {
         </span>
       </div>
       {!hud.locked && !hud.message && <p className="look-hint">Drag to look · click to capture the mouse</p>}
-      {hud.message && <p className="toast">{hud.message}</p>}
+      {hud.message && (
+        <p className="toast">
+          <i />
+          {hud.message}
+        </p>
+      )}
       <div className="crosshair" />
       {hud.mine > 0 && (
         <div className="mine-track">
@@ -250,14 +255,18 @@ function Hud({ game }: { game: GameApi }) {
       )}
       {!hud.creative && (
         <div className="hearts" aria-label={`${hud.health} health`}>
-          {Array.from({ length: hearts }, (_, i) => (
-            <Heart
-              key={i}
-              size={16}
-              className={i < Math.ceil(hud.health / 2) ? "heart" : "heart off"}
-              fill="currentColor"
-            />
-          ))}
+          {Array.from({ length: hearts }, (_, i) => {
+            const full = i < Math.floor(hud.health / 2);
+            const half = !full && hud.health % 2 === 1 && i === Math.floor(hud.health / 2);
+            return (
+              <Heart
+                key={i}
+                size={16}
+                className={full ? "heart" : half ? "heart half" : "heart off"}
+                fill="currentColor"
+              />
+            );
+          })}
         </div>
       )}
       {hud.oxygen < 10 && (

@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (Lego product icons integration ongoing)
+**Last update:** 2026-10-25 (HUD plaque, half hearts, toast). Icon batch below is still in progress — do not redo public/icons.
 
 ### Lego Product Icons (IN PROGRESS)
 - Unique isometric Lego product photos generated for items (zero duplicates).
@@ -303,5 +303,26 @@ DO NOT TOUCH:
 - Files: GameView.tsx.
 - Logged.
 
-### Next move
-- More farming polish or hotbar swipe on mobile.
+### 2026-10-25 — Grok (HUD quality)
+Stems were already in `63d386a`. This pass is the interface Philippe asked for, plus one stem fix.
+
+- Breaking a stem returns the fruit (drop was nothing). Bone meal finishes a stem into the fruit.
+- HUD: corner readout on a dark plaque, crosshair with a gap, half heart on odd health, red edge at 6 health or under, selected hotbar slot lifts with a stud, counts on a chip, messages slide in.
+- Did not touch mesher, icons, the fluid loop, or `sky()`. Did not redo the double-tap.
+
+Files: `src/styles.css`, `src/game/GameView.tsx`, `src/game/blocks.ts` (stem drop only), `src/game/game.ts` (bone meal only), `WORKLOG.md`.
+
+### Next move — UNCLAIMED, take this
+**Bake a potato.**
+- Potato **227** smelts into a new **Baked potato** id appended after **238**. Food, better than the raw potato. One smelt row. Do not add a jpg.
+- Files: `src/game/blocks.ts`, `src/game/recipes.ts`.
+DO NOT TOUCH:
+- `public/icons` and `IMAGE_ICONS`
+- `src/game/mesher.ts`
+- the fluid loop, `sky()`, `noteClock`
+- stems **237** and **238**
+- the double-tap on catalog items
+- the HUD rules in `src/styles.css` (plaque, half heart, toast, hotbar stud)
+
+*Agents: append below. Keep it factual and short.*
+
