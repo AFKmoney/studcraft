@@ -1,6 +1,14 @@
 import { ID } from "./blocks";
 
-export type Offer = { pay: number; pn: number; out: number; on: number };
+export type Offer = { pay: number; pn: number; out: number; on: number; tier?: number };
+
+/** Villager professions level up as you trade with that profession:
+ *  tier-2 offers unlock at 4 trades, tier-3 (master) at 12. */
+export const TIER_NAMES = ["", "Novice", "Journeyman", "Master"];
+export const TIER_XP = [0, 4, 12];
+export function tradeLevelFor(xp: number): number {
+  return xp >= TIER_XP[2] ? 3 : xp >= TIER_XP[1] ? 2 : 1;
+}
 
 export type TraderRole = "grocer" | "smith" | "mason" | "herder" | "clerk" | "mage" | "ranger";
 
@@ -16,6 +24,10 @@ export const TRADERS: Record<TraderRole, { name: string; blurb: string; offers: 
       { pay: ID.Apple, pn: 4, out: ID.Emerald, on: 1 },
       { pay: ID.Pumpkin, pn: 3, out: ID.Emerald, on: 1 },
       { pay: ID.Honey, pn: 2, out: ID.Emerald, on: 1 },
+      { pay: ID.Wheat, pn: 16, out: ID.Emerald, on: 2, tier: 2 },
+      { pay: ID.Emerald, pn: 2, out: ID.Honey, on: 3, tier: 2 },
+      { pay: ID.Emerald, pn: 5, out: ID.Gapple, on: 1, tier: 3 },
+      { pay: ID.Honey, pn: 6, out: ID.Emerald, on: 2, tier: 3 },
     ],
   },
   smith: {
@@ -27,6 +39,10 @@ export const TRADERS: Record<TraderRole, { name: string; blurb: string; offers: 
       { pay: ID.RawIron, pn: 4, out: ID.Emerald, on: 1 },
       { pay: ID.Emerald, pn: 3, out: ID.PickS, on: 1 },
       { pay: ID.Emerald, pn: 5, out: ID.Ingot, on: 4 },
+      { pay: ID.Coal, pn: 16, out: ID.Emerald, on: 2, tier: 2 },
+      { pay: ID.Emerald, pn: 9, out: ID.Ingot, on: 8, tier: 2 },
+      { pay: ID.Emerald, pn: 12, out: ID.SwordI, on: 1, tier: 3 },
+      { pay: ID.Emerald, pn: 22, out: ID.SwordSapph, on: 1, tier: 3 },
     ],
   },
   mason: {
@@ -39,6 +55,10 @@ export const TRADERS: Record<TraderRole, { name: string; blurb: string; offers: 
       { pay: ID.Emerald, pn: 2, out: ID.Torch, on: 8 },
       { pay: ID.Emerald, pn: 4, out: ID.Lamp, on: 1 },
       { pay: ID.Emerald, pn: 3, out: ID.Lantern, on: 2 },
+      { pay: ID.Cobble, pn: 32, out: ID.Emerald, on: 2, tier: 2 },
+      { pay: ID.Emerald, pn: 3, out: ID.Lamp, on: 2, tier: 2 },
+      { pay: ID.Sand, pn: 16, out: ID.Emerald, on: 1, tier: 3 },
+      { pay: ID.Emerald, pn: 4, out: ID.Lantern, on: 4, tier: 3 },
     ],
   },
   herder: {
@@ -50,6 +70,10 @@ export const TRADERS: Record<TraderRole, { name: string; blurb: string; offers: 
       { pay: ID.RawMeat, pn: 6, out: ID.Emerald, on: 1 },
       { pay: ID.Emerald, pn: 2, out: ID.Cooked, on: 6 },
       { pay: ID.Emerald, pn: 6, out: ID.Saddle, on: 1 },
+      { pay: ID.Emerald, pn: 2, out: ID.Lead, on: 1, tier: 2 },
+      { pay: ID.Emerald, pn: 3, out: ID.Fur, on: 2, tier: 2 },
+      { pay: ID.RawMeat, pn: 14, out: ID.Emerald, on: 3, tier: 3 },
+      { pay: ID.Emerald, pn: 4, out: ID.Cooked, on: 10, tier: 3 },
     ],
   },
   clerk: {
@@ -61,6 +85,10 @@ export const TRADERS: Record<TraderRole, { name: string; blurb: string; offers: 
       { pay: ID.Emerald, pn: 6, out: ID.Amber, on: 2 },
       { pay: ID.Prism, pn: 1, out: ID.Emerald, on: 8 },
       { pay: ID.Emerald, pn: 8, out: ID.Eye, on: 1 },
+      { pay: ID.Emerald, pn: 4, out: ID.Sapphire, on: 1, tier: 2 },
+      { pay: ID.Emerald, pn: 3, out: ID.Book, on: 2, tier: 2 },
+      { pay: ID.Emerald, pn: 12, out: ID.Prism, on: 1, tier: 3 },
+      { pay: ID.Emerald, pn: 6, out: ID.Chrome, on: 2, tier: 3 },
     ],
   },
   mage: {
@@ -72,6 +100,10 @@ export const TRADERS: Record<TraderRole, { name: string; blurb: string; offers: 
       { pay: ID.Wisp, pn: 2, out: ID.Emerald, on: 1 },
       { pay: ID.Emerald, pn: 4, out: ID.Amber, on: 1 },
       { pay: ID.Emerald, pn: 6, out: ID.Tome, on: 1 },
+      { pay: ID.Emerald, pn: 5, out: ID.Focus, on: 1, tier: 2 },
+      { pay: ID.Wisp, pn: 4, out: ID.Emerald, on: 2, tier: 2 },
+      { pay: ID.Emerald, pn: 9, out: ID.EnderPearl, on: 2, tier: 3 },
+      { pay: ID.Emerald, pn: 7, out: ID.PotionRegen, on: 1, tier: 3 },
     ],
   },
   ranger: {
@@ -84,6 +116,10 @@ export const TRADERS: Record<TraderRole, { name: string; blurb: string; offers: 
       { pay: ID.Fur, pn: 3, out: ID.Emerald, on: 2 },
       { pay: ID.Emerald, pn: 5, out: ID.Bow, on: 1 },
       { pay: ID.Emerald, pn: 4, out: ID.Compass, on: 1 },
+      { pay: ID.Emerald, pn: 3, out: ID.Arrow, on: 16, tier: 2 },
+      { pay: ID.String, pn: 6, out: ID.Emerald, on: 2, tier: 2 },
+      { pay: ID.Emerald, pn: 20, out: ID.Elytra, on: 1, tier: 3 },
+      { pay: ID.Feather, pn: 10, out: ID.Emerald, on: 3, tier: 3 },
     ],
   },
 };

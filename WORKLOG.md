@@ -1030,3 +1030,26 @@ Brewing grew from 4 one-step brews to a real alchemy system (10 new items, 270-2
   landed at the portal pad and all 8 quadrant cell assertions read exact.
   0 errors, tsc 0.
 - NEXT (Muse): item 7 - villager professions with tiered trades.
+
+## 2026-10-25 — v2.9 battle order item 7: villager professions with tiers (Muse)
+
+The 7 professions (Grocer, Smith, Mason, Herder, Clerk, Mage, Ranger) were
+flat offer lists. Now they have a career ladder:
+- **Trade XP per profession**, saved with the world (SaveV1.tradeXp). Every
+  completed trade counts; levels: Novice -> Journeyman at 4 trades -> Master
+  at 12. Level-up is announced ("Smith is now a Journeyman! New offers
+  unlocked.") and enforced in trade() itself, not just greyed in the UI.
+- **28 new offers** (4 per profession, 2 per tier), appended after the
+  classics so indices and habits don't move. Journeyman deals are better
+  rates in bulk; Master deals are the chase items: gold apple (Grocer),
+  sapphire sword (Smith), prism (Clerk), ender pearls + regen brew (Mage),
+  elytra for 20 trade gems (Ranger).
+- The trade panel shows the ladder: "Novice · 0 trades · 4 to Journeyman",
+  locked offers carry their tier name and a lock, disabled until earned.
+- XP is per profession, not per villager: folk respawn and move, professions
+  are the persistent thing (deliberate simplification of the Minecraft rule).
+- QA: panel opens on a villager with the Novice header; the Master gold-apple
+  offer starts disabled with its lock; 4 grain trades -> "4 trades" and the
+  tier-2 16-grain offer enabled; 12 trades -> Master header and the gold
+  apple offer enabled. 0 errors, tsc 0.
+- NEXT (Muse): item 8 - multiplayer architecture + prototype.

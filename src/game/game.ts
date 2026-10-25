@@ -6,7 +6,7 @@ import { STUD_H, STUD_R, buildChunk, type Surface } from "./mesher";
 import { NEIGHBORS, RECIPES, SMELT, fuelTime, matchGrid } from "./recipes";
 import { DISCOVER, MOB_XP, ORE_HEAR, ORE_XP, nextPerk, rankTitle, xpNeed } from "./ranks";
 import { manaMaxFor, skillById, spellsFor } from "./skills";
-import { QUESTS, traderOf, type TraderRole } from "./quests";
+import { QUESTS, traderOf, tradeLevelFor, TIER_NAMES, TIER_XP, type TraderRole } from "./quests";
 import { clearSave, deleteWorld, hasSave, listWorlds, loadLatest, loadSettings, loadWorld, writeSettings, writeWorld, type SaveV1, type WorldSlot } from "./save";
 import { buildAtlas } from "./textures";
 import { CS, HEIGHT, World, decorate, folkLayout, penSheep, paintEndCrystals, END_PILLARS, type Decor, type FolkSpot } from "./world";
@@ -68,7 +68,9 @@ export type Hud = {
   flat: boolean;
   trader: string;
   traderBlurb: string;
-  offers: { pay: number; pn: number; out: number; on: number; payName: string; outName: string }[];
+  offers: { pay: number; pn: number; out: number; on: number; payName: string; outName: string; tier: number; locked: boolean }[];
+  traderLevel: string;
+  traderNext: string;
   quests: { id: string; name: string; detail: string; n: number; need: number; done: boolean; ready: boolean; reward: string }[];
   questAlert: string;
   questTrack: string;
@@ -252,6 +254,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     trader: "",
     traderBlurb: "",
     offers: [],
+    traderLevel: "",
+    traderNext: "",
     quests: [],
     questAlert: "",
     questTrack: "",
@@ -382,6 +386,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let villageAt = opening.village;
   let quests: { id: string; n: number; done: boolean }[] = QUESTS.map((q) => ({ id: q.id, n: 0, done: false }));
   let traderRole: TraderRole = "grocer";
+  let tradeXp: Record<string, number> = {};
 
   const player = {
     x: spawnPoint.x,
@@ -984,6 +989,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const trader = traderOf(traderRole);
     hud.trader = trader.name;
     hud.traderBlurb = trader.blurb;
+    const tXp = tradeXp[traderRole] ?? 0;
+    const tLv = tradeLevelFor(tXp);
+    hud.traderLevel = TIER_NAMES[tLv];
+    hud.traderNext = tLv >= 3 ? tXp + " trades · Master" : tXp + " trades · " + (TIER_XP[tLv] - tXp) + " to " + TIER_NAMES[tLv + 1];
     hud.offers = trader.offers.map((o) => ({
       pay: o.pay,
       pn: o.pn,
@@ -991,6 +1000,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       on: o.on,
       payName: def(o.pay).name.toLowerCase(),
       outName: def(o.out).name.toLowerCase(),
+      tier: o.tier ?? 1,
+      locked: (o.tier ?? 1) > tLv,
     }));
     let alert = "";
     hud.quests = QUESTS.map((q) => {
@@ -1261,6 +1272,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     for (const s of data.signs ?? []) signs.set(s.x + "," + s.y + "," + s.z, s.t);
     ench.clear();
     for (const [id, list] of data.ench ?? []) ench.set(id, Object.fromEntries(list));
+    tradeXp = data.tradeXp ?? {};
     hotbar = data.hotbar?.length === 9 ? [...data.hotbar] : [...CREATIVE_BAR];
     for (const k of Object.keys(inv)) delete inv[Number(k)];
     for (const [id, n] of data.inv ?? []) inv[id] = n;
@@ -4483,6 +4495,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         return { x, y, z, t };
       }),
       ench: [...ench.entries()].map(([id, e]) => [id, Object.entries(e)] as [number, [string, number][]]),
+      tradeXp: { ...tradeXp },
       folk: folkSpots.map((f) => ({ x: f.x, z: f.z, role: f.role })),
       village: villageAt,
       quests: quests.map((q) => ({ id: q.id, n: q.n, done: q.done })),
@@ -5947,10 +5960,17 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     trade(i) {
       const offer = traderOf(traderRole).offers[i];
       if (!offer) return;
+      const tier = offer.tier ?? 1;
+      const before = tradeLevelFor(tradeXp[traderRole] ?? 0);
+      if (tier > before) return say("Locked — this " + traderOf(traderRole).name.toLowerCase() + " is a " + TIER_NAMES[before] + ". Trade more to reach " + TIER_NAMES[tier] + ".");
       if (!creative && (inv[offer.pay] ?? 0) < offer.pn) return say("Need " + offer.pn + " " + def(offer.pay).name.toLowerCase());
       if (!creative) spend(offer.pay, offer.pn);
       give(offer.out, offer.on);
-      say("Traded");
+      tradeXp[traderRole] = (tradeXp[traderRole] ?? 0) + 1;
+      const after = tradeLevelFor(tradeXp[traderRole]);
+      if (after > before) say(traderOf(traderRole).name + " is now a " + TIER_NAMES[after] + "! New offers unlocked.");
+      else say("Traded");
+      saveDirty = true;
       emit();
     },
     unlock(id) {
