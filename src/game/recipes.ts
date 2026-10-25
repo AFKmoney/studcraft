@@ -301,6 +301,30 @@ export const RECIPES: Recipe[] = [
     cat: "build",
   }),
   r("barrel", "Barrel", "7 planks", [[P, 7]], ID.Barrel, 1, { cat: "build" }),
+  r("shulker-box", "Shulker box", "2 shulker shells + crate — keeps its contents when broken", [[ID.ShulkerShell, 2], [ID.Chest, 1]], ID.ShulkerBox, 1, {
+    shape: [ID.ShulkerShell, ID.Chest, ID.ShulkerShell],
+    w: 1,
+    h: 3,
+    cat: "build",
+  }),
+  r("beacon", "Beacon", "glass + nether star + obsidian — buffs on a metal pyramid", [[ID.Glass, 5], [ID.NetherStar, 1], [ID.Obsidian, 3]], ID.Beacon, 1, {
+    shape: [ID.Glass, ID.Glass, ID.Glass, ID.Glass, ID.NetherStar, ID.Glass, ID.Obsidian, ID.Obsidian, ID.Obsidian],
+    w: 3,
+    h: 3,
+    cat: "magic",
+  }),
+  r("conduit", "Conduit", "8 shell chips + prism core — breathe underwater", [[ID.Shell, 8], [ID.Core, 1]], ID.Conduit, 1, {
+    shape: [ID.Shell, ID.Shell, ID.Shell, ID.Shell, ID.Core, ID.Shell, ID.Shell, ID.Shell, ID.Shell],
+    w: 3,
+    h: 3,
+    cat: "magic",
+  }),
+  r("jukebox", "Jukebox", "8 planks + aqua gem — plays music discs", [[P, 8], [ID.Diamond, 1]], ID.Jukebox, 1, {
+    shape: [P, P, P, P, ID.Diamond, P, P, P, P],
+    w: 3,
+    h: 3,
+    cat: "build",
+  }),
 ];
 
 export const SMELT: Record<number, number> = {

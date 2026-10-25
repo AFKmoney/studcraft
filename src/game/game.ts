@@ -38,7 +38,7 @@ export type Hud = {
   armor: number[];
   grid: number[];
   cursor: number;
-  panel: "bag" | "bench" | "furnace" | "chest" | "enchant" | "anvil" | "brew" | "trade";
+  panel: "bag" | "bench" | "furnace" | "chest" | "enchant" | "anvil" | "brew" | "trade" | "beacon";
   craftOut: { id: number; n: number } | null;
   furnace: { in: number; inN: number; fuel: number; fuelN: number; out: number; outN: number; cook: number };
   chest: { id: number; n: number }[];
@@ -69,6 +69,8 @@ export type Hud = {
   flat: boolean;
   trader: string;
   traderBlurb: string;
+  beaconLevel: number;
+  beaconBuff: string;
   offers: { pay: number; pn: number; out: number; on: number; payName: string; outName: string; tier: number; locked: boolean }[];
   traderLevel: string;
   traderNext: string;
@@ -137,6 +139,7 @@ export type GameApi = {
   mend: () => void;
   temper: () => void;
   brew: (kind: string) => void;
+  beacon: (buff: string) => void;
   trade: (i: number) => void;
   hostOnline: () => void;
   joinOnline: () => void;
@@ -188,6 +191,9 @@ declare global {
       scanLandmarks?: () => string[];
       getWx?: () => string;
       setWx?: (s: string) => boolean;
+      setBlock?: (x: number, y: number, z: number, id: number) => boolean;
+      getStations?: () => string;
+      setStation?: (kind: string, x: number, y: number, z: number, val: string) => boolean;
       getMobNames?: () => string[];
       getArmor?: () => number[];
       give?: (id: number, n: number) => boolean;
@@ -279,6 +285,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     flat: false,
     trader: "",
     traderBlurb: "",
+    beaconLevel: 0,
+    beaconBuff: "",
     offers: [],
     traderLevel: "",
     traderNext: "",
@@ -362,7 +370,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   const armor = [0, 0, 0, 0];
   let grid = [0, 0, 0, 0, 0, 0, 0, 0, 0];
   let cursor = 0;
-  let panel: "bag" | "bench" | "furnace" | "chest" | "enchant" | "anvil" | "brew" | "trade" = "bag";
+  let panel: "bag" | "bench" | "furnace" | "chest" | "enchant" | "anvil" | "brew" | "trade" | "beacon" = "bag";
   let focus = { x: 0, y: 0, z: 0 };
   type Furn = {
     x: number;
@@ -379,6 +387,15 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   };
   const furnaces = new Map<string, Furn>();
   const chests = new Map<string, { ids: number[]; ns: number[] }>();
+  // Stations (v3.8): state the blocks themselves can't carry — a beacon's
+  // chosen buff, a jukebox's disc, and the contents of broken shulker
+  // boxes waiting for their next placement (FIFO, like the box itself
+  // would carry them; with one box in play it is exact).
+  const beaconBuffs = new Map<string, string>();
+  const jukeDiscs = new Map<string, number>();
+  let shulkerQueue: { ids: number[]; ns: number[] }[] = [];
+  const beamMeshes = new Map<string, THREE.Mesh>();
+  let stationAcc = 0;
   const pistonHot = new Set<string>();
   const noteHot = new Set<string>();
   const dispenserHot = new Set<string>();
@@ -1344,6 +1361,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     panel = "bag";
     furnaces.clear();
     chests.clear();
+    beaconBuffs.clear();
+    jukeDiscs.clear();
+    shulkerQueue = [];
+    for (const beam of beamMeshes.values()) scene.remove(beam);
+    beamMeshes.clear();
     comps.clear();
     signs.clear();
     ench.clear();
@@ -1471,6 +1493,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     repTimer.clear();
     for (const f of data.furnaces ?? []) furnaces.set(f.x + "," + f.y + "," + f.z, { ...f });
     for (const c of data.chests ?? []) chests.set(c.x + "," + c.y + "," + c.z, { ids: c.ids.slice(), ns: c.ns.slice() });
+    beaconBuffs.clear();
+    for (const b of data.beacons ?? []) beaconBuffs.set(b.x + "," + b.y + "," + b.z, b.buff);
+    jukeDiscs.clear();
+    for (const j of data.jukeboxes ?? []) jukeDiscs.set(j.x + "," + j.y + "," + j.z, j.disc);
+    shulkerQueue = (data.shulkerQueue ?? []).map((q) => ({ ids: q.ids.slice(), ns: q.ns.slice() }));
     for (const c of data.comps ?? []) comps.set(c.x + "," + c.y + "," + c.z, { dir: c.dir, delay: c.delay });
     signs.clear();
     for (const s of data.signs ?? []) signs.set(s.x + "," + s.y + "," + s.z, s.t);
@@ -1859,6 +1886,25 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     markDirtyAt(x, z);
     netSendEdit(x, y, z, ID.Air);
     if (block.sign) signs.delete(x + "," + y + "," + z);
+    if (id === ID.ShulkerBox) {
+      // The box keeps its contents: move the bin into the carry queue;
+      // the next shulker box placed inherits it (the generic drop below
+      // still gives the empty box item itself).
+      const key = x + "," + y + "," + z;
+      const bin = chests.get(key);
+      if (bin && bin.ids.some((v) => v > 0)) {
+        shulkerQueue.push({ ids: bin.ids.slice(), ns: bin.ns.slice() });
+        saveDirty = true;
+      }
+      chests.delete(key);
+    }
+    if (id === ID.Jukebox) {
+      const key = x + "," + y + "," + z;
+      const disc = jukeDiscs.get(key);
+      if (disc) dropItem(disc, 1, x + 0.5, y + 0.8, z + 0.5);
+      jukeDiscs.delete(key);
+    }
+    if (id === ID.Beacon) beaconBuffs.delete(x + "," + y + "," + z);
     if (isComponent(id)) {
       const k = rsKey(x, y, z);
       comps.delete(k);
@@ -2044,9 +2090,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     return f;
   }
 
-  function openPanel(next: "bag" | "bench" | "furnace" | "chest" | "enchant" | "anvil" | "brew" | "trade", x = 0, y = 0, z = 0) {
+  function openPanel(next: "bag" | "bench" | "furnace" | "chest" | "enchant" | "anvil" | "brew" | "trade" | "beacon", x = 0, y = 0, z = 0) {
     panel = next;
     focus = { x, y, z };
+    if (next === "beacon") {
+      hud.beaconLevel = pyramidLevel(x, y, z);
+      hud.beaconBuff = beaconBuffs.get(x + "," + y + "," + z) ?? "";
+    }
     if (next === "chest") {
       const bin = ensureChest(x + "," + y + "," + z);
       const rx = Math.floor(x / 192);
@@ -2405,7 +2455,28 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       launchArrow(hit.x + 0.5, hit.y + 0.6, hit.z + 0.5, -Math.sin(player.yaw), 0, -Math.cos(player.yaw), false);
       return true;
     }
-    if (block.work === "bench" || block.work === "furnace" || block.work === "chest" || block.work === "enchant" || block.work === "anvil" || block.work === "brew") {
+    if (hit.id === ID.Jukebox) {
+      const key = hit.x + "," + hit.y + "," + hit.z;
+      const inside = jukeDiscs.get(key);
+      if (inside) {
+        jukeDiscs.delete(key);
+        addInv(inside, 1);
+        say("Ejected " + def(inside).name);
+        saveDirty = true;
+        return true;
+      }
+      const heldId = hotbar[slot];
+      if (heldId >= ID.DiscA && heldId <= ID.DiscE) {
+        if (!creative) spend(heldId, 1);
+        jukeDiscs.set(key, heldId);
+        say("Now playing: " + def(heldId).name);
+        saveDirty = true;
+        return true;
+      }
+      say("It wants a music disc");
+      return true;
+    }
+    if (block.work === "bench" || block.work === "furnace" || block.work === "chest" || block.work === "enchant" || block.work === "anvil" || block.work === "brew" || block.work === "beacon") {
       openPanel(block.work, hit.x, hit.y, hit.z);
       return true;
     }
@@ -2564,6 +2635,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (heldDef.sign) {
       hud.signEdit = { x: px, y: py, z: pz, text: "" };
       emit();
+    }
+    if (placeId === ID.ShulkerBox && shulkerQueue.length > 0) {
+      const savedBin = shulkerQueue.shift()!;
+      chests.set(px + "," + py + "," + pz, { ids: savedBin.ids.slice(), ns: savedBin.ns.slice() });
+      say("The shulker box kept its contents");
     }
     if (!creative) spend(held, 1);
     if (placeId === ID.Repeater || placeId === ID.Comparator || placeId === ID.Piston) comps.set(rsKey(px, py, pz), { dir: facingDir(), delay: 1 });
@@ -3292,6 +3368,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       guardT = 4;
       ensureLandmarkGuards();
     }
+    stationTick(dt);
     if (fireResT > 0) fireT = 0;
     if (regenT > 0) {
       healAcc += dt;
@@ -3990,6 +4067,101 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
   }
 
+  // ---- Stations (v3.8): beacon pyramids, conduit frames ----------------
+  // Stations are player-built, so instead of a fragile placement registry
+  // the tick simply scans the blocks around the player every 1.5 s —
+  // a station works however it got into the world.
+  const PYRAMID_BLOCKS = new Set<number>([ID.IronBlock, ID.Gold, ID.Diamond]);
+  function pyramidLevel(x: number, y: number, z: number): number {
+    let level = 0;
+    for (let l = 1; l <= 4; l++) {
+      let full = true;
+      for (let dz = -l; dz <= l && full; dz++)
+        for (let dx = -l; dx <= l; dx++)
+          if (!PYRAMID_BLOCKS.has(world.get(x + dx, y - l, z + dz))) {
+            full = false;
+            break;
+          }
+      if (!full) break;
+      level = l;
+    }
+    return level;
+  }
+  function prismFrameCount(x: number, y: number, z: number): number {
+    // The three axis rings at Chebyshev distance 2 (the conduit frame).
+    let n = 0;
+    for (let a = -2; a <= 2; a++)
+      for (let b = -2; b <= 2; b++) {
+        if (Math.max(Math.abs(a), Math.abs(b)) !== 2) continue;
+        if (world.get(x + a, y + b, z + 2) === ID.Prism) n++;
+        if (world.get(x + a, y + 2, z + b) === ID.Prism) n++;
+        if (world.get(x + 2, y + a, z + b) === ID.Prism) n++;
+      }
+    return n;
+  }
+  const BUFF_NEED: Record<string, number> = { speed: 1, jump: 1, regen: 2, strength: 3 };
+  const CONDUIT_FOES = new Set(["walker", "creeper", "spider", "skelly", "stray", "husk", "drowned", "witch", "blaze", "ghast", "enderman", "guardian", "pillager", "vindicator", "evoker", "vex", "ravager", "slime", "phantom", "piglin", "wither", "dragon"]);
+  function stationTick(dt: number) {
+    stationAcc += dt;
+    if (stationAcc < 1.5) return;
+    stationAcc = 0;
+    if (phase !== "play") return;
+    const px = Math.floor(player.x);
+    const py = Math.floor(player.y);
+    const pz = Math.floor(player.z);
+    const seenBeams = new Set<string>();
+    for (let y = py - 8; y <= py + 8; y++)
+      for (let z = pz - 24; z <= pz + 24; z++)
+        for (let x = px - 24; x <= px + 24; x++) {
+          const id = world.get(x, y, z);
+          if (id === ID.Beacon) {
+            const key = x + "," + y + "," + z;
+            const level = pyramidLevel(x, y, z);
+            if (level > 0) {
+              seenBeams.add(key);
+              let beam = beamMeshes.get(key);
+              if (!beam) {
+                beam = new THREE.Mesh(
+                  new THREE.BoxGeometry(0.55, 64, 0.55),
+                  new THREE.MeshBasicMaterial({ color: 0x9ae8e0, transparent: true, opacity: 0.3, depthWrite: false }),
+                );
+                beam.userData.keepShadow = false;
+                scene.add(beam);
+                beamMeshes.set(key, beam);
+              }
+              beam.position.set(x + 0.5, y + 32, z + 0.5);
+              const buff = beaconBuffs.get(key);
+              if (buff && level >= (BUFF_NEED[buff] ?? 1) && Math.hypot(player.x - x, player.z - z) <= 20 + level * 10 && Math.abs(player.y - y) <= 24) {
+                if (buff === "speed") speedT = Math.max(speedT, 3);
+                else if (buff === "jump") jumpT = Math.max(jumpT, 3);
+                else if (buff === "regen") regenT = Math.max(regenT, 3);
+                else if (buff === "strength") strengthT = Math.max(strengthT, 3);
+              }
+            }
+          } else if (id === ID.Conduit) {
+            const wet =
+              world.get(x, y + 1, z) === ID.Water || world.get(x, y - 1, z) === ID.Water || world.get(x + 1, y, z) === ID.Water || world.get(x - 1, y, z) === ID.Water;
+            if (!wet || prismFrameCount(x, y, z) < 16) continue;
+            if (Math.hypot(player.x - x, player.y - y, player.z - z) <= 32 && inWaterNow()) gillT = Math.max(gillT, 3);
+            for (const m of mobs) {
+              if (m.dead || !CONDUIT_FOES.has(m.kind)) continue;
+              if (Math.hypot(m.x - x, m.y - y, m.z - z) <= 8) {
+                m.hp -= 2;
+                if (m.hp <= 0) killMob(m);
+              }
+            }
+          }
+        }
+    for (const [key, beam] of beamMeshes) {
+      if (seenBeams.has(key)) continue;
+      const [bx, by, bz] = key.split(",").map(Number);
+      if (world.get(bx, by, bz) !== ID.Beacon || Math.hypot(player.x - bx, player.z - bz) > 40) {
+        scene.remove(beam);
+        beamMeshes.delete(key);
+      }
+    }
+  }
+
   function spawnWalker(x: number, z: number) {
     spawnKind("walker", x, z);
   }
@@ -4301,7 +4473,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
                                             : mob.kind === "guardian"
                                               ? [ID.Crystal]
                                               : mob.kind === "shulker"
-                                                ? [ID.Shell]
+                                                ? [ID.ShulkerShell]
                                                 : mob.kind === "pillager"
                                                   ? [ID.Arrow, ID.Arrow]
                                                   : mob.kind === "vindicator"
@@ -5303,6 +5475,15 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         const [x, y, z] = key.split(",").map(Number);
         return { x, y, z, t };
       }),
+      beacons: [...beaconBuffs.entries()].map(([key, buff]) => {
+        const [x, y, z] = key.split(",").map(Number);
+        return { x, y, z, buff };
+      }),
+      jukeboxes: [...jukeDiscs.entries()].map(([key, disc]) => {
+        const [x, y, z] = key.split(",").map(Number);
+        return { x, y, z, disc };
+      }),
+      shulkerQueue: shulkerQueue.map((q) => ({ ids: q.ids.slice(), ns: q.ns.slice() })),
       ench: [...ench.entries()].map(([id, e]) => [id, Object.entries(e)] as [number, [string, number][]]),
       tradeXp: { ...tradeXp },
       folk: folkSpots.map((f) => ({ x: f.x, z: f.z, role: f.role })),
@@ -5481,7 +5662,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
 
     if (player.y < -6) die();
     if (!creative && phase === "play") {
-      if (headWater) {
+      if (headWater && gillT <= 0) {
         oxygen = Math.max(0, oxygen - dt * (rankLv >= 10 ? 0.7 : 1.15));
         if (oxygen <= 0) {
           drownTick += dt;
@@ -5823,10 +6004,44 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
     return "day"; // title screen runs the day list
   }
+  // Jukebox (v3.8): a placed disc outranks the context director while the
+  // player is near its jukebox — the track loops, fading with distance.
+  const DISC_TRACKS: Record<number, string> = {
+    [ID.DiscA]: "./music/music-day-3.mp3",
+    [ID.DiscB]: "./music/music-night-2.mp3",
+    [ID.DiscC]: "./music/music-nether-1.mp3",
+    [ID.DiscD]: "./music/music-boss-2.mp3",
+    [ID.DiscE]: "./music/music-day-1.mp3",
+  };
+  function activeJukebox(): { disc: number; dist: number } | null {
+    let best: { disc: number; dist: number } | null = null;
+    for (const [key, disc] of jukeDiscs) {
+      const [x, y, z] = key.split(",").map(Number);
+      if (world.get(x, y, z) !== ID.Jukebox) continue;
+      const dist = Math.hypot(player.x - (x + 0.5), player.y - y, player.z - (z + 0.5));
+      if (dist <= 42 && (!best || dist < best.dist)) best = { disc, dist };
+    }
+    return best;
+  }
   function musicTick(dt: number) {
     if (!settings.sound) {
       if (!musicEl.paused) musicEl.pause();
       return;
+    }
+    const jb = phase === "play" ? activeJukebox() : null;
+    if (jb) {
+      const src = DISC_TRACKS[jb.disc];
+      musicEl.loop = true;
+      musicEl.volume = 0.45 * Math.max(0.12, 1 - jb.dist / 46);
+      if (!musicEl.src.endsWith(src.slice(1))) musicEl.src = src;
+      if (musicEl.paused && musicArmed) musicEl.play().catch(() => {});
+      return;
+    }
+    if (musicEl.loop) {
+      musicEl.loop = false;
+      musicEl.volume = 0.45;
+      if (!musicEl.paused) musicEl.pause();
+      musicGap = 2;
     }
     if (!musicEl.paused) return; // a track is playing: let it finish
     if (!musicArmed) return;
@@ -6569,6 +6784,42 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       wxCur.wind = d.wind;
       return true;
     },
+    setBlock: (x: number, y: number, z: number, id: number) => {
+      // Test hook: direct world edit (stations are scan-based, so they
+      // pick these up exactly like player-placed blocks).
+      world.set(Math.floor(x), Math.floor(y), Math.floor(z), id);
+      markDirtyAt(Math.floor(x), Math.floor(z));
+      return true;
+    },
+    getStations: () => {
+      const px = Math.floor(player.x);
+      const py = Math.floor(player.y);
+      const pz = Math.floor(player.z);
+      let beacon = "";
+      let conduit = "";
+      for (let y = py - 10; y <= py + 10; y++)
+        for (let z = pz - 26; z <= pz + 26; z++)
+          for (let x = px - 26; x <= px + 26; x++) {
+            const id = world.get(x, y, z);
+            if (id === ID.Beacon && !beacon) beacon = "L" + pyramidLevel(x, y, z) + " buff=" + (beaconBuffs.get(x + "," + y + "," + z) ?? "-") + " beams=" + beamMeshes.size;
+            if (id === ID.Conduit && !conduit) conduit = "frame=" + prismFrameCount(x, y, z);
+          }
+      return (
+        "beacon[" + beacon + "] conduit[" + conduit + "] juke=" + [...jukeDiscs.entries()].map(([k, d]) => k + ":" + d).join(",") +
+        " queue=" + shulkerQueue.length +
+        " fx speed=" + speedT.toFixed(0) + " str=" + strengthT.toFixed(0) + " regen=" + regenT.toFixed(0) + " jump=" + jumpT.toFixed(0) + " gill=" + gillT.toFixed(0) + " oxy=" + oxygen.toFixed(1)
+      );
+    },
+    setStation: (kind: string, x: number, y: number, z: number, val: string) => {
+      // Test hook: beacon buff / jukebox disc state without panel input.
+      const key = Math.floor(x) + "," + Math.floor(y) + "," + Math.floor(z);
+      if (kind === "buff") beaconBuffs.set(key, val);
+      else if (kind === "disc") jukeDiscs.set(key, Number(val));
+      else if (kind === "eject") jukeDiscs.delete(key);
+      else return false;
+      saveDirty = true;
+      return true;
+    },
     scanLandmarks: () => {
       const out: string[] = [];
       const gx = Math.floor(player.x / 384);
@@ -6998,6 +7249,18 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       inv[id] = Math.min(cap, (inv[id] ?? 0) + Math.round(d.maxUse * 0.35));
       if (!hotbar.includes(id)) hotbar[slot] = id;
       say("Tempered");
+      emit();
+    },
+    beacon(buff: string) {
+      if (world.get(focus.x, focus.y, focus.z) !== ID.Beacon) return;
+      const level = pyramidLevel(focus.x, focus.y, focus.z);
+      hud.beaconLevel = level;
+      if (!buff) return;
+      if (level < (BUFF_NEED[buff] ?? 1)) return say("The pyramid is too small for that blessing");
+      beaconBuffs.set(focus.x + "," + focus.y + "," + focus.z, buff);
+      hud.beaconBuff = buff;
+      say("Beacon blessing: " + buff);
+      saveDirty = true;
       emit();
     },
     brew(kind) {

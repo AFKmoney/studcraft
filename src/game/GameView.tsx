@@ -909,6 +909,27 @@ function StationScreen({ game }: { game: GameApi }) {
               </button>
             </div>
           )}
+          {hud.panel === "beacon" && (
+            <div className="stack">
+              <p className="lede">
+                {hud.beaconLevel > 0
+                  ? `Pyramid level ${hud.beaconLevel} · blessing: ${hud.beaconBuff || "none chosen"}`
+                  : "No pyramid yet — stack iron, gold or aqua-gem blocks under the beacon: 3×3, then 5×5 below it, 7×7, 9×9."}
+              </p>
+              <button className="btn big" disabled={hud.beaconLevel < 1} onClick={() => game.beacon("speed")}>
+                💨 Swiftness{hud.beaconBuff === "speed" ? " · active" : ""}{hud.beaconLevel < 1 ? " 🔒" : ""}
+              </button>
+              <button className="btn big" disabled={hud.beaconLevel < 1} onClick={() => game.beacon("jump")}>
+                🐇 Leap{hud.beaconBuff === "jump" ? " · active" : ""}{hud.beaconLevel < 1 ? " 🔒" : ""}
+              </button>
+              <button className="btn big" disabled={hud.beaconLevel < 2} onClick={() => game.beacon("regen")}>
+                💗 Renewal{hud.beaconBuff === "regen" ? " · active" : ""}{hud.beaconLevel < 2 ? " 🔒 level 2" : ""}
+              </button>
+              <button className="btn big" disabled={hud.beaconLevel < 3} onClick={() => game.beacon("strength")}>
+                💪 Might{hud.beaconBuff === "strength" ? " · active" : ""}{hud.beaconLevel < 3 ? " 🔒 level 3" : ""}
+              </button>
+            </div>
+          )}
           {hud.panel === "trade" && (
             <div className="stack">
               <p className="lede">{hud.traderBlurb}</p>
@@ -934,7 +955,7 @@ function StationScreen({ game }: { game: GameApi }) {
 function Inventory({ game }: { game: GameApi }) {
   const hud = game.hud;
   const station =
-    hud.panel === "furnace" || hud.panel === "chest" || hud.panel === "enchant" || hud.panel === "anvil" || hud.panel === "brew" || hud.panel === "trade";
+    hud.panel === "furnace" || hud.panel === "chest" || hud.panel === "enchant" || hud.panel === "anvil" || hud.panel === "brew" || hud.panel === "trade" || hud.panel === "beacon";
   const [page, setPage] = useState<"bin" | "craft" | "ranks" | "quests" | "skills">("bin");
   const known = new Set(hud.found);
   if (station) return <StationScreen game={game} />;

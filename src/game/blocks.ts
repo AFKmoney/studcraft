@@ -287,10 +287,20 @@ export const ID = {
   NameTag: 285,
   Frame: 286,
   Painting: 287,
+  ShulkerShell: 288,
+  ShulkerBox: 289,
+  Beacon: 290,
+  Conduit: 291,
+  Jukebox: 292,
+  DiscA: 293,
+  DiscB: 294,
+  DiscC: 295,
+  DiscD: 296,
+  DiscE: 297,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
-export type WorkKind = "" | "bench" | "furnace" | "chest" | "bed" | "enchant" | "anvil" | "brew";
+export type WorkKind = "" | "bench" | "furnace" | "chest" | "bed" | "enchant" | "anvil" | "brew" | "beacon";
 
 export type BlockDef = {
   id: number;
@@ -792,6 +802,16 @@ gear(ID.Trident, "Trident", "#2a9a86", "sword", 4, 240);
 gear(ID.Crossbow, "Crossbow", "#8a6428", "bow", 4, 240);
 put(b(ID.Frame, "Item frame", "#a67c3a", "#c4924a", "#8a6428", "#6d4a22", { hard: 0.4, solid: false, flat: true }));
 put(b(ID.Painting, "Painting", "#e8b64a", "#7ab648", "#4a7ac0", "#8a5426", { hard: 0.4, solid: false, flat: true }));
+item(ID.ShulkerShell, "Shulker shell", "#9a7ab8");
+put(b(ID.ShulkerBox, "Shulker box", "#8a6aa8", "#a887c4", "#6e5490", "#543e70", { hard: 1.4, tough: true, need: 1, work: "chest" }));
+put(b(ID.Beacon, "Beacon", "#7ee0e0", "#d8f8f4", "#3ec8c8", "#2a8ab8", { hard: 1.6, tough: true, work: "beacon", light: 12 }));
+put(b(ID.Conduit, "Conduit", "#3ec8c8", "#9ae8e0", "#2a9ab8", "#1e6e8a", { hard: 1.6, tough: true, need: 1, light: 10 }));
+put(b(ID.Jukebox, "Jukebox", "#8a6428", "#c4924a", "#5c4020", "#2a2a2a", { hard: 1.0, tough: true }));
+item(ID.DiscA, "Disc — Sunloop", "#e8b64a");
+item(ID.DiscB, "Disc — Moonloop", "#7a8ac0");
+item(ID.DiscC, "Disc — Emberdeep", "#e85a4a");
+item(ID.DiscD, "Disc — Warloop", "#5a5a5a");
+item(ID.DiscE, "Disc — Rainloop", "#4a9ac0");
 put(b(ID.Grindstone, "Grindstone", "#8e959c", "#a7aeb4", "#6d4426", "#4a2e1a", { hard: 1.5, tough: true, work: "anvil" }));
 item(ID.Copper, "Copper", "#e07a3d");
 item(ID.Bronze, "Bronze", "#cd7f32");
@@ -1265,6 +1285,16 @@ export const CATALOG = [
   ID.NameTag,
   ID.Frame,
   ID.Painting,
+  ID.ShulkerShell,
+  ID.ShulkerBox,
+  ID.Beacon,
+  ID.Conduit,
+  ID.Jukebox,
+  ID.DiscA,
+  ID.DiscB,
+  ID.DiscC,
+  ID.DiscD,
+  ID.DiscE,
 ];
 
 export const COLORS = [ID.Red, ID.Orange, ID.Yellow, ID.Green, ID.Blue, ID.Azure, ID.Pink, ID.White, ID.Black];

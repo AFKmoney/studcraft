@@ -1320,3 +1320,25 @@ Philippe's brief: a quality sky — day/night, weather, realistic clouds — ups
 
 ### Next move (claimed by Muse)
 BO2-6: stations (beacon, shulker box, conduit, jukebox + discs).
+
+## v3.8 — 2026-10-25 (BO2-6: stations — beacon, shulker box, conduit, jukebox + discs)
+
+The four working stations, each wired into systems the game already had (effect timers, the chest store, the music director) instead of parallel ones.
+
+### What shipped
+- **Beacon** (new block): right-click opens its panel — build a pyramid of iron/gold/aqua-gem blocks underneath (3×3, 5×5, 7×7, 9×9) and pick a blessing. A sky beam marks an active pyramid; while the player is in range the blessing stays topped up: Swiftness or Leap (level 1), Renewal (level 2), Might (level 3). Crafted from glass + a nether star + obsidian.
+- **Conduit** (new block): framed by three prism rings (16+ prism blocks) and set in water, it keeps swimmers breathing — the Gill effect, sustained — and zaps hostile mobs that come within 8 blocks. Crafted from shell chips + a prism core. Side benefit: Gill now actually stops the oxygen drain (before, it only sped up swimming while you drowned at full speed).
+- **Shulker box** (new block): a crate that keeps its contents. Break it and the contents ride along in the save; the next shulker box placed inherits them — no spill, ever. Shulkers now drop **shulker shells** (2 + a crate = the box). With several boxes in flight the contents queue is FIFO — the one simplification vs Minecraft, noted here honestly.
+- **Jukebox + 5 music discs** (new block + items): discs (Sunloop, Moonloop, Emberdeep, Warloop, Rainloop) hide in deep and nether chests (~10%). Right-click a jukebox holding a disc to play it — that track loops and outranks the music director while you're near (fading with distance); right-click again to eject. Breaking the box drops the disc.
+- Stations are **scan-based**: the effects tick searches around the player every 1.5 s, so a station works however it appeared in the world — no placement registry to desync. Beacon buffs, jukebox discs and the shulker queue persist in the save.
+
+### QA
+- tsc clean (0 errors). Node probe on the real defs/recipes: all 4 station recipes resolve, shapes and ingredients valid, work kinds correct (shulker box → chest panel, beacon → its panel).
+- qa65 live (browser, seed 23): beacon read back at pyramid level 1 then 2 after adding the 5×5 layer, buff registered, beam mesh created, fx timer topped in range (speed=3); conduit prism frame counted 48/48 ring cells (≥16 = active); jukebox override switched the shared music element to the disc's track (music-day-3) — the element stayed paused in the harness because synthetic clicks don't count as a user gesture for autoplay, so audible playback and the eject hand-back are code-verified, the override engagement is live-proven; 0 game errors.
+- Code-verified only: the shulker break/place queue (needs real dig/place input the harness can't aim reliably), the conduit's in-water Gill sustain and mob zap (frame counting is the live-proven half), disc loot rolls (deterministic hash gates in the chest tables).
+
+### Files
+`src/game/blocks.ts` (defs 288–297), `src/game/game.ts`, `src/game/GameView.tsx` (beacon panel), `src/game/recipes.ts`, `src/game/loot.ts`, `src/game/save.ts`, `WORKLOG.md`, `apk/src/main/AndroidManifest.xml` (versionCode 29 / versionName 3.8). APK + web zip + PC exe rebuilt.
+
+### Next move (claimed by Muse)
+BO2-7: villager depth (stock/refresh, reputation).

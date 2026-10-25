@@ -160,4 +160,13 @@ export function stockChest(bin: { ids: number[]; ns: number[] }, x: number, y: n
       bin.ns[slot] = 1;
     }
   }
+  // Music discs (v3.8): the rare prize of deep and nether chests.
+  if ((kind === "deep" && hash3(x, y, z, seed + 334) > 0.88) || (kind === "nether" && hash3(x, y, z, seed + 335) > 0.9)) {
+    const slot = bin.ids.findIndex((id) => !id);
+    if (slot >= 0) {
+      const discs = [ID.DiscA, ID.DiscB, ID.DiscC, ID.DiscD, ID.DiscE];
+      bin.ids[slot] = discs[Math.floor(hash3(x + 9, y, z + 9, seed + 336) * discs.length) % discs.length];
+      bin.ns[slot] = 1;
+    }
+  }
 }
