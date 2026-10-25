@@ -161,4 +161,10 @@ export const MOB_XP: Record<string, number> = {
   bee: 2,
   turtle: 3,
   bat: 2,
+  husk: 5,
+  stray: 5,
+  axolotl: 2,
+  parrot: 2,
+  guardian: 10,
+  shulker: 8,
 };

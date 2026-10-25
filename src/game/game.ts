@@ -741,7 +741,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     mad?: boolean;
     tpT?: number;
     convT?: number;
-    kind: "sheep" | "creeper" | "cow" | "walker" | "pig" | "chicken" | "spider" | "skelly" | "villager" | "ghast" | "dragon" | "horse" | "phantom" | "piglin" | "boat" | "cart" | "frog" | "fox" | "crab" | "wisp" | "slime" | "wolf" | "golem" | "wither" | "enderman" | "blaze" | "witch" | "bee" | "cat" | "squid" | "bat" | "drowned";
+    kind: "sheep" | "creeper" | "cow" | "walker" | "pig" | "chicken" | "spider" | "skelly" | "villager" | "ghast" | "dragon" | "horse" | "phantom" | "piglin" | "boat" | "cart" | "frog" | "fox" | "crab" | "wisp" | "slime" | "wolf" | "golem" | "wither" | "enderman" | "blaze" | "witch" | "bee" | "cat" | "squid" | "bat" | "drowned" | "husk" | "stray" | "goat" | "axolotl" | "parrot" | "guardian" | "shulker";
     x: number;
     y: number;
     z: number;
@@ -3053,6 +3053,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         spawnKind("skelly", -556, -500);
         spawnKind("skelly", -560, -516);
         spawnKind("skelly", -548, -504);
+        spawnKind("shulker", -552, -508);
+        spawnKind("shulker", -544, -512);
       }
       if (mobs.filter((m) => m.kind === "enderman" && !m.dead).length < 2) {
         spawnKind("enderman", -530, -530);
@@ -3678,7 +3680,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           ? 140 + crystalsLeft() * 15
           : kind === "enderman"
             ? 16
-            : kind === "witch"
+            : kind === "guardian" || kind === "shulker"
+              ? 15
+              : kind === "witch"
               ? 13
               : kind === "blaze"
                 ? 10
@@ -3696,13 +3700,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
                           : scale < 0.8
                             ? 4
                             : 10
-                        : kind === "walker" || kind === "wolf" || kind === "drowned"
+                        : kind === "walker" || kind === "wolf" || kind === "drowned" || kind === "husk" || kind === "stray"
                           ? 8
                           : kind === "wisp"
                             ? 6
-                            : kind === "cow" || kind === "squid"
+                            : kind === "cow" || kind === "squid" || kind === "goat"
                               ? 5
-                              : kind === "frog" || kind === "crab" || kind === "sheep" || kind === "bee"
+                              : kind === "frog" || kind === "crab" || kind === "sheep" || kind === "bee" || kind === "axolotl" || kind === "parrot"
                                 ? 3
                                 : 4,
       wander: 1,
@@ -3752,14 +3756,14 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       say("Shorn");
       return;
     }
-    if (held === ID.Lead && (mob.kind === "sheep" || mob.kind === "cow" || mob.kind === "pig" || mob.kind === "chicken" || mob.kind === "horse")) {
+    if (held === ID.Lead && (mob.kind === "sheep" || mob.kind === "cow" || mob.kind === "pig" || mob.kind === "chicken" || mob.kind === "horse" || mob.kind === "goat")) {
       // one lead, one mob: clear others
       for (const m of mobs) if (m !== mob) m.lead = false;
       mob.lead = !mob.lead;
       say(mob.lead ? "Hitched" : "Unhitched");
       return;
     }
-    if ((mob.kind === "cow" || mob.kind === "sheep" || mob.kind === "pig") && held === ID.Wheat) {
+    if ((mob.kind === "cow" || mob.kind === "sheep" || mob.kind === "pig" || mob.kind === "goat") && held === ID.Wheat) {
       mob.love = 8;
       if (!creative) spend(ID.Wheat, 1);
       say("Hearts");
@@ -3778,7 +3782,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       say("Egg");
       return;
     }
-    if (mob.kind === "cow" && held === ID.Bucket) {
+    if (mob.kind === "parrot" && held === ID.Seeds) {
+      mob.tame = true;
+      if (!creative) spend(ID.Seeds, 1);
+      say("Parrot tamed — it will follow you");
+      return;
+    }
+    if ((mob.kind === "cow" || mob.kind === "goat") && held === ID.Bucket) {
       if (!creative) spend(ID.Bucket, 1);
       addInv(ID.Milk, 1);
       say("Milk");
@@ -3899,15 +3909,15 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           : [ID.White, ID.RawMeat]
         : mob.kind === "cow"
           ? [ID.RawMeat, ID.RawMeat]
-          : mob.kind === "pig"
+          : mob.kind === "pig" || mob.kind === "goat"
             ? [ID.RawMeat]
             : mob.kind === "chicken"
               ? [ID.Feather, ID.RawMeat]
               : mob.kind === "spider"
                 ? [ID.String]
-                : mob.kind === "skelly"
+                : mob.kind === "skelly" || mob.kind === "stray"
                   ? [ID.Bone, ID.Arrow]
-                  : mob.kind === "walker"
+                  : mob.kind === "walker" || mob.kind === "husk"
                     ? [ID.RawMeat, ID.Bone]
                     : mob.kind === "creeper"
                       ? [ID.Powder]
@@ -3925,13 +3935,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
                                   ? [ID.String]
                                   : mob.kind === "squid"
                                     ? [ID.InkSac]
-                                    : mob.kind === "bat"
+                                    : mob.kind === "bat" || mob.kind === "axolotl"
                                       ? []
                                       : mob.kind === "ghast"
                         ? [ID.Blaze, ID.Powder]
                         : mob.kind === "piglin"
                           ? [ID.Scrap]
-                          : mob.kind === "phantom"
+                          : mob.kind === "phantom" || mob.kind === "parrot"
                             ? [ID.Feather]
                             : mob.kind === "dragon"
                               ? [ID.Elytra, ID.Totem, ID.Scrap]
@@ -3953,9 +3963,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
                                           ? [ID.Bone]
                                           : mob.kind === "golem"
                                             ? [ID.Ingot]
-                                            : mob.kind === "villager"
-                                              ? [ID.Emerald]
-                                              : [ID.Green];
+                                            : mob.kind === "guardian"
+                                              ? [ID.Crystal]
+                                              : mob.kind === "shulker"
+                                                ? [ID.Shell]
+                                                : mob.kind === "villager"
+                                                  ? [ID.Emerald]
+                                                  : [ID.Green];
     if (!creative) {
       for (const drop of drops) dropItem(drop, 1, mob.x, mob.y + 0.4, mob.z);
       // Looting on the held blade: bonus copies of the base drops.
@@ -3974,6 +3988,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (mob.kind === "enderman" && Math.random() < luck) extra.push(ID.EnderPearl);
       if (mob.kind === "drowned" && Math.random() < luck) extra.push(ID.Copper);
       if (mob.kind === "drowned" && Math.random() < 0.22) extra.push(ID.Trident);
+      if (mob.kind === "guardian" && Math.random() < luck) extra.push(ID.Crystal);
       if (mob.kind === "squid" && Math.random() < luck) extra.push(ID.InkSac);
       if (mob.kind === "witch" && Math.random() < luck * 0.6) extra.push(ID.Bottle);
       if ((mob.kind === "creeper" || mob.kind === "ghast") && Math.random() < luck * 0.7) extra.push(ID.Cinder);
@@ -3993,7 +4008,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     burst(mob.x, mob.y + 0.5, mob.z, drops.length ? def(drops[0]).color : "#3aaa4c", 12);
     audio.break();
     gainXp(MOB_XP[mob.kind] ?? 2);
-    if (mob.kind === "walker" || mob.kind === "creeper" || mob.kind === "skelly") bumpQuest("kill", "host");
+    if (mob.kind === "walker" || mob.kind === "creeper" || mob.kind === "skelly" || mob.kind === "husk" || mob.kind === "stray") bumpQuest("kill", "host");
     if (mob.kind === "spider") bumpQuest("kill", "spider");
     if (mob.kind === "frog") bumpQuest("kill", "frog");
     if (mob.kind === "fox") bumpQuest("kill", "fox");
@@ -4318,6 +4333,30 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           const [x, z] = spot();
           if (def(world.get(Math.floor(x), Math.floor(groundY(x, z)), Math.floor(z))).fluid) spawnKind("squid", x, z);
         }
+        if ((biome === "Ash ridge" || biome === "Snow cap") && alive("goat") < 2) {
+          const [x, z] = spot();
+          spawnKind("goat", x, z);
+        }
+        if (!night && (biome === "Grove" || biome === "Flower grove") && alive("parrot") < 2) {
+          const [x, z] = spot();
+          spawnKind("parrot", x, z);
+        }
+        if ((biome === "Ocean" || biome === "Shore") && alive("axolotl") < 3) {
+          const [x, z] = spot();
+          if (def(world.get(Math.floor(x), Math.floor(groundY(x, z)), Math.floor(z))).fluid) spawnKind("axolotl", x, z);
+        }
+        if (!settings.mods.peaceful && biome === "Ocean" && alive("guardian") < 2) {
+          const [x, z] = spot();
+          if (def(world.get(Math.floor(x), Math.floor(groundY(x, z)), Math.floor(z))).fluid) spawnKind("guardian", x, z);
+        }
+        if (!settings.mods.peaceful && night && (biome === "Desert" || biome === "Sand flats" || biome === "Mesa") && alive("husk") < 2) {
+          const [x, z] = spot();
+          spawnKind("husk", x, z);
+        }
+        if (!settings.mods.peaceful && night && biome === "Snow cap" && alive("stray") < 2) {
+          const [x, z] = spot();
+          spawnKind("stray", x, z);
+        }
       }
     }
     for (const m of mobs) {
@@ -4353,7 +4392,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         }
       }
       if (d > 44 && m.kind !== "dragon" && m.kind !== "wither" && m.kind !== "ghast") {
-        const passive = m.kind === "sheep" || m.kind === "cow" || m.kind === "pig" || m.kind === "chicken" || m.kind === "fox" || m.kind === "crab" || m.kind === "frog" || m.kind === "cat" || m.kind === "bee" || m.kind === "squid" || m.kind === "bat";
+        const passive = m.kind === "sheep" || m.kind === "cow" || m.kind === "pig" || m.kind === "chicken" || m.kind === "fox" || m.kind === "crab" || m.kind === "frog" || m.kind === "cat" || m.kind === "bee" || m.kind === "squid" || m.kind === "bat" || m.kind === "goat" || m.kind === "axolotl" || m.kind === "parrot";
         if (d > 64 && passive && !m.tame && !m.lead && !m.name && !(m.baby && m.baby > 0) && m.homeX === undefined) {
           m.dead = true;
           scene.remove(m.mesh);
@@ -4404,7 +4443,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         }
       }
       const farHost =
-        m.kind === "creeper" || m.kind === "walker" || m.kind === "skelly" || m.kind === "spider" || m.kind === "phantom" || m.kind === "wisp" || m.kind === "slime" || m.kind === "enderman" || m.kind === "witch" || m.kind === "drowned";
+        m.kind === "creeper" || m.kind === "walker" || m.kind === "skelly" || m.kind === "spider" || m.kind === "phantom" || m.kind === "wisp" || m.kind === "slime" || m.kind === "enderman" || m.kind === "witch" || m.kind === "drowned" || m.kind === "husk" || m.kind === "stray" || m.kind === "guardian";
       if (farHost && (d > 42 || phase !== "play")) {
         m.dead = true;
         scene.remove(m.mesh);
@@ -4421,7 +4460,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         scene.remove(m.mesh);
         continue;
       }
-      if ((m.kind === "walker" || m.kind === "skelly" || m.kind === "drowned") && !night && realm === 0) {
+      if ((m.kind === "walker" || m.kind === "skelly" || m.kind === "drowned" || m.kind === "stray") && !night && realm === 0) {
         m.hp -= dt * 3;
         if (m.hp <= 0) {
           killMob(m);
@@ -4478,6 +4517,62 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           }
         } else m.convT = 0;
       }
+      // Goat: every so often it picks a target, faces it for a beat
+      // (mode "aim", speed forced to 0), then charges horn-first.
+      if (m.kind === "goat" && phase === "play" && seen) {
+        if (m.mode === "aim") {
+          m.wander = 1.5;
+          m.yaw = Math.atan2(-dx, -dz);
+          m.modeT = (m.modeT ?? 0) - dt;
+          if ((m.modeT ?? 0) <= 0) {
+            m.mode = "charge";
+            m.modeT = 0.9;
+          }
+        } else if (m.mode === "charge") {
+          m.wander = 1.5;
+          m.modeT = (m.modeT ?? 0) - dt;
+          if (d < 1.25 && m.cool <= 0) {
+            bite(2);
+            thornsHit(m);
+            audio.hit();
+            m.cool = 5;
+            m.mode = undefined;
+          } else if ((m.modeT ?? 0) <= 0) {
+            m.mode = undefined;
+            m.cool = 3.5;
+          }
+        } else if (m.cool <= 0 && d < 9 && d > 2.5 && Math.random() < dt * 0.25) {
+          m.mode = "aim";
+          m.modeT = 0.8;
+        }
+      }
+      // Shulker: rooted to its block, it spits a bullet at anything
+      // that wanders within range of the End city walls.
+      if (m.kind === "shulker" && phase === "play" && seen && m.cool <= 0 && d < 16) {
+        launchArrow(m.x, m.y + 0.6, m.z, dx, player.y + 1.2 - (m.y + 0.6), dz, false);
+        burst(m.x, m.y + 0.7, m.z, "#c77dff", 4);
+        m.cool = 2.4;
+      }
+      // Guardian: it charges its eye beam for a beat, then zaps —
+      // break line of sight during the charge and you are safe.
+      if (m.kind === "guardian" && phase === "play" && seen) {
+        if (m.mode === "laser") {
+          m.yaw = Math.atan2(-dx, -dz);
+          m.modeT = (m.modeT ?? 0) - dt;
+          if ((m.modeT ?? 0) <= 0) {
+            m.mode = undefined;
+            m.cool = 2.8;
+            if (d < 15 && lineClear(m.x, m.z, player.x, player.z, m.y)) {
+              for (let s = 1; s <= 4; s++) burst(m.x + (dx * s) / 5, m.y + 0.6 + ((player.y + 1 - (m.y + 0.6)) * s) / 5, m.z + (dz * s) / 5, "#7ee0d8", 3);
+              bite(3);
+              audio.hit();
+            }
+          }
+        } else if (m.cool <= 0 && d < 13 && d > 2) {
+          m.mode = "laser";
+          m.modeT = 0.8;
+        }
+      }
       const flyer = m.kind === "ghast" || m.kind === "phantom" || m.kind === "dragon" || m.kind === "wither" || m.kind === "blaze";
       const piglinMad = m.kind === "piglin" && hotbar[slot] !== ID.Gold && hotbar[slot] !== ID.Ingot;
       const townGuard = m.kind === "golem" || (m.kind === "wolf" && m.tame);
@@ -4496,6 +4591,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
                 o.kind === "enderman" ||
                 o.kind === "witch" ||
                 o.kind === "drowned" ||
+                o.kind === "husk" ||
+                o.kind === "stray" ||
                 (o.kind === "piglin" && hotbar[slot] !== ID.Gold && hotbar[slot] !== ID.Ingot)) &&
               Math.hypot(o.x - m.x, o.z - m.z) < (m.kind === "golem" ? 16 : 11),
           )
@@ -4506,11 +4603,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         piglinMad ||
         ((m.kind === "enderman" || m.kind === "bee") && !!m.mad && d < 20 && seen) ||
         ((m.kind === "witch" || m.kind === "drowned") && d < 15 && seen) ||
-        ((m.kind === "creeper" || m.kind === "walker" || m.kind === "skelly" || m.kind === "spider" || m.kind === "wisp" || m.kind === "slime") &&
-          d < (m.kind === "skelly" ? 18 : m.kind === "slime" ? 12 : 16) &&
-          seen);
+        ((m.kind === "creeper" || m.kind === "walker" || m.kind === "skelly" || m.kind === "spider" || m.kind === "wisp" || m.kind === "slime" || m.kind === "husk" || m.kind === "stray") &&
+          d < (m.kind === "skelly" || m.kind === "stray" ? 18 : m.kind === "slime" ? 12 : 16) &&
+          seen) ||
+        (m.kind === "guardian" && d < 16 && seen);
       if (foe) m.yaw = Math.atan2(-(foe.x - m.x), -(foe.z - m.z));
-      else if ((m.kind === "wolf" || m.kind === "cat") && m.tame && d > 3.2 && d < 32) m.yaw = Math.atan2(-dx, -dz);
+      else if ((m.kind === "wolf" || m.kind === "cat" || m.kind === "parrot") && m.tame && d > 3.2 && d < 32) m.yaw = Math.atan2(-dx, -dz);
       else if (chase) m.yaw = Math.atan2(-dx, -dz);
       else if (mount !== m) {
         m.wander -= dt;
@@ -4584,7 +4682,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           audio.hit();
         }
       } else {
-        if ((m.kind === "wolf" || m.kind === "cat") && m.tame && !foe && d > 28) {
+        if ((m.kind === "wolf" || m.kind === "cat" || m.kind === "parrot") && m.tame && !foe && d > 28) {
           m.x = player.x + Math.sin(player.yaw) * 1.6;
           m.z = player.z + Math.cos(player.yaw) * 1.6;
           m.y = groundY(m.x, m.z);
@@ -4596,7 +4694,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           m.z += -Math.cos(m.yaw) * sp * dt;
           m.y = groundY(m.x, m.z);
         }
-        const speed = (foe ? 2.7 : chase ? (m.kind === "spider" ? 3.1 : m.kind === "slime" ? 1.35 : m.kind === "walker" ? 2.15 : 2.4) : ((m.kind === "wolf" || m.kind === "cat") && m.tame && d > 4) ? 2.35 : m.kind === "bee" || m.kind === "bat" ? 1.7 : 1.05) * ((m.slowT ?? 0) > 0 ? 0.45 : 1);
+        const speed = (m.kind === "shulker" ? 0 : m.kind === "goat" && m.mode === "aim" ? 0 : m.kind === "goat" && m.mode === "charge" ? 5.2 : foe ? 2.7 : chase ? (m.kind === "spider" ? 3.1 : m.kind === "slime" ? 1.35 : m.kind === "walker" || m.kind === "husk" ? 2.15 : 2.4) : ((m.kind === "wolf" || m.kind === "cat" || m.kind === "parrot") && m.tame && d > 4) ? 2.35 : m.kind === "bee" || m.kind === "bat" || m.kind === "parrot" ? 1.7 : 1.05) * ((m.slowT ?? 0) > 0 ? 0.45 : 1);
         const fx = -Math.sin(m.yaw);
         const fz = -Math.cos(m.yaw);
         const nx = m.x + fx * speed * dt;
@@ -4604,7 +4702,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         const gy = groundY(nx, nz);
         // Water: land animals refuse deep water instead of walking
         // the lake bed. Swimmers (crab, frog, slime) ride the surface.
-        const swimmer = m.kind === "crab" || m.kind === "frog" || m.kind === "slime" || m.kind === "squid" || m.kind === "drowned";
+        const swimmer = m.kind === "crab" || m.kind === "frog" || m.kind === "slime" || m.kind === "squid" || m.kind === "drowned" || m.kind === "axolotl" || m.kind === "guardian";
         let floorY = gy;
         let inWater = false;
         if (def(world.get(Math.floor(nx), Math.floor(gy), Math.floor(nz))).fluid) {
@@ -4613,8 +4711,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           if (top - gy >= 1) {
             inWater = true;
             floorY = top;
-            // Squid swim below the surface, not on it.
-            if (m.kind === "squid") floorY = top - 1;
+            // Squid, axolotls and guardians swim below the surface, not on it.
+            if (m.kind === "squid" || m.kind === "axolotl" || m.kind === "guardian") floorY = top - 1;
           }
         }
         const blocked =
@@ -4624,11 +4722,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           (inWater && !swimmer);
         // Bees and bats hover: they ease toward a height above the
         // ground and ignore the walking rules entirely.
-        const hover = m.kind === "bee" || m.kind === "bat";
+        const hover = m.kind === "bee" || m.kind === "bat" || m.kind === "parrot";
         if (hover) {
           m.x = nx;
           m.z = nz;
-          const target = gy + (m.kind === "bee" ? 1.25 : 2.1) + Math.sin(elapsed * 2.2 + (m.phase ?? 0)) * 0.25;
+          const target = gy + (m.kind === "bee" ? 1.25 : m.kind === "parrot" ? 1.5 : 2.1) + Math.sin(elapsed * 2.2 + (m.phase ?? 0)) * 0.25;
           m.y += (target - m.y) * Math.min(1, dt * 3);
           if (m.kind === "bat") m.yaw += (Math.random() - 0.5) * 3 * dt;
         } else if (blocked) m.yaw += 1.4;
@@ -4647,11 +4745,25 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
             continue;
           }
         }
+        // An axolotl out of water dries out, four times slower.
+        if (m.kind === "axolotl" && !inWater) {
+          m.hp -= dt * 0.5;
+          if (m.hp <= 0) {
+            killMob(m);
+            continue;
+          }
+        }
       }
-      if ((m.kind === "walker" || m.kind === "spider" || m.kind === "wisp" || m.kind === "slime" || m.kind === "drowned" || piglinMad) && d < 1.35 && phase === "play" && m.cool <= 0) {
+      if ((m.kind === "walker" || m.kind === "spider" || m.kind === "wisp" || m.kind === "slime" || m.kind === "drowned" || m.kind === "husk" || piglinMad) && d < 1.35 && phase === "play" && m.cool <= 0) {
         bite(m.kind === "wisp" || m.kind === "spider" ? 2 : m.kind === "slime" ? ((m.size ?? 1) > 0.7 ? 3 : 1) : 3);
         thornsHit(m);
         m.cool = 0.75;
+        audio.hit();
+      }
+      if (m.kind === "guardian" && d < 1.6 && phase === "play" && m.cool <= 0) {
+        bite(2);
+        thornsHit(m);
+        m.cool = 0.9;
         audio.hit();
       }
       if (m.kind === "enderman" && m.mad && d < 1.6 && phase === "play" && m.cool <= 0) {
@@ -4672,7 +4784,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         audio.hit();
         if (foe.hp <= 0) killMob(foe);
       }
-      if (m.kind === "skelly" && d < 16 && d > 3 && phase === "play" && m.cool <= 0 && seen) {
+      if ((m.kind === "skelly" || m.kind === "stray") && d < 16 && d > 3 && phase === "play" && m.cool <= 0 && seen) {
         launchArrow(m.x, m.y + 1, m.z, dx, 0.2, dz, false);
         m.cool = 1.5;
       }
@@ -4722,10 +4834,15 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         if (d2 > 0.36 || d2 === 0) continue;
         const dist = Math.sqrt(d2);
         const push = ((0.6 - dist) / dist) * 0.5;
-        a.x -= sx * push;
-        a.z -= sz * push;
-        b.x += sx * push;
-        b.z += sz * push;
+        // A shulker is rooted to its block: it never gets shoved.
+        if (a.kind !== "shulker") {
+          a.x -= sx * push;
+          a.z -= sz * push;
+        }
+        if (b.kind !== "shulker") {
+          b.x += sx * push;
+          b.z += sz * push;
+        }
       }
     }
   }
@@ -5923,7 +6040,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     },
     getChunks: () => world.chunks.size,
     spawnMob: (kind: string, dx = 6, dz = 0) => {
-      const kinds = ["sheep", "creeper", "cow", "walker", "pig", "chicken", "spider", "skelly", "villager", "ghast", "dragon", "horse", "phantom", "piglin", "frog", "fox", "crab", "wisp", "slime", "wolf", "golem", "wither", "enderman", "blaze", "witch", "bee", "cat", "squid", "bat", "drowned"];
+      const kinds = ["sheep", "creeper", "cow", "walker", "pig", "chicken", "spider", "skelly", "villager", "ghast", "dragon", "horse", "phantom", "piglin", "frog", "fox", "crab", "wisp", "slime", "wolf", "golem", "wither", "enderman", "blaze", "witch", "bee", "cat", "squid", "bat", "drowned", "husk", "stray", "goat", "axolotl", "parrot", "guardian", "shulker"];
       if (!kinds.includes(kind)) return false;
       spawnKind(kind as Mob["kind"], player.x + dx, player.z + dz);
       return true;
@@ -6824,7 +6941,7 @@ function beast(kind: string): LegoBody {
     const body = block(g, pink, 0.7, 0.36, 0.42, 0, 0.48, 0, 3, 2);
     body.userData.skin = "body";
     block(g, pink, 0.3, 0.26, 0.26, 0, 0.56, -0.36, 1, 1);
-    put(g, geoCyl(0.08, 0.08, 10), skin(0xe23b2f), 0, 0.52, -0.52, Math.PI / 2);
+    put(g, geoCyl(0.08, 0.08, 10), skin(0xd96a8a), 0, 0.52, -0.52, Math.PI / 2);
     const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, pink, 0.1, 0.22, 0.1, sx * 0.2, 0.22, sz * 0.12)));
     return { group: g, legs, bodyMat: pink };
   }
@@ -6834,6 +6951,9 @@ function beast(kind: string): LegoBody {
     body.userData.skin = "body";
     put(g, geoBox(0.1, 0.08, 0.1), skin(0xe23b2f), 0, 0.54, -0.02);
     put(g, geoBox(0.08, 0.06, 0.1), skin(0xf07820), 0, 0.36, -0.24);
+    put(g, geoBox(0.05, 0.16, 0.24), white, -0.19, 0.38, 0.02);
+    put(g, geoBox(0.05, 0.16, 0.24), white, 0.19, 0.38, 0.02);
+    put(g, geoBox(0.16, 0.12, 0.06), white, 0, 0.52, 0.2, -0.4);
     const legs = [legBox(g, skin(0xf07820), 0.06, 0.2, 0.06, -0.06, 0.2, 0), legBox(g, skin(0xf07820), 0.06, 0.2, 0.06, 0.06, 0.2, 0)];
     return { group: g, legs, bodyMat: white };
   }
@@ -7120,6 +7240,106 @@ function beast(kind: string): LegoBody {
     g.add(right);
     return { group: g, legs: [left, right], bodyMat: hide };
   }
+  if (kind === "goat") {
+    const coat = skin(0xbdb8ae);
+    const darkLeg = skin(0x8a857c);
+    const body = block(g, coat, 0.72, 0.38, 0.44, 0, 0.55, 0, 3, 2);
+    body.userData.skin = "body";
+    block(g, coat, 0.26, 0.26, 0.28, 0, 0.66, -0.38, 1, 1);
+    put(g, geoBox(0.14, 0.1, 0.08), coat, 0, 0.6, -0.55);
+    put(g, geoBox(0.07, 0.14, 0.05), skin(0xf4f1ea), 0, 0.47, -0.52);
+    put(g, geoBox(0.05, 0.16, 0.05), skin(0x6a655c), -0.09, 0.86, -0.34);
+    put(g, geoBox(0.05, 0.16, 0.05), skin(0x6a655c), 0.09, 0.86, -0.34);
+    put(g, geoBox(0.1, 0.04, 0.06), coat, -0.19, 0.7, -0.38);
+    put(g, geoBox(0.1, 0.04, 0.06), coat, 0.19, 0.7, -0.38);
+    put(g, geoBox(0.04, 0.04, 0.02), black, -0.07, 0.7, -0.53);
+    put(g, geoBox(0.04, 0.04, 0.02), black, 0.07, 0.7, -0.53);
+    put(g, geoBox(0.08, 0.14, 0.06), coat, 0, 0.68, 0.26);
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, darkLeg, 0.1, 0.3, 0.1, sx * 0.22, 0.3, sz * 0.13)));
+    return { group: g, legs, bodyMat: coat };
+  }
+  if (kind === "axolotl") {
+    const pink = skin(0xf2a8c8);
+    const gill = skin(0xef6a9a);
+    const body = block(g, pink, 0.4, 0.22, 0.62, 0, 0.2, 0.02, 2, 3);
+    body.userData.skin = "body";
+    block(g, pink, 0.46, 0.2, 0.26, 0, 0.22, -0.36, 2, 1);
+    put(g, geoBox(0.05, 0.05, 0.02), black, -0.13, 0.26, -0.5);
+    put(g, geoBox(0.05, 0.05, 0.02), black, 0.13, 0.26, -0.5);
+    for (const sx of [-1, 1]) for (let i = 0; i < 3; i++) put(g, geoBox(0.05, 0.12, 0.05), gill, sx * 0.27, 0.24, -0.44 + i * 0.08);
+    put(g, geoBox(0.04, 0.26, 0.3), pink, 0, 0.22, 0.44);
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, pink, 0.06, 0.1, 0.06, sx * 0.14, 0.1, sz * 0.2)));
+    return { group: g, legs, bodyMat: pink };
+  }
+  if (kind === "parrot") {
+    const green = skin(0x35b558);
+    const body = block(g, green, 0.24, 0.34, 0.28, 0, 0.42, 0, 1, 1);
+    body.userData.skin = "body";
+    block(g, green, 0.22, 0.2, 0.22, 0, 0.68, -0.04, 1, 1);
+    put(g, geoBox(0.16, 0.08, 0.03), skin(0xe23b2f), 0, 0.72, -0.16);
+    put(g, geoBox(0.08, 0.07, 0.08), skin(0xd8d3c8), 0, 0.63, -0.19);
+    put(g, geoBox(0.035, 0.035, 0.02), black, -0.07, 0.7, -0.16);
+    put(g, geoBox(0.035, 0.035, 0.02), black, 0.07, 0.7, -0.16);
+    put(g, geoBox(0.09, 0.34, 0.04), skin(0x3d7ad4), 0, 0.16, 0.18, 0.35);
+    put(g, geoBox(0.04, 0.1, 0.04), skin(0x8a8f98), -0.06, 0.1, 0);
+    put(g, geoBox(0.04, 0.1, 0.04), skin(0x8a8f98), 0.06, 0.1, 0);
+    const left = new THREE.Group();
+    left.position.set(-0.13, 0.5, 0);
+    put(left, geoBox(0.26, 0.03, 0.2), green, -0.13, 0, 0);
+    g.add(left);
+    const right = new THREE.Group();
+    right.position.set(0.13, 0.5, 0);
+    put(right, geoBox(0.26, 0.03, 0.2), green, 0.13, 0, 0);
+    g.add(right);
+    return { group: g, legs: [left, right], bodyMat: green };
+  }
+  if (kind === "guardian") {
+    const hide = skin(0x5f7f78);
+    const spike = skin(0xd8a860);
+    const body = block(g, hide, 0.72, 0.58, 0.85, 0, 0.55, 0, 3, 3);
+    body.userData.skin = "body";
+    put(g, geoBox(0.3, 0.3, 0.04), skin(0xf4f1ea), 0, 0.62, -0.44);
+    put(g, geoBox(0.18, 0.18, 0.03), skin(0xf07820), 0, 0.62, -0.47);
+    put(g, geoBox(0.08, 0.08, 0.03), black, 0, 0.62, -0.49);
+    for (const sz of [-0.25, 0, 0.25]) put(g, geoBox(0.07, 0.16, 0.07), spike, 0, 0.92, sz);
+    for (const sx of [-1, 1]) for (const sz of [-0.1, 0.2]) put(g, geoBox(0.07, 0.14, 0.07), spike, sx * 0.4, 0.66, sz);
+    put(g, geoBox(0.05, 0.4, 0.28), hide, 0, 0.55, 0.56);
+    put(g, geoBox(0.2, 0.05, 0.24), hide, -0.46, 0.4, 0.05);
+    put(g, geoBox(0.2, 0.05, 0.24), hide, 0.46, 0.4, 0.05);
+    return { group: g, legs: [], bodyMat: hide };
+  }
+  if (kind === "shulker") {
+    const shell = skin(0x8a6aa8);
+    const rim = skin(0x6a4a88);
+    const body = block(g, shell, 0.84, 0.3, 0.84, 0, 0.15, 0, 3, 3);
+    body.userData.skin = "body";
+    put(g, geoBox(0.9, 0.08, 0.9), rim, 0, 0.33, 0);
+    block(g, skin(0xd8c88a), 0.3, 0.26, 0.3, 0, 0.48, 0, 1, 1);
+    put(g, geoBox(0.05, 0.05, 0.02), black, -0.07, 0.5, -0.16);
+    put(g, geoBox(0.05, 0.05, 0.02), black, 0.07, 0.5, -0.16);
+    block(g, shell, 0.78, 0.22, 0.78, 0, 0.73, 0, 3, 3);
+    return { group: g, legs: [], bodyMat: shell };
+  }
+  if (kind === "wither") {
+    // Three skulls on a ribbed spine — it used to fall through to the
+    // white-cube fallback, a boss rendered as a blank brick.
+    const bone = skin(0x1c1c24);
+    const rib = skin(0x3d3d4a);
+    const body = block(g, bone, 0.26, 0.9, 0.26, 0, 0.95, 0, 1, 1);
+    body.userData.skin = "body";
+    for (const ry of [0.72, 0.98, 1.24]) put(g, geoBox(0.62, 0.09, 0.3), rib, 0, ry, 0);
+    put(g, geoBox(0.16, 0.55, 0.16), bone, 0, 0.32, 0.1);
+    block(g, bone, 0.4, 0.36, 0.36, 0, 1.66, 0, 2, 2);
+    block(g, bone, 0.28, 0.26, 0.26, -0.44, 1.5, 0, 1, 1);
+    block(g, bone, 0.28, 0.26, 0.26, 0.44, 1.5, 0, 1, 1);
+    const eyeW = skin(0xf4f1ea);
+    put(g, geoBox(0.09, 0.03, 0.02), eyeW, -0.09, 1.7, -0.19);
+    put(g, geoBox(0.09, 0.03, 0.02), eyeW, 0.09, 1.7, -0.19);
+    put(g, geoBox(0.16, 0.04, 0.02), black, 0, 1.56, -0.19);
+    put(g, geoBox(0.07, 0.03, 0.02), eyeW, -0.44, 1.54, -0.14);
+    put(g, geoBox(0.07, 0.03, 0.02), eyeW, 0.44, 1.54, -0.14);
+    return { group: g, legs: [], bodyMat: bone };
+  }
   const fallback = skin(0xf4f1ea);
   const body = block(g, fallback, 0.4, 0.4, 0.4, 0, 0.3, 0, 2, 2);
   body.userData.skin = "body";
@@ -7140,7 +7360,11 @@ function buildLego(kind: string, scale: number): LegoBody {
               ? makeFig(0x4a2a6a, 0x2a1a3a, 0x14101c, "nose", 0xd8b088)
               : kind === "drowned"
                 ? makeFig(0x2a6a6a, 0x1a3a4a, 0x0a2a2a, "mad", 0x7ac0a8)
-                : null;
+                : kind === "husk"
+                  ? makeFig(0x8a6a42, 0x6a5136, 0x3a2c1c, "mad", 0xb08a5a)
+                  : kind === "stray"
+                    ? makeFig(0x7a8a94, 0x4a565e, 0xc8d8e2, "skull", 0xdfe9ee)
+                    : null;
   const built = figKind ?? beast(kind);
   if (kind === "witch") {
     // Pointed hat: brim + two stacked drums taper to the tip.

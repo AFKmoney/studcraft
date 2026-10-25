@@ -1190,3 +1190,33 @@ Every enchantment effect shipped code-verified in v3.1 was exercised live in sur
 
 ### Next move (claimed by Muse)
 BO2-3: pillar mobs #2 (Shulker, Guardian, goat, axolotl, parrot, Husk, Stray) + the bestiary visual-coherence pass Philippe ordered 2026-10-25 08:52 (every animal must make structural/visual sense).
+
+## v3.3 — 2026-10-25 (Battle order #2, item 3: pillar mobs #2 + bestiary coherence)
+
+### New mobs (7 kinds)
+- **Husk** — desert zombie (makeFig: tan rags, sun-baked skin). Walker AI, speed and drops, but **exempt from the daylight-burn list** — its Minecraft signature trait (strays, added to the burn list, do burn). Night spawns in Desert / Sand flats / Mesa.
+- **Stray** — snow skeleton (makeFig: frost palette, skull face). Full skelly AI including ranged arrows and daylight burn. Night spawns in Snow cap. (Its slowness arrows are plain arrows here — noted omission.)
+- **Goat** — new beast() build (horns, beard, ears, upturned tail). Grazer that is milkable (bucket), breeds on wheat, takes a lead. **Ram**: within 9 blocks it may pick you — 0.8 s aim (rooted, facing you), then a 5.2 blocks/s horn charge for up to 0.9 s; contact = bite 2 (thorns reflect applies), 5 s cooldown. Spawns in Ash ridge / Snow cap.
+- **Axolotl** — pink swimmer, gill frills and tail fin. Swims below the surface like the squid; dries out on land at a quarter of the squid's rate. Ocean / Shore water spawns. Drops nothing (Minecraft-accurate).
+- **Parrot** — green hover flyer, wings in the flap rig. Tame it with Seeds and it follows / teleports like the wolf and cat. Drops Feather. Day spawns in Grove / Flower grove.
+- **Guardian** — teal spiked fish with the one big orange eye. Swims and chases. **Laser**: 0.8 s eye charge — break line of sight during the charge and the zap fizzles — then 3 dmg with a particle beam; spike melee at contact range. Drops Crystal (plus a luck-chance second). Ocean water spawns.
+- **Shulker** — purple shell with the head peeking between the halves. Rooted (speed 0) and exempt from separation shoves; spits a bullet every 2.4 s within 16 blocks (arrow system — straight flight, no homing or levitation, noted). Drops Shell. Two now guard the End city with the skellies.
+- All seven wired through: kind union, spawn HP (guardian/shulker 15, husk/stray 8, goat 5, axolotl/parrot 3), drops, MOB_XP (ranks.ts — goat's 3 was already there), golem/wolf foe lists, far-hostile despawn, passive despawn, quest "host" credit for husk/stray.
+
+### Bestiary visual-coherence pass (Philippe, 2026-10-25: animals that « font pas de sens »)
+- **The Wither was a white cube** — no build existed, it fell through to beast()'s blank fallback. Now: three black skulls on a ribbed spine, trailing tail vertebra, white eye slits.
+- **Pig snout was clown-red** (0xe23b2f) → brick pink (0xd96a8a).
+- **Chicken gained wings and an angled tail** — it no longer reads as a white box on sticks.
+- QA hook: the `spawnMob` whitelist silently refused every new kind (first contact-sheet run spawned only wither/pig/chicken) — extended with all seven.
+
+### QA
+- tsc clean (0 errors).
+- qa60b (seed 23): all 7 new kinds + wither spawn through the fixed hook — `all present: true` in getMobs, zero page errors.
+- Screenshots (qa60c / qa60d + 5x zoom): the **Wither reads crisply against the sky** — three black skulls on a ribbed spine (it was a white cube before this pass). The Stray's pale skull face, the Guardian's spiked teal bulk with the orange eye, the Shulker's purple shell and the Axolotl's pink all identify in the zoom. Husk / goat / parrot eluded a clean photo (spawn-point trees + harness screenshot latency) — spawn-verified, models judged by construction; Philippe's A54 remains the visual verdict.
+- Behaviours (ram, laser charge, spit cadence, seed-taming) are code-reviewed against the existing AI blocks they extend; not individually trip-wired in the slow-motion harness.
+
+### Files
+`src/game/game.ts`, `src/game/ranks.ts`, `WORKLOG.md`, `apk/src/main/AndroidManifest.xml` (versionCode 24 / versionName 3.3). APK + web zip rebuilt.
+
+### Next move (claimed by Muse)
+BO2-4: Illagers + hamlet raids.
