@@ -230,6 +230,12 @@ export const ID = {
   Beetroot: 228,
   Crop1: 229,
   Crop2: 230,
+  CarrotCrop: 231,
+  CarrotRipe: 232,
+  PotatoCrop: 233,
+  PotatoRipe: 234,
+  BeetCrop: 235,
+  BeetRipe: 236,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -875,6 +881,12 @@ item(ID.Lead, "Lead", "#f4f1ea");
 item(ID.Carrot, "Carrot", "#f07820", { food: 3 });
 item(ID.Potato, "Potato", "#c4924a", { food: 1 });
 item(ID.Beetroot, "Beetroot", "#b02620", { food: 1 });
+put(b(ID.CarrotCrop, "Carrot shoots", "#f07820", "#e4d0a2", "#3aaa4c", "#2f7d3a", { solid: false, plant: true, crop: true, hard: 0.05, drop: -1 }));
+put(b(ID.CarrotRipe, "Carrots", "#f07820", "#ffb020", "#c45a10", "#8d3e08", { solid: false, plant: true, crop: true, hard: 0.05, drop: ID.Carrot }));
+put(b(ID.PotatoCrop, "Potato shoots", "#c4924a", "#e4d0a2", "#3aaa4c", "#2f7d3a", { solid: false, plant: true, crop: true, hard: 0.05, drop: -1 }));
+put(b(ID.PotatoRipe, "Potatoes", "#c4924a", "#e0b15a", "#8d5a34", "#6b3e22", { solid: false, plant: true, crop: true, hard: 0.05, drop: ID.Potato }));
+put(b(ID.BeetCrop, "Beet shoots", "#b02620", "#e4d0a2", "#3aaa4c", "#2f7d3a", { solid: false, plant: true, crop: true, hard: 0.05, drop: -1 }));
+put(b(ID.BeetRipe, "Beetroots", "#b02620", "#e23b2f", "#8d1c18", "#5a1010", { solid: false, plant: true, crop: true, hard: 0.05, drop: ID.Beetroot }));
 
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];

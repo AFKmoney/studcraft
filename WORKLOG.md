@@ -274,3 +274,15 @@ DO NOT TOUCH:
 
 ### Next move
 - Extend crop stages to carrot/potato/beet or more mobile inventory gestures.
+
+### 2026-10-25 — Grok (veg crop stages)
+- Extended farming to carrot, potato, beetroot.
+- New plantable stages: CarrotCrop/Ripe (231/232), PotatoCrop/Ripe (233/234), BeetCrop/Ripe (235/236).
+- Plant by using the item on farmland (same as seeds).
+- Growth tick advances them to ripe (water/rain speeds). Ripe drops the vegetable.
+- Early stages drop seeds. Hybrid: same on touch and PC.
+- Files: blocks.ts, game.ts.
+- Logged.
+
+### Next move
+- Mobile inventory gestures or pumpkin/melon growth.

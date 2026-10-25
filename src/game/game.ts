@@ -1444,7 +1444,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         if (Math.random() < 0.12) addInv(ID.Stick, 1);
       } else if (canDrop && id === ID.TallGrass) {
         if (Math.random() < 0.4) addInv(ID.Seeds, 1);
-      } else if (canDrop && (id === ID.Crop || id === ID.Crop1 || id === ID.Crop2)) addInv(ID.Seeds, 1);
+      } else if (canDrop && (id === ID.Crop || id === ID.Crop1 || id === ID.Crop2 || id === ID.CarrotCrop || id === ID.PotatoCrop || id === ID.BeetCrop)) addInv(ID.Seeds, 1);
       else if (canDrop && id === ID.CropRipe) {
         addInv(ID.Wheat, 1);
         addInv(ID.Seeds, 1);
@@ -1809,6 +1809,19 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       const tz = hit.id === ID.Farmland ? hit.z : hit.z + hit.nz;
       if (world.get(tx, ty, tz) === ID.Air && world.get(tx, ty - 1, tz) === ID.Farmland && spend(ID.Seeds, 1)) {
         world.set(tx, ty, tz, ID.Crop);
+        markDirtyAt(tx, tz);
+        audio.place();
+        saveDirty = true;
+      }
+      return;
+    }
+    if (held === ID.Carrot || held === ID.Potato || held === ID.Beetroot) {
+      const tx = hit.id === ID.Farmland ? hit.x : hit.x + hit.nx;
+      const ty = hit.id === ID.Farmland ? hit.y + 1 : hit.y + hit.ny;
+      const tz = hit.id === ID.Farmland ? hit.z : hit.z + hit.nz;
+      const plant = held === ID.Carrot ? ID.CarrotCrop : held === ID.Potato ? ID.PotatoCrop : ID.BeetCrop;
+      if (world.get(tx, ty, tz) === ID.Air && world.get(tx, ty - 1, tz) === ID.Farmland && spend(held, 1)) {
+        world.set(tx, ty, tz, plant);
         markDirtyAt(tx, tz);
         audio.place();
         saveDirty = true;
@@ -3774,15 +3787,25 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
                 const x = gx + dx;
                 const y = Math.floor(player.y) + dy;
                 const z = gz + dz;
-                if (world.get(x, y, z) !== ID.Crop && world.get(x, y, z) !== ID.Crop1 && world.get(x, y, z) !== ID.Crop2) continue;
+                const cur = world.get(x, y, z);
+                const isWheat = cur === ID.Crop || cur === ID.Crop1 || cur === ID.Crop2;
+                const isVeg = cur === ID.CarrotCrop || cur === ID.PotatoCrop || cur === ID.BeetCrop;
+                if (!isWheat && !isVeg) continue;
                 if (world.get(x, y - 1, z) !== ID.Farmland) continue;
                 let wet = raining;
                 for (const [ox, , oz] of NEIGHBORS) if (world.get(x + ox, y - 1, z + oz) === ID.Water) wet = true;
                 if (Math.random() < (wet ? 0.7 : 0.4)) {
-                  const cur = world.get(x, y, z);
-                  const next = cur === ID.Crop ? ID.Crop1 : cur === ID.Crop1 ? ID.Crop2 : ID.CropRipe;
-                  world.set(x, y, z, next);
-                  markDirtyAt(x, z);
+                  let next = cur;
+                  if (cur === ID.Crop) next = ID.Crop1;
+                  else if (cur === ID.Crop1) next = ID.Crop2;
+                  else if (cur === ID.Crop2) next = ID.CropRipe;
+                  else if (cur === ID.CarrotCrop) next = ID.CarrotRipe;
+                  else if (cur === ID.PotatoCrop) next = ID.PotatoRipe;
+                  else if (cur === ID.BeetCrop) next = ID.BeetRipe;
+                  if (next !== cur) {
+                    world.set(x, y, z, next);
+                    markDirtyAt(x, z);
+                  }
                 }
               }
             }
