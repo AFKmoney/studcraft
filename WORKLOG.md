@@ -201,3 +201,14 @@ Files: src/game/world.ts, src/game/sites.ts, src/game/loot.ts, src/game/game.ts 
 - Next free: breakable end crystals or inventory shift-click.
 
 *Agents: append below. Keep it factual and short.*
+
+### 2026-10-25 — Grok (fluid flow, hybrid-friendly)
+- Next gap from WORKLOG: Full fluid flow + gravity for sand/gravel.
+- Gravity for sand/gravel already existed (fall: true). Added budgeted water/lava flow near the player.
+- Water/Lava spreads down into air, and sideways when blocked below. Hard budget of 28 cells/tick so it stays smooth on mobile.
+- Files: game.ts (tickExtras).
+- Did not touch mesher, recompute, sky, biomes, End crystals, or inventory.
+- Logged.
+
+### Next move
+- Crop growth stages or more mobile HUD polish.

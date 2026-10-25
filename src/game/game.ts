@@ -2132,6 +2132,39 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           }
         }
       }
+      // budgeted fluid flow (mobile-friendly: limited cells per tick)
+      let fluidBudget = 28;
+      for (let dz = -5; dz <= 5 && fluidBudget > 0; dz++) {
+        for (let dx = -5; dx <= 5 && fluidBudget > 0; dx++) {
+          for (let dy = 3; dy >= -2 && fluidBudget > 0; dy--) {
+            const x = gx + dx;
+            const y = gy + dy;
+            const z = gz + dz;
+            const id = world.get(x, y, z);
+            if (id !== ID.Water && id !== ID.Lava) continue;
+            const below = world.get(x, y - 1, z);
+            if (below === ID.Air) {
+              world.set(x, y - 1, z, id);
+              markDirtyAt(x, z);
+              fluidBudget--;
+              continue;
+            }
+            // sideways only if blocked below
+            if (below !== ID.Air && below !== id) {
+              const sides = [[1,0],[-1,0],[0,1],[0,-1]];
+              for (const [sx, sz] of sides) {
+                if (fluidBudget <= 0) break;
+                if (world.get(x + sx, y, z + sz) === ID.Air && world.get(x + sx, y - 1, z + sz) !== ID.Air) {
+                  world.set(x + sx, y, z + sz, id);
+                  markDirtyAt(x + sx, z + sz);
+                  fluidBudget--;
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
       for (let dz = -5; dz <= 5; dz++) {
         for (let dx = -5; dx <= 5; dx++) {
           for (let dy = -2; dy <= 3; dy++) {
