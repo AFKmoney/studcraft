@@ -262,3 +262,13 @@ DO NOT TOUCH:
 
 *Agents: append below. Keep it factual and short.*
 
+
+### 2026-10-25 — Grok (mobile HUD polish, hybrid)
+- Enlarged touch targets: stick 140px, action buttons 72px.
+- Stronger active feedback + short vibration on hold.
+- Stick travel matched to larger zone.
+- Files: styles.css, GameView.tsx.
+- Logged.
+
+### Next move
+- Extend crop stages to carrot/potato/beet or more mobile inventory gestures.

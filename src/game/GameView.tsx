@@ -744,10 +744,10 @@ function TouchControls({ game }: { game: GameApi }) {
           if (!origin.current || origin.current.id !== e.pointerId) return;
           const dx = e.clientX - origin.current.x;
           const dy = e.clientY - origin.current.y;
-          const max = 40;
+          const max = 48;
           const m = Math.hypot(dx, dy) || 1;
           const scale = Math.min(1, max / m);
-          setKnob({ x: 40 + dx * scale, y: 40 + dy * scale });
+          setKnob({ x: 44 + dx * scale, y: 44 + dy * scale });
           setMove((dx * scale) / max, -(dy * scale) / max);
         }}
         onPointerUp={(e) => {
@@ -788,10 +788,12 @@ function HoldButton({ label, onHold }: { label: string; onHold: (down: boolean) 
   return (
     <button
       onPointerDown={(e) => {
-        e.currentTarget.setPointerCapture(e.pointerId);
+        e.preventDefault();
         onHold(true);
+        if (navigator.vibrate) navigator.vibrate(12);
       }}
       onPointerUp={() => onHold(false)}
+      onPointerLeave={() => onHold(false)}
       onPointerCancel={() => onHold(false)}
     >
       {label}

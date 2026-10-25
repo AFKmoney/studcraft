@@ -653,48 +653,50 @@ h1 {
   display: none;
   position: absolute;
   inset: auto 0 0 0;
-  height: 168px;
+  height: 190px;
 }
 
 .stick-zone {
   position: absolute;
-  left: 16px;
-  bottom: calc(12px + env(safe-area-inset-bottom));
-  width: 120px;
-  height: 120px;
+  left: 12px;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  width: 140px;
+  height: 140px;
   border-radius: 999px;
-  background: rgb(28 20 14 / 0.35);
-  border: 2px solid rgb(246 241 231 / 0.25);
+  background: rgb(28 20 14 / 0.42);
+  border: 3px solid rgb(246 241 231 / 0.35);
   touch-action: none;
 }
 
 .stick-knob {
   position: absolute;
-  width: 40px;
-  height: 40px;
+  width: 52px;
+  height: 52px;
   border-radius: 999px;
   background: var(--color-foam);
-  opacity: 0.9;
+  opacity: 0.95;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.35);
 }
 
 .touch-actions {
   position: absolute;
-  right: 12px;
-  bottom: calc(16px + env(safe-area-inset-bottom));
+  right: 10px;
+  bottom: calc(14px + env(safe-area-inset-bottom));
   display: grid;
-  grid-template-columns: 64px 64px;
-  gap: 8px;
+  grid-template-columns: 72px 72px;
+  gap: 10px;
 }
 
 .touch-actions button {
-  width: 64px;
-  height: 64px;
-  border-radius: 18px;
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
   border: 2px solid rgb(0 0 0 / 0.3);
   background: color-mix(in srgb, var(--color-ink) 70%, transparent);
   color: var(--color-foam);
   font-family: var(--font-display);
-  font-size: 0.78rem;
+  font-size: 0.85rem;
+  touch-action: none;
 }
 
 .show-touch .touch-layer {
@@ -1131,8 +1133,12 @@ h1 {
 }
 
 .touch-actions button:active {
-  transform: scale(0.92);
-  filter: brightness(1.18);
+  transform: scale(0.88);
+  filter: brightness(1.25);
+  box-shadow:
+    inset 0 2px 0 rgb(255 255 255 / 0.4),
+    inset 0 -2px 0 rgb(0 0 0 / 0.4),
+    0 2px 6px rgb(0 0 0 / 0.4);
 }
 
 .touch-actions button:nth-child(1) {
