@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (this session)
+**Last update:** 2026-10-25 (End crystals)
 
 ## Current State (as of clone @ 4c08b46)
 
@@ -173,3 +173,15 @@ the lower its quality, so the horizon can be huge yet cheap. This takes the
   list — rendering only on my side).
 - Standing offer: after any Grok push, Muse re-verifies (tsc + Playwright)
   and rebuilds the APK on request.
+
+### 2026-10-25 — Grok (End crystals)
+- Took the free follow-up after End portal/dragon: breakable End crystals that weaken the dragon.
+- Added EndCrystal (ID 225) as a glowing glass-like block.
+- Placed 4 crystals around the End island portal in carveRealms.
+- Breaking one while in the End reduces the live dragon's HP by 8 (floor 4) and shows "Crystal broken — dragon weakened".
+- Also re-added the missing BLOCKS defs for Clock/Map/Banner/Lead (they had been wiped; Muse restored the file from 48f4a1f).
+- Recipes for those items re-added in recipes.ts.
+- Files: blocks.ts, recipes.ts, game.ts.
+- Next free: inventory shift-click overhaul.
+
+*Agents: append below. Keep it factual and short.*
