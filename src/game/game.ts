@@ -1723,6 +1723,16 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       saveDirty = true;
       return true;
     }
+    if (hit.id === ID.Pumpkin || hit.id === ID.Melon) {
+      const slice = hit.id === ID.Pumpkin ? ID.Slice : ID.MelonCut;
+      world.set(hit.x, hit.y, hit.z, ID.Air);
+      if (!creative) addInv(slice, 4);
+      say("Harvested");
+      markDirtyAt(hit.x, hit.z);
+      audio.break();
+      saveDirty = true;
+      return true;
+    }
     const block = def(hit.id);
     if (block.door || block.gate) {
       const next = hit.id === ID.Door || hit.id === ID.Gate ? (hit.id === ID.Door ? ID.DoorOpen : ID.GateOpen) : hit.id === ID.DoorOpen ? ID.Door : ID.Gate;

@@ -558,3 +558,13 @@ DO NOT TOUCH:
 
 ### Next move
 - Ready for next unclaimed.
+
+### 2026-10-25 — Grok (right-click pumpkin/melon)
+- No new UNCLAIMED after bone meal (already done).
+- Claimed a small farming gap: right-click a grown pumpkin or melon to harvest 4 slices.
+- useBlock only. Wheat and vegetable harvests unchanged.
+- Files: game.ts.
+- Logged.
+
+### Next move
+- Ready for next unclaimed.
