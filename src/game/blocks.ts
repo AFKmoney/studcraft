@@ -225,6 +225,9 @@ export const ID = {
   Banner: 223,
   Lead: 224,
   EndCrystal: 225,
+  Carrot: 226,
+  Potato: 227,
+  Beetroot: 228,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -849,6 +852,9 @@ item(ID.Clock, "Clock", "#f0c43a");
 item(ID.Map, "Map", "#c4924a");
 put(b(ID.Banner, "Banner", "#e23b2f", "#f25a46", "#c43228", "#8a221c", { hard: 0.4 }));
 item(ID.Lead, "Lead", "#f4f1ea");
+item(ID.Carrot, "Carrot", "#f07820", { food: 3 });
+item(ID.Potato, "Potato", "#c4924a", { food: 1 });
+item(ID.Beetroot, "Beetroot", "#b02620", { food: 1 });
 
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];

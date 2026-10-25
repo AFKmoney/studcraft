@@ -5,6 +5,7 @@
 **Last update:** 2026-10-25 (clock speaks the day; banner places). Icon batch above is still in progress — do not redo public/icons.
 
 ### Lego Product Icons (IN PROGRESS → INTEGRATING)
+- Added missing classic foods: Carrot (226), Potato (227), Beetroot (228) with food values.
 - Unique isometric Lego product photos generated for full item list (zero duplicates).
 - Batch integrated into public/icons/ and mapped to correct ID.xxx in icons.tsx.
 - Added mappings: Apple, Bread, Bow, Bone, Bottle, Compass + previous batch.
