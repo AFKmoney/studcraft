@@ -10,3 +10,15 @@ dist
 .env
 .env.*
 .DS_Store
+
+# Standalone game builds (Muse, 2026-10-24)
+dist-game
+dist-apk
+apk/build
+*.keystore
+qa*.mjs
+probe.mjs
+report.mjs
+dig.mjs
+place*.mjs
+fps.mjs
