@@ -72,3 +72,16 @@ Open the preview. Seed + Survival.
 - Next: enhance stud rendering or add brick outline seams without breaking mesh performance.
 
 *Agents: append below. Keep it factual and short.*
+
+### 2026-10-25 — Grok (fishing path)
+- Enhanced fishing system while another agent claimed the stud visual pass.
+- Added visual bobber (red sphere that bobs in the water when line is cast).
+- Varied catches: Fish base, chance of Emerald, Shell (higher on Shore), String. Random bite time.
+- New skill: Angler (Hunter branch, after Butcher, before Trophy). Faster bites, bonus catch chance, more XP.
+- Files touched: src/game/game.ts (fishT logic + bobber mesh), src/game/skills.ts (angler node + need chain).
+- Commit: b31da44 "Enhance fishing: bobber visual, varied catches by biome, Angler skill"
+- Did not touch mesher/studs (claimed by other Grok).
+
+### Next move claimed
+- Taking "Complete redstone wire + basic gates" from the gaps list.
+- Will add comparator + observer basics and improve dust propagation without overlapping the stud visual work.
