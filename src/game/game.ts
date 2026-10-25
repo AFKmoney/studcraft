@@ -123,7 +123,6 @@ export type GameApi = {
   copySeed: () => void;
   readonly slots: WorldSlot[];
   press: (id: number) => void;
-  shiftStack: (id: number) => void;
   setSens: (n: number) => void;
   setRadius: (n: number) => void;
   setSound: (on: boolean) => void;
@@ -4092,26 +4091,6 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       }
       hotbar[slot] = id;
       cursor = id;
-      emit();
-    },
-    shiftStack(id: number) {
-      if (!id) return;
-      const inHot = hotbar.indexOf(id);
-      if (inHot >= 0) {
-        // move from hotbar to bag (clear slot)
-        hotbar[inHot] = 0;
-        say("Moved to bin");
-      } else {
-        // move from bag to hotbar
-        if (!creative && (inv[id] ?? 0) <= 0) {
-          say("None in bin");
-          return;
-        }
-        const empty = hotbar.indexOf(0);
-        const target = empty >= 0 ? empty : slot;
-        hotbar[target] = id;
-        say("Moved to bar");
-      }
       emit();
     },
     hold(id) {
