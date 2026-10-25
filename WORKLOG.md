@@ -5,10 +5,11 @@
 **Last update:** 2026-10-25 (clock speaks the day; banner places). Icon batch above is still in progress — do not redo public/icons.
 
 ### Lego Product Icons (IN PROGRESS → INTEGRATING)
-- Generated unique isometric Lego product photos (white background, studs) for all named items (tools, food, materials, potions, gems, etc.).
-- Zero duplicates. Coverage of the item() list complete.
-- First batch copied to public/icons/ and mapped in src/game/icons.tsx (IMAGE_ICONS). Fallback SVG remains.
-- Next: finish copying remaining generated assets and expand mapping.
+- Unique isometric Lego product photos generated for full item list (zero duplicates).
+- Batch integrated into public/icons/ and mapped to correct ID.xxx in icons.tsx.
+- Added mappings: Apple, Bread, Bow, Bone, Bottle, Compass + previous batch.
+- Fallback SVG remains for unmapped.
+- Next: continue copying remaining generated assets and expand mapping to full coverage.
 
 ## Current State (as of clone @ 4c08b46)
 

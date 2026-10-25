@@ -13,6 +13,12 @@ const IMAGE_ICONS: Record<number, string> = {
   [ID.RawMeat]: "/icons/meat.jpg",
   [ID.Fish]: "/icons/fish.jpg",
   [ID.Bucket]: "/icons/bucket.jpg",
+  [ID.Apple]: "/icons/apple.jpg",
+  [ID.Bread]: "/icons/bread.jpg",
+  [ID.Bow]: "/icons/bow.jpg",
+  [ID.Bone]: "/icons/bone.jpg",
+  [ID.Bottle]: "/icons/bottle.jpg",
+  [ID.Compass]: "/icons/compass.jpg",
   [ID.Pelt]: "/icons/pelt.jpg",
   [ID.Pie]: "/icons/pie.jpg",
   [ID.Prism]: "/icons/prism.jpg",
@@ -25,7 +31,7 @@ const IMAGE_ICONS: Record<number, string> = {
   [ID.Shell]: "/icons/shell.jpg",
   [ID.Flint]: "/icons/spark.jpg",
   [ID.Tome]: "/icons/tome.jpg",
-  // more Lego product icons added as generated (no duplicates)
+  // more unique Lego product icons mapped as assets are added (no duplicates)
 };
 
 export function ItemIcon({ id, muted = false }: { id: number; muted?: boolean }) {
