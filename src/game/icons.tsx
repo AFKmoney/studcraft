@@ -112,6 +112,17 @@ const IMAGE_ICONS: Record<number, string> = {
   [ID.Clay]: "/icons/clay.jpg",
   [ID.Moss]: "/icons/moss.jpg",
   [ID.Bedrock]: "/icons/bedrock.jpg",
+    [ID.Cobble]: "/icons/cobble.jpg",
+  [ID.IronOre]: "/icons/ironore.jpg",
+  [ID.IronBlock]: "/icons/ironblock.jpg",
+  [ID.Bench]: "/icons/bench.jpg",
+  [ID.Door]: "/icons/door.jpg",
+  [ID.Bed]: "/icons/bed.jpg",
+  [ID.Farmland]: "/icons/farmland.jpg",
+  [ID.Lamp]: "/icons/lamp.jpg",
+  [ID.Piston]: "/icons/piston.jpg",
+  [ID.TNT]: "/icons/tnt.jpg",
+  [ID.Hard]: "/icons/hard.jpg",
   // more unique Lego product icons mapped as assets are added (no duplicates)
 };
 

@@ -20,6 +20,8 @@
 - Added new blocks: Basalt (229), Calcite (230), Tuff (231).
 - Assets placed in public/icons/.
 - Next: more block icons + world gen integration for the new blocks.
+- Added more block icons (Cobble, IronOre, IronBlock, Bench, Door, Bed, Farmland, Lamp, Piston, TNT, Hard…).
+- Rare Basalt/Calcite/Tuff placed in world gen.
 
 ### Lego Product Icons (IN PROGRESS)
 - Unique isometric Lego product photos generated for items (zero duplicates).
