@@ -45,6 +45,7 @@ export type SaveV1 = {
   spell?: number;
   seedText?: string;
   pets?: { x: number; z: number }[];
+  fluids?: [number, number, number, number][];
 };
 
 export type SettingsSave = {

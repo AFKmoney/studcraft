@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { ATLAS_COLS, ATLAS_ROWS, BLOCKS, ID, TILE, type BlockDef } from "./blocks";
+import { ATLAS_COLS, ATLAS_ROWS, BLOCKS, ID, TILE, faceTile, type BlockDef } from "./blocks";
 
 function shade(hex: string, amt: number): string {
   const n = parseInt(hex.slice(1), 16);
@@ -260,8 +260,9 @@ export function buildAtlas(): BrickAtlases {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   for (const block of BLOCKS) {
     if (!block) continue;
-    for (let face = 0; face < 4; face++) {
-      const tile = block.id * 4 + face;
+    for (const face of [0, 1, 2, 3] as const) {
+      const tile = faceTile(block.id, face);
+      if (!tile) continue;
       const col = tile % ATLAS_COLS;
       const row = Math.floor(tile / ATLAS_COLS);
       if (row >= ATLAS_ROWS) continue;
@@ -285,8 +286,9 @@ export function buildAtlas(): BrickAtlases {
   const normalPx = nctx.createImageData(rw, rh);
   for (const block of BLOCKS) {
     if (!block) continue;
-    for (let face = 0; face < 4; face++) {
-      const tile = block.id * 4 + face;
+    for (const face of [0, 1, 2, 3] as const) {
+      const tile = faceTile(block.id, face);
+      if (!tile) continue;
       const col = tile % ATLAS_COLS;
       const row = Math.floor(tile / ATLAS_COLS);
       if (row >= ATLAS_ROWS) continue;

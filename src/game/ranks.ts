@@ -145,4 +145,8 @@ export const MOB_XP: Record<string, number> = {
   slime: 3,
   wolf: 3,
   golem: 8,
+  enderman: 8,
+  witch: 7,
+  blaze: 10,
+  drowned: 6,
 };

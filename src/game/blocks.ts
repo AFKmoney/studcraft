@@ -192,6 +192,9 @@ export const ID = {
   WaxSeal: 190,
   IceSheet: 191,
   GravelBar: 192,
+  RedTorch: 193,
+  RedTorchOn: 194,
+  Repeater: 195,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -713,17 +716,66 @@ BLOCKS[ID.Gold].drop = ID.Gold;
 BLOCKS[ID.Diamond].need = 3;
 BLOCKS[ID.Sand].fall = true;
 
+put(
+  b(ID.RedTorch, "Red torch", "#e23b2f", "#f25a46", "#6b3e22", "#4e2c18", {
+    solid: false,
+    hard: 0.05,
+    torch: true,
+  }),
+);
+put(
+  b(ID.RedTorchOn, "Lit red torch", "#ff5a4a", "#ffe14a", "#e23b2f", "#6b3e22", {
+    solid: false,
+    placeable: false,
+    hard: 0.05,
+    torch: true,
+    light: 0.55,
+    drop: ID.RedTorch,
+  }),
+);
+put(
+  b(ID.Repeater, "Repeater", "#8e959c", "#e23b2f", "#6e645c", "#4a4038", {
+    solid: false,
+    hard: 0.2,
+    dust: true,
+  }),
+);
+
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];
-}
-
-export function faceTile(id: number, face: 0 | 1 | 2 | 3): number {
-  return id * 4 + face;
 }
 
 export const ATLAS_COLS = 16;
 export const ATLAS_ROWS = 32;
 export const TILE = 128;
+
+const TILE_OF = new Uint16Array(512);
+let tileSlot = 0;
+for (let id = 1; id < BLOCKS.length; id++) {
+  const block = BLOCKS[id];
+  if (!block) continue;
+  const drawn =
+    block.placeable ||
+    block.fluid ||
+    block.solid ||
+    block.plant ||
+    block.glass ||
+    block.torch ||
+    block.dust ||
+    block.lever ||
+    block.door ||
+    block.gate ||
+    block.plate ||
+    block.rail ||
+    block.cactus ||
+    block.ladder;
+  if (!drawn) continue;
+  TILE_OF[id] = ++tileSlot;
+}
+
+export function faceTile(id: number, face: 0 | 1 | 2 | 3): number {
+  return (TILE_OF[id] || 0) * 4 + face;
+}
 
 export const CATALOG = [
   ID.Grass,
@@ -811,6 +863,8 @@ export const CATALOG = [
   ID.Dust,
   ID.Lever,
   ID.Piston,
+  ID.RedTorch,
+  ID.Repeater,
   ID.Hard,
   ID.Farmland,
   ID.Red,

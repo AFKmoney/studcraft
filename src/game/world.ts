@@ -2,9 +2,15 @@ import { BLOCKS, ID, def } from "./blocks";
 import { hash2, hash3, makeNoise, type Noise } from "./noise";
 
 export const CS = 16;
-export const HEIGHT = 48;
-export const SEA = 16;
+export const HEIGHT = 72;
+export const SEA = 26;
 export const REGION = 192;
+export const NETHER_X0 = 20000;
+export const NETHER_X1 = 24000;
+
+export function inNether(x: number) {
+  return x >= NETHER_X0 && x < NETHER_X1;
+}
 
 export type HamletSite = { x: number; z: number; y: number };
 
@@ -36,15 +42,24 @@ export class World {
 
   heightAt(x: number, z: number): number {
     if (this.flat) return 4;
-    const e = this.noise.fbm(x * 0.006, z * 0.006);
-    const h = this.noise.fbm(x * 0.02 + 40, z * 0.02);
-    const ridge = Math.abs(this.noise.fbm(x * 0.012, z * 0.012 + 80) * 2 - 1);
-    const base = 8 + e * 16 + h * h * 8 + (1 - ridge) * 3;
-    return Math.max(5, Math.min(HEIGHT - 10, Math.floor(base)));
+    if (inNether(x)) return this.netherFloor(x, z);
+    const e = this.noise.fbm(x * 0.005, z * 0.005);
+    const h = this.noise.fbm(x * 0.016 + 40, z * 0.016);
+    const ridge = Math.abs(this.noise.fbm(x * 0.01, z * 0.01 + 80) * 2 - 1);
+    const base = 12 + e * 26 + h * h * 16 + (1 - ridge) * 6;
+    return Math.max(8, Math.min(HEIGHT - 8, Math.floor(base)));
+  }
+
+  netherFloor(x: number, z: number): number {
+    const n = this.noise.fbm((x - NETHER_X0) * 0.016, z * 0.016);
+    const low = this.noise.fbm((x - NETHER_X0) * 0.004 + 8, z * 0.004);
+    if (low < 0.42) return 14;
+    return 20 + Math.floor(n * 12);
   }
 
   biomeAt(x: number, z: number): string {
     if (this.flat) return "Baseplate";
+    if (inNether(x)) return "Nether";
     return this.biomeOf(x, z, this.heightAt(x, z));
   }
 
@@ -52,8 +67,8 @@ export class World {
     if (h <= SEA) return "Shore";
     const wet = this.noise.fbm(x * 0.008 + 200, z * 0.008);
     const heat = this.noise.fbm(x * 0.007 + 20, z * 0.009 + 400);
-    if (h >= 28 || (h >= 24 && heat < 0.46)) return "Snow cap";
-    if (h <= SEA + 3 && wet > 0.57) return "Fen";
+    if (h >= 50 || (h >= 44 && heat < 0.46)) return "Snow cap";
+    if (h <= SEA + 4 && wet > 0.57) return "Fen";
     if (heat > 0.64 && wet < 0.46) return "Ash ridge";
     if (wet > 0.62) return "Grove";
     if (wet < 0.38) return "Sand flats";
@@ -61,6 +76,7 @@ export class World {
   }
 
   private generate(cx: number, cz: number): Uint8Array {
+    if (!this.flat && inNether(cx * CS)) return this.generateNether(cx, cz);
     const data = new Uint8Array(CS * HEIGHT * CS);
     const baseX = cx * CS;
     const baseZ = cz * CS;
@@ -103,33 +119,49 @@ export class World {
           else if (y >= h - 3) id = fill;
           else {
             id = ID.Stone;
-            if (y > 2 && y < h - 2) {
-              const c = this.noise.noise3(x * 0.08, y * 0.11, z * 0.08);
-              if (c > 0.78) id = ID.Air;
+            if (y > 4 && y < h - 5) {
+              const c = this.noise.noise3(x * 0.07, y * 0.09, z * 0.07);
+              if (c > 0.73) id = ID.Air;
             }
             if (id === ID.Stone) {
               const o = hash3(x, y, z, this.seed);
-              if (y < 12 && o > 0.997) id = ID.Diamond;
-              else if (y < 22 && o > 0.993) id = ID.Gold;
-              else if (y < 40 && o > 0.984) id = ID.IronOre;
+              if (y < 16 && o > 0.997) id = ID.Diamond;
+              else if (y < 30 && o > 0.993) id = ID.Gold;
+              else if (y < 52 && o > 0.984) id = ID.IronOre;
               else if (o > 0.968) id = ID.Coal;
-              if (id === ID.Stone && y < 6 && hash3(x, y, z, this.seed + 11) > 0.992) id = ID.Hard;
-              if (id === ID.Stone && y < 30 && hash3(x, y, z, this.seed + 3) > 0.996) id = ID.EmeraldOre;
-              if (id === ID.Stone && y >= 8 && y <= 38 && hash3(x, y, z, this.seed + 71) > 0.9952) id = ID.TinOre;
-              else if (id === ID.Stone && y >= 6 && y <= 30 && hash3(x, y, z, this.seed + 72) > 0.9964) id = ID.CopperOre;
-              else if (id === ID.Stone && y >= 4 && y <= 20 && hash3(x, y, z, this.seed + 73) > 0.998) id = ID.AmberOre;
-              else if (id === ID.Stone && y >= 2 && y <= 14 && hash3(x, y, z, this.seed + 74) > 0.9986) id = ID.ChromeOre;
-              else if (id === ID.Stone && y >= 2 && y <= 11 && hash3(x, y, z, this.seed + 75) > 0.999) id = ID.SapphireOre;
-              else if (id === ID.Stone && y >= 2 && y <= 7 && hash3(x, y, z, this.seed + 76) > 0.99935) id = ID.PrismOre;
-              else if (id === ID.Stone && y >= 3 && y <= 8 && hash3(x, y, z, this.seed + 78) > 0.9992) id = ID.ResinOre;
-              else if (id === ID.Stone && y >= 4 && y <= 18 && hash3(x, y, z, this.seed + 81) > 0.9988) id = ID.CrystalOre;
+              if (id === ID.Stone && y < 8 && hash3(x, y, z, this.seed + 11) > 0.992) id = ID.Hard;
+              if (id === ID.Stone && y < 36 && hash3(x, y, z, this.seed + 3) > 0.996) id = ID.EmeraldOre;
+              if (id === ID.Stone && y >= 10 && y <= 48 && hash3(x, y, z, this.seed + 71) > 0.9952) id = ID.TinOre;
+              else if (id === ID.Stone && y >= 8 && y <= 40 && hash3(x, y, z, this.seed + 72) > 0.9964) id = ID.CopperOre;
+              else if (id === ID.Stone && y >= 6 && y <= 28 && hash3(x, y, z, this.seed + 73) > 0.998) id = ID.AmberOre;
+              else if (id === ID.Stone && y >= 3 && y <= 18 && hash3(x, y, z, this.seed + 74) > 0.9986) id = ID.ChromeOre;
+              else if (id === ID.Stone && y >= 2 && y <= 14 && hash3(x, y, z, this.seed + 75) > 0.999) id = ID.SapphireOre;
+              else if (id === ID.Stone && y >= 2 && y <= 10 && hash3(x, y, z, this.seed + 76) > 0.99935) id = ID.PrismOre;
+              else if (id === ID.Stone && y >= 4 && y <= 12 && hash3(x, y, z, this.seed + 78) > 0.9992) id = ID.ResinOre;
+              else if (id === ID.Stone && y >= 6 && y <= 24 && hash3(x, y, z, this.seed + 81) > 0.9988) id = ID.CrystalOre;
             }
-            if (id === ID.Stone && y > 4 && y < h - 4) {
-              const c2 = this.noise.noise3(x * 0.045 + 9, y * 0.06, z * 0.045);
-              if (c2 > 0.84) id = ID.Air;
+            if (id === ID.Stone && y > 6 && y < h - 5) {
+              const c2 = this.noise.noise3(x * 0.04 + 9, y * 0.05, z * 0.04);
+              if (c2 > 0.8) id = ID.Air;
             }
           }
           data[idx(lx, y, lz)] = id;
+        }
+      }
+    }
+
+    if (!this.flat) {
+      this.carveWorms(data, baseX, baseZ);
+      this.carveRavines(data, baseX, baseZ);
+      for (let lz = 0; lz < CS; lz++) {
+        for (let lx = 0; lx < CS; lx++) {
+          const x = baseX + lx;
+          const z = baseZ + lz;
+          if (this.heightAt(x, z) > SEA) continue;
+          for (let y = 2; y <= SEA; y++) {
+            const i = idx(lx, y, lz);
+            if (data[i] === ID.Air) data[i] = ID.Water;
+          }
         }
       }
     }
@@ -205,6 +237,150 @@ export class World {
 
     this.paintCellar(data, baseX, baseZ);
     this.paintHamlet(data, baseX, baseZ);
+    this.paintGate(data, baseX, baseZ);
+    this.chunks.set(this.ck(cx, cz), data);
+    return data;
+  }
+
+  private carveWorms(data: Uint8Array, baseX: number, baseZ: number) {
+    const step = 28;
+    const x0 = Math.floor((baseX - 80) / step) * step;
+    const z0 = Math.floor((baseZ - 80) / step) * step;
+    const at = (x: number, y: number, z: number) => {
+      if (x < baseX || x >= baseX + CS || z < baseZ || z >= baseZ + CS || y < 2 || y >= HEIGHT - 2) return -1;
+      return x - baseX + (z - baseZ) * CS + y * CS * CS;
+    };
+    for (let oz = z0; oz <= baseZ + CS + 80; oz += step) {
+      for (let ox = x0; ox <= baseX + CS + 80; ox += step) {
+        if (hash2(ox, oz, this.seed + 917) > 0.42) continue;
+        let x = ox + 4 + hash2(ox, oz, this.seed + 918) * (step - 8);
+        let z = oz + 4 + hash2(ox, oz, this.seed + 919) * (step - 8);
+        let y = 8 + hash2(ox, oz, this.seed + 920) * 36;
+        let yaw = hash2(ox, oz, this.seed + 921) * Math.PI * 2;
+        let pitch = (hash2(ox, oz, this.seed + 922) - 0.5) * 0.35;
+        const len = 42 + Math.floor(hash2(ox, oz, this.seed + 923) * 28);
+        for (let s = 0; s < len; s++) {
+          yaw += (hash3(ox, s, oz, this.seed + 924) - 0.5) * 0.9;
+          pitch += (hash3(ox + 3, s, oz, this.seed + 925) - 0.5) * 0.22;
+          if (pitch > 0.45) pitch = 0.45;
+          if (pitch < -0.45) pitch = -0.45;
+          x += Math.cos(yaw) * 1.25;
+          z += Math.sin(yaw) * 1.25;
+          y += Math.sin(pitch) * 0.85;
+          const ix = Math.floor(x);
+          const iz = Math.floor(z);
+          const ceiling = this.heightAt(ix, iz) - 4;
+          if (y > ceiling) y = ceiling;
+          if (y < 4) y = 4;
+          const iy = Math.floor(y);
+          const roll = hash3(ox, s, oz, this.seed + 926);
+          const rad = roll > 0.86 ? 3 : roll > 0.5 ? 2 : 1;
+          for (let dy = -rad; dy <= rad; dy++) {
+            for (let dz = -rad; dz <= rad; dz++) {
+              for (let dx = -rad; dx <= rad; dx++) {
+                if (dx * dx + dy * dy + dz * dz > rad * rad + 0.2) continue;
+                const cx = ix + dx;
+                const cy = iy + dy;
+                const cz = iz + dz;
+                if (cy >= this.heightAt(cx, cz) - 3) continue;
+                const i = at(cx, cy, cz);
+                if (i < 0) continue;
+                const cur = data[i];
+                if (cur === ID.Bedrock || cur === ID.Air || cur === ID.Water || cur === ID.Lava) continue;
+                data[i] = ID.Air;
+              }
+            }
+          }
+          if (s === len - 1 && iy < 12) {
+            const i = at(ix, iy, iz);
+            if (i >= 0 && data[i] === ID.Air) data[i] = ID.Lava;
+          }
+        }
+      }
+    }
+  }
+
+  private carveRavines(data: Uint8Array, baseX: number, baseZ: number) {
+    const step = 56;
+    const x0 = Math.floor((baseX - 48) / step) * step;
+    const z0 = Math.floor((baseZ - 48) / step) * step;
+    const at = (x: number, y: number, z: number) => {
+      if (x < baseX || x >= baseX + CS || z < baseZ || z >= baseZ + CS || y < 2 || y >= HEIGHT - 2) return -1;
+      return x - baseX + (z - baseZ) * CS + y * CS * CS;
+    };
+    for (let oz = z0; oz <= baseZ + CS; oz += step) {
+      for (let ox = x0; ox <= baseX + CS; ox += step) {
+        if (hash2(ox, oz, this.seed + 640) > 0.78) continue;
+        let x = ox + step * 0.5;
+        let z = oz + step * 0.5;
+        let yaw = hash2(ox, oz, this.seed + 641) * Math.PI * 2;
+        const len = 40;
+        for (let s = 0; s < len; s++) {
+          yaw += (hash3(ox, s, oz, this.seed + 642) - 0.5) * 0.28;
+          x += Math.cos(yaw) * 1.35;
+          z += Math.sin(yaw) * 1.35;
+          const ix = Math.floor(x);
+          const iz = Math.floor(z);
+          const open = hash2(ox, oz, this.seed + 643) > 0.45;
+          const top = this.heightAt(ix, iz) - (open ? 0 : 4);
+          for (let y = 8; y <= top; y++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              const i = at(ix + dx, y, iz);
+              if (i < 0) continue;
+              const cur = data[i];
+              if (cur === ID.Bedrock || cur === ID.Water || cur === ID.Lava) continue;
+              data[i] = ID.Air;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  private generateNether(cx: number, cz: number): Uint8Array {
+    const data = new Uint8Array(CS * HEIGHT * CS);
+    const baseX = cx * CS;
+    const baseZ = cz * CS;
+    const idx = (lx: number, y: number, lz: number) => lx + lz * CS + y * CS * CS;
+    const ceil = 56;
+    const lava = 16;
+    for (let lz = 0; lz < CS; lz++) {
+      for (let lx = 0; lx < CS; lx++) {
+        const x = baseX + lx;
+        const z = baseZ + lz;
+        const floor = this.netherFloor(x, z);
+        for (let y = 0; y < HEIGHT; y++) {
+          let id: number = ID.Air;
+          if (y === 0 || y === HEIGHT - 1) id = ID.Bedrock;
+          else if (y < floor) {
+            id = ID.Netherrack;
+            const o = hash3(x, y, z, this.seed + 90);
+            if (y > 2 && o > 0.993) id = ID.ResinOre;
+            else if (y > 2 && o > 0.986) id = ID.Gold;
+          } else if (y === floor) id = hash2(x, z, this.seed + 5) > 0.84 ? ID.Soul : ID.Netherrack;
+          else if (y <= lava) id = ID.Lava;
+          else if (y >= ceil) id = ID.Netherrack;
+          data[idx(lx, y, lz)] = id;
+        }
+        if (hash2(x, z, this.seed + 33) > 0.975) {
+          data[idx(lx, ceil - 1, lz)] = ID.LampOn;
+          if (lx + 1 < CS) data[idx(lx + 1, ceil - 1, lz)] = ID.LampOn;
+        }
+      }
+    }
+    const ax = Math.floor(baseX / 72) * 72 + 36;
+    const az = Math.floor(baseZ / 72) * 72 + 36;
+    if (hash2(ax, az, this.seed + 300) < 0.5) {
+      for (let x = ax - 18; x <= ax + 18; x++) {
+        for (let z = az - 2; z <= az + 2; z++) this.force(data, baseX, baseZ, x, 30, z, ID.Hard);
+      }
+      for (let z = az - 18; z <= az + 18; z++) {
+        for (let x = ax - 2; x <= ax + 2; x++) this.force(data, baseX, baseZ, x, 30, z, ID.Hard);
+      }
+      this.force(data, baseX, baseZ, ax, 31, az, ID.Chest);
+      this.force(data, baseX, baseZ, ax + 3, 31, az, ID.Lava);
+      this.force(data, baseX, baseZ, ax, 31, az + 3, ID.ResinOre);
+    }
     this.chunks.set(this.ck(cx, cz), data);
     return data;
   }
@@ -281,6 +457,41 @@ export class World {
       }
     }
     return best;
+  }
+
+  private paintGate(data: Uint8Array, baseX: number, baseZ: number) {
+    if (this.flat) return;
+    const site = this.hamletAt(0, 0);
+    if (!site) return;
+    let gx = 0;
+    let gz = 0;
+    let ground = 0;
+    let found = false;
+    for (let dz = 0; dz <= 20 && !found; dz += 4) {
+      for (let dx = 34; dx <= 72 && !found; dx += 4) {
+        const h = this.heightAt(site.x + dx, site.z + dz);
+        if (h > SEA + 2 && h < HEIGHT - 8) {
+          gx = site.x + dx;
+          gz = site.z + dz;
+          ground = h;
+          found = true;
+        }
+      }
+    }
+    if (!found) return;
+    if (gx + 3 < baseX || gx >= baseX + CS || gz < baseZ || gz >= baseZ + CS) return;
+    for (let dy = 1; dy <= 5; dy++) {
+      for (let dx = 0; dx <= 3; dx++) {
+        const edge = dx === 0 || dx === 3 || dy === 1 || dy === 5;
+        this.force(data, baseX, baseZ, gx + dx, ground + dy, gz, edge ? ID.Obsidian : ID.Portal);
+      }
+    }
+    for (let dy = 1; dy <= 4; dy++) {
+      this.force(data, baseX, baseZ, gx + 1, ground + dy, gz + 1, ID.Air);
+      this.force(data, baseX, baseZ, gx + 2, ground + dy, gz + 1, ID.Air);
+      this.force(data, baseX, baseZ, gx + 1, ground + dy, gz - 1, ID.Air);
+      this.force(data, baseX, baseZ, gx + 2, ground + dy, gz - 1, ID.Air);
+    }
   }
 
   private paintCellar(data: Uint8Array, baseX: number, baseZ: number) {
