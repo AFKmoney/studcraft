@@ -47,6 +47,9 @@ const IMAGE_ICONS: Record<number, string> = {
   [ID.Horn]: "/icons/horn.jpg",
   [ID.Lead]: "/icons/lead.jpg",
   [ID.Slime]: "/icons/slime.jpg",
+  [ID.PotionHeal]: "/icons/potion_heal.jpg",
+  [ID.PotionSpeed]: "/icons/potion_speed.jpg",
+  [ID.Gapple]: "/icons/gapple.jpg",
 
   // more unique Lego product icons mapped as assets are added (no duplicates)
 };

@@ -2,7 +2,16 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (crystals shield the dragon; item defs 221–224 restored)
+**Last update:** 2026-10-25 (Lego product icons integration ongoing)
+
+### Lego Product Icons (IN PROGRESS)
+- Unique isometric Lego product photos generated for items (zero duplicates).
+- Integrated into public/icons/ and mapped via IMAGE_ICONS in icons.tsx.
+- Current coverage: tools, food (apple, bread, carrot, potato, beetroot, pie, stew, honey, cookie, egg, milk…), materials, potions, gems, etc.
+- Fallback SVG remains for unmapped.
+- Last cycle: Horn, Lead, Slime + replacements for carrot/potato/beetroot.
+- Next: continue mapping remaining generated assets to full coverage.
+
 
 ## Current State (as of clone @ 4c08b46)
 
