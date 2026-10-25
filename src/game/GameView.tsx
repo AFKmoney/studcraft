@@ -193,6 +193,7 @@ function TitleScreen({
           <li>The world keeps going. Horizon in the pause menu is only how far bricks draw</li>
           <li>Hamlets repeat across the map. Traders show up when you walk into town</li>
           <li>Skills spend rank levels. Pause holds four mods. Q cycles spells when you hold a tome</li>
+          <li>Folk and beasts are built from studs. A bone tames a hound. Storms charge fuse bricks</li>
           <li>Hold to mine · place with the other click · E opens the bin</li>
         </ul>
         <p className="fine">

@@ -262,6 +262,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let oxygen = 10;
   let raining = false;
   let weatherIn = 50;
+  let strikeIn = 14;
+  let boltT = 0;
+  let golemWait = 0;
   let regenAcc = 0;
   let growAcc = 0;
   let lightAcc = 0;
@@ -529,6 +532,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   ghost.visible = false;
   scene.add(ghost);
 
+  const boltMat = skin(0xe7f6ff);
+  boltMat.emissive = new THREE.Color(0xd6f4ff);
+  const bolt = new THREE.Mesh(new THREE.BoxGeometry(0.16, 46, 0.16), boltMat);
+  bolt.visible = false;
+  bolt.userData.keepShadow = false;
+  scene.add(bolt);
+
   const brickMat = skin(0xe23b2f, { depthTest: false });
   const viewBrick = new THREE.Group();
   viewBrick.userData.keepShadow = false;
@@ -555,7 +565,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   scene.add(fig.group);
 
   type Mob = {
-    kind: "sheep" | "creeper" | "cow" | "walker" | "pig" | "chicken" | "spider" | "skelly" | "villager" | "ghast" | "dragon" | "horse" | "phantom" | "piglin" | "boat" | "cart" | "frog" | "fox" | "crab" | "wisp";
+    kind: "sheep" | "creeper" | "cow" | "walker" | "pig" | "chicken" | "spider" | "skelly" | "villager" | "ghast" | "dragon" | "horse" | "phantom" | "piglin" | "boat" | "cart" | "frog" | "fox" | "crab" | "wisp" | "slime" | "wolf" | "golem";
     x: number;
     y: number;
     z: number;
@@ -576,6 +586,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     homeX?: number;
     homeZ?: number;
     roam?: boolean;
+    size?: number;
+    charged?: boolean;
   };
   const mobs: Mob[] = [];
 
@@ -1062,6 +1074,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     });
     traderRole = "grocer";
     spawnSheep();
+    for (const pet of data.pets ?? []) {
+      const wolf = spawnKind("wolf", pet.x, pet.z);
+      wolf.tame = true;
+    }
     stream(narrow ? 6 : 10);
   }
 
@@ -1877,7 +1893,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const y = hit.y + hit.ny;
     const z = hit.z + hit.nz + 0.5;
     if (!creative) spend(hotbar[slot], 1);
-    const body = makeAnimal(kind === "boat" ? 0xc4924a : 0x8e959c, 0xf4f1ea, kind === "boat" ? 1.15 : 0.8);
+    const body = buildLego(kind, 1);
     const mob: Mob = {
       kind,
       x,
@@ -2273,49 +2289,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   }
 
   function spawnSheep() {
-    for (const spot of sheepSpots) {
-      const y = groundY(spot.x, spot.z);
-      const sheep = makeAnimal(0xf4f1ea, 0x2a2a2a, 0.85);
-      const mob: Mob = {
-        kind: "sheep",
-        x: spot.x,
-        y,
-        z: spot.z,
-        yaw: Math.random() * Math.PI * 2,
-        hp: 3,
-        wander: 1,
-        fuse: 0,
-        cool: 0,
-        dead: false,
-        mesh: sheep.group,
-        legs: sheep.legs,
-      };
-      scene.add(sheep.group);
-      mobs.push(mob);
-    }
-    for (const spot of [
-      { x: sheepSpots[0]?.x ?? player.x + 6, z: (sheepSpots[0]?.z ?? player.z) - 4 },
-      { x: player.x - 5, z: player.z - 2 },
-    ]) {
-      const y = groundY(spot.x, spot.z);
-      const cow = makeAnimal(0x8d5a34, 0xf4f1ea, 1.05);
-      const mob: Mob = {
-        kind: "cow",
-        x: spot.x,
-        y,
-        z: spot.z,
-        yaw: Math.random() * Math.PI * 2,
-        hp: 5,
-        wander: 1,
-        fuse: 0,
-        cool: 0,
-        dead: false,
-        mesh: cow.group,
-        legs: cow.legs,
-      };
-      scene.add(cow.group);
-      mobs.push(mob);
-    }
+    for (const spot of sheepSpots) spawnKind("sheep", spot.x, spot.z);
+    const baseX = sheepSpots[0]?.x ?? player.x + 6;
+    const baseZ = sheepSpots[0]?.z ?? player.z;
+    spawnKind("cow", baseX, baseZ - 4);
+    spawnKind("cow", player.x - 5, player.z - 2);
     spawnKind("pig", player.x + 3, player.z - 5);
     spawnKind("chicken", player.x - 2, player.z + 6);
     spawnKind("chicken", player.x + 2, player.z + 7);
@@ -2323,6 +2301,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     spawnKind("frog", player.x + 6, player.z + 8);
     spawnKind("fox", player.x - 6, player.z - 7);
     spawnKind("crab", player.x + 11, player.z - 3);
+    spawnKind("wolf", player.x - 9, player.z + 9);
+    if (!settings.mods.peaceful) spawnKind("slime", player.x + 14, player.z + 5);
     spawnFolk();
   }
 
@@ -2333,6 +2313,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       mob.homeX = spot.x;
       mob.homeZ = spot.z;
       mob.bodyMat?.color.setHex(traderOf(spot.role).tint);
+    }
+    if (villageAt) {
+      const mob = spawnKind("golem", villageAt.x + 14.5, villageAt.z + 8.5);
+      mob.homeX = villageAt.x + 14.5;
+      mob.homeZ = villageAt.z + 8.5;
+      golemWait = 45;
     }
   }
 
@@ -2349,6 +2335,17 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const site = world.nearestHamlet(player.x, player.z, 2);
     if (!site) return;
     if (Math.hypot(site.x + 15 - player.x, site.z + 14 - player.z) > 72) return;
+    golemWait = Math.max(0, golemWait - 2.5);
+    const gx = site.x + 14.5;
+    const gz = site.z + 8.5;
+    const hasGolem = mobs.some((m) => m.kind === "golem" && !m.dead && Math.hypot(m.x - gx, m.z - gz) < 48);
+    if (!hasGolem && golemWait <= 0) {
+      const mob = spawnKind("golem", gx, gz);
+      mob.homeX = gx;
+      mob.homeZ = gz;
+      mob.roam = true;
+      golemWait = 45;
+    }
     const live = mobs.filter((m) => m.kind === "villager" && !m.dead);
     if (live.length >= 21) return;
     for (const spot of folkLayout(site.x, site.z)) {
@@ -2364,59 +2361,40 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   }
 
   function spawnWalker(x: number, z: number) {
-    const y = groundY(x, z);
-    const body = makeAnimal(0x3d5c38, 0x1a120c, 1);
-    const mob: Mob = {
-      kind: "walker",
-      x,
-      y,
-      z,
-      yaw: 0,
-      hp: 8,
-      wander: 0.4,
-      fuse: 0,
-      cool: 0,
-      dead: false,
-      mesh: body.group,
-      legs: body.legs,
-    };
-    scene.add(body.group);
-    mobs.push(mob);
+    spawnKind("walker", x, z);
   }
 
   function spawnKind(kind: Mob["kind"], x: number, z: number, scale = 1) {
     const y = kind === "ghast" || kind === "dragon" || kind === "phantom" ? groundY(x, z) + (kind === "dragon" ? 6 : 4) : groundY(x, z);
-    const colors: Record<string, [number, number, number]> = {
-      sheep: [0xf4f1ea, 0x2a2a2a, 0.85],
-      cow: [0x8d5a34, 0xf4f1ea, 1.05],
-      pig: [0xf2a2c0, 0xe23b2f, 0.8],
-      chicken: [0xf4f1ea, 0xf07820, 0.55],
-      spider: [0x2a2a2a, 0xe23b2f, 0.7],
-      skelly: [0xf4f1ea, 0x2a2a2a, 1],
-      villager: [0x8d5a34, 0x3aaa4c, 1],
-      ghast: [0xf4f1ea, 0xe23b2f, 1.8],
-      dragon: [0x2a1848, 0x7a4ad4, 2.4],
-      horse: [0x6b3e22, 0xf4f1ea, 1.25],
-      phantom: [0x3d7ad4, 0x8ec8f5, 1.1],
-      piglin: [0xf2a2c0, 0xf0c43a, 1.05],
-      frog: [0x3aaa4c, 0xf0c43a, 0.55],
-      fox: [0xf07820, 0xf4f1ea, 0.7],
-      crab: [0xe23b2f, 0xf4f1ea, 0.5],
-      wisp: [0xb48cff, 0xf5c518, 0.65],
-      walker: [0x3d5c38, 0x1a120c, 1],
-      creeper: [0x3aaa4c, 0x16381c, 1.15],
-      boat: [0xc4924a, 0xf4f1ea, 1.1],
-      cart: [0x8e959c, 0xf4f1ea, 0.8],
-    };
-    const spec = colors[kind] ?? [0xf4f1ea, 0x2a2a2a, scale];
-    const body = makeAnimal(spec[0], spec[1], spec[2] * scale);
+    const body = buildLego(kind, scale);
     const mob: Mob = {
       kind,
       x,
       y,
       z,
       yaw: Math.random() * Math.PI * 2,
-      hp: kind === "dragon" ? 40 : kind === "ghast" ? 10 : kind === "walker" ? 8 : kind === "wisp" ? 6 : kind === "frog" || kind === "crab" ? 3 : 4,
+      hp:
+        kind === "dragon"
+          ? 40
+          : kind === "golem"
+            ? 24
+            : kind === "ghast"
+              ? 10
+              : kind === "slime"
+                ? scale < 0.5
+                  ? 2
+                  : scale < 0.8
+                    ? 4
+                    : 10
+                : kind === "walker" || kind === "wolf"
+                  ? 8
+                  : kind === "wisp"
+                    ? 6
+                    : kind === "cow"
+                      ? 5
+                      : kind === "frog" || kind === "crab" || kind === "sheep"
+                        ? 3
+                        : 4,
       wander: 1,
       fuse: 0,
       cool: 0,
@@ -2428,6 +2406,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       baby: 0,
       sheared: 0,
       tame: false,
+      size: kind === "slime" ? scale : 1,
     };
     scene.add(body.group);
     mobs.push(mob);
@@ -2439,6 +2418,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (mob.kind === "sheep" && held === ID.Shears && !(mob.sheared && mob.sheared > 0)) {
       dropItem(ID.White, 2, mob.x, mob.y + 0.5, mob.z);
       mob.sheared = 45;
+      mob.mesh.traverse((obj) => {
+        if (obj.userData.wool) obj.visible = false;
+      });
       wearHeld();
       say("Shorn");
       return;
@@ -2458,6 +2440,21 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (!creative) spend(ID.Bucket, 1);
       addInv(ID.Milk, 1);
       say("Milk");
+      return;
+    }
+    if (mob.kind === "wolf") {
+      if (!mob.tame && held === ID.Bone) {
+        if (!creative) spend(ID.Bone, 1);
+        mob.tame = true;
+        say("The hound follows");
+        saveDirty = true;
+        return;
+      }
+      say(mob.tame ? "Good hound" : "It wants a bone");
+      return;
+    }
+    if (mob.kind === "golem") {
+      say("The hamlet golem");
       return;
     }
     if (mob.kind === "horse") {
@@ -2490,26 +2487,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   }
 
   function spawnCreeper(x: number, z: number) {
-    const y = groundY(x, z);
-    const body = makeAnimal(0x3aaa4c, 0x16381c, 1.15);
-    body.bodyMat.emissive = new THREE.Color(0x000000);
-    const mob: Mob = {
-      kind: "creeper",
-      x,
-      y,
-      z,
-      yaw: 0,
-      hp: 6,
-      wander: 0.2,
-      fuse: 0,
-      cool: 0,
-      dead: false,
-      mesh: body.group,
-      legs: body.legs,
-      bodyMat: body.bodyMat,
-    };
-    scene.add(body.group);
-    mobs.push(mob);
+    spawnKind("creeper", x, z);
   }
 
   function killMob(mob: Mob) {
@@ -2550,9 +2528,17 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
                                     ? [ID.Scale]
                                     : mob.kind === "wisp"
                                       ? [ID.Wisp]
-                                      : mob.kind === "villager"
-                                ? [ID.Emerald]
-                                : [ID.Green];
+                                      : mob.kind === "slime"
+                                        ? (mob.size ?? 1) <= 0.5
+                                          ? [ID.Slime]
+                                          : []
+                                        : mob.kind === "wolf"
+                                          ? [ID.Bone]
+                                          : mob.kind === "golem"
+                                            ? [ID.Ingot]
+                                            : mob.kind === "villager"
+                                              ? [ID.Emerald]
+                                              : [ID.Green];
     if (!creative) {
       for (const drop of drops) dropItem(drop, 1, mob.x, mob.y + 0.4, mob.z);
       const trophy = skills.has("trophy");
@@ -2567,14 +2553,14 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (mob.kind === "wisp" && Math.random() < luck) extra.push(ID.Frost);
       if ((mob.kind === "creeper" || mob.kind === "ghast") && Math.random() < luck * 0.7) extra.push(ID.Cinder);
       if ((mob.kind === "skelly" || mob.kind === "walker") && Math.random() < luck * 0.45) extra.push(ID.Antler);
-      if ((skills.has("butcher") || settings.mods.generous) && (mob.kind === "sheep" || mob.kind === "cow" || mob.kind === "pig" || mob.kind === "fox" || mob.kind === "frog")) {
+      if ((skills.has("butcher") || settings.mods.generous) && (mob.kind === "sheep" || mob.kind === "cow" || mob.kind === "pig" || mob.kind === "fox" || mob.kind === "frog" || mob.kind === "wolf")) {
         extra.push(ID.RawMeat);
       }
       if (settings.mods.generous && (mob.kind === "frog" || mob.kind === "fox" || mob.kind === "crab" || mob.kind === "wisp")) extra.push(drops[0]);
       for (const drop of extra) dropItem(drop, 1, mob.x, mob.y + 0.7, mob.z);
     }
     if (mob.kind === "dragon") dragonUp = false;
-    burst(mob.x, mob.y + 0.5, mob.z, def(drops[0]).color, 12);
+    burst(mob.x, mob.y + 0.5, mob.z, drops.length ? def(drops[0]).color : "#3aaa4c", 12);
     audio.break();
     gainXp(MOB_XP[mob.kind] ?? 2);
     if (mob.kind === "walker" || mob.kind === "creeper" || mob.kind === "skelly") bumpQuest("kill", "host");
@@ -2583,11 +2569,18 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (mob.kind === "fox") bumpQuest("kill", "fox");
     if (mob.kind === "crab") bumpQuest("kill", "crab");
     if (mob.kind === "wisp") bumpQuest("kill", "wisp");
+    if (mob.kind === "slime") bumpQuest("kill", "slime");
+    if (mob.kind === "slime" && (mob.size ?? 1) > 0.5) {
+      const next = (mob.size ?? 1) * 0.62;
+      spawnKind("slime", mob.x + 0.45, mob.z + 0.2, next);
+      spawnKind("slime", mob.x - 0.45, mob.z - 0.2, next);
+    }
+    if (mob.kind === "golem") golemWait = 45;
     saveDirty = true;
   }
 
-  function explode(x: number, y: number, z: number) {
-    const r = 3;
+  function explode(x: number, y: number, z: number, rad = 3) {
+    const r = rad;
     for (let dy = -r; dy <= r; dy++) {
       for (let dz = -r; dz <= r; dz++) {
         for (let dx = -r; dx <= r; dx++) {
@@ -2615,6 +2608,41 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     shake = 0.55;
     audio.explode();
     saveDirty = true;
+  }
+
+  function lightning() {
+    const a = Math.random() * Math.PI * 2;
+    const dist = 7 + Math.random() * 18;
+    const x = player.x + Math.cos(a) * dist;
+    const z = player.z + Math.sin(a) * dist;
+    const y = groundY(x, z);
+    bolt.position.set(x, y + 22, z);
+    bolt.visible = true;
+    boltT = 0.18;
+    flash = Math.max(flash, 0.55);
+    audio.explode();
+    if (Math.hypot(player.x - x, player.z - z) < 3.4) hurt(5);
+    const turned: Mob[] = [];
+    for (const m of mobs) {
+      if (m.dead) continue;
+      if (Math.hypot(m.x - x, m.z - z) > 3.2) continue;
+      if (m.kind === "creeper") {
+        m.charged = true;
+        m.bodyMat?.emissive.setHex(0x7ee0ff);
+        say("Charged fuse");
+      } else if (m.kind === "pig") turned.push(m);
+      else if (m.kind !== "golem" && m.kind !== "villager" && !(m.kind === "wolf" && m.tame)) {
+        m.hp -= 4;
+        if (m.hp <= 0) killMob(m);
+      }
+    }
+    for (const m of turned) {
+      if (m.dead) continue;
+      m.dead = true;
+      scene.remove(m.mesh);
+      spawnWalker(m.x, m.z);
+      say("The stud changed");
+    }
   }
 
   function updateMobs(dt: number) {
@@ -2666,9 +2694,17 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           const [x, z] = spot();
           spawnKind("frog", x, z);
         }
+        if (!settings.mods.peaceful && (biome === "Fen" || biome === "Brick plains") && alive("slime") < 2) {
+          const [x, z] = spot();
+          spawnKind("slime", x, z);
+        }
         if ((biome === "Grove" || biome === "Brick plains") && alive("fox") < 2) {
           const [x, z] = spot();
           spawnKind("fox", x, z);
+        }
+        if ((biome === "Grove" || biome === "Brick plains") && alive("wolf") < 2) {
+          const [x, z] = spot();
+          spawnKind("wolf", x, z);
         }
         if ((biome === "Shore" || biome === "Sand flats" || biome === "Ash ridge") && alive("crab") < 2) {
           const [x, z] = spot();
@@ -2701,9 +2737,16 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           baby.baby = 50;
         }
       }
-      if ((m.sheared ?? 0) > 0) m.sheared = (m.sheared ?? 0) - dt;
+      if ((m.sheared ?? 0) > 0) {
+        m.sheared = (m.sheared ?? 0) - dt;
+        if ((m.sheared ?? 0) <= 0) {
+          m.mesh.traverse((obj) => {
+            if (obj.userData.wool) obj.visible = true;
+          });
+        }
+      }
       const farHost =
-        m.kind === "creeper" || m.kind === "walker" || m.kind === "skelly" || m.kind === "spider" || m.kind === "phantom" || m.kind === "wisp";
+        m.kind === "creeper" || m.kind === "walker" || m.kind === "skelly" || m.kind === "spider" || m.kind === "phantom" || m.kind === "wisp" || m.kind === "slime";
       if (farHost && (d > 42 || phase !== "play")) {
         m.dead = true;
         scene.remove(m.mesh);
@@ -2723,11 +2766,32 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       }
       const flyer = m.kind === "ghast" || m.kind === "phantom" || m.kind === "dragon";
       const piglinMad = m.kind === "piglin" && hotbar[slot] !== ID.Gold && hotbar[slot] !== ID.Ingot;
+      const townGuard = m.kind === "golem" || (m.kind === "wolf" && m.tame);
+      const foe = townGuard
+        ? mobs.find(
+            (o) =>
+              o !== m &&
+              !o.dead &&
+              (o.kind === "creeper" ||
+                o.kind === "walker" ||
+                o.kind === "skelly" ||
+                o.kind === "spider" ||
+                o.kind === "wisp" ||
+                o.kind === "phantom" ||
+                o.kind === "slime" ||
+                (o.kind === "piglin" && hotbar[slot] !== ID.Gold && hotbar[slot] !== ID.Ingot)) &&
+              Math.hypot(o.x - m.x, o.z - m.z) < (m.kind === "golem" ? 16 : 11),
+          )
+        : undefined;
       const chase =
+        !!foe ||
         flyer ||
         piglinMad ||
-        ((m.kind === "creeper" || m.kind === "walker" || m.kind === "skelly" || m.kind === "spider" || m.kind === "wisp") && d < (m.kind === "skelly" ? 18 : 16));
-      if (chase) m.yaw = Math.atan2(-dx, -dz);
+        ((m.kind === "creeper" || m.kind === "walker" || m.kind === "skelly" || m.kind === "spider" || m.kind === "wisp" || m.kind === "slime") &&
+          d < (m.kind === "skelly" ? 18 : m.kind === "slime" ? 12 : 16));
+      if (foe) m.yaw = Math.atan2(-(foe.x - m.x), -(foe.z - m.z));
+      else if (m.kind === "wolf" && m.tame && d > 3.2 && d < 32) m.yaw = Math.atan2(-dx, -dz);
+      else if (chase) m.yaw = Math.atan2(-dx, -dz);
       else if (mount !== m) {
         m.wander -= dt;
         if (m.wander <= 0) {
@@ -2735,7 +2799,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           m.yaw += (Math.random() - 0.5) * 2.4;
         }
       }
-      if (m.kind === "villager" && m.homeX !== undefined && m.homeZ !== undefined) {
+      if ((m.kind === "villager" || m.kind === "golem") && m.homeX !== undefined && m.homeZ !== undefined) {
         const hx = m.homeX - m.x;
         const hz = m.homeZ - m.z;
         const hd = Math.hypot(hx, hz);
@@ -2764,7 +2828,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           audio.hit();
         }
       } else {
-        const speed = chase ? (m.kind === "spider" ? 3.1 : m.kind === "walker" ? 2.15 : 2.4) : 1.05;
+        if (m.kind === "wolf" && m.tame && !foe && d > 28) {
+          m.x = player.x + Math.sin(player.yaw) * 1.6;
+          m.z = player.z + Math.cos(player.yaw) * 1.6;
+          m.y = groundY(m.x, m.z);
+        }
+        const speed = foe ? 2.7 : chase ? (m.kind === "spider" ? 3.1 : m.kind === "slime" ? 1.35 : m.kind === "walker" ? 2.15 : 2.4) : m.kind === "wolf" && m.tame && d > 4 ? 2.35 : 1.05;
         const fx = -Math.sin(m.yaw);
         const fz = -Math.cos(m.yaw);
         const nx = m.x + fx * speed * dt;
@@ -2780,10 +2849,16 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           m.y = gy;
         }
       }
-      if ((m.kind === "walker" || m.kind === "spider" || m.kind === "wisp" || piglinMad) && d < 1.35 && phase === "play" && m.cool <= 0) {
-        bite(m.kind === "wisp" ? 2 : m.kind === "spider" ? 2 : 3);
+      if ((m.kind === "walker" || m.kind === "spider" || m.kind === "wisp" || m.kind === "slime" || piglinMad) && d < 1.35 && phase === "play" && m.cool <= 0) {
+        bite(m.kind === "wisp" || m.kind === "spider" ? 2 : m.kind === "slime" ? ((m.size ?? 1) > 0.7 ? 3 : 1) : 3);
         m.cool = 0.75;
         audio.hit();
+      }
+      if (foe && Math.hypot(foe.x - m.x, foe.z - m.z) < 1.7 && m.cool <= 0) {
+        foe.hp -= m.kind === "golem" ? 6 : 3;
+        m.cool = 0.65;
+        audio.hit();
+        if (foe.hp <= 0) killMob(foe);
       }
       if (m.kind === "skelly" && d < 16 && d > 3 && phase === "play" && m.cool <= 0) {
         launchArrow(m.x, m.y + 1, m.z, dx, 0.2, dz, false);
@@ -2795,18 +2870,21 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         if (m.fuse > 1.2) {
           m.dead = true;
           scene.remove(m.mesh);
-          explode(Math.round(m.x), Math.round(m.y), Math.round(m.z));
+          explode(Math.round(m.x), Math.round(m.y), Math.round(m.z), m.charged ? 5 : 3);
         }
       } else if (m.fuse > 0) {
         m.fuse = Math.max(0, m.fuse - dt * 2);
-        if (m.bodyMat) m.bodyMat.emissive.setHex(0x000000);
+        if (m.bodyMat) m.bodyMat.emissive.setHex(m.charged ? 0x7ee0ff : 0x000000);
       }
-      const hop = Math.abs(Math.sin(elapsed * 8 + m.x));
-      m.mesh.position.set(m.x, m.y, m.z);
+      const stride = Math.sin(elapsed * (m.kind === "slime" ? 6 : 8));
+      for (let i = 0; i < m.legs.length; i++) {
+        const part = m.legs[i];
+        if (!part) continue;
+        part.rotation.x = stride * (i % 2 === 0 ? 0.55 : -0.55);
+      }
+      const bounce = m.kind === "slime" ? Math.abs(stride) * (0.18 + (m.size ?? 1) * 0.22) : m.kind === "frog" ? Math.abs(stride) * 0.2 : Math.abs(stride) * 0.04;
       m.mesh.rotation.y = m.yaw;
-      m.legs[0].rotation.x = Math.sin(elapsed * 8) * 0.6;
-      m.legs[1].rotation.x = -Math.sin(elapsed * 8) * 0.6;
-      m.mesh.position.y = m.y + (settings.studs ? STUD_H : 0) + hop * 0.05;
+      m.mesh.position.set(m.x, m.y + (settings.studs ? STUD_H : 0) + bounce, m.z);
     }
   }
 
@@ -2853,6 +2931,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       skills: [...skills],
       mana,
       spell: spellIx,
+      pets: mobs.filter((m) => m.kind === "wolf" && m.tame && !m.dead).map((m) => ({ x: m.x, z: m.z })),
     };
   }
 
@@ -2877,7 +2956,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     say(
       (creative
         ? "Creative. The land does not end. Same seed, same bricks."
-        : "Survival. The land does not end. Skills and mods live in the bin and the pause menu.") +
+        : "Survival. The land does not end. Skills and mods live in the bin and the pause menu. Hounds, slimes, and a hamlet golem are out there.") +
         " Seed " +
         seedText +
         "." +
@@ -3101,7 +3180,15 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
                               ? "Pinch stud"
                               : mob.kind === "wisp"
                                 ? "Wisp"
-                                : mob.kind === "villager"
+                                : mob.kind === "slime"
+                                  ? "Slime brick"
+                                  : mob.kind === "wolf"
+                                    ? mob.tame
+                                      ? "Hound"
+                                      : "Wild hound"
+                                    : mob.kind === "golem"
+                                      ? "Hamlet golem"
+                                      : mob.kind === "villager"
                           ? traderOf(mob.role).name
                           : mob.kind === "horse"
                             ? "Steed"
@@ -3448,6 +3535,17 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (weatherIn <= 0) {
         raining = !raining && Math.random() < 0.45;
         weatherIn = raining ? 45 : 70 + Math.random() * 40;
+      }
+      if (raining) {
+        strikeIn -= dt;
+        if (strikeIn <= 0) {
+          strikeIn = 11 + Math.random() * 16;
+          lightning();
+        }
+      }
+      if (boltT > 0) {
+        boltT -= dt;
+        bolt.visible = boltT > 0;
       }
       if (!creative) {
         growAcc += dt;
@@ -4235,63 +4333,395 @@ function skin(
 }
 
 function makeMinifig() {
-  const group = new THREE.Group();
-  const yellow = skin(0xf3d37a);
-  const red = skin(0xe23b2f);
-  const blue = skin(0x1f5fbf);
-  const black = skin(0x241c16);
-  const legL = pivotBox(0.18, 0.46, 0.22, blue, -0.1, 0.46, 0);
-  const legR = pivotBox(0.18, 0.46, 0.22, blue, 0.1, 0.46, 0);
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.42, 0.24), red);
-  torso.position.y = 0.78;
-  const armL = pivotBox(0.12, 0.36, 0.12, red, -0.32, 0.92, 0);
-  const armR = pivotBox(0.12, 0.36, 0.12, red, 0.32, 0.92, 0);
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.32, 0.32), yellow);
-  head.position.y = 1.18;
-  const hair = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.12, 0.36), black);
-  hair.position.y = 1.36;
-  const eye = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.03), black);
-  eye.position.set(-0.07, 1.2, -0.17);
-  const eye2 = eye.clone();
-  eye2.position.x = 0.07;
-  const smile = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.03, 0.03), black);
-  smile.position.set(0, 1.08, -0.17);
-  group.add(legL, legR, torso, armL, armR, head, hair, eye, eye2, smile);
-  return { group, legL, legR, armL, armR };
+  const fig = makeFig(0xe23b2f, 0x1f5fbf, 0x241c16, "smile");
+  return { group: fig.group, legL: fig.legs[0], legR: fig.legs[1], armL: fig.legs[3], armR: fig.legs[2] };
 }
 
-function pivotBox(w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number) {
+const figGeo = new Map<string, THREE.BufferGeometry>();
+
+function geoBox(w: number, h: number, d: number) {
+  const k = "b" + w + ":" + h + ":" + d;
+  let g = figGeo.get(k);
+  if (!g) {
+    g = new THREE.BoxGeometry(w, h, d);
+    figGeo.set(k, g);
+  }
+  return g;
+}
+
+function geoCyl(r: number, h: number, n = 12, rb = r) {
+  const k = "c" + r + ":" + rb + ":" + h + ":" + n;
+  let g = figGeo.get(k);
+  if (!g) {
+    g = new THREE.CylinderGeometry(r, rb, h, n);
+    figGeo.set(k, g);
+  }
+  return g;
+}
+
+function put(parent: THREE.Object3D, geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, rx = 0) {
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, y, z);
+  mesh.rotation.x = rx;
+  mesh.castShadow = plasticOn;
+  mesh.receiveShadow = plasticOn;
+  parent.add(mesh);
+  return mesh;
+}
+
+function studs(parent: THREE.Object3D, mat: THREE.Material, x: number, y: number, z: number, w: number, d: number, nx: number, nz: number) {
+  if (nx < 1 || nz < 1) return;
+  const r = Math.min(w / nx, d / nz) * 0.32;
+  const h = r * (4 / 6);
+  const geo = geoCyl(r, h, 10, r * 0.9);
+  for (let ix = 0; ix < nx; ix++) {
+    for (let iz = 0; iz < nz; iz++) {
+      put(parent, geo, mat, x - w / 2 + (w / nx) * (ix + 0.5), y + h / 2, z - d / 2 + (d / nz) * (iz + 0.5));
+    }
+  }
+}
+
+function block(parent: THREE.Object3D, mat: THREE.Material, w: number, h: number, d: number, x: number, y: number, z: number, nx = 0, nz = 0) {
+  const mesh = put(parent, geoBox(w, h, d), mat, x, y, z);
+  if (nx > 0) studs(parent, mat, x, y + h / 2, z, w, d, nx, nz || nx);
+  return mesh;
+}
+
+function hinge(parent: THREE.Object3D, mat: THREE.Material, r: number, h: number, x: number, y: number, z: number) {
   const pivot = new THREE.Group();
   pivot.position.set(x, y, z);
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  const mesh = new THREE.Mesh(geoCyl(r, h, 10), mat);
   mesh.position.y = -h / 2;
+  mesh.castShadow = plasticOn;
+  mesh.receiveShadow = plasticOn;
   pivot.add(mesh);
+  parent.add(pivot);
   return pivot;
 }
 
-function makeAnimal(bodyColor: number, face: number, scale: number) {
-  const group = new THREE.Group();
-  const bodyMat = skin(bodyColor);
-  const faceMat = skin(face);
-  const legMat = skin(0x2a241c);
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.42, 0.78), bodyMat);
+function legBox(parent: THREE.Object3D, mat: THREE.Material, w: number, h: number, d: number, x: number, y: number, z: number) {
+  const pivot = new THREE.Group();
+  pivot.position.set(x, y, z);
+  const mesh = new THREE.Mesh(geoBox(w, h, d), mat);
+  mesh.position.y = -h / 2;
+  mesh.castShadow = plasticOn;
+  mesh.receiveShadow = plasticOn;
+  pivot.add(mesh);
+  parent.add(pivot);
+  return pivot;
+}
+
+type FigFace = "smile" | "mad" | "skull" | "snout" | "nose";
+type LegoBody = { group: THREE.Group; legs: THREE.Object3D[]; bodyMat: THREE.MeshStandardMaterial | THREE.MeshLambertMaterial };
+
+function makeFig(shirt: number, pants: number, hairCol: number, face: FigFace, headCol = 0xf3d37a): LegoBody {
+  const g = new THREE.Group();
+  const shirtM = skin(shirt);
+  const pantsM = skin(pants);
+  const headM = skin(headCol);
+  const hairM = skin(hairCol);
+  const black = skin(0x1a120c);
+  const white = skin(0xf7f4ee);
+  const legL = hinge(g, pantsM, 0.075, 0.42, -0.09, 0.44, 0);
+  const legR = hinge(g, pantsM, 0.075, 0.42, 0.09, 0.44, 0);
+  block(g, pantsM, 0.36, 0.08, 0.22, 0, 0.48, 0);
+  const torso = block(g, shirtM, 0.44, 0.4, 0.24, 0, 0.74, 0);
+  torso.userData.skin = "body";
+  put(g, geoBox(0.16, 0.05, 0.02), white, 0, 0.78, -0.13);
+  const armR = hinge(g, shirtM, 0.05, 0.34, 0.3, 0.88, 0);
+  const armL = hinge(g, shirtM, 0.05, 0.34, -0.3, 0.88, 0);
+  put(armL, geoCyl(0.045, 0.07, 8), headM, 0, -0.38, 0);
+  put(armR, geoCyl(0.045, 0.07, 8), headM, 0, -0.38, 0);
+  put(g, geoCyl(0.15, 0.3, 16), headM, 0, 1.12, 0);
+  studs(g, headM, 0, 1.27, 0, 0.18, 0.18, 1, 1);
+  put(g, geoBox(0.32, 0.1, 0.18), hairM, 0, 1.22, 0.05);
+  if (face === "skull") {
+    put(g, geoBox(0.07, 0.07, 0.02), black, -0.06, 1.16, -0.16);
+    put(g, geoBox(0.07, 0.07, 0.02), black, 0.06, 1.16, -0.16);
+    put(g, geoBox(0.1, 0.03, 0.02), black, 0, 1.04, -0.16);
+    put(g, geoBox(0.28, 0.025, 0.02), black, 0, 0.7, -0.13);
+    put(g, geoBox(0.28, 0.025, 0.02), black, 0, 0.8, -0.13);
+  } else if (face === "snout") {
+    put(g, geoCyl(0.07, 0.1, 10), skin(0xf2a2c0), 0, 1.08, -0.18, Math.PI / 2);
+    put(g, geoBox(0.05, 0.05, 0.02), black, -0.06, 1.18, -0.16);
+    put(g, geoBox(0.05, 0.05, 0.02), black, 0.06, 1.18, -0.16);
+  } else if (face === "nose") {
+    put(g, geoBox(0.05, 0.05, 0.02), black, -0.06, 1.16, -0.16);
+    put(g, geoBox(0.05, 0.05, 0.02), black, 0.06, 1.16, -0.16);
+    put(g, geoBox(0.08, 0.03, 0.02), black, 0, 1.05, -0.16);
+    put(g, geoCyl(0.055, 0.16, 10), skin(0xc47a2a), 0, 1.08, -0.2, Math.PI / 2);
+  } else {
+    put(g, geoBox(0.05, 0.05, 0.02), black, -0.06, 1.16, -0.16);
+    put(g, geoBox(0.05, 0.05, 0.02), black, 0.06, 1.16, -0.16);
+    put(g, geoBox(0.1, 0.025, 0.02), black, 0, 1.06, -0.16);
+    if (face === "mad") {
+      put(g, geoBox(0.07, 0.02, 0.02), black, -0.06, 1.22, -0.17);
+      put(g, geoBox(0.07, 0.02, 0.02), black, 0.06, 1.22, -0.17);
+    }
+  }
+  return { group: g, legs: [legL, legR, armR, armL], bodyMat: shirtM };
+}
+
+function tagWool(group: THREE.Group, mat: THREE.Material) {
+  group.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (mesh.isMesh && mesh.material === mat) mesh.userData.wool = true;
+  });
+}
+
+function beast(kind: string): LegoBody {
+  const g = new THREE.Group();
+  const dark = skin(0x2a241c);
+  const black = skin(0x1a120c);
+  if (kind === "sheep") {
+    const wool = skin(0xf4f1ea);
+    const body = block(g, wool, 0.78, 0.4, 0.5, 0, 0.56, 0, 3, 2);
+    body.userData.skin = "body";
+    block(g, dark, 0.28, 0.26, 0.26, 0, 0.64, -0.4, 1, 1);
+    block(g, dark, 0.12, 0.08, 0.08, 0, 0.56, -0.56);
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, dark, 0.12, 0.28, 0.12, sx * 0.22, 0.28, sz * 0.14)));
+    tagWool(g, wool);
+    return { group: g, legs, bodyMat: wool };
+  }
+  if (kind === "cow") {
+    const hide = skin(0x8d5a34);
+    const spot = skin(0xf4f1ea);
+    const body = block(g, hide, 0.9, 0.42, 0.46, 0, 0.62, 0, 4, 2);
+    body.userData.skin = "body";
+    put(g, geoBox(0.16, 0.1, 0.04), spot, -0.18, 0.7, -0.22);
+    put(g, geoBox(0.14, 0.12, 0.04), spot, 0.2, 0.66, 0.22);
+    block(g, hide, 0.28, 0.28, 0.28, 0, 0.78, -0.46, 1, 1);
+    block(g, spot, 0.16, 0.12, 0.1, 0, 0.68, -0.62);
+    put(g, geoCyl(0.04, 0.16, 8), dark, -0.08, 0.96, -0.46);
+    put(g, geoCyl(0.04, 0.16, 8), dark, 0.08, 0.96, -0.46);
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, dark, 0.12, 0.36, 0.12, sx * 0.28, 0.36, sz * 0.12)));
+    return { group: g, legs, bodyMat: hide };
+  }
+  if (kind === "pig") {
+    const pink = skin(0xf2a2c0);
+    const body = block(g, pink, 0.7, 0.36, 0.42, 0, 0.48, 0, 3, 2);
+    body.userData.skin = "body";
+    block(g, pink, 0.3, 0.26, 0.26, 0, 0.56, -0.36, 1, 1);
+    put(g, geoCyl(0.08, 0.08, 10), skin(0xe23b2f), 0, 0.52, -0.52, Math.PI / 2);
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, pink, 0.1, 0.22, 0.1, sx * 0.2, 0.22, sz * 0.12)));
+    return { group: g, legs, bodyMat: pink };
+  }
+  if (kind === "chicken") {
+    const white = skin(0xf7f4ee);
+    const body = block(g, white, 0.32, 0.28, 0.36, 0, 0.36, 0, 2, 2);
+    body.userData.skin = "body";
+    put(g, geoBox(0.1, 0.08, 0.1), skin(0xe23b2f), 0, 0.54, -0.02);
+    put(g, geoBox(0.08, 0.06, 0.1), skin(0xf07820), 0, 0.36, -0.24);
+    const legs = [legBox(g, skin(0xf07820), 0.06, 0.2, 0.06, -0.06, 0.2, 0), legBox(g, skin(0xf07820), 0.06, 0.2, 0.06, 0.06, 0.2, 0)];
+    return { group: g, legs, bodyMat: white };
+  }
+  if (kind === "horse") {
+    const hide = skin(0x6b3e22);
+    const body = block(g, hide, 1.05, 0.38, 0.36, 0, 0.78, 0, 4, 1);
+    body.userData.skin = "body";
+    block(g, hide, 0.22, 0.42, 0.22, 0, 1.05, -0.48);
+    block(g, hide, 0.26, 0.24, 0.36, 0, 1.28, -0.62, 1, 1);
+    put(g, geoBox(0.08, 0.16, 0.2), black, 0, 1.22, -0.28);
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, hide, 0.1, 0.5, 0.1, sx * 0.28, 0.5, sz * 0.28)));
+    return { group: g, legs, bodyMat: hide };
+  }
+  if (kind === "fox") {
+    const coat = skin(0xf07820);
+    const white = skin(0xf4f1ea);
+    const body = block(g, coat, 0.7, 0.28, 0.32, 0, 0.42, 0, 3, 1);
+    body.userData.skin = "body";
+    put(g, geoBox(0.28, 0.12, 0.04), white, 0, 0.4, -0.15);
+    block(g, coat, 0.22, 0.2, 0.24, 0, 0.5, -0.4, 1, 1);
+    put(g, geoBox(0.06, 0.1, 0.04), white, -0.06, 0.64, -0.4);
+    put(g, geoBox(0.06, 0.1, 0.04), white, 0.06, 0.64, -0.4);
+    block(g, coat, 0.16, 0.16, 0.28, 0, 0.48, 0.42, 1, 1);
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, coat, 0.08, 0.22, 0.08, sx * 0.18, 0.22, sz * 0.1)));
+    return { group: g, legs, bodyMat: coat };
+  }
+  if (kind === "frog") {
+    const green = skin(0x3aaa4c);
+    const body = block(g, green, 0.46, 0.2, 0.36, 0, 0.24, 0, 2, 2);
+    body.userData.skin = "body";
+    studs(g, skin(0xf0c43a), -0.1, 0.36, -0.08, 0.12, 0.12, 1, 1);
+    studs(g, skin(0xf0c43a), 0.1, 0.36, -0.08, 0.12, 0.12, 1, 1);
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, green, 0.08, 0.12, 0.1, sx * 0.16, 0.12, sz * 0.12)));
+    return { group: g, legs, bodyMat: green };
+  }
+  if (kind === "crab") {
+    const red = skin(0xe23b2f);
+    const body = block(g, red, 0.5, 0.16, 0.36, 0, 0.22, 0, 2, 2);
+    body.userData.skin = "body";
+    put(g, geoBox(0.14, 0.1, 0.14), red, -0.32, 0.24, -0.12);
+    put(g, geoBox(0.14, 0.1, 0.14), red, 0.32, 0.24, -0.12);
+    studs(g, skin(0xf4f1ea), -0.08, 0.3, -0.08, 0.08, 0.08, 1, 1);
+    studs(g, skin(0xf4f1ea), 0.08, 0.3, -0.08, 0.08, 0.08, 1, 1);
+    const legs = [-1, 1].flatMap((sx) => [0, 1].map((i) => legBox(g, red, 0.06, 0.1, 0.08, sx * 0.18, 0.1, -0.02 + i * 0.1)));
+    return { group: g, legs, bodyMat: red };
+  }
+  if (kind === "wolf") {
+    const coat = skin(0x8a8f98);
+    const body = block(g, coat, 0.72, 0.3, 0.32, 0, 0.48, 0, 3, 1);
+    body.userData.skin = "body";
+    block(g, coat, 0.24, 0.22, 0.28, 0, 0.58, -0.4, 1, 1);
+    put(g, geoBox(0.06, 0.12, 0.04), coat, -0.07, 0.74, -0.4);
+    put(g, geoBox(0.06, 0.12, 0.04), coat, 0.07, 0.74, -0.4);
+    put(g, geoBox(0.08, 0.08, 0.02), black, -0.05, 0.6, -0.55);
+    put(g, geoBox(0.08, 0.08, 0.02), black, 0.05, 0.6, -0.55);
+    block(g, coat, 0.1, 0.1, 0.22, 0, 0.55, 0.38);
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, coat, 0.08, 0.28, 0.08, sx * 0.18, 0.28, sz * 0.1)));
+    return { group: g, legs, bodyMat: coat };
+  }
+  if (kind === "spider") {
+    const body = block(g, dark, 0.46, 0.22, 0.36, 0, 0.32, 0.08, 2, 2);
+    body.userData.skin = "body";
+    block(g, dark, 0.28, 0.18, 0.24, 0, 0.28, -0.28, 1, 1);
+    put(g, geoBox(0.06, 0.06, 0.02), skin(0xe23b2f), -0.06, 0.3, -0.4);
+    put(g, geoBox(0.06, 0.06, 0.02), skin(0xe23b2f), 0.06, 0.3, -0.4);
+    const legs: THREE.Object3D[] = [];
+    for (let i = 0; i < 4; i++) {
+      const z = -0.12 + i * 0.1;
+      legs.push(hinge(g, dark, 0.03, 0.34, -0.24, 0.3, z));
+      legs.push(hinge(g, dark, 0.03, 0.34, 0.24, 0.3, z));
+    }
+    return { group: g, legs, bodyMat: dark };
+  }
+  if (kind === "creeper") {
+    const green = skin(0x3aaa4c);
+    green.emissive = new THREE.Color(0x000000);
+    const body = block(g, green, 0.62, 0.7, 0.4, 0, 0.58, 0, 2, 2);
+    body.userData.skin = "body";
+    block(g, green, 0.48, 0.36, 0.36, 0, 1.12, 0, 2, 2);
+    const face = skin(0x142018);
+    put(g, geoBox(0.1, 0.1, 0.03), face, -0.1, 1.2, -0.19);
+    put(g, geoBox(0.1, 0.1, 0.03), face, 0.1, 1.2, -0.19);
+    put(g, geoBox(0.1, 0.16, 0.03), face, 0, 1.02, -0.19);
+    put(g, geoBox(0.1, 0.1, 0.03), face, -0.1, 0.9, -0.19);
+    put(g, geoBox(0.1, 0.1, 0.03), face, 0.1, 0.9, -0.19);
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, green, 0.16, 0.22, 0.16, sx * 0.16, 0.22, sz * 0.08)));
+    return { group: g, legs, bodyMat: green };
+  }
+  if (kind === "ghast") {
+    const white = skin(0xf7f4ee);
+    const body = block(g, white, 1.15, 1.15, 1.15, 0, 0.7, 0, 3, 3);
+    body.userData.skin = "body";
+    put(g, geoBox(0.16, 0.16, 0.04), black, -0.22, 0.85, -0.58);
+    put(g, geoBox(0.16, 0.16, 0.04), black, 0.22, 0.85, -0.58);
+    put(g, geoBox(0.28, 0.1, 0.04), black, 0, 0.5, -0.58);
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => hinge(g, white, 0.06, 0.55, sx * 0.32, 0.15, sz * 0.28)));
+    return { group: g, legs, bodyMat: white };
+  }
+  if (kind === "phantom") {
+    const wing = skin(0x3d7ad4);
+    const body = block(g, wing, 0.7, 0.12, 0.28, 0, 0.3, 0, 3, 1);
+    body.userData.skin = "body";
+    const left = new THREE.Group();
+    left.position.set(-0.36, 0.3, 0);
+    put(left, geoBox(0.7, 0.05, 0.32), wing, -0.35, 0, 0);
+    g.add(left);
+    const right = new THREE.Group();
+    right.position.set(0.36, 0.3, 0);
+    put(right, geoBox(0.7, 0.05, 0.32), wing, 0.35, 0, 0);
+    g.add(right);
+    put(g, geoBox(0.08, 0.06, 0.02), skin(0x8ec8f5), -0.08, 0.32, -0.15);
+    put(g, geoBox(0.08, 0.06, 0.02), skin(0x8ec8f5), 0.08, 0.32, -0.15);
+    return { group: g, legs: [left, right], bodyMat: wing };
+  }
+  if (kind === "dragon") {
+    const hide = skin(0x2a1848);
+    const body = block(g, hide, 1.5, 0.42, 0.42, 0, 0.7, 0, 5, 2);
+    body.userData.skin = "body";
+    block(g, hide, 0.4, 0.36, 0.5, 0, 0.95, -0.85, 1, 1);
+    put(g, geoCyl(0.05, 0.28, 8), skin(0x7a4ad4), -0.1, 1.25, -0.9);
+    put(g, geoCyl(0.05, 0.28, 8), skin(0x7a4ad4), 0.1, 1.25, -0.9);
+    put(g, geoBox(0.08, 0.08, 0.03), skin(0xf5c518), -0.08, 1.0, -1.1);
+    put(g, geoBox(0.08, 0.08, 0.03), skin(0xf5c518), 0.08, 1.0, -1.1);
+    block(g, hide, 0.28, 0.2, 0.55, 0, 0.6, 0.95, 1, 2);
+    const left = new THREE.Group();
+    left.position.set(-0.3, 0.85, 0);
+    put(left, geoBox(1.1, 0.06, 0.55), skin(0x7a4ad4), -0.55, 0, 0);
+    g.add(left);
+    const right = new THREE.Group();
+    right.position.set(0.3, 0.85, 0);
+    put(right, geoBox(1.1, 0.06, 0.55), skin(0x7a4ad4), 0.55, 0, 0);
+    g.add(right);
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, hide, 0.12, 0.4, 0.12, sx * 0.28, 0.4, sz * 0.35)));
+    legs.push(left, right);
+    g.scale.setScalar(1.35);
+    return { group: g, legs, bodyMat: hide };
+  }
+  if (kind === "wisp") {
+    const glow = skin(0xb48cff, { transparent: true, opacity: 0.86 });
+    glow.emissive = new THREE.Color(0x7a4ad4);
+    const body = block(g, glow, 0.36, 0.36, 0.36, 0, 0.4, 0, 2, 2);
+    body.userData.skin = "body";
+    return { group: g, legs: [], bodyMat: glow };
+  }
+  if (kind === "slime") {
+    const gel = skin(0x5dce6a, { transparent: true, opacity: 0.78 });
+    const body = block(g, gel, 0.85, 0.7, 0.85, 0, 0.45, 0, 2, 2);
+    body.userData.skin = "body";
+    put(g, geoBox(0.1, 0.1, 0.04), black, -0.16, 0.55, -0.43);
+    put(g, geoBox(0.1, 0.1, 0.04), black, 0.16, 0.55, -0.43);
+    put(g, geoBox(0.22, 0.06, 0.04), black, 0, 0.38, -0.43);
+    return { group: g, legs: [], bodyMat: gel };
+  }
+  if (kind === "golem") {
+    const iron = skin(0xc5ccd3);
+    const darkIron = skin(0x6e767e);
+    const headC = skin(0xe07a3d);
+    const body = block(g, iron, 0.72, 0.72, 0.42, 0, 1.1, 0, 3, 2);
+    body.userData.skin = "body";
+    block(g, darkIron, 0.5, 0.16, 0.32, 0, 0.66, 0, 2, 1);
+    block(g, headC, 0.4, 0.34, 0.36, 0, 1.66, 0, 2, 2);
+    put(g, geoBox(0.08, 0.08, 0.03), black, -0.09, 1.7, -0.19);
+    put(g, geoBox(0.08, 0.08, 0.03), black, 0.09, 1.7, -0.19);
+    put(g, geoBox(0.16, 0.04, 0.03), black, 0, 1.56, -0.19);
+    const legs = [
+      legBox(g, darkIron, 0.18, 0.52, 0.18, -0.16, 0.52, 0),
+      legBox(g, darkIron, 0.18, 0.52, 0.18, 0.16, 0.52, 0),
+      hinge(g, iron, 0.08, 0.58, -0.5, 1.3, 0),
+      hinge(g, iron, 0.08, 0.58, 0.5, 1.3, 0),
+    ];
+    return { group: g, legs, bodyMat: iron };
+  }
+  if (kind === "boat") {
+    const wood = skin(0xc4924a);
+    const body = block(g, wood, 0.7, 0.16, 1.15, 0, 0.16, 0, 2, 4);
+    body.userData.skin = "body";
+    put(g, geoBox(0.06, 0.18, 1.05), wood, -0.36, 0.28, 0);
+    put(g, geoBox(0.06, 0.18, 1.05), wood, 0.36, 0.28, 0);
+    return { group: g, legs: [], bodyMat: wood };
+  }
+  if (kind === "cart") {
+    const iron = skin(0x8e959c);
+    const body = block(g, iron, 0.62, 0.28, 0.82, 0, 0.36, 0, 2, 3);
+    body.userData.skin = "body";
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        const wheel = put(g, geoCyl(0.14, 0.08, 10), dark, sx * 0.36, 0.14, sz * 0.28);
+        wheel.rotation.z = Math.PI / 2;
+      }
+    }
+    return { group: g, legs: [], bodyMat: iron };
+  }
+  const fallback = skin(0xf4f1ea);
+  const body = block(g, fallback, 0.4, 0.4, 0.4, 0, 0.3, 0, 2, 2);
   body.userData.skin = "body";
-  body.position.y = 0.48;
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.32, 0.32), bodyMat);
-  head.position.set(0, 0.72, -0.42);
-  const snout = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 0.08), faceMat);
-  snout.position.set(0, 0.66, -0.6);
-  const eye = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.03), faceMat);
-  eye.position.set(-0.08, 0.78, -0.58);
-  const eye2 = eye.clone();
-  eye2.position.x = 0.08;
-  const legs = [
-    pivotBox(0.12, 0.28, 0.12, legMat, -0.16, 0.28, -0.22),
-    pivotBox(0.12, 0.28, 0.12, legMat, 0.16, 0.28, -0.22),
-    pivotBox(0.12, 0.28, 0.12, legMat, -0.16, 0.28, 0.22),
-    pivotBox(0.12, 0.28, 0.12, legMat, 0.16, 0.28, 0.22),
-  ];
-  group.add(body, head, snout, eye, eye2, ...legs);
-  group.scale.setScalar(scale);
-  return { group, legs, bodyMat };
+  return { group: g, legs: [], bodyMat: fallback };
+}
+
+function buildLego(kind: string, scale: number): LegoBody {
+  const figKind =
+    kind === "villager"
+      ? makeFig(0x8d5a34, 0x6b3e22, 0x4a3424, "nose")
+      : kind === "walker"
+        ? makeFig(0x3d5c38, 0x243028, 0x1a120c, "mad", 0x6a8a52)
+        : kind === "skelly"
+          ? makeFig(0xe8e0d0, 0xd4cbb8, 0xf7f4ee, "skull", 0xf4f1ea)
+          : kind === "piglin"
+            ? makeFig(0xf0c43a, 0x8d5a34, 0xf2a2c0, "snout", 0xf2a2c0)
+            : null;
+  const built = figKind ?? beast(kind);
+  if (scale !== 1) built.group.scale.multiplyScalar(scale);
+  return built;
 }

@@ -427,4 +427,18 @@ export const QUESTS: QuestDef[] = [
     ],
     xp: 8,
   },
+  {
+    id: "slimes",
+    name: "Split the stud",
+    detail: "Drop 4 slime bricks. Big ones split into smaller studs.",
+    kind: "kill",
+    tag: "slime",
+    what: 0,
+    need: 4,
+    reward: [
+      [ID.Slime, 6],
+      [ID.Emerald, 2],
+    ],
+    xp: 6,
+  },
 ];
