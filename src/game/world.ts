@@ -1051,6 +1051,21 @@ function levelPad(world: World, x0: number, z0: number, w: number, d: number, h:
 
 
 
+
+function stampHut(world: World, x: number, y: number, z: number) {
+  // tiny hut
+  for (let dx = 0; dx <= 2; dx++) {
+    for (let dz = 0; dz <= 2; dz++) {
+      world.set(x + dx, y, z + dz, ID.Planks);
+      world.set(x + dx, y + 2, z + dz, ID.Planks);
+    }
+  }
+  world.set(x + 1, y + 1, z, ID.Door);
+  world.set(x + 1, y + 1, z + 1, ID.Air);
+  world.set(x, y + 1, z + 1, ID.Glass);
+  world.set(x + 2, y + 1, z + 1, ID.Glass);
+}
+
 function stampTower(world: World, x: number, y: number, z: number) {
   // small watchtower
   for (let i = 0; i < 5; i++) {
