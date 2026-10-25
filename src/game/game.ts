@@ -3503,6 +3503,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         const held = def(heldId);
         hud.targetName = held.maxUse ? held.name + " · " + (inv[heldId] ?? 0) + " left" : held.name;
         if (heldId === ID.Bow) hud.targetName += " · " + (inv[ID.Arrow] ?? 0) + " arrows";
+        else if (held.food) hud.targetName += " · +" + held.food;
       }
       if (sample.first && sample.place && !prevPlace) {
         if (heldId === ID.Tome) castSpell();
@@ -3517,6 +3518,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       const held = def(id);
       hud.targetName = held.maxUse ? held.name + " · " + (inv[id] ?? 0) + " left" : held.name;
       if (id === ID.Bow) hud.targetName += " · " + (inv[ID.Arrow] ?? 0) + " arrows";
+      else if (held.food) hud.targetName += " · +" + held.food;
     }
     if (sample.place) placeCool -= dt;
     else placeCool = 0;

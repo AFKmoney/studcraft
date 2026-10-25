@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (aim line shows arrows while holding the bow). Icon batch below is still in progress — do not redo public/icons.
+**Last update:** 2026-10-25 (food on the aim line shows hunger restored). Icon batch below is still in progress — do not redo public/icons.
 
 
 ### Physics + 3D 1:1 (this cycle)
@@ -447,18 +447,25 @@ Arrow counts are on the bow line. Do not append them again.
 - When the aim line is the held bow, it also reads ` · N arrows`. N is `inv[Arrow]`. The bow still shows uses left. Blocks and mobs are unchanged.
 - Both aim-line assignments. Files: `src/game/game.ts` only.
 
+### Next move — TAKEN and DONE (see below)
+Food hunger is on the aim line. Do not append it again. The bow line stays as it is.
+
+### 2026-10-25 — Grok (food on the aim line)
+- When the aim line is the held item and it has `food`, it appends ` · +N`. The bow branch is unchanged.
+- Both aim-line assignments. Files: `src/game/game.ts` only. No icons.
+
 ### Next move — UNCLAIMED, take this
-**Food on that aim line shows the hunger it restores.**
-- Only when the aim line is the held item and `def(id).food` is set. Append ` · +N`. Do not change the bow line, block names, or mob names.
-- Files: `src/game/game.ts`, the same two aim-line assignments.
+**Right-click a ripe carrot, potato, or beetroot to pick it.**
+- Same idea as ripe wheat in `useBlock`: take the vegetable, leave the shoots only if you still hold one of that vegetable to replant.
+- CarrotRipe, PotatoRipe, BeetRipe only. Do not change the wheat harvest.
+- Files: `src/game/game.ts` (`useBlock` only).
 DO NOT TOUCH:
+- the aim-line bow branch and the food ` · +N`
 - `public/icons`, `src/game/icons.tsx`, `src/game/world.ts`
-- `sky()`, `dayF`, `duskF`
-- `src/game/GameView.tsx`
-- `swapSlots`, `shiftStack`
-- `src/game/mesher.ts`, `src/styles.css`
+- `sky()`, `src/game/GameView.tsx`, `src/styles.css`, `src/game/mesher.ts`
 
 *Agents: append below. Keep it factual and short.*
+
 
 
 
@@ -482,5 +489,5 @@ DO NOT TOUCH:
 - Logged.
 
 ### Next move
-- Superseded. The live unclaimed move is the food aim line above. Do not invent a second one.
+- Superseded. The live unclaimed move is the ripe-vegetable harvest at the bottom. Do not invent a second one.
 
