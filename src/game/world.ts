@@ -1157,6 +1157,33 @@ function stampVillage(world: World, x0: number, ground: number, z0: number) {
   world.set(sx + 1, ground + 1, sz + 1, ID.Chest);
   world.set(sx + 3, ground + 1, sz + 1, ID.Chest);
   world.set(sx + 2, ground + 2, sz + 2, ID.Torch);
+  // blacksmith shed
+  const bx = x0 + 8;
+  const bz = z0 + 18;
+  for (let x = 0; x < 5; x++) for (let z = 0; z < 4; z++) {
+    world.set(bx + x, ground, bz + z, ID.Cobble);
+    for (let y = 1; y <= 3; y++) {
+      const edge = x === 0 || z === 0 || x === 4 || z === 3;
+      if (edge && !(z === 0 && x === 2 && y <= 2)) world.set(bx + x, ground + y, bz + z, ID.Stone);
+    }
+    if (x > 0 && x < 4 && z > 0 && z < 3) world.set(bx + x, ground + 4, bz + z, ID.Planks);
+  }
+  world.set(bx + 1, ground + 1, bz + 1, ID.Furnace);
+  world.set(bx + 3, ground + 1, bz + 1, ID.Anvil);
+  world.set(bx + 2, ground + 1, bz + 2, ID.Chest);
+  // small chapel near well
+  const cx = x0 + 4;
+  const cz = z0 + 10;
+  for (let x = 0; x < 4; x++) for (let z = 0; z < 5; z++) {
+    world.set(cx + x, ground, cz + z, ID.Planks);
+    for (let y = 1; y <= 4; y++) {
+      const edge = x === 0 || z === 0 || x === 3 || z === 4;
+      if (edge && !(z === 0 && x === 1 && y <= 2)) world.set(cx + x, ground + y, cz + z, ID.White);
+    }
+  }
+  world.set(cx + 1, ground + 1, cz + 2, ID.Bench);
+  world.set(cx + 2, ground + 1, cz + 3, ID.Chest);
+  world.set(cx + 1, ground + 5, cz + 2, ID.Lamp);
   world.set(x0 + 13, ground + 1, z0 + 8, ID.Cobble);
   world.set(x0 + 13, ground + 2, z0 + 8, ID.Cobble);
   world.set(x0 + 16, ground + 1, z0 + 8, ID.Cobble);

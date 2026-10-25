@@ -615,3 +615,12 @@ Do not add a second wheat-or-apple check.
 
 ### Next move
 - More village buildings or next unclaimed.
+
+### 2026-10-25 — Grok (more village buildings)
+- Added a blacksmith shed (stone walls, furnace, anvil, chest, plank roof).
+- Added a small white chapel near the well (bench, chest, lamp on top).
+- Files: world.ts.
+- Logged.
+
+### Next move
+- Next unclaimed or more village detail.
