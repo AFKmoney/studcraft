@@ -1815,11 +1815,16 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       }
       return;
     }
-    if (held === ID.Carrot || held === ID.Potato || held === ID.Beetroot) {
+    if (held === ID.Carrot || held === ID.Potato || held === ID.Beetroot || held === ID.Pumpkin || held === ID.Melon) {
       const tx = hit.id === ID.Farmland ? hit.x : hit.x + hit.nx;
       const ty = hit.id === ID.Farmland ? hit.y + 1 : hit.y + hit.ny;
       const tz = hit.id === ID.Farmland ? hit.z : hit.z + hit.nz;
-      const plant = held === ID.Carrot ? ID.CarrotCrop : held === ID.Potato ? ID.PotatoCrop : ID.BeetCrop;
+      const plant =
+        held === ID.Carrot ? ID.CarrotCrop :
+        held === ID.Potato ? ID.PotatoCrop :
+        held === ID.Beetroot ? ID.BeetCrop :
+        held === ID.Pumpkin ? ID.PumpkinStem :
+        ID.MelonStem;
       if (world.get(tx, ty, tz) === ID.Air && world.get(tx, ty - 1, tz) === ID.Farmland && spend(held, 1)) {
         world.set(tx, ty, tz, plant);
         markDirtyAt(tx, tz);
@@ -3790,7 +3795,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
                 const cur = world.get(x, y, z);
                 const isWheat = cur === ID.Crop || cur === ID.Crop1 || cur === ID.Crop2;
                 const isVeg = cur === ID.CarrotCrop || cur === ID.PotatoCrop || cur === ID.BeetCrop;
-                if (!isWheat && !isVeg) continue;
+                const isStem = cur === ID.PumpkinStem || cur === ID.MelonStem;
+                if (!isWheat && !isVeg && !isStem) continue;
                 if (world.get(x, y - 1, z) !== ID.Farmland) continue;
                 let wet = raining;
                 for (const [ox, , oz] of NEIGHBORS) if (world.get(x + ox, y - 1, z + oz) === ID.Water) wet = true;
@@ -3802,6 +3808,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
                   else if (cur === ID.CarrotCrop) next = ID.CarrotRipe;
                   else if (cur === ID.PotatoCrop) next = ID.PotatoRipe;
                   else if (cur === ID.BeetCrop) next = ID.BeetRipe;
+                  else if (cur === ID.PumpkinStem) next = ID.Pumpkin;
+                  else if (cur === ID.MelonStem) next = ID.Melon;
                   if (next !== cur) {
                     world.set(x, y, z, next);
                     markDirtyAt(x, z);

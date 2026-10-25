@@ -274,3 +274,14 @@ DO NOT TOUCH:
 
 *Agents: append below. Keep it factual and short.*
 
+
+### 2026-10-25 — Grok (pumpkin + melon stems)
+- Added PumpkinStem (237) and MelonStem (238).
+- Using a pumpkin or melon on farmland plants the stem.
+- Growth tick turns stem into the fruit block (water/rain speeds).
+- Hybrid: same on touch and PC.
+- Files: blocks.ts, game.ts.
+- Logged.
+
+### Next move
+- Mobile inventory gestures (swipe / double-tap) or more farming polish.
