@@ -4,7 +4,11 @@ export type Recipe = {
   id: string;
   name: string;
   detail: string;
-  need: [number, number][];
+  need: [number, number][
+  r("basalt", "Basalt brick", "4 stone → 4", [[ID.Stone, 4]], ID.Basalt, 4, { cat: "build" }),
+  r("calcite", "Calcite brick", "4 sand → 4", [[ID.Sand, 4]], ID.Calcite, 4, { cat: "build" }),
+  r("tuff", "Tuff brick", "4 cobble → 4", [[ID.Cobble, 4]], ID.Tuff, 4, { cat: "build" }),
+];
   out: number;
   n: number;
   special?: "hammer";

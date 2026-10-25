@@ -15,6 +15,11 @@
 - shiftStack improved (clear duplicates + prefer empty hotbar slot).
 
 
+
+### Recipes for new blocks (this cycle)
+- Basalt, Calcite, Tuff now craftable (4 stone/sand/cobble → 4).
+- Block icon coverage complete (all put() blocks mapped).
+
 ### Block icons + new blocks (this cycle)
 - Mapped core blocks to IMAGE_ICONS: Grass, Dirt, Stone, Sand, Log, Leaves, Planks, Coal, Glass, Water, Lava, Snow, Gravel, Clay, Moss, Bedrock.
 - Added new blocks: Basalt (229), Calcite (230), Tuff (231).
