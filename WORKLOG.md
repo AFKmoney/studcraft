@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (this session)
+**Last update:** 2026-10-25 (crystals shield the dragon; item defs 221–224 restored)
 
 ## Current State (as of clone @ 4c08b46)
 
@@ -38,13 +38,13 @@
 10. **Physics / Mechanics**: Full fluid flow, gravity for sand/gravel, crop growth stages, animal breeding full, sleeping, weather (rain/snow/thunder).
 
 ### Immediate Next Tasks (this or next agent)
-- [ ] Expand biome set + structures (start with desert + ocean).
-- [ ] Complete redstone wire + basic gates.
-- [ ] Full Ender Dragon encounter or End portal.
-- [x] Improve Lego stud visual (more detail, brick texture seams) — CLAIMED by Grok 2026-10-25, starting analysis of mesher.ts.
-- [ ] Inventory overhaul for closer vanilla feel.
-- [ ] Add more recipes and vanilla items.
-- [ ] Performance pass on mesher + chunk loading.
+- [x] Expand biome set + structures (start with desert + ocean). — in the tree (Ocean, Desert, tomb, reef). Do not redo biomeOf.
+- [x] Complete redstone wire + basic gates. — comparator, observer, NOT torch are in. Do not rewrite recompute() without a claim.
+- [x] Full Ender Dragon encounter or End portal. — frame + crystals this commit (EndCrystal 225). Do not redo the four pillars.
+- [x] Improve Lego stud visual — still CLAIMED. Do not edit stud geometry in mesher.ts.
+- [ ] Inventory overhaul for closer vanilla feel. — **NEXT MOVE is the narrow slice: shift-click. See the bottom.**
+- [x] Add more recipes and vanilla items. — defs for Clock 221, Map 222, Banner 223, Lead 224 restored after the blocks.ts wipe. No use-behavior yet.
+- [x] Performance pass on mesher + chunk loading. — DONE by Muse LOD (radius 6/8, slider to 14). Do not redo stream()/tierFor.
 
 ### Sync Protocol
 - **Before starting work:** Read this file + last commit message. Append your changes under a new dated section.
@@ -184,11 +184,13 @@ First pass toward it — all in the atlas/mesher, zero per-frame cost:
   (white × 1.15) on the opaque + plant standard materials. Fire/light blocks
   now emit instead of just being bright-colored.
 - Files: textures.ts, mesher.ts (jitter only), game.ts (material wiring).
-- Verified: tsc 0; Playwright — title orbit shows distinct brick seams
-  (sand/grass read as assembled pieces), no wrong-surface glow, 0 errors.
-  Honest limit: this is a step toward the reference, not the full
-  product-render look; per-brick geometry gaps would cost too much. A54
-  verdict is the judge — seams can be deepened in pass 2 if Philippe wants.
+- Merge note: Grok's End-crystal commit `225934b` landed mid-push; game.ts /
+  blocks.ts / WORKLOG were merged on top of it — his crystals and his
+  restored 221–224 item defs are preserved; this pass was re-applied on top.
+- Verified: tsc 0; Playwright — title orbit + in-game show distinct brick
+  seams (sand/grass read as assembled pieces), no wrong-surface glow,
+  0 errors. Honest limit: a step toward the reference, not the full
+  product-render look; A54 verdict is the judge — seams can deepen in pass 2.
 
 ### Next move claimed (Muse)
 - Taking: **light & atmosphere polish, pass 2** — sunset/night grading,
@@ -200,3 +202,32 @@ First pass toward it — all in the atlas/mesher, zero per-frame cost:
   list — rendering only on my side).
 - Standing offer: after any Grok push, Muse re-verifies (tsc + Playwright)
   and rebuilds the APK on request.
+
+### 2026-10-25 — Grok (crystal shield + item defs)
+Two crystal notes above described the first placement. This pass is the one that is in the tree now. Do not place the pillars again.
+
+- Clock **221**, Map **222**, Banner **223**, Lead **224** now have defs, catalog rows, icons, and recipes. Muse's repair had left them as bare ids. No use-behavior yet.
+- **EndCrystal 225** stays the other agent's block (do not add a second `put`). `Crystal` 179 is still the ore drop.
+- Pillars only via `paintEndCrystals` in world.ts, called after the End air carve so the columns are not erased. Same four spots.
+- Dragon spawn HP is `12 + 8 * crystals`. Sword, arrow, and spark damage is halved while any crystal remains. Breaking one costs 8 HP and hurts you for 3 inside 3.5 blocks. The crystal drops itself, not PrismOre.
+- End frame ring is back in `carveRealms`. Eye of Ender still hops straight in.
+- Re-entering a realm recarves the pocket, so the crystals return next visit.
+
+Files: blocks.ts, recipes.ts, icons.tsx, world.ts, game.ts, WORKLOG.md.
+Did not touch stud geometry, `recompute()`, `sky()`, biomeOf, or Muse LOD.
+
+### Next move — UNCLAIMED, take this
+**Inventory shift-click.**
+- `src/game/GameView.tsx`: the catalog button whose `onClick` calls `game.press`.
+- A small helper on the game object in `src/game/game.ts`.
+- Shift-click moves a stack between the hotbar and the bag. Nothing else.
+DO NOT TOUCH:
+- `src/game/mesher.ts` (stud visual still claimed; LOD tiers are Muse's)
+- `recompute()` and redstone ids 215–217
+- `sky()` / shadow camera
+- `biomeOf`, `decorateOcean`, tomb, reef
+- EndCrystal **225**, `END_PILLARS`, `paintEndCrystals`, `crystalsLeft`, `popCrystal`
+- Clock/Map/Banner/Lead 221–224
+
+*Agents: append below. Keep it factual and short.*
+

@@ -156,22 +156,6 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
     paintGlass(ctx, ox, oy);
     return;
   }
-  if (block.id === ID.Web) {
-    ctx.clearRect(ox, oy, S, S);
-    ctx.strokeStyle = "rgba(244, 241, 234, 0.9)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(ox + 8, oy + 8);
-    ctx.lineTo(ox + S - 8, oy + S - 8);
-    ctx.moveTo(ox + S - 8, oy + 8);
-    ctx.lineTo(ox + 8, oy + S - 8);
-    ctx.moveTo(ox + S * 0.5, oy + 6);
-    ctx.lineTo(ox + S * 0.5, oy + S - 6);
-    ctx.moveTo(ox + 6, oy + S * 0.5);
-    ctx.lineTo(ox + S - 6, oy + S * 0.5);
-    ctx.stroke();
-    return;
-  }
   if (block.plant) {
     paintPlant(ctx, ox, oy, block.top, block.id === ID.TallGrass || block.id === ID.Reed ? "grass" : "flower");
     return;
@@ -240,56 +224,6 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
     ctx.stroke();
     return;
   }
-  if (block.id === ID.Pumpkin) {
-    paintSide(ctx, ox, oy, face === 0 ? block.top : block.side, face === 0 ? undefined : block.top);
-    ctx.strokeStyle = "rgba(90, 40, 8, 0.55)";
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    if (face === 0) {
-      ctx.moveTo(ox + S * 0.5, oy + 8);
-      ctx.lineTo(ox + S * 0.5, oy + S - 8);
-      ctx.moveTo(ox + 8, oy + S * 0.5);
-      ctx.lineTo(ox + S - 8, oy + S * 0.5);
-    } else {
-      ctx.moveTo(ox + S * 0.28, oy + 6);
-      ctx.lineTo(ox + S * 0.28, oy + S - 6);
-      ctx.moveTo(ox + S * 0.5, oy + 6);
-      ctx.lineTo(ox + S * 0.5, oy + S - 6);
-      ctx.moveTo(ox + S * 0.72, oy + 6);
-      ctx.lineTo(ox + S * 0.72, oy + S - 6);
-    }
-    ctx.stroke();
-    return;
-  }
-  if (block.id === ID.Melon && face !== 2) {
-    paintSide(ctx, ox, oy, face === 0 ? block.top : block.side);
-    ctx.strokeStyle = "rgba(20, 60, 24, 0.45)";
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(ox + 6, oy + S * 0.2);
-    ctx.lineTo(ox + S - 6, oy + S * 0.8);
-    ctx.moveTo(ox + S - 6, oy + S * 0.2);
-    ctx.lineTo(ox + 6, oy + S * 0.8);
-    ctx.stroke();
-    return;
-  }
-  if (block.id === ID.Hay && face !== 2) {
-    paintSide(ctx, ox, oy, face === 0 ? block.top : block.side);
-    ctx.fillStyle = "rgba(140, 90, 20, 0.35)";
-    for (let i = 0; i < 4; i++) ctx.fillRect(ox + 4, oy + 8 + i * (S / 5), S - 8, 3);
-    return;
-  }
-  if (block.id === ID.Bookshelf && face !== 0 && face !== 2) {
-    paintSide(ctx, ox, oy, block.side);
-    ctx.fillStyle = "#f4f1ea";
-    ctx.fillRect(ox + 8, oy + 10, S - 16, 8);
-    ctx.fillRect(ox + 8, oy + 26, S - 16, 8);
-    ctx.fillRect(ox + 8, oy + 42, S - 16, 8);
-    ctx.fillStyle = "#e23b2f";
-    ctx.fillRect(ox + 10, oy + 10, 6, 8);
-    ctx.fillRect(ox + 22, oy + 26, 6, 8);
-    return;
-  }
   if (face === 0) paintTop(ctx, ox, oy, block.top, block.id === ID.Log);
   else if (face === 2) paintBottom(ctx, ox, oy, block.bottom);
   else paintSide(ctx, ox, oy, block.side, block.id === ID.Grass ? block.top : undefined);
@@ -315,6 +249,7 @@ export type BrickAtlases = {
   color: THREE.CanvasTexture;
   rough: THREE.CanvasTexture;
   normal: THREE.CanvasTexture;
+  glow: THREE.CanvasTexture;
 };
 
 export function buildAtlas(): BrickAtlases {
@@ -333,6 +268,77 @@ export function buildAtlas(): BrickAtlases {
       const row = Math.floor(tile / ATLAS_COLS);
       if (row >= ATLAS_ROWS) continue;
       paintSpecial(ctx, block, col * TILE, row * TILE, face);
+    }
+  }
+
+  // Brick seams + bevel (reference look): darken each solid tile's border so
+  // every brick reads as a separate piece with a shadow gap, and catch a
+  // light line just inside the top edge like a molded bevel. Per-pixel
+  // multiply, so hue survives; transparent pixels (cutout art) are skipped,
+  // and fluid/plant tiles are excluded entirely.
+  {
+    const skip = new Set<number>();
+    for (const block of BLOCKS) {
+      if (!block || (!block.fluid && !block.plant)) continue;
+      for (const face of [0, 1, 2, 3] as const) {
+        const t = faceTile(block.id, face);
+        if (t) skip.add(t);
+      }
+    }
+    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const d = img.data;
+    const W = canvas.width;
+    const done = new Set<number>();
+    for (const block of BLOCKS) {
+      if (!block) continue;
+      for (const face of [0, 1, 2, 3] as const) {
+        const tile = faceTile(block.id, face);
+        if (!tile || skip.has(tile) || done.has(tile)) continue;
+        done.add(tile);
+        const ox = (tile % ATLAS_COLS) * TILE;
+        const oy = Math.floor(tile / ATLAS_COLS) * TILE;
+        if (oy >= canvas.height) continue;
+        for (let py = 0; py < TILE; py++) {
+          for (let px = 0; px < TILE; px++) {
+            const edge = Math.min(px, py, TILE - 1 - px, TILE - 1 - py);
+            if (edge > 7) continue;
+            const i = ((oy + py) * W + (ox + px)) * 4;
+            if (d[i + 3] < 200) continue;
+            let m = edge < 2 ? 0.8 : edge < 4 ? 0.91 : 0.97;
+            if (py >= 2 && py < 5) m *= 1.08;
+            d[i] *= m;
+            d[i + 1] *= m;
+            d[i + 2] *= m;
+          }
+        }
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  // Glow atlas (small, like rough/normal): black everywhere except the tiles
+  // of light-emitting blocks (light > 0: torches, magma, lit lamps, lanterns),
+  // which copy their painted color tile. Wired as emissiveMap in game.ts.
+  const GT = 32;
+  const glowCanvas = document.createElement("canvas");
+  glowCanvas.width = ATLAS_COLS * GT;
+  glowCanvas.height = ATLAS_ROWS * GT;
+  const gtx = glowCanvas.getContext("2d");
+  if (gtx) {
+    gtx.fillStyle = "#000";
+    gtx.fillRect(0, 0, glowCanvas.width, glowCanvas.height);
+    const done = new Set<number>();
+    for (const block of BLOCKS) {
+      if (!block || !(block.light > 0)) continue;
+      for (const face of [0, 1, 2, 3] as const) {
+        const tile = faceTile(block.id, face);
+        if (!tile || done.has(tile)) continue;
+        done.add(tile);
+        const sx = (tile % ATLAS_COLS) * TILE;
+        const sy = Math.floor(tile / ATLAS_COLS) * TILE;
+        if (sy >= canvas.height) continue;
+        gtx.drawImage(canvas, sx, sy, TILE, TILE, (tile % ATLAS_COLS) * GT, Math.floor(tile / ATLAS_COLS) * GT, GT, GT);
+      }
     }
   }
 
@@ -365,7 +371,7 @@ export function buildAtlas(): BrickAtlases {
           const i = ((oy + py) * rw + (ox + px)) * 4;
           const nse = hash01(block.id * 17 + face * 131 + px * 13 + py * 29);
           const seam = px < 2 || py < 2 || px > T - 3 || py > T - 3;
-          let rough = 0.3 + (nse - 0.5) * 0.1;
+          let rough = 0.46 + (nse - 0.5) * 0.1;
           if (seam) rough += 0.14;
           const dx = (px + 0.5) / T - 0.5;
           const dy = (py + 0.5) / T - 0.5;
@@ -400,5 +406,6 @@ export function buildAtlas(): BrickAtlases {
     color: finish(canvas, THREE.SRGBColorSpace),
     rough: finish(roughCanvas, THREE.LinearSRGBColorSpace),
     normal: finish(normalCanvas, THREE.LinearSRGBColorSpace),
+    glow: finish(glowCanvas, THREE.SRGBColorSpace),
   };
 }
