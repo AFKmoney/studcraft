@@ -271,6 +271,17 @@ export class World {
               }
             } else if (biome === "Mushroom") {
               if (t < 0.01) this.paint(data, baseX, baseZ, x, h + 1, z, t < 0.005 ? ID.MushroomRed : ID.Mushroom);
+            } else if (biome === "Jungle" && t > 0.992 && x >= baseX + 4 && x < baseX + CS - 4 && z >= baseZ + 4 && z < baseZ + CS - 4) {
+              // jungle temple
+              for (let dx = -3; dx <= 3; dx++) for (let dz = -3; dz <= 3; dz++) {
+                this.paint(data, baseX, baseZ, x + dx, h, z + dz, ID.Moss);
+                for (let dy = 1; dy <= 4; dy++) {
+                  const edge = Math.abs(dx) === 3 || Math.abs(dz) === 3;
+                  if (edge) this.paint(data, baseX, baseZ, x + dx, h + dy, z + dz, ID.Cobble);
+                }
+              }
+              this.paint(data, baseX, baseZ, x, h + 1, z, ID.Chest);
+              this.paint(data, baseX, baseZ, x + 1, h + 1, z, ID.TNT);
             } else if (biome !== "Snow cap" && biome !== "Sand flats") this.writeTree(data, baseX, baseZ, x, h, z);
           } else if (biome === "Grove" && t > 0.9 && t < 0.94 && x >= baseX && x < baseX + CS && z >= baseZ && z < baseZ + CS) {
             const y = h + 1;

@@ -243,6 +243,8 @@ export const ID = {
   Basalt: 241,
   Calcite: 242,
   Tuff: 243,
+  WitherSkull: 244,
+  NetherStar: 245,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -680,6 +682,8 @@ item(ID.String, "String", "#f4f1ea");
 item(ID.Eye, "Seeker eye", "#7a4ad4");
 item(ID.Elytra, "Glide shell", "#5eb0e5");
 item(ID.Totem, "Last stud", "#f0c43a");
+item(ID.WitherSkull, "Wither skull", "#2a2a2a");
+item(ID.NetherStar, "Nether star", "#f4e8ff");
 item(ID.Scrap, "Ember scrap", "#6e2424");
 item(ID.Shield, "Shield", "#c4924a", { maxUse: 120 });
 item(ID.Milk, "Milk", "#f4f1ea");

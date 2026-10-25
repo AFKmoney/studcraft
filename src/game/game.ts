@@ -19,6 +19,7 @@ export type EnterKind = "play" | "survival" | "flat" | "continue";
 export type Hud = {
   hotbar: { id: number; count: number }[];
   slot: number;
+  offhand: number;
   health: number;
   hunger: number;
   xp: number;
@@ -184,6 +185,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   const hud: Hud = {
     hotbar: [],
     slot: 0,
+    offhand: 0,
     health: 20,
     hunger: 20,
     xp: 0,
@@ -296,6 +298,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   const pistonHot = new Set<string>();
   let slot = 0;
   let hotbar: number[] = [...CREATIVE_BAR];
+  let offhand = 0;
   const inv: Record<number, number> = {};
   let message = "";
   let messageAt = 0;
@@ -626,7 +629,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   scene.add(fig.group);
 
   type Mob = {
-    kind: "sheep" | "creeper" | "cow" | "walker" | "pig" | "chicken" | "spider" | "skelly" | "villager" | "ghast" | "dragon" | "horse" | "phantom" | "piglin" | "boat" | "cart" | "frog" | "fox" | "crab" | "wisp" | "slime" | "wolf" | "golem";
+    kind: "sheep" | "creeper" | "cow" | "walker" | "pig" | "chicken" | "spider" | "skelly" | "villager" | "ghast" | "dragon" | "horse" | "phantom" | "piglin" | "boat" | "cart" | "frog" | "fox" | "crab" | "wisp" | "slime" | "wolf" | "golem" | "wither";
     x: number;
     y: number;
     z: number;
@@ -811,6 +814,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
 
   function snapshot() {
     hud.hotbar = hotbar.map((id) => ({ id, count: creative ? -1 : (inv[id] ?? 0) }));
+    hud.offhand = offhand;
     hud.slot = slot;
     hud.health = health;
     hud.hunger = hunger;
@@ -1305,9 +1309,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   function hurt(n: number) {
     if (creative || n <= 0 || phase !== "play" || invuln > 0) return;
     const sneaking = keys.has("ShiftLeft") || keys.has("ShiftRight");
-    if (sneaking && hotbar.includes(ID.Shield)) {
+    if (sneaking && (hotbar.includes(ID.Shield) || offhand === ID.Shield)) {
       n *= 0.35;
-      if (hotbar[slot] === ID.Shield) wearHeld();
+      if (hotbar[slot] === ID.Shield || offhand === ID.Shield) wearHeld();
     }
     if (rankLv >= 8) n *= 0.86;
     let resist = 0;
@@ -1801,6 +1805,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const held = hotbar[slot];
     const heldDef = def(held);
     if (held === ID.Bow) return shootHeld();
+    if (hit.id === ID.Soul && held === ID.WitherSkull && (creative || (inv[ID.WitherSkull] ?? 0) >= 3)) {
+      if (!creative) spend(ID.WitherSkull, 3);
+      spawnKind("wither", hit.x + 0.5, hit.z + 0.5);
+      say("Wither summoned");
+      return;
+    }
     if (held === ID.Clock) return say(timeWord());
     if (held === ID.Map) {
       const x = Math.floor(player.x);
@@ -2124,6 +2134,17 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     world.set(-504, 50, -504, ID.Portal);
     for (let i = 0; i < 6; i++) world.set(-516 + i * 3, 49, -506, ID.PrismOre);
     paintEndCrystals((x, y, z, id) => world.set(x, y, z, id));
+    // End city towers
+    for (const [tx, tz] of [[-530, -530], [-470, -530], [-500, -470]]) {
+      for (let y = 49; y <= 64; y++) {
+        for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+          const edge = Math.abs(dx) === 2 || Math.abs(dz) === 2;
+          if (edge || y === 64) world.set(tx + dx, y, tz + dz, y === 64 ? ID.EndStone : ID.Obsidian);
+        }
+      }
+      world.set(tx, 62, tz, ID.Chest);
+      world.set(tx + 1, 62, tz, ID.EndCrystal);
+    }
     for (let cz = Math.floor(468 / CS); cz <= Math.floor(508 / CS); cz++) {
       for (let cx = Math.floor(468 / CS); cx <= Math.floor(508 / CS); cx++) dirty.add(cx + "," + cz);
     }
@@ -2242,6 +2263,35 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
             world.set(x, y, z, ID.Air);
             world.set(x, y - 1, z, id);
             markDirtyAt(x, z);
+          }
+        }
+      }
+      // budgeted hopper: chest above -> hopper -> chest below
+      let hopBudget = 6;
+      const hgx = Math.floor(player.x);
+      const hgy = Math.floor(player.y);
+      const hgz = Math.floor(player.z);
+      for (let dz = -4; dz <= 4 && hopBudget > 0; dz++) {
+        for (let dx = -4; dx <= 4 && hopBudget > 0; dx++) {
+          const x = hgx + dx;
+          const y = hgy;
+          const z = hgz + dz;
+          if (world.get(x, y, z) !== ID.Hopper) continue;
+          if (world.get(x, y + 1, z) === ID.Chest && world.get(x, y - 1, z) === ID.Chest) {
+            const src = ensureChest(x + "," + (y + 1) + "," + z);
+            const dst = ensureChest(x + "," + (y - 1) + "," + z);
+            const from = src.ids.findIndex((id, i) => id > 0 && (src.ns[i] ?? 0) > 0);
+            if (from >= 0) {
+              const id = src.ids[from];
+              const into = dst.ids.findIndex((oid, i) => oid === id || (dst.ns[i] ?? 0) === 0);
+              if (into >= 0) {
+                dst.ids[into] = id;
+                dst.ns[into] = (dst.ns[into] ?? 0) + 1;
+                src.ns[from] -= 1;
+                if (src.ns[from] <= 0) src.ids[from] = 0;
+                hopBudget--;
+              }
+            }
           }
         }
       }
@@ -2611,7 +2661,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   }
 
   function spawnKind(kind: Mob["kind"], x: number, z: number, scale = 1) {
-    const y = kind === "ghast" || kind === "dragon" || kind === "phantom" ? groundY(x, z) + (kind === "dragon" ? 6 : 4) : groundY(x, z);
+    const y = kind === "ghast" || kind === "dragon" || kind === "phantom" || kind === "wither" ? groundY(x, z) + (kind === "dragon" ? 6 : kind === "wither" ? 5 : 4) : groundY(x, z);
     const body = buildLego(kind, scale);
     const mob: Mob = {
       kind,
@@ -2626,7 +2676,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
             ? 24
             : kind === "ghast"
               ? 10
-              : kind === "slime"
+              : kind === "wither"
+                ? 40
+                : kind === "slime"
                 ? scale < 0.5
                   ? 2
                   : scale < 0.8
@@ -2827,7 +2879,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
                             ? [ID.Feather]
                             : mob.kind === "dragon"
                               ? [ID.Elytra, ID.Totem, ID.Scrap]
-                              : mob.kind === "frog"
+                              : mob.kind === "wither"
+                                ? [ID.NetherStar]
+                                : mob.kind === "frog"
                                 ? [ID.Slime]
                                 : mob.kind === "fox"
                                   ? [ID.Fur, ID.RawMeat]
@@ -3080,7 +3134,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           continue;
         }
       }
-      const flyer = m.kind === "ghast" || m.kind === "phantom" || m.kind === "dragon";
+      const flyer = m.kind === "ghast" || m.kind === "phantom" || m.kind === "dragon" || m.kind === "wither";
       const piglinMad = m.kind === "piglin" && hotbar[slot] !== ID.Gold && hotbar[slot] !== ID.Ingot;
       const townGuard = m.kind === "golem" || (m.kind === "wolf" && m.tame);
       const foe = townGuard
@@ -3134,9 +3188,14 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         m.z += -Math.cos(m.yaw) * sp * dt;
         const want = groundY(m.x, m.z) + alt;
         m.y += (want - m.y) * Math.min(1, dt * 2);
-        if (m.kind !== "dragon" && m.cool <= 0 && d < 24 && phase === "play") {
+        if (m.kind !== "dragon" && m.kind !== "wither" && m.cool <= 0 && d < 24 && phase === "play") {
           launchArrow(m.x, m.y, m.z, dx, player.y + 1 - m.y, dz, false);
           m.cool = m.kind === "ghast" ? 2.5 : 1.5;
+        }
+        if (m.kind === "wither" && m.cool <= 0 && d < 18 && phase === "play") {
+          launchArrow(m.x, m.y, m.z, dx, player.y + 1 - m.y, dz, false);
+          bite(2);
+          m.cool = 1.8;
         }
         if (m.kind === "dragon" && d < 2.8 && phase === "play" && m.cool <= 0) {
           bite(5);
@@ -3291,6 +3350,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   function poll(first: boolean) {
     let fwd = 0;
     let str = 0;
+    if (keys.has("KeyF")) {
+      const tmp = offhand;
+      offhand = hotbar[slot];
+      hotbar[slot] = tmp;
+      keys.delete("KeyF");
+      emit();
+    }
     if (keys.has("KeyW") || keys.has("ArrowUp")) fwd += 1;
     if (keys.has("KeyS") || keys.has("ArrowDown")) fwd -= 1;
     if (keys.has("KeyD") || keys.has("ArrowRight")) str += 1;
@@ -3955,10 +4021,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
 
       // crop growth (simple)
       if ((elapsed * 2) % 1 < dt * 2) {
+        const cgx = Math.floor(player.x);
+        const cgy = Math.floor(player.y);
+        const cgz = Math.floor(player.z);
         for (let dz = -3; dz <= 3; dz++) {
           for (let dx = -3; dx <= 3; dx++) {
-            const x = gx + dx, z = gz + dz;
-            const y = gy;
+            const x = cgx + dx, z = cgz + dz;
+            const y = cgy;
             const id = world.get(x, y, z);
             if (id === ID.CarrotCrop && Math.random() < 0.15) world.set(x, y, z, ID.CarrotRipe);
             if (id === ID.PotatoCrop && Math.random() < 0.15) world.set(x, y, z, ID.PotatoRipe);
