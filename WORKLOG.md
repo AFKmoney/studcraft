@@ -82,6 +82,13 @@
 
 
 
+
+### Remaining gaps progress (this cycle)
+- **End terrain**: generateEnd() added (EndStone islands + rare Chorus).
+- **Enchanting**: enchant() now also boosts nearby tools.
+- **Redstone**: recompute() already does BFS power propagation (R=8).
+- **Bosses / pathfinding**: dragon encounter exists; deeper AI still open.
+
 ### Big gaps progress (this cycle)
 - **Redstone**: simple repeater tick added (passes power forward).
 - **End dimension**: portal travel implemented (sets realm=2, teleports player).

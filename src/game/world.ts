@@ -423,6 +423,29 @@ export class World {
     }
   }
 
+  
+  private generateEnd(cx: number, cz: number): Uint8Array {
+    const data = new Uint8Array(CS * HEIGHT * CS);
+    const baseX = cx * CS;
+    const baseZ = cz * CS;
+    for (let lz = 0; lz < CS; lz++) {
+      for (let lx = 0; lx < CS; lx++) {
+        const x = baseX + lx;
+        const z = baseZ + lz;
+        const h = 60 + Math.floor(this.noise.fbm(x * 0.02, z * 0.02) * 8);
+        for (let y = 0; y < HEIGHT; y++) {
+          let id = ID.Air;
+          if (y === 0) id = ID.Bedrock;
+          else if (y < h - 2) id = ID.EndStone;
+          else if (y < h) id = ID.EndStone;
+          else if (y === h && Math.random() < 0.02) id = ID.Chorus;
+          data[idx(lx, y, lz)] = id;
+        }
+      }
+    }
+    return data;
+  }
+
   private generateNether(cx: number, cz: number): Uint8Array {
     const data = new Uint8Array(CS * HEIGHT * CS);
     const baseX = cx * CS;

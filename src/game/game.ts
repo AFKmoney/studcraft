@@ -4541,6 +4541,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (!spendLevels(3)) return say("Need builder level 3");
       sharp = true;
       say("Sword rune set");
+      // also boost nearby tools
+      for (let i = 0; i < 9; i++) {
+        const id = hotbar[i];
+        if (def(id).tool) inv[id] = (inv[id] ?? 0) + 10;
+      }
       emit();
     },
     mend() {
