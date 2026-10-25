@@ -238,6 +238,7 @@ function Hud({ game }: { game: GameApi }) {
           {hud.effect ? " · " + hud.effect : ""}
           {hud.questAlert ? " · " + hud.questAlert : ""}
           {hud.questTrack ? " · " + hud.questTrack : ""}
+          {hud.won ? " · The End is yours" : ""}
         </span>
         <span>
           {Math.floor(hud.x)} {Math.floor(hud.y)} {Math.floor(hud.z)} · seed {hud.seedText || hud.seed}

@@ -55,7 +55,7 @@ export class World {
     if (eyes >= 12) {
       for (let dx = -1; dx <= 1; dx++) {
         for (let dz = -1; dz <= 1; dz++) {
-          this.set(x + dx, y, z + dz, ID.EndPortal);
+          this.set(x + dx, y, z + dz, ID.Portal);
         }
       }
     }

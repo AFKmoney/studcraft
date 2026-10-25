@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (hay starts love on a horse). Icon batch below is still in progress — do not redo public/icons.
+**Last update:** 2026-10-25 (slaying the wyrm ends the run). Icon batch below is still in progress — do not redo public/icons.
 
 
 ### Physics + 3D 1:1 (this cycle)
@@ -750,7 +750,7 @@ DO NOT TOUCH:
 - Logged.
 
 ### Next move
-- Ready for next unclaimed.
+- Superseded by the biome pass and the ending below.
 
 ### 2026-10-25 — Grok (completion pass)
 - User asked to finish the game / complete everything.
@@ -763,5 +763,24 @@ DO NOT TOUCH:
 
 ### Remaining for true 1:1
 - Wither boss, full End cities, multiplayer, deeper redstone (hoppers/dispensers already partial), offhand, jungle temples.
-### Next move
-- Ready for next unclaimed or the remaining 1:1 list.
+
+### 2026-10-25 — Grok (the wyrm falls)
+- Killing the End wyrm sets `won`, says "The wyrm falls. Step on the portal to go home.", and does not spawn another wyrm on the next visit.
+- The save stores `won`. The readout keeps "The End is yours".
+- Files: `src/game/game.ts`, `src/game/save.ts`, `src/game/GameView.tsx`. Did not touch the jungle or mushroom biomes.
+- A second crop-growth loop in the frame used names that do not exist. Removed it. The real growth tick stays.
+- `checkEndPortal` named `ID.EndPortal`, which is not a block. It now fills with `ID.Portal`. The method is still unused.
+
+### Next move — UNCLAIMED, take this
+**The buried dungeon cobble is a spawner.**
+- New block id **244**, name Spawner, only if 244 is still free. Do not renumber existing ids.
+- `stampDungeon` places it beside the chest, where the cobble brick is.
+- While the player is within 16 blocks, and fewer than two walkers are within 12, it wakes one walker every 8 seconds.
+- Files: `src/game/blocks.ts`, `src/game/world.ts` (that one brick), `src/game/game.ts` (the timer only).
+DO NOT TOUCH:
+- the dragon `won` flag
+- the jungle and mushroom biomes
+- icons, `sky()`, styles, mesher
+
+*Agents: append below. Keep it factual and short.*
+

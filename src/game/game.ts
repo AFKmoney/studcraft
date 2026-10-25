@@ -66,6 +66,7 @@ export type Hud = {
   quests: { id: string; name: string; detail: string; n: number; need: number; done: boolean; ready: boolean; reward: string }[];
   questAlert: string;
   questTrack: string;
+  won: boolean;
   skills: string[];
   skillPoints: number;
   mana: number;
@@ -231,6 +232,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     quests: [],
     questAlert: "",
     questTrack: "",
+    won: false,
     skills: [],
     skillPoints: 0,
     mana: 8,
@@ -759,6 +761,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let realmsReady = false;
   let fishT = -1;
   let dragonUp = false;
+  let won = false;
   let mount: Mob | null = null;
   let returnSpot = { x: 0, y: 80, z: 0 };
   let noteStep = 0;
@@ -824,6 +827,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     hud.oxygen = oxygen;
     hud.rain = raining;
     hud.weather = raining ? "rain" : "clear";
+    hud.won = won;
     hud.armor = [...armor];
     hud.grid = [...grid];
     hud.cursor = cursor;
@@ -1153,6 +1157,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       const wolf = spawnKind("wolf", pet.x, pet.z);
       wolf.tame = true;
     }
+    won = !!data.won;
+    if (won) dragonUp = true;
     stream(narrow ? 6 : 10);
   }
 
@@ -2178,7 +2184,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       player.z = -500.5;
       realm = 2;
       say("The End");
-      if (!dragonUp) {
+      if (!dragonUp && !won) {
         dragonUp = true;
         spawnKind("dragon", -504, -508);
       }
@@ -2858,7 +2864,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (settings.mods.generous && (mob.kind === "frog" || mob.kind === "fox" || mob.kind === "crab" || mob.kind === "wisp")) extra.push(drops[0]);
       for (const drop of extra) dropItem(drop, 1, mob.x, mob.y + 0.7, mob.z);
     }
-    if (mob.kind === "dragon") dragonUp = false;
+    if (mob.kind === "dragon") {
+      won = true;
+      dragonUp = true;
+      say("The wyrm falls. Step on the portal to go home.", 6400);
+      saveDirty = true;
+    }
     burst(mob.x, mob.y + 0.5, mob.z, drops.length ? def(drops[0]).color : "#3aaa4c", 12);
     audio.break();
     gainXp(MOB_XP[mob.kind] ?? 2);
@@ -3237,6 +3248,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       skills: [...skills],
       mana,
       spell: spellIx,
+      won,
       pets: mobs.filter((m) => m.kind === "wolf" && m.tame && !m.dead).map((m) => ({ x: m.x, z: m.z })),
     };
   }
@@ -3905,22 +3917,6 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     noteClock();
     if (phase === "play") {
       tickExtras(dt);
-      // crop growth (simple)
-      if ((elapsed * 2) % 1 < dt * 2) {
-        for (let dz = -3; dz <= 3; dz++) {
-          for (let dx = -3; dx <= 3; dx++) {
-            const x = gx + dx, z = gz + dz;
-            const y = gy;
-            const id = world.get(x, y, z);
-            if (id === ID.CarrotCrop && Math.random() < 0.15) world.set(x, y, z, ID.CarrotRipe);
-            if (id === ID.PotatoCrop && Math.random() < 0.15) world.set(x, y, z, ID.PotatoRipe);
-            if (id === ID.BeetCrop && Math.random() < 0.15) world.set(x, y, z, ID.BeetRipe);
-            if (id === ID.PumpkinStem && Math.random() < 0.1) world.set(x, y, z, ID.Pumpkin);
-            if (id === ID.MelonStem && Math.random() < 0.1) world.set(x, y, z, ID.Melon);
-          }
-        }
-      }
-
       weatherIn -= dt;
       if (weatherIn <= 0) {
         raining = !raining && Math.random() < 0.45;
