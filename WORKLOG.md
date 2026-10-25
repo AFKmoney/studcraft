@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (clock speaks the day; banner places). Icon batch above is still in progress — do not redo public/icons.
+**Last update:** 2026-10-25 (right-click ripe wheat harvests and replants). Icon batch above is still in progress — do not redo public/icons.
 
 ### Lego Product Icons (IN PROGRESS → INTEGRATING)
 - Added missing classic foods: Carrot (226), Potato (227), Beetroot (228) with food values.
@@ -217,25 +217,8 @@ Files: `src/game/blocks.ts`, `src/game/game.ts`, `WORKLOG.md`.
 - Files: game.ts (`tickExtras`).
 - Did not touch mesher, recompute, sky, biomes, End crystals, or inventory.
 
-### Next move — UNCLAIMED, take this
-**Map speaks your place, lead hitches a passive mob.**
-- Map **222**, while selected, says the coordinates and the cardinal (the same words the compass already uses, if that helper exists). Do not edit `sky()`.
-- Lead **224**, used on a sheep, cow, pig, chicken, or horse, makes that mob follow you until you use the lead again. One lead, one mob. Do not rewrite mob AI beyond that follow flag.
-- Files: `src/game/game.ts` only.
-DO NOT TOUCH:
-- `public/icons` and `IMAGE_ICONS` (icon batch still in progress)
-- `src/game/mesher.ts`
-- `recompute()` and redstone ids 215–217
-- `sky()` / shadow camera / emissiveMap
-- the new fluid loop in `tickExtras` (28-cell budget)
-- `biomeOf`, `decorateOcean`, tomb, reef
-- EndCrystal **225**, `paintEndCrystals`, `crystalsLeft`, `popCrystal`
-- `shiftStack`, `noteClock`, Banner **223**
-
-Alternate if someone else already took map/lead: crop growth stages only.
-
-*Agents: append below. Keep it factual and short.*
-
+### Next move — TAKEN and DONE (see the session below)
+Map and lead are in. Do not start them again.
 
 ### 2026-10-25 — Grok (Map speaks, Lead hitches)
 - Took the unclaimed "Map speaks your place, lead hitches a passive mob".
@@ -250,13 +233,31 @@ Alternate if someone else already took map/lead: crop growth stages only.
 - Crop growth stages or mobile HUD polish.
 
 ### 2026-10-25 — Grok (crop growth stages)
-- Took the alternate next move: crop growth stages.
-- Added Crop1 (226) and Crop2 (227) as intermediate plant stages.
-- Growth now progresses Crop → Crop1 → Crop2 → CropRipe (water/rain still speeds it).
-- Breaking early stages drops seeds; bone-meal style advance also steps one stage.
-- Files: blocks.ts, game.ts.
-- Hybrid: same behavior on touch and PC.
-- Logged.
+Already in the tree (`31f3075`). Do not add another pair of stage ids.
 
-### Next move
-- Mobile HUD polish or more farming (pumpkins/melons stages).
+- Foods took **226–228**: Carrot, Potato, Beetroot.
+- Wheat stages are **Crop1 229** (sprouts) and **Crop2 230** (young wheat).
+- Order: Crop → Crop1 → Crop2 → CropRipe. Water and rain still speed it. Bone meal steps one stage. Early breaks drop seeds. Only ripe wheat drops grain.
+- A second pass that named them CropYoung 226 / CropTall 227 was dropped so it would not overwrite the foods.
+
+### 2026-10-25 — Grok (harvest ripe wheat)
+- Right-click ripe wheat. You get one grain and one seed. If the soil under it is farmland and you have a seed, one seed goes back in as shoots.
+- Crop, Crop1, and Crop2 are not harvested this way. Sneak still skips the use, so you can place against the plant.
+- Files: `src/game/game.ts` (`useBlock` only).
+
+### Next move — UNCLAIMED, take this
+**Plant carrot, potato, and beetroot on farmland.**
+- Carrot **226**, Potato **227**, Beetroot **228** are already items. Do not renumber.
+- Using one on farmland plants it. They grow with the same wet tick as wheat, but each is a single plant block (reuse the item id as the plant, or one new id after **230**). Right-click the mature plant to pick it.
+- Files: `src/game/game.ts` and `src/game/blocks.ts` only if a plant id is required. Append after 230.
+DO NOT TOUCH:
+- `public/icons` and `IMAGE_ICONS`
+- `src/game/mesher.ts`
+- `recompute()` and the fluid loop in `tickExtras`
+- `sky()`, `noteClock`
+- Crop / Crop1 **229** / Crop2 **230** / CropRipe growth
+- the ripe-wheat harvest in `useBlock`
+- EndCrystal, `shiftStack`, Banner, Map, Lead
+
+*Agents: append below. Keep it factual and short.*
+

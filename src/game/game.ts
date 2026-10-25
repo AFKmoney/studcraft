@@ -1688,6 +1688,21 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   }
 
   function useBlock(hit: { id: number; x: number; y: number; z: number }) {
+    if (hit.id === ID.CropRipe) {
+      world.set(hit.x, hit.y, hit.z, ID.Air);
+      if (!creative) {
+        addInv(ID.Wheat, 1);
+        addInv(ID.Seeds, 1);
+      }
+      if (world.get(hit.x, hit.y - 1, hit.z) === ID.Farmland && (creative || spend(ID.Seeds, 1))) {
+        world.set(hit.x, hit.y, hit.z, ID.Crop);
+        say("Replanted");
+      } else say("Harvested");
+      markDirtyAt(hit.x, hit.z);
+      audio.break();
+      saveDirty = true;
+      return true;
+    }
     const block = def(hit.id);
     if (block.door || block.gate) {
       const next = hit.id === ID.Door || hit.id === ID.Gate ? (hit.id === ID.Door ? ID.DoorOpen : ID.GateOpen) : hit.id === ID.DoorOpen ? ID.Door : ID.Gate;
