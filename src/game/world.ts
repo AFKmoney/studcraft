@@ -1053,6 +1053,23 @@ function levelPad(world: World, x0: number, z0: number, w: number, d: number, h:
 
 
 
+
+function stampTemple(world: World, x: number, y: number, z: number) {
+  // small desert temple
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dz = -2; dz <= 2; dz++) {
+      if (Math.abs(dx) === 2 || Math.abs(dz) === 2) {
+        world.set(x + dx, y, z + dz, ID.Sand);
+        world.set(x + dx, y + 1, z + dz, ID.Sand);
+      }
+    }
+  }
+  world.set(x, y, z, ID.Chest);
+  world.set(x, y + 1, z, ID.Sand);
+  world.set(x + 1, y, z, ID.TNT);
+  world.set(x - 1, y, z, ID.TNT);
+}
+
 function stampPortal(world: World, x: number, y: number, z: number) {
   // ruined nether portal frame
   for (let i = 0; i < 4; i++) {
