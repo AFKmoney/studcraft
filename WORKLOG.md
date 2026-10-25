@@ -1298,3 +1298,25 @@ Four set-piece structures join the small site system, on their own coarse grid (
 
 ### Next move (claimed by Muse)
 BO2-6: stations (beacon, shulker box, conduit, jukebox + discs).
+
+## v3.7 — 2026-10-25 (Living sky — Philippe's order: quality day/night sky, weather, realistic clouds)
+
+Philippe's brief: a quality sky — day/night, weather, realistic clouds — upscaled the Studcraft way (procedural math, zero heavy assets). The dome, sun/moon and stars already existed; what was missing was real clouds and real weather. This version builds both, plus the rain that until now was invisible.
+
+### What shipped
+- **Procedural cloud deck** (Realistic mode): ONE shader plane following the player at +88, zero textures. A two-layer fBm field (5 octaves, 4 on narrow screens) shapes soft cloud masses — detail noise for lit puff tops, a low-frequency belly field for grey undersides, a sun-glow term through the deck, distance + near fades so flying through it never hard-clips. World-space UVs + eased wind drift: the sky moves, the player doesn't swim through it. In Realistic mode it replaces the 32 slab clouds; **Performance keeps the slabs exactly as before**.
+- **Weather director**: four states — clear → cloudy → rain → storm — on a small Markov chain with per-state durations (50–300 s). All consumers read **eased** values (cover, dark, precip, fog, wind; ~10 s transitions), so weather breathes in instead of snapping: fog greys and closes in, the zenith dulls, the sun dims under cover, the deck thickens and darkens, the wind picks up.
+- **Rain, visible at last**: 700 recycled line streaks in a box around the camera, slanted by the eased wind, opacity driven by precipitation. Before this version "rain" existed only as a HUD word, wet crops and lightning.
+- **Lightning re-gated**: frequent in storms (5–14 s), rare in plain rain (24–54 s) — same bolt/flash/thunder/creeper-charging strike as before.
+- HUD weather now reports the real state. QA hooks: `getWx()` / `setWx(state)` (the hook snaps eased values — a test convenience; production transitions always ease).
+
+### QA
+- tsc clean (0 errors).
+- qa64 live (browser, seed 23, Realistic): director states and eased values read back exactly (`clear cover=0.22 deck=on slabs=off rain=off` → `storm cover=1.00 dark=0.78 precip=1.00`), rain streaks observed ON during the storm phase, back off after clear, 0 game errors (the single console error is the fonts CDN tunnel failing on this VM, environmental).
+- Honest limit: all three qa64 screenshots timed out on this box (SwiftShader + a neighbour benchmark saturating the CPU) — the deck is verified by state and shader compile, **not yet by eye**. Philippe's A54 look at the sky is the visual verdict, as always.
+
+### Files
+`src/game/game.ts`, `WORKLOG.md`, `apk/src/main/AndroidManifest.xml` (versionCode 28 / versionName 3.7). APK + web zip rebuilt.
+
+### Next move (claimed by Muse)
+BO2-6: stations (beacon, shulker box, conduit, jukebox + discs).

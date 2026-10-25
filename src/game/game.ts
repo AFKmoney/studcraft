@@ -186,6 +186,8 @@ declare global {
       forceRaid?: () => boolean;
       getLandmark?: () => string;
       scanLandmarks?: () => string[];
+      getWx?: () => string;
+      setWx?: (s: string) => boolean;
       getMobNames?: () => string[];
       getArmor?: () => number[];
       give?: (id: number, n: number) => boolean;
@@ -321,6 +323,27 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let oxygen = 10;
   let raining = false;
   let weatherIn = 50;
+  // Weather director (v3.7): four states with eased parameters — the sky,
+  // fog, cloud deck and rain all read wxCur, never the raw state, so the
+  // weather breathes instead of snapping.
+  type WxState = "clear" | "cloudy" | "rain" | "storm";
+  let wx: WxState = "clear";
+  const WX_DEF: Record<WxState, { cover: number; dark: number; precip: number; fog: number; wind: number; dur: [number, number] }> = {
+    clear: { cover: 0.22, dark: 0, precip: 0, fog: 1, wind: 1, dur: [150, 300] },
+    cloudy: { cover: 0.62, dark: 0.28, precip: 0, fog: 0.92, wind: 1.4, dur: [90, 200] },
+    rain: { cover: 0.88, dark: 0.55, precip: 1, fog: 0.78, wind: 1.8, dur: [80, 160] },
+    storm: { cover: 1, dark: 0.78, precip: 1, fog: 0.62, wind: 2.6, dur: [50, 110] },
+  };
+  const wxCur = { cover: 0.22, dark: 0, precip: 0, fog: 1, wind: 1 };
+  function advanceWx() {
+    const r = Math.random();
+    if (wx === "clear") wx = "cloudy";
+    else if (wx === "cloudy") wx = r < 0.45 ? "rain" : r < 0.6 ? "clear" : "cloudy";
+    else if (wx === "rain") wx = r < 0.25 ? "storm" : r < 0.7 ? "cloudy" : "rain";
+    else wx = r < 0.6 ? "rain" : "cloudy";
+    const d = WX_DEF[wx].dur;
+    weatherIn = d[0] + Math.random() * (d[1] - d[0]);
+  }
   let strikeIn = 14;
   let boltT = 0;
   let golemWait = 0;
@@ -689,6 +712,121 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   }));
   scene.add(clouds);
 
+  // Procedural cloud deck (v3.7, Realistic mode): one shader plane, zero
+  // textures — a two-layer fBm field gives soft masses with lit tops and
+  // grey bellies; coverage and darkness are driven by the weather
+  // director. Same law as SIREN: the detail is math, not assets.
+  const deckU = {
+    uDrift: { value: new THREE.Vector2(0, 0) },
+    uCover: { value: 0.22 },
+    uDark: { value: 0 },
+    uSunDir: { value: new THREE.Vector3(0, 1, 0) },
+    uSunCol: { value: new THREE.Color(0xffe9b8) },
+    uDayF: { value: 1 },
+    uFog: { value: new THREE.Color(0x8ec8f5) },
+    uCam: { value: new THREE.Vector3() },
+    uOct: { value: narrow ? 4 : 5 },
+  };
+  const deck = new THREE.Mesh(
+    new THREE.PlaneGeometry(760, 760),
+    new THREE.ShaderMaterial({
+      uniforms: deckU,
+      transparent: true,
+      depthWrite: false,
+      vertexShader: `
+        varying vec3 vWorld;
+        void main() {
+          vec4 wp = modelMatrix * vec4(position, 1.0);
+          vWorld = wp.xyz;
+          gl_Position = projectionMatrix * viewMatrix * wp;
+        }`,
+      fragmentShader: `
+        varying vec3 vWorld;
+        uniform vec2 uDrift;
+        uniform float uCover;
+        uniform float uDark;
+        uniform vec3 uSunDir;
+        uniform vec3 uSunCol;
+        uniform float uDayF;
+        uniform vec3 uFog;
+        uniform vec3 uCam;
+        uniform float uOct;
+        float hash21(vec2 p) {
+          p = fract(p * vec2(234.34, 435.345));
+          p += dot(p, p + 34.23);
+          return fract(p.x * p.y);
+        }
+        float vnoise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          float a = hash21(i);
+          float b = hash21(i + vec2(1.0, 0.0));
+          float c = hash21(i + vec2(0.0, 1.0));
+          float d = hash21(i + vec2(1.0, 1.0));
+          return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+        }
+        float fbm(vec2 p) {
+          float v = 0.0;
+          float a = 0.55;
+          for (int i = 0; i < 5; i++) {
+            if (float(i) >= uOct) break;
+            v += a * vnoise(p);
+            p = p * 2.13 + vec2(17.3, 9.1);
+            a *= 0.55;
+          }
+          return v;
+        }
+        void main() {
+          vec2 p = vWorld.xz * 0.006;
+          float base = fbm(p + uDrift);
+          float det = fbm(p * 3.7 - uDrift * 1.7);
+          float n = base * 0.72 + det * 0.28;
+          float t = 1.02 - uCover * 0.72;
+          float alpha = smoothstep(t - 0.24, t + 0.24, n);
+          if (alpha < 0.004) discard;
+          float belly = fbm(p * 0.9 + 4.7 + uDrift * 0.6);
+          vec3 col = mix(vec3(0.52, 0.56, 0.63), vec3(1.02), clamp(det * 1.25 - 0.08, 0.0, 1.0));
+          col *= 0.82 + belly * 0.3;
+          col *= 1.0 - uDark * 0.52;
+          col *= 0.16 + 0.84 * uDayF;
+          vec3 vd = normalize(vWorld - uCam);
+          float sg = pow(max(dot(vd, normalize(uSunDir)), 0.0), 6.0);
+          col += uSunCol * sg * 0.38 * uDayF * (1.0 - uDark * 0.6);
+          float dist = length(vWorld - uCam);
+          float fade = (1.0 - smoothstep(230.0, 370.0, dist)) * smoothstep(6.0, 26.0, dist);
+          gl_FragColor = vec4(col, alpha * 0.94 * fade);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }`,
+    }),
+  );
+  deck.rotation.x = -Math.PI / 2;
+  deck.frustumCulled = false;
+  deck.renderOrder = 4;
+  deck.visible = false;
+  scene.add(deck);
+
+  // Rain streaks (v3.7): recycled line segments in a box around the
+  // camera — the cheapest rain that reads. Slant follows the wind.
+  const RAIN_N = 700;
+  const rainPos = new Float32Array(RAIN_N * 2 * 3);
+  const rainOff = new Float32Array(RAIN_N * 3);
+  for (let i = 0; i < RAIN_N; i++) {
+    rainOff[i * 3] = Math.random() * 38 - 19;
+    rainOff[i * 3 + 1] = Math.random() * 26;
+    rainOff[i * 3 + 2] = Math.random() * 38 - 19;
+  }
+  const rainGeo = new THREE.BufferGeometry();
+  rainGeo.setAttribute("position", new THREE.BufferAttribute(rainPos, 3));
+  const rainLines = new THREE.LineSegments(
+    rainGeo,
+    new THREE.LineBasicMaterial({ color: 0xaaccee, transparent: true, opacity: 0 }),
+  );
+  rainLines.frustumCulled = false;
+  rainLines.visible = false;
+  scene.add(rainLines);
+
   const outlineMat = new THREE.LineBasicMaterial({ color: 0x1a120c });
   const highlight = new THREE.Group();
   highlight.add(
@@ -993,7 +1131,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     hud.found = [...found];
     hud.oxygen = oxygen;
     hud.rain = raining;
-    hud.weather = raining ? "rain" : "clear";
+    hud.weather = wx;
     hud.armor = [...armor];
     hud.grid = [...grid];
     hud.cursor = cursor;
@@ -5705,6 +5843,17 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   function sky(dt: number) {
     worldTime = (worldTime + dt / 200) % 1;
     musicTick(dt);
+    // Weather director easing (v3.7): live values trail the state over
+    // ~10 s, and the cloud deck drifts with the eased wind.
+    const wxDef = WX_DEF[wx];
+    const wk = 1 - Math.exp(-dt * 0.22);
+    wxCur.cover += (wxDef.cover - wxCur.cover) * wk;
+    wxCur.dark += (wxDef.dark - wxCur.dark) * wk;
+    wxCur.precip += (wxDef.precip - wxCur.precip) * wk;
+    wxCur.fog += (wxDef.fog - wxCur.fog) * wk;
+    wxCur.wind += (wxDef.wind - wxCur.wind) * wk;
+    deckU.uDrift.value.x += dt * 0.011 * wxCur.wind;
+    deckU.uDrift.value.y += dt * 0.003 * wxCur.wind;
     const ang = worldTime * Math.PI * 2;
     const sunH = Math.sin(ang);
     const sunX = Math.cos(ang);
@@ -5718,12 +5867,17 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const duskF = Math.max(0, 1 - Math.abs(sunH) / 0.3);
     let fogHex = sunH > 0 ? lerpHex(hor, day, Math.min(1, sunH * 1.5)) : lerpHex(hor, night, Math.min(1, -sunH * 1.15));
     if (duskF > 0) fogHex = lerpHex(fogHex, 0xf07840, duskF * 0.22);
+    if (realm === 0 && wxCur.dark > 0.01) fogHex = lerpHex(fogHex, 0x87919c, wxCur.dark * 0.55);
     renderer.setClearColor(fogHex, 1);
     const fog = scene.fog as THREE.Fog;
     fog.color.setHex(fogHex);
     const far = effRadius() * CS + 18;
     fog.near = far * 0.42;
     fog.far = far;
+    if (realm === 0) {
+      fog.near *= wxCur.fog;
+      fog.far *= wxCur.fog;
+    }
     // Underwater: when the camera's eye block is a fluid, collapse the fog
     // into a dense tint (the dome colors are bent to match below).
     const eyeDef = def(world.get(Math.floor(camera.position.x), Math.floor(camera.position.y), Math.floor(camera.position.z)));
@@ -5768,13 +5922,15 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       sun.position.set(sunX * 60, sunH * 50 + 8, 24);
       sun.castShadow = false;
     }
+    if (realm === 0) sun.intensity *= 1 - wxCur.cover * 0.45;
     sunMesh.position.set(player.x + sunX * 150, player.y + sunH * 90 + 10, player.z + 30);
     moonMesh.position.set(player.x - sunX * 150, player.y - sunH * 90 + 16, player.z - 20);
     sunMesh.visible = sunH > -0.1;
     moonMesh.visible = sunH < 0.25;
     (stars.material as THREE.PointsMaterial).opacity = Math.max(0, Math.min(1, -sunH * 1.4));
     stars.position.set(player.x, 0, player.z);
-    const zenHex = sunH > 0 ? lerpHex(0x2c4a73, 0x2a6ad4, Math.min(1, sunH * 1.6)) : lerpHex(0x2c4a73, 0x030612, Math.min(1, -sunH * 1.2));
+    let zenHex = sunH > 0 ? lerpHex(0x2c4a73, 0x2a6ad4, Math.min(1, sunH * 1.6)) : lerpHex(0x2c4a73, 0x030612, Math.min(1, -sunH * 1.2));
+    if (realm === 0 && wxCur.dark > 0.01) zenHex = lerpHex(zenHex, 0x59636e, wxCur.dark * 0.5);
     if (submerged) {
       skyU.topColor.value.setHex(lerpHex(uwHex, 0x000000, 0.35));
       skyU.horizonColor.value.setHex(uwHex);
@@ -5785,6 +5941,45 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     skyU.sunDirection.value.set(sunX, sunH, 0.18).normalize();
     skyU.uGlow.value = THREE.MathUtils.clamp(sunH * 1.8 + 0.25, 0, 1);
     skyDome.position.set(player.x, player.y, player.z);
+    // Cloud deck + rain (v3.7). The deck replaces the slab clouds in
+    // Realistic mode; Performance keeps the slabs untouched.
+    clouds.visible = !settings.realistic;
+    const deckOn = settings.realistic && realm === 0 && !submerged;
+    deck.visible = deckOn;
+    if (deckOn) {
+      deck.position.set(player.x, player.y + 88, player.z);
+      deckU.uCover.value = wxCur.cover;
+      deckU.uDark.value = wxCur.dark;
+      deckU.uDayF.value = dayF;
+      deckU.uSunDir.value.copy(skyU.sunDirection.value);
+      deckU.uSunCol.value.copy(skyU.sunColor.value);
+      deckU.uCam.value.copy(camera.position);
+    }
+    const rainOn = realm === 0 && !submerged && wxCur.precip > 0.03;
+    rainLines.visible = rainOn;
+    if (rainOn) {
+      (rainLines.material as THREE.LineBasicMaterial).opacity = 0.34 * wxCur.precip * (0.35 + 0.65 * dayF);
+      const fall = (21 + wxCur.wind * 5) * dt;
+      const slantX = wxCur.wind * 0.55;
+      const cx = camera.position.x;
+      const cy = camera.position.y;
+      const cz = camera.position.z;
+      for (let i = 0; i < RAIN_N; i++) {
+        let oy = rainOff[i * 3 + 1] - fall * (0.85 + (i % 7) * 0.04);
+        if (oy < -3) oy += 29;
+        rainOff[i * 3 + 1] = oy;
+        const ox = rainOff[i * 3];
+        const oz = rainOff[i * 3 + 2];
+        const j = i * 6;
+        rainPos[j] = cx + ox;
+        rainPos[j + 1] = cy + oy;
+        rainPos[j + 2] = cz + oz;
+        rainPos[j + 3] = cx + ox + slantX;
+        rainPos[j + 4] = cy + oy - 1.15;
+        rainPos[j + 5] = cz + oz + slantX * 0.3;
+      }
+      (rainGeo.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    }
   }
 
   function renderCamera(dt: number) {
@@ -5963,14 +6158,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (phase === "play") {
       tickExtras(dt);
       weatherIn -= dt;
-      if (weatherIn <= 0) {
-        raining = !raining && Math.random() < 0.45;
-        weatherIn = raining ? 45 : 70 + Math.random() * 40;
-      }
+      if (weatherIn <= 0) advanceWx();
+      raining = wx === "rain" || wx === "storm";
       if (raining) {
         strikeIn -= dt;
         if (strikeIn <= 0) {
-          strikeIn = 11 + Math.random() * 16;
+          strikeIn = wx === "storm" ? 5 + Math.random() * 9 : 24 + Math.random() * 30;
           lightning();
         }
       }
@@ -6353,6 +6546,28 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     getLandmark: () => {
       const lm = world.nearestLandmark(player.x, player.z);
       return lm ? lm.kind + "@" + lm.x + "," + lm.z + " y=" + lm.y + " d=" + Math.round(Math.hypot(lm.x - player.x, lm.z - player.z)) : "-";
+    },
+    getWx: () =>
+      wx +
+      " cover=" + wxCur.cover.toFixed(2) +
+      " dark=" + wxCur.dark.toFixed(2) +
+      " precip=" + wxCur.precip.toFixed(2) +
+      " deck=" + (deck.visible ? "on" : "off") +
+      " slabs=" + (clouds.visible ? "on" : "off") +
+      " rain=" + (rainLines.visible ? "on" : "off"),
+    setWx: (s: string) => {
+      if (s !== "clear" && s !== "cloudy" && s !== "rain" && s !== "storm") return false;
+      wx = s;
+      weatherIn = 600;
+      // Test hook: snap the eased values so QA doesn't wait out the
+      // (deliberately slow) production transitions.
+      const d = WX_DEF[s];
+      wxCur.cover = d.cover;
+      wxCur.dark = d.dark;
+      wxCur.precip = d.precip;
+      wxCur.fog = d.fog;
+      wxCur.wind = d.wind;
+      return true;
     },
     scanLandmarks: () => {
       const out: string[] = [];
