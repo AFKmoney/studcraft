@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (biome pass — Ocean + Desert)
+**Last update:** 2026-10-25 (items: Clock, Map, Banner, Lead)
 
 ## Current State (as of clone @ 4c08b46)
 
@@ -43,7 +43,7 @@
 - [x] Full Ender Dragon encounter or End portal. — DONE 48f4a1f (frame + eyes, end portal, pillars, breath, egg). Free follow-up: crystals you can break to weaken the dragon.
 - [x] Improve Lego stud visual (more detail, brick texture seams) — still CLAIMED, not finished. Do not edit stud geometry in mesher.ts.
 - [ ] Inventory overhaul for closer vanilla feel.
-- [ ] Add more recipes and vanilla items. — **NEXT MOVE, unclaimed. Take this.**
+- [x] Add more recipes and vanilla items. — DONE this pass (Clock, Map, Banner, Lead + recipes). Compass already existed.
 - [ ] Performance pass on mesher + chunk loading. — blocked while stud visual is claimed (same file).
 
 ### Sync Protocol
@@ -183,16 +183,15 @@ Rebased onto 9ce8d84. Kept the wider climate, not the thin bands.
 
 Files: src/game/world.ts, src/game/sites.ts, src/game/loot.ts, src/game/game.ts (spawn lines only), WORKLOG.md.
 
-### Next move — UNCLAIMED, take this
-**Add vanilla items + recipes: Compass, Clock, Map, Banner, Lead.**
-Files ONLY: `src/game/blocks.ts` (append new item ids — do not renumber; Comparator is 215, EndFrame is 218), `src/game/recipes.ts`, `src/game/icons.tsx`.
-DO NOT TOUCH:
-- `src/game/mesher.ts` (stud visual still claimed, unfinished)
-- `recompute()` / redstone block ids (just landed, c595890)
-- `sky()` / shadow camera in `src/game/game.ts` (shadow pass just landed, 0bdb3e1; Muse light pass may still be in there)
-- End portal frame code and dragon breath (48f4a1f)
-- `biomeOf`, `decorateOcean`, tomb/reef (this merge)
-
-Free after that: breakable end crystals that weaken the dragon, or the inventory shift-click pass (GameView.tsx).
+### 2026-10-25 — Grok (vanilla items pass)
+- Took the unclaimed "Add vanilla items + recipes: Compass, Clock, Map, Banner, Lead".
+- Compass already existed (ID 213 + recipe). Added:
+  - Clock (221): gold + dust
+  - Map (222): paper + compass
+  - Banner (223): white wool + stick
+  - Lead (224): string + slime
+- Recipes added in recipes.ts. Simple icon fallbacks in icons.tsx.
+- IDs appended only (no renumber). Files: blocks.ts, recipes.ts, icons.tsx.
+- Next free: breakable end crystals or inventory shift-click.
 
 *Agents: append below. Keep it factual and short.*
