@@ -321,12 +321,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     coyote: 0,
   };
 
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: !narrow, alpha: false, powerPreference: "high-performance" });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, narrow ? 1.25 : 1.6));
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: "high-performance" });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, narrow ? 1.75 : 2));
   renderer.setClearColor(0x8ec8f5, 1);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = settings.realistic ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
-  renderer.toneMappingExposure = settings.realistic ? 1.05 : 1;
+  renderer.toneMappingExposure = settings.realistic ? 1.08 : 1;
   renderer.shadowMap.enabled = settings.realistic;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -370,10 +370,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
 
   const atlases = buildAtlas();
   const atlas = atlases.color;
-  const aniso = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+  const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   atlas.anisotropy = aniso;
-  atlases.rough.anisotropy = aniso;
-  atlases.normal.anisotropy = aniso;
+  atlases.rough.anisotropy = Math.min(4, aniso);
+  atlases.normal.anisotropy = Math.min(4, aniso);
   const pmrem = new THREE.PMREMGenerator(renderer);
   const room = new RoomEnvironment();
   const envTex = pmrem.fromScene(room, 0.04).texture;
@@ -429,7 +429,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     opacity: 0.55,
     depthWrite: false,
     side: THREE.DoubleSide,
-    envMapIntensity: 0.85,
+    envMapIntensity: 1,
     vertexColors: true,
   });
   waterStd.onBeforeCompile = (shader) => {
@@ -603,7 +603,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   function relight() {
     plasticOn = settings.realistic;
     renderer.toneMapping = settings.realistic ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
-    renderer.toneMappingExposure = settings.realistic ? 1.05 : 1;
+    renderer.toneMappingExposure = settings.realistic ? 1.08 : 1;
     renderer.shadowMap.enabled = settings.realistic;
     scene.environment = settings.realistic ? envTex : null;
     scene.environmentIntensity = settings.realistic ? 0.35 : 1;
@@ -3495,6 +3495,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let viewW = 0;
   let viewH = 0;
   let viewPR = 0;
+  let prScale = 1;
+  let fpsAcc = 0;
+  let fpsFrames = 0;
+  let fpsWindow = 0;
 
   function frame() {
     if (!running) return;
@@ -3502,9 +3506,20 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const dt = Math.min(timer.getDelta(), 0.05);
     elapsed += dt;
     waterTime.value = elapsed;
+    fpsAcc += dt;
+    fpsFrames += 1;
+    fpsWindow += dt;
+    if (fpsWindow >= 1.5) {
+      const avg = fpsAcc / Math.max(1, fpsFrames);
+      if (avg > 0.024 && prScale > 0.6) prScale = Math.max(0.6, prScale - 0.15);
+      else if (avg < 0.0125 && prScale < 1) prScale = Math.min(1, prScale + 0.1);
+      fpsAcc = 0;
+      fpsFrames = 0;
+      fpsWindow = 0;
+    }
     const w = canvas.clientWidth || 1;
     const h = canvas.clientHeight || 1;
-    const pr = Math.min(window.devicePixelRatio || 1, touchMode ? 1.25 : 1.6);
+    const pr = Math.min(window.devicePixelRatio || 1, touchMode ? 1.75 : 2) * prScale;
     if (w !== viewW || h !== viewH || pr !== viewPR) {
       viewW = w;
       viewH = h;
