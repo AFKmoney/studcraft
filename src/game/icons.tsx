@@ -55,6 +55,19 @@ const IMAGE_ICONS: Record<number, string> = {
   [ID.Saddle]: "/icons/saddle.jpg",
   [ID.Shield]: "/icons/shield.jpg",
 
+  
+  [ID.DragonEgg]: "/icons/dragonegg.jpg",
+  [ID.Ingot]: "/icons/ingot.jpg",
+  [ID.Stick]: "/icons/stick.jpg",
+  [ID.Seeds]: "/icons/seeds.jpg",
+  [ID.Wheat]: "/icons/wheat.jpg",
+  [ID.WaterBucket]: "/icons/waterbucket.jpg",
+  [ID.Cooked]: "/icons/cooked.jpg",
+  [ID.Rod]: "/icons/rod.jpg",
+  [ID.PotionStr]: "/icons/potion_str.jpg",
+  [ID.Emerald]: "/icons/emerald.jpg",
+  [ID.Boat]: "/icons/boat.jpg",
+  [ID.Cart]: "/icons/cart.jpg",
   // more unique Lego product icons mapped as assets are added (no duplicates)
 };
 

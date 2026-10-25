@@ -12,6 +12,7 @@
 - Last cycle: Horn, Lead, Slime + replacements for carrot/potato/beetroot.
 - Next: continue mapping remaining generated assets to full coverage.
 - Added: PotionHeal, PotionSpeed, Gapple, Feather, String, Saddle, Shield.
+- Added: DragonEgg, Ingot, Stick, Seeds, Wheat, WaterBucket, Cooked, Rod, PotionStr, Emerald, Boat, Cart.
 
 
 ## Current State (as of clone @ 4c08b46)
