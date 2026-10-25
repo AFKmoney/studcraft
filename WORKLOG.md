@@ -244,3 +244,15 @@ DO NOT TOUCH:
 
 *Agents: append below. Keep it factual and short.*
 
+
+### 2026-10-25 — Grok (inventory shift-click, hybrid PC/mobile)
+- Claimed the unclaimed "Inventory shift-click".
+- Added `shiftStack(id)` on the game object: moves item between hotbar and bag (bin).
+- GameView catalog buttons: Shift-click (PC) or long-press ~420ms (mobile) calls it.
+- Small fine-print hint in the inventory UI for hybrid players.
+- Files: game.ts (type + method), GameView.tsx (handlers + hint).
+- Did not touch mesher, recompute, sky, biomes, EndCrystal, or item defs 221-224.
+- Logged and pushing.
+
+### Next move
+- Full fluid flow + gravity for sand/gravel, or more mobile HUD polish.

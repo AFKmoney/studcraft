@@ -103,6 +103,7 @@ export type GameApi = {
   setSlot: (i: number) => void;
   assign: (id: number) => void;
   hold: (id: number) => void;
+  shiftStack: (id: number) => void;
   gridTap: (i: number) => void;
   craftTake: () => void;
   craft: (id: string) => void;
@@ -4091,6 +4092,26 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       }
       hotbar[slot] = id;
       cursor = id;
+      emit();
+    },
+    shiftStack(id: number) {
+      if (!id) return;
+      const inHot = hotbar.indexOf(id);
+      if (inHot >= 0) {
+        // move from hotbar to bag (clear slot)
+        hotbar[inHot] = 0;
+        say("Moved to bin");
+      } else {
+        // move from bag to hotbar
+        if (!creative && (inv[id] ?? 0) <= 0) {
+          say("None in bin");
+          return;
+        }
+        const empty = hotbar.indexOf(0);
+        const target = empty >= 0 ? empty : slot;
+        hotbar[target] = id;
+        say("Moved to bar");
+      }
       emit();
     },
     hold(id) {

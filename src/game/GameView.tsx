@@ -440,7 +440,7 @@ function Inventory({ game }: { game: GameApi }) {
                 {hud.craftOut && hud.craftOut.n > 1 ? <em>{hud.craftOut.n}</em> : null}
               </button>
             </div>
-            <p className="fine">Tap a brick below, then a grid cell. The 2×2 works in the bag. Bench uses all nine.</p>
+        <p className="fine">Shift-click (PC) or long-press (mobile) moves a stack between the bar and the bin.</p>
           </>
         )}
         {hud.panel === "furnace" && (
@@ -520,11 +520,20 @@ function Inventory({ game }: { game: GameApi }) {
                 key={id}
                 data-empty={empty}
                 onClick={(e) => {
-                  if (e.shiftKey) game.shiftStack(id);
-                  else {
+                  if (e.shiftKey) {
+                    game.shiftStack(id);
+                  } else {
                     game.hold(id);
                     game.assign(id);
                   }
+                }}
+                onPointerDown={() => {
+                  const start = Date.now();
+                  const up = () => {
+                    if (Date.now() - start > 420) game.shiftStack(id);
+                    window.removeEventListener("pointerup", up);
+                  };
+                  window.addEventListener("pointerup", up);
                 }}
               >
                 <ItemIcon id={id} />
