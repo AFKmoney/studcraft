@@ -347,16 +347,17 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   const sun = new THREE.DirectionalLight(0xfff4dd, 0.85);
   sun.position.set(40, 80, 20);
   sun.castShadow = settings.realistic;
-  sun.shadow.mapSize.set(narrow ? 1024 : 2048, narrow ? 1024 : 2048);
-  sun.shadow.bias = -0.0002;
-  sun.shadow.normalBias = 0.06;
-  const shadowCam = sun.shadow.camera;
-  shadowCam.left = -30;
-  shadowCam.right = 30;
-  shadowCam.top = 30;
-  shadowCam.bottom = -30;
-  shadowCam.near = 0.5;
-  shadowCam.far = 140;
+  sun.shadow.mapSize.set(narrow ? 1536 : 2048, narrow ? 1536 : 2048);
+  sun.shadow.bias = -0.00012;
+  sun.shadow.normalBias = 0.022;
+  const shadowCam = sun.shadow.camera as THREE.OrthographicCamera;
+  const baseExtent = 28;
+  shadowCam.left = -baseExtent;
+  shadowCam.right = baseExtent;
+  shadowCam.top = baseExtent;
+  shadowCam.bottom = -baseExtent;
+  shadowCam.near = 1;
+  shadowCam.far = 160;
   scene.add(hemi, ambient, sun, sun.target);
   const sunMesh = new THREE.Mesh(
     new THREE.SphereGeometry(7, 16, 12),
@@ -3581,19 +3582,32 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     hemi.color.setHex(sunH > 0 ? 0xcfe6ff : 0x22304e);
     sun.color.setHex(sunH > 0 ? 0xfff2d2 : 0x6d7eaa);
     if (settings.realistic) {
-      hemi.intensity = 0.28 + Math.max(0, sunH) * 0.32;
-      ambient.intensity = 0.28 + Math.max(0, sunH) * 0.07;
-      sun.intensity = 0.1 + Math.max(0, sunH) * 1.75;
-      scene.environmentIntensity = 0.3 + Math.max(0, sunH) * 0.25;
-      const texel = 60 / (narrow ? 1024 : 2048);
+      hemi.intensity = 0.26 + Math.max(0, sunH) * 0.34;
+      ambient.intensity = 0.22 + Math.max(0, sunH) * 0.08;
+      sun.intensity = 0.08 + Math.max(0, sunH) * 1.85;
+      scene.environmentIntensity = 0.28 + Math.max(0, sunH) * 0.28;
+      // Dynamic shadow frustum sized to view distance, snapped to reduce swimming
+      const extent = Math.max(22, settings.radius * CS * 0.42);
+      const texel = (extent * 2) / (narrow ? 1536 : 2048);
       const px = Math.round(player.x / texel) * texel;
-      const py = Math.round((player.y + 1) / texel) * texel;
+      const py = Math.round((player.y + 0.8) / texel) * texel;
       const pz = Math.round(player.z / texel) * texel;
-      const lift = 48;
+      const lift = Math.max(36, extent * 1.1);
       sun.target.position.set(px, py, pz);
-      sun.position.set(px + sunX * lift, py + Math.max(12, sunH * lift + 18), pz + 14);
-      sun.castShadow = sunH > 0.05;
-      sun.shadow.camera.updateProjectionMatrix();
+      sun.position.set(
+        px + sunX * lift,
+        py + Math.max(14, sunH * lift + 16),
+        pz + sunX * 6,
+      );
+      const cam = sun.shadow.camera as THREE.OrthographicCamera;
+      cam.left = -extent;
+      cam.right = extent;
+      cam.top = extent;
+      cam.bottom = -extent;
+      cam.near = 2;
+      cam.far = lift + extent + 40;
+      sun.castShadow = sunH > 0.08;
+      cam.updateProjectionMatrix();
     } else {
       hemi.intensity = 0.25 + Math.max(0, sunH) * 0.4;
       ambient.intensity = 0.22 + Math.max(0, sunH) * 0.12;
