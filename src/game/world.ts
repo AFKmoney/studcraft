@@ -1052,6 +1052,21 @@ function levelPad(world: World, x0: number, z0: number, w: number, d: number, h:
 
 
 
+
+function stampPortal(world: World, x: number, y: number, z: number) {
+  // ruined nether portal frame
+  for (let i = 0; i < 4; i++) {
+    world.set(x, y + i, z, ID.Obsidian);
+    world.set(x + 3, y + i, z, ID.Obsidian);
+  }
+  world.set(x + 1, y, z, ID.Obsidian);
+  world.set(x + 2, y, z, ID.Obsidian);
+  world.set(x + 1, y + 4, z, ID.Obsidian);
+  world.set(x + 2, y + 4, z, ID.Obsidian);
+  // missing some blocks to look ruined
+  world.set(x + 1, y + 2, z, ID.Air);
+}
+
 function stampHut(world: World, x: number, y: number, z: number) {
   // tiny hut
   for (let dx = 0; dx <= 2; dx++) {

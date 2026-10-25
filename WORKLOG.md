@@ -27,6 +27,7 @@
 - Added rare buried dungeon (room + chest + spawner).
 - Added rare watchtower (cobble + torch) in Brick plains.
 - Added rare hut (planks + door + glass) in Grove.
+- Added rare ruined nether portal in Ash ridge.
 - Block icons + recipes for Basalt/Calcite/Tuff complete.
 
 ### Recipes for new blocks (this cycle)
