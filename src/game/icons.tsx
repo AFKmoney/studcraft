@@ -13,7 +13,19 @@ const IMAGE_ICONS: Record<number, string> = {
   [ID.RawMeat]: "/icons/meat.jpg",
   [ID.Fish]: "/icons/fish.jpg",
   [ID.Bucket]: "/icons/bucket.jpg",
-  // tools / armor / food / blocks will be filled as we generate more
+  [ID.Pelt]: "/icons/pelt.jpg",
+  [ID.Pie]: "/icons/pie.jpg",
+  [ID.Prism]: "/icons/prism.jpg",
+  [ID.Slice]: "/icons/pumpkin.jpg",
+  [ID.RawIron]: "/icons/rawiron.jpg",
+  [ID.Resin]: "/icons/resin.jpg",
+  [ID.Sapphire]: "/icons/sapphire.jpg",
+  [ID.Scale]: "/icons/scale.jpg",
+  [ID.Eye]: "/icons/eye.jpg",
+  [ID.Shell]: "/icons/shell.jpg",
+  [ID.Flint]: "/icons/spark.jpg",
+  [ID.Tome]: "/icons/tome.jpg",
+  // more Lego product icons added as generated (no duplicates)
 };
 
 export function ItemIcon({ id, muted = false }: { id: number; muted?: boolean }) {
