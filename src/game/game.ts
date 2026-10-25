@@ -1444,7 +1444,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         if (Math.random() < 0.12) addInv(ID.Stick, 1);
       } else if (canDrop && id === ID.TallGrass) {
         if (Math.random() < 0.4) addInv(ID.Seeds, 1);
-      } else if (canDrop && id === ID.Crop) addInv(ID.Seeds, 1);
+      } else if (canDrop && (id === ID.Crop || id === ID.Crop1 || id === ID.Crop2)) addInv(ID.Seeds, 1);
       else if (canDrop && id === ID.CropRipe) {
         addInv(ID.Wheat, 1);
         addInv(ID.Seeds, 1);
@@ -1964,7 +1964,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
 
   function meal(hit: { id: number; x: number; y: number; z: number }) {
     const id = hit.id;
-    if (id === ID.Crop) world.set(hit.x, hit.y, hit.z, ID.CropRipe);
+    if (id === ID.Crop || id === ID.Crop1 || id === ID.Crop2) {
+      const next = id === ID.Crop ? ID.Crop1 : id === ID.Crop1 ? ID.Crop2 : ID.CropRipe;
+      world.set(hit.x, hit.y, hit.z, next);
+    }
     else if (id === ID.Sapling) growTree(hit.x, hit.y, hit.z);
     else if (id === ID.Cane && world.get(hit.x, hit.y + 1, hit.z) === ID.Air) world.set(hit.x, hit.y + 1, hit.z, ID.Cane);
     else if (id === ID.Grass || id === ID.Dirt) {
@@ -3756,12 +3759,14 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
                 const x = gx + dx;
                 const y = Math.floor(player.y) + dy;
                 const z = gz + dz;
-                if (world.get(x, y, z) !== ID.Crop) continue;
+                if (world.get(x, y, z) !== ID.Crop && world.get(x, y, z) !== ID.Crop1 && world.get(x, y, z) !== ID.Crop2) continue;
                 if (world.get(x, y - 1, z) !== ID.Farmland) continue;
                 let wet = raining;
                 for (const [ox, , oz] of NEIGHBORS) if (world.get(x + ox, y - 1, z + oz) === ID.Water) wet = true;
-                if (Math.random() < (wet ? 0.65 : 0.35)) {
-                  world.set(x, y, z, ID.CropRipe);
+                if (Math.random() < (wet ? 0.7 : 0.4)) {
+                  const cur = world.get(x, y, z);
+                  const next = cur === ID.Crop ? ID.Crop1 : cur === ID.Crop1 ? ID.Crop2 : ID.CropRipe;
+                  world.set(x, y, z, next);
                   markDirtyAt(x, z);
                 }
               }

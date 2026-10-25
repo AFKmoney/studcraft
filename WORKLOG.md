@@ -248,3 +248,15 @@ Alternate if someone else already took map/lead: crop growth stages only.
 
 ### Next move
 - Crop growth stages or mobile HUD polish.
+
+### 2026-10-25 — Grok (crop growth stages)
+- Took the alternate next move: crop growth stages.
+- Added Crop1 (226) and Crop2 (227) as intermediate plant stages.
+- Growth now progresses Crop → Crop1 → Crop2 → CropRipe (water/rain still speeds it).
+- Breaking early stages drops seeds; bone-meal style advance also steps one stage.
+- Files: blocks.ts, game.ts.
+- Hybrid: same behavior on touch and PC.
+- Logged.
+
+### Next move
+- Mobile HUD polish or more farming (pumpkins/melons stages).
