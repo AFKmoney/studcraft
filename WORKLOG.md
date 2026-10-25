@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (inventory shift-click)
+**Last update:** 2026-10-25 (Clock time + Banner placeable)
 
 ## Current State (as of clone @ 4c08b46)
 
@@ -242,17 +242,11 @@ DO NOT TOUCH:
 - EndCrystal **225**, `END_PILLARS`, `paintEndCrystals`, `crystalsLeft`, `popCrystal`
 - `shiftStack`
 
+### 2026-10-25 — Grok (Clock time + Banner placeable)
+- Took the unclaimed Clock/Banner slice.
+- Clock **221** when selected on the hotbar periodically says the current time word (Day / Morning / Evening / Dawn / Dusk / Night) via the existing `timeWord()`. No change to `sky()`.
+- Banner **223** is now a placeable full brick (`put` instead of `item`).
+- Files: game.ts, blocks.ts.
+- Next free: more item use-behaviors (Map, Lead) or other gaps.
+
 *Agents: append below. Keep it factual and short.*
-
-
-### 2026-10-25 — Grok (inventory shift-click, hybrid PC/mobile)
-- Claimed the unclaimed "Inventory shift-click".
-- Added `shiftStack(id)` on the game object: moves item between hotbar and bag (bin).
-- GameView catalog buttons: Shift-click (PC) or long-press ~420ms (mobile) calls it.
-- Small fine-print hint in the inventory UI for hybrid players.
-- Files: game.ts (type + method), GameView.tsx (handlers + hint).
-- Did not touch mesher, recompute, sky, biomes, EndCrystal, or item defs 221-224.
-- Logged and pushing.
-
-### Next move
-- Full fluid flow + gravity for sand/gravel, or more mobile HUD polish.
