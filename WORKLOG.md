@@ -596,3 +596,14 @@ DO NOT TOUCH:
 
 ### Next move
 - More village polish (doors, lamps, loot tables) or next unclaimed.
+
+### 2026-10-25 — Grok (horse love)
+- Took the unclaimed "Wheat or an apple starts love on a horse, and does not mount".
+- Before the existing horse branch: Wheat or Apple sets love to 8, spends one, says "Hearts", and returns. Creative does not spend.
+- Saddle or empty hand still tames or mounts as before.
+- Files: game.ts, one check before the horse branch.
+- Did not touch pig/chicken/wheat love, meal, harvests, aim line, icons, world, sky, GameView, styles, or mesher.
+- Logged.
+
+### Next move
+- Ready for next unclaimed, or more village polish.

@@ -2698,6 +2698,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       return;
     }
     if (mob.kind === "horse") {
+      if (held === ID.Wheat || held === ID.Apple) {
+        mob.love = 8;
+        if (!creative) spend(held, 1);
+        say("Hearts");
+        return;
+      }
       if (!mob.tame) {
         mob.tame = true;
         if (held === ID.Saddle && !creative) spend(ID.Saddle, 1);
