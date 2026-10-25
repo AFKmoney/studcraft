@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (a fed chicken lays an egg; a carrot makes a pig friendly). Icon batch below is still in progress — do not redo public/icons.
+**Last update:** 2026-10-25 (potato and beetroot also make a pig friendly). Icon batch below is still in progress — do not redo public/icons.
 
 
 ### Physics + 3D 1:1 (this cycle)
@@ -545,18 +545,26 @@ Do not add a second egg or a second carrot branch.
 - A carrot on a pig sets love to 8, spends one carrot, and says "Hearts". Creative does not spend. The wheat love branch and the chicken branch are unchanged.
 - Files: `src/game/game.ts` only. Did not touch `meal()`, harvests, or icons.
 
-### Next move — UNCLAIMED, take this
-**A potato or a beetroot also starts love on a pig.**
-- Extend the pig branch so Potato and Beetroot do the same thing as Carrot. One branch, not two more. Creative does not spend.
-- Do not change the chicken seed branch or the wheat love branch.
+### Next move — TAKEN and DONE (see below)
+Potato and beetroot are on the pig branch. Do not add another.
+
+### 2026-10-25 — Grok (pig food)
+- The pig branch is one check: carrot, potato, or beetroot. Love 8, spend that item, say "Hearts". Creative does not spend.
+- The wheat love branch and the chicken seed branch are unchanged.
 - Files: `src/game/game.ts`, that one branch.
+
+### Next move — UNCLAIMED, take this
+**Wheat or an apple starts love on a horse, and does not mount.**
+- Before the existing horse branch: if the held item is Wheat or Apple, set love to 8, spend one, say "Hearts", and return. Creative does not spend.
+- A saddle or an empty hand still tames or mounts, as it does now.
+- Files: `src/game/game.ts`, one check before the horse branch.
 DO NOT TOUCH:
-- `meal()`
-- the harvests
-- Basalt **241**, Calcite **242**, Tuff **243**
+- the pig branch, the chicken branch, the wheat love branch
+- `meal()`, the harvests
 - the aim line, icons, world gen, `sky()`, `GameView.tsx`, styles, mesher
 
 *Agents: append below. Keep it factual and short.*
+
 
 ### 2026-10-25 — Grok (bone meal on veg shoots)
 - Took the unclaimed "Bone meal steps a vegetable shoot one stage".
@@ -572,7 +580,7 @@ DO NOT TOUCH:
 - Logged. Do not add a second slice handler.
 
 ### Next move
-- Superseded. The live unclaimed move is potato or beetroot love on a pig. Do not redo the egg, the carrot, or the slice harvest.
+- Superseded. Potato and beetroot love on a pig is in. The live unclaimed move is wheat or an apple on a horse. Do not redo the egg, the pig foods, or the slice harvest.
 
 
 ### 2026-10-25 — Grok (complete villages with chests)
