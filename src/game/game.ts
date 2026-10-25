@@ -1700,6 +1700,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   }
 
   function useBlock(hit: { id: number; x: number; y: number; z: number }) {
+    if (hit.id === ID.Lamp) {
+      say("Ding");
+      audio.note(12);
+      return true;
+    }
     if (hit.id === ID.CropRipe) {
       world.set(hit.x, hit.y, hit.z, ID.Air);
       if (!creative) {

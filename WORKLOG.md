@@ -667,5 +667,12 @@ DO NOT TOUCH:
 - Logged.
 
 ### Next move
-- Superseded. The live unclaimed move is a prism on a wisp, above. Do not invent a second one.
 
+### 2026-10-25 — Grok (village lamp bell)
+- No new UNCLAIMED after crab love.
+- Right-click a Lamp says "Ding" and plays a note.
+- useBlock only. Files: game.ts.
+- Logged.
+
+### Next move
+- Ready for next unclaimed.
