@@ -3502,6 +3502,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (heldId) {
         const held = def(heldId);
         hud.targetName = held.maxUse ? held.name + " · " + (inv[heldId] ?? 0) + " left" : held.name;
+        if (heldId === ID.Bow) hud.targetName += " · " + (inv[ID.Arrow] ?? 0) + " arrows";
       }
       if (sample.first && sample.place && !prevPlace) {
         if (heldId === ID.Tome) castSpell();
@@ -3515,6 +3516,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       const id = hotbar[slot];
       const held = def(id);
       hud.targetName = held.maxUse ? held.name + " · " + (inv[id] ?? 0) + " left" : held.name;
+      if (id === ID.Bow) hud.targetName += " · " + (inv[ID.Arrow] ?? 0) + " arrows";
     }
     if (sample.place) placeCool -= dt;
     else placeCool = 0;

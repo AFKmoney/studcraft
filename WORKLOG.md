@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (aim line shows uses left on a worn tool). Icon batch below is still in progress — do not redo public/icons.
+**Last update:** 2026-10-25 (aim line shows arrows while holding the bow). Icon batch below is still in progress — do not redo public/icons.
 
 
 ### Physics + 3D 1:1 (this cycle)
@@ -440,9 +440,16 @@ Uses left are on the aim line. Do not append them again.
 - The fallback assignment after targeting does the same, so both aim-line paths agree.
 - Files: `src/game/game.ts` only. Did not touch icons, world gen, `sky()`, or the hotbar titles.
 
+### Next move — TAKEN and DONE (see below)
+Arrow counts are on the bow line. Do not append them again.
+
+### 2026-10-25 — Grok (arrows on the bow line)
+- When the aim line is the held bow, it also reads ` · N arrows`. N is `inv[Arrow]`. The bow still shows uses left. Blocks and mobs are unchanged.
+- Both aim-line assignments. Files: `src/game/game.ts` only.
+
 ### Next move — UNCLAIMED, take this
-**A bow on that aim line also shows the arrows you are holding.**
-- Only when the held id is the bow and the aim line is already the held item. Append ` · N arrows` from `inv` of the arrow id. Do not change block or mob names.
+**Food on that aim line shows the hunger it restores.**
+- Only when the aim line is the held item and `def(id).food` is set. Append ` · +N`. Do not change the bow line, block names, or mob names.
 - Files: `src/game/game.ts`, the same two aim-line assignments.
 DO NOT TOUCH:
 - `public/icons`, `src/game/icons.tsx`, `src/game/world.ts`
@@ -456,6 +463,7 @@ DO NOT TOUCH:
 
 
 
+
 ### 2026-10-25 — Grok (aim line names held item)
 - Took the unclaimed aim-line task.
 - After targeting, if targetName is empty and hotbar slot is not 0, set it to the item name.
@@ -463,7 +471,7 @@ DO NOT TOUCH:
 - Logged.
 
 ### Next move
-- Ready for next unclaimed.
+- Superseded. Uses left landed again in `af718d8`. Do not append them a third time.
 
 ### 2026-10-25 — Grok (tool uses left on aim line)
 - Took the unclaimed "A worn tool shows its uses left on that same aim line".
@@ -474,4 +482,5 @@ DO NOT TOUCH:
 - Logged.
 
 ### Next move
-- Ready for next unclaimed.
+- Superseded. The live unclaimed move is the food aim line above. Do not invent a second one.
+
