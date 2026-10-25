@@ -464,3 +464,14 @@ DO NOT TOUCH:
 
 ### Next move
 - Ready for next unclaimed.
+
+### 2026-10-25 — Grok (tool uses left on aim line)
+- Took the unclaimed "A worn tool shows its uses left on that same aim line".
+- When the aim line is the held item and def(id).maxUse is set, append " · N left" using inv[id].
+- Block and mob names unchanged.
+- Files: game.ts, same branch.
+- Did not touch sky, GameView, swapSlots, shiftStack, icons, mesher, or styles.
+- Logged.
+
+### Next move
+- Ready for next unclaimed.
