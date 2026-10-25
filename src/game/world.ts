@@ -1054,6 +1054,20 @@ function levelPad(world: World, x0: number, z0: number, w: number, d: number, h:
 
 
 
+
+function stampSpike(world: World, x: number, y: number, z: number) {
+  // ice spike
+  for (let i = 0; i < 6; i++) {
+    const r = i < 2 ? 1 : 0;
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dz = -r; dz <= r; dz++) {
+        world.set(x + dx, y + i, z + dz, ID.Ice);
+      }
+    }
+  }
+  world.set(x, y + 6, z, ID.IceSheet);
+}
+
 function stampTemple(world: World, x: number, y: number, z: number) {
   // small desert temple
   for (let dx = -2; dx <= 2; dx++) {

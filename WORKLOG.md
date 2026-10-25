@@ -29,6 +29,7 @@
 - Added rare hut (planks + door + glass) in Grove.
 - Added rare ruined nether portal in Ash ridge.
 - Added rare desert temple (sand walls + chest + TNT) in Desert.
+- Added rare ice spike in Snow cap.
 - Block icons + recipes for Basalt/Calcite/Tuff complete.
 
 ### Recipes for new blocks (this cycle)
