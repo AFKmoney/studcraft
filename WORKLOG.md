@@ -647,3 +647,14 @@ DO NOT TOUCH:
 
 *Agents: append below. Keep it factual and short.*
 
+
+### 2026-10-25 — Grok (crab love)
+- Took the unclaimed "A fish starts love on a crab".
+- Crab + Fish sets love to 8, spends one fish, says "Hearts". Creative does not spend.
+- Wolf branch unchanged.
+- Files: game.ts, one branch.
+- Did not touch world.ts, meal, harvests, other love branches, aim line, icons, sky, GameView, styles, or mesher.
+- Logged.
+
+### Next move
+- Ready for next unclaimed.
