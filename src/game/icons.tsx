@@ -37,10 +37,51 @@ function glyph(block: BlockDef, fill: string): ReactNode {
   if (block.work === "enchant" || block.work === "brew" || block.id === ID.Bottle || block.name.includes("brew")) return <Flask fill={fill} />;
   if (block.id === ID.Arrow) return <Dart fill={fill} />;
   if (block.id === ID.Stick || block.id === ID.Rod) return <Rod fill={fill} />;
+  if (block.id === ID.Compass) return <CompassMark fill={fill} />;
+  if (block.id === ID.Horn) return <HornMark fill={fill} />;
+  if (block.id === ID.Book || block.id === ID.Bookshelf) return <BookMark fill={fill} />;
+  if (block.id === ID.Paper) return <PaperMark fill={fill} />;
   if (block.id === ID.Ingot || block.id === ID.RawIron || block.id === ID.GravelBar) return <Bar fill={fill} />;
   if (block.id === ID.Bucket || block.id === ID.WaterBucket || block.id === ID.Milk) return <Pail fill={fill} />;
   if (block.need >= 2 || block.id === ID.Coal || block.id === ID.Emerald) return <Gem fill={fill} />;
   return <Stud fill={fill} mark={block.id} />;
+}
+
+function CompassMark({ fill }: { fill: string }) {
+  return (
+    <g>
+      <circle cx="16" cy="16" r="11" fill="#2a241c" stroke={fill} strokeWidth="2" />
+      <path d="M16 6l3 10-3-2-3 2z" fill={fill} />
+      <path d="M16 26l-3-10 3 2 3-2z" fill="#f4f1ea" opacity="0.8" />
+    </g>
+  );
+}
+function HornMark({ fill }: { fill: string }) {
+  return (
+    <g>
+      <path d="M8 22c2-8 8-12 16-14 1 6-2 12-8 16z" fill={fill} />
+      <rect x="6" y="18" width="6" height="6" rx="1" fill="#c4924a" />
+    </g>
+  );
+}
+function BookMark({ fill }: { fill: string }) {
+  return (
+    <g>
+      <rect x="8" y="5" width="16" height="22" rx="1.5" fill={fill} />
+      <rect x="11" y="8" width="10" height="2" fill="#f4f1ea" />
+      <rect x="11" y="12" width="10" height="2" fill="#f4f1ea" />
+      <rect x="11" y="16" width="7" height="2" fill="#f4f1ea" />
+    </g>
+  );
+}
+function PaperMark({ fill }: { fill: string }) {
+  return (
+    <g>
+      <rect x="9" y="4" width="14" height="18" fill={fill} />
+      <rect x="12" y="8" width="12" height="18" fill="#fff" opacity="0.85" />
+      <path d="M14 14h8M14 18h8M14 22h5" stroke="#1c140e" strokeWidth="1.2" />
+    </g>
+  );
 }
 
 function Stud({ fill, mark }: { fill: string; mark: number }) {

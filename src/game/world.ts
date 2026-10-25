@@ -1,5 +1,8 @@
 import { BLOCKS, ID, def } from "./blocks";
 import { hash2, hash3, makeNoise, type Noise } from "./noise";
+import { SITE_STEP, siteBricks, type Site, type SiteKind } from "./sites";
+
+export { SITE_STEP };
 
 export const CS = 16;
 export const HEIGHT = 72;
@@ -231,13 +234,32 @@ export class World {
               if (data[i] === ID.Air) data[i] = ID.TallGrass;
             }
           }
+          if (x >= baseX && x < baseX + CS && z >= baseZ && z < baseZ + CS && !slope && h > SEA + 1) {
+            const g = hash2(x, z, this.seed + 77);
+            if (g < 0.012) {
+              const y = h + 1;
+              if (y < HEIGHT - 1) {
+                const i = idx(x - baseX, y, z - baseZ);
+                if (data[i] === ID.Air) {
+                  const pick = hash2(x, z, this.seed + 78);
+                  let plant = 0;
+                  if (biome === "Brick plains" || biome === "Grove") plant = pick < 0.4 ? ID.Pumpkin : pick < 0.7 ? ID.Melon : ID.Berry;
+                  else if (biome === "Fen" || biome === "Shore") plant = pick < 0.55 ? ID.Mushroom : ID.MushroomRed;
+                  else if (biome === "Snow cap" && pick < 0.4) plant = ID.Mushroom;
+                  if (plant) data[i] = plant;
+                }
+              }
+            }
+          }
         }
       }
     }
 
     this.paintCellar(data, baseX, baseZ);
     this.paintHamlet(data, baseX, baseZ);
+    this.paintSites(data, baseX, baseZ);
     this.paintGate(data, baseX, baseZ);
+    this.scatterCaps(data, baseX, baseZ);
     this.chunks.set(this.ck(cx, cz), data);
     return data;
   }
@@ -537,6 +559,127 @@ export class World {
     }
   }
 
+  private scatterCaps(data: Uint8Array, baseX: number, baseZ: number) {
+    if (this.flat) return;
+    const idx = (lx: number, y: number, lz: number) => lx + lz * CS + y * CS * CS;
+    for (let lz = 0; lz < CS; lz++) {
+      for (let lx = 0; lx < CS; lx++) {
+        const x = baseX + lx;
+        const z = baseZ + lz;
+        const roof = this.heightAt(x, z) - 5;
+        for (let y = 4; y < roof && y < HEIGHT - 2; y++) {
+          const i = idx(lx, y, lz);
+          if (data[i] !== ID.Air) continue;
+          const under = data[idx(lx, y - 1, lz)];
+          if (under !== ID.Stone && under !== ID.Cobble && under !== ID.Moss) continue;
+          if (hash3(x, y, z, this.seed + 640) < 0.9972) continue;
+          data[i] = hash3(x, y, z, this.seed + 641) > 0.5 ? ID.MushroomRed : ID.Mushroom;
+        }
+      }
+    }
+  }
+
+  private paintSites(data: Uint8Array, baseX: number, baseZ: number) {
+    if (this.flat) return;
+    const g0x = Math.floor((baseX - 10) / SITE_STEP) - 1;
+    const g1x = Math.floor((baseX + CS + 10) / SITE_STEP) + 1;
+    const g0z = Math.floor((baseZ - 10) / SITE_STEP) - 1;
+    const g1z = Math.floor((baseZ + CS + 10) / SITE_STEP) + 1;
+    for (let gz = g0z; gz <= g1z; gz++) {
+      for (let gx = g0x; gx <= g1x; gx++) {
+        const site = this.siteAt(gx, gz);
+        if (!site) continue;
+        if (site.x + 8 < baseX || site.x - 3 >= baseX + CS || site.z + 8 < baseZ || site.z - 3 >= baseZ + CS) continue;
+        if (site.kind !== "wreck" && site.kind !== "mine") {
+          const rad = site.kind === "outpost" ? 6 : 5;
+          const floor = site.kind === "cairn" ? ID.Snow : site.kind === "shrine" ? ID.Hard : ID.Grass;
+          for (let dz = -1; dz <= rad; dz++) {
+            for (let dx = -1; dx <= rad; dx++) {
+              this.force(data, baseX, baseZ, site.x + dx, site.y, site.z + dz, floor);
+              for (let dy = 1; dy <= 4; dy++) this.force(data, baseX, baseZ, site.x + dx, site.y + dy, site.z + dz, ID.Air);
+            }
+          }
+        }
+        if (site.kind === "mine") {
+          for (let dz = 0; dz < 5; dz++) {
+            for (let dx = 0; dx < 5; dx++) {
+              for (let dy = 1; dy <= 3; dy++) this.force(data, baseX, baseZ, site.x + dx, site.y + dy, site.z + dz, ID.Air);
+            }
+          }
+        }
+        for (const brick of siteBricks(site.kind, this.seed, site.x, site.z)) {
+          this.force(data, baseX, baseZ, site.x + brick.dx, site.y + brick.dy, site.z + brick.dz, brick.id);
+        }
+      }
+    }
+  }
+
+  siteAt(gx: number, gz: number): Site | null {
+    if (this.flat) return null;
+    if (hash2(gx, gz, this.seed + 1200) > 0.58) return null;
+    const span = SITE_STEP - 36;
+    const x = gx * SITE_STEP + 18 + Math.floor(hash2(gx, gz, this.seed + 1201) * span);
+    const z = gz * SITE_STEP + 18 + Math.floor(hash2(gx, gz, this.seed + 1202) * span);
+    if (inNether(x)) return null;
+    const h = this.heightAt(x, z);
+    const samples = [h, this.heightAt(x + 4, z), this.heightAt(x, z + 4), this.heightAt(x + 4, z + 4)];
+    let min = samples[0];
+    let max = samples[0];
+    for (const sample of samples) {
+      if (sample < min) min = sample;
+      if (sample > max) max = sample;
+    }
+    const rx = Math.floor(x / REGION);
+    const rz = Math.floor(z / REGION);
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const ham = this.hamletAt(rx + dx, rz + dz);
+        if (!ham) continue;
+        if (Math.abs(ham.x - x) < 46 && Math.abs(ham.z - z) < 46) return null;
+      }
+    }
+    const shore = h >= SEA - 1 && h <= SEA + 1;
+    const biome = this.biomeOf(x, z, h);
+    const roll = hash2(gx, gz, this.seed + 1203);
+    const steep = max - min > 5;
+    let kind: SiteKind;
+    if (shore && roll < 0.55) kind = "wreck";
+    else if (h <= SEA + 1) return null;
+    else if (biome === "Snow cap" && max - min <= 12) kind = roll < 0.72 ? "cairn" : "mine";
+    else if (steep) return null;
+    else if (biome === "Grove") kind = roll < 0.34 ? "shrine" : roll < 0.62 ? "patch" : "camp";
+    else if (biome === "Ash ridge") kind = roll < 0.55 ? "ruin" : "outpost";
+    else if (biome === "Fen") kind = roll < 0.5 ? "camp" : "shrine";
+    else if (biome === "Sand flats") kind = roll < 0.48 ? "ruin" : roll < 0.75 ? "outpost" : "mine";
+    else {
+      const bag: SiteKind[] = ["ruin", "camp", "mine", "outpost", "patch", "shrine"];
+      kind = bag[Math.floor(roll * bag.length) % bag.length];
+    }
+    const y = Math.max(2, Math.min(HEIGHT - 16, h));
+    return { x, z, y, kind };
+  }
+
+  nearestSite(x: number, z: number, rings = 2, kind?: SiteKind): Site | null {
+    const gx = Math.floor(x / SITE_STEP);
+    const gz = Math.floor(z / SITE_STEP);
+    let best: Site | null = null;
+    let bestD = Infinity;
+    for (let dz = -rings; dz <= rings; dz++) {
+      for (let dx = -rings; dx <= rings; dx++) {
+        const site = this.siteAt(gx + dx, gz + dz);
+        if (!site || (kind && site.kind !== kind)) continue;
+        const ddx = site.x - x;
+        const ddz = site.z - z;
+        const d = ddx * ddx + ddz * ddz;
+        if (d < bestD) {
+          bestD = d;
+          best = site;
+        }
+      }
+    }
+    return best;
+  }
+
   releaseFar(cx: number, cz: number, radius: number) {
     const lim = (radius + 3) * (radius + 3);
     for (const key of this.chunks.keys()) {
@@ -679,6 +822,7 @@ function hamletBlock(lx: number, ry: number, lz: number): number {
     const edge = px === 0 || pz === 0 || px === 6 || pz === 4;
     if (edge && !(pz === 0 && px === 3)) return ID.Fence;
   }
+  if (lx === 12 && lz === 19 && ry === 1) return ID.Chest;
   if (lx === 9 && lz === 19 && ry === 1) return ID.Furnace;
   if (lx === 10 && lz === 19 && ry === 1) return ID.Anvil;
   if (lx === 13 && lz === 8 && (ry === 1 || ry === 2)) return ID.Cobble;

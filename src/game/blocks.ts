@@ -195,6 +195,25 @@ export const ID = {
   RedTorch: 193,
   RedTorchOn: 194,
   Repeater: 195,
+  Pumpkin: 196,
+  Melon: 197,
+  Mushroom: 198,
+  MushroomRed: 199,
+  Hay: 200,
+  Lantern: 201,
+  Bookshelf: 202,
+  Web: 203,
+  Berry: 204,
+  Barrel: 205,
+  Slice: 206,
+  MelonCut: 207,
+  Honey: 208,
+  Stew: 209,
+  Pie: 210,
+  Paper: 211,
+  Book: 212,
+  Compass: 213,
+  Horn: 214,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -740,6 +759,57 @@ put(
     dust: true,
   }),
 );
+put(b(ID.Pumpkin, "Pumpkin", "#e07a20", "#f07820", "#c45a10", "#8d3e08", { hard: 0.45 }));
+put(b(ID.Melon, "Melon", "#3aaa4c", "#2f7d3a", "#c45a32", "#8d3e18", { hard: 0.5 }));
+put(
+  b(ID.Mushroom, "Mushroom", "#e8d8c8", "#f4f1ea", "#e23b2f", "#8d5a34", {
+    solid: false,
+    plant: true,
+    hard: 0.05,
+  }),
+);
+put(
+  b(ID.MushroomRed, "Red cap", "#e23b2f", "#f25a46", "#f4f1ea", "#8d5a34", {
+    solid: false,
+    plant: true,
+    hard: 0.05,
+  }),
+);
+put(b(ID.Hay, "Hay bale", "#e6c14a", "#f5e07a", "#c4924a", "#8d6a28", { hard: 0.4 }));
+put(
+  b(ID.Lantern, "Lantern", "#f0c43a", "#ffe14a", "#c47a2a", "#6e645c", {
+    solid: false,
+    hard: 0.2,
+    torch: true,
+    light: 1,
+  }),
+);
+put(b(ID.Bookshelf, "Shelf", "#c4924a", "#e0b15a", "#8d3e18", "#6b3e22", { hard: 0.7, note: true }));
+put(
+  b(ID.Web, "Web", "#f4f1ea", "#ffffff", "#d9dde2", "#c5ccd3", {
+    solid: false,
+    plant: true,
+    hard: 0.25,
+    drop: ID.String,
+  }),
+);
+put(
+  b(ID.Berry, "Berry bush", "#e23b2f", "#f25a46", "#2f7d3a", "#1d5526", {
+    solid: false,
+    plant: true,
+    hard: 0.05,
+  }),
+);
+put(b(ID.Barrel, "Barrel", "#8d5a34", "#a56b3c", "#6b3e22", "#4e2c18", { hard: 0.7, work: "chest" }));
+item(ID.Slice, "Pumpkin slice", "#f07820", { food: 3 });
+item(ID.MelonCut, "Melon slice", "#e23b2f", { food: 2 });
+item(ID.Honey, "Honey", "#f0c43a", { food: 5 });
+item(ID.Stew, "Stew", "#c45a32", { food: 8 });
+item(ID.Pie, "Pie", "#e0b15a", { food: 8 });
+item(ID.Paper, "Paper", "#f4f1ea");
+item(ID.Book, "Book", "#8d3e18");
+item(ID.Compass, "Compass", "#e23b2f");
+item(ID.Horn, "Horn", "#e8d0a8");
 
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];
@@ -918,6 +988,25 @@ export const CATALOG = [
   ID.Campfire,
   ID.Ice,
   ID.Gravel,
+  ID.Pumpkin,
+  ID.Melon,
+  ID.Mushroom,
+  ID.MushroomRed,
+  ID.Hay,
+  ID.Lantern,
+  ID.Bookshelf,
+  ID.Web,
+  ID.Berry,
+  ID.Barrel,
+  ID.Slice,
+  ID.MelonCut,
+  ID.Honey,
+  ID.Stew,
+  ID.Pie,
+  ID.Paper,
+  ID.Book,
+  ID.Compass,
+  ID.Horn,
 ];
 
 export const COLORS = [ID.Red, ID.Orange, ID.Yellow, ID.Green, ID.Blue, ID.Azure, ID.Pink, ID.White, ID.Black];

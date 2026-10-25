@@ -90,6 +90,14 @@ export const CODEX: CodexEntry[] = [
   { id: ID.Frost, where: "Wisp studs", use: "Frost cap and packed ice.", lvl: 0 },
   { id: ID.Cinder, where: "Fuse bricks and ember studs", use: "Cinder blade and ash cookies.", lvl: 0 },
   { id: ID.Antler, where: "Night studs and bone studs", use: "Antler bow, once Trophy is learned.", lvl: 0 },
+  { id: ID.Pumpkin, where: "Plains, groves, and crop patches", use: "Four slices. Pie needs a slice, an egg, and grain.", lvl: 0 },
+  { id: ID.Melon, where: "Plains, groves, and crop patches", use: "Six melon slices.", lvl: 0 },
+  { id: ID.Mushroom, where: "Fens, and cave floors", use: "Stew, with a red cap and grain.", lvl: 0 },
+  { id: ID.Honey, where: "Bees, or wax plus a bottle", use: "Sweet food. The grocer buys jars.", lvl: 0 },
+  { id: ID.Compass, where: "Craft four ingots around red dust, or buy one from the ranger", use: "Hold it. The readout points at the nearest hamlet and site.", lvl: 0 },
+  { id: ID.Horn, where: "Ridge goats, outpost crates", use: "Place while holding it. Hostiles get shoved back.", lvl: 0 },
+  { id: ID.Bookshelf, where: "Six planks and three books. Shrines keep one.", use: "Click it. It chimes.", lvl: 0 },
+  { id: ID.Web, where: "Mine rooms, or four string", use: "Walking through it is slow.", lvl: 0 },
 ];
 
 export const DISCOVER = new Set(CODEX.map((entry) => entry.id));
@@ -149,4 +157,8 @@ export const MOB_XP: Record<string, number> = {
   witch: 7,
   blaze: 10,
   drowned: 6,
+  goat: 3,
+  bee: 2,
+  turtle: 3,
+  bat: 2,
 };

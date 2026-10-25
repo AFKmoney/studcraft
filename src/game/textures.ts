@@ -156,6 +156,22 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
     paintGlass(ctx, ox, oy);
     return;
   }
+  if (block.id === ID.Web) {
+    ctx.clearRect(ox, oy, S, S);
+    ctx.strokeStyle = "rgba(244, 241, 234, 0.9)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(ox + 8, oy + 8);
+    ctx.lineTo(ox + S - 8, oy + S - 8);
+    ctx.moveTo(ox + S - 8, oy + 8);
+    ctx.lineTo(ox + 8, oy + S - 8);
+    ctx.moveTo(ox + S * 0.5, oy + 6);
+    ctx.lineTo(ox + S * 0.5, oy + S - 6);
+    ctx.moveTo(ox + 6, oy + S * 0.5);
+    ctx.lineTo(ox + S - 6, oy + S * 0.5);
+    ctx.stroke();
+    return;
+  }
   if (block.plant) {
     paintPlant(ctx, ox, oy, block.top, block.id === ID.TallGrass || block.id === ID.Reed ? "grass" : "flower");
     return;
@@ -222,6 +238,56 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
     ctx.moveTo(ox + 8, oy + S * 0.35);
     ctx.lineTo(ox + S - 8, oy + S * 0.48);
     ctx.stroke();
+    return;
+  }
+  if (block.id === ID.Pumpkin) {
+    paintSide(ctx, ox, oy, face === 0 ? block.top : block.side, face === 0 ? undefined : block.top);
+    ctx.strokeStyle = "rgba(90, 40, 8, 0.55)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    if (face === 0) {
+      ctx.moveTo(ox + S * 0.5, oy + 8);
+      ctx.lineTo(ox + S * 0.5, oy + S - 8);
+      ctx.moveTo(ox + 8, oy + S * 0.5);
+      ctx.lineTo(ox + S - 8, oy + S * 0.5);
+    } else {
+      ctx.moveTo(ox + S * 0.28, oy + 6);
+      ctx.lineTo(ox + S * 0.28, oy + S - 6);
+      ctx.moveTo(ox + S * 0.5, oy + 6);
+      ctx.lineTo(ox + S * 0.5, oy + S - 6);
+      ctx.moveTo(ox + S * 0.72, oy + 6);
+      ctx.lineTo(ox + S * 0.72, oy + S - 6);
+    }
+    ctx.stroke();
+    return;
+  }
+  if (block.id === ID.Melon && face !== 2) {
+    paintSide(ctx, ox, oy, face === 0 ? block.top : block.side);
+    ctx.strokeStyle = "rgba(20, 60, 24, 0.45)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(ox + 6, oy + S * 0.2);
+    ctx.lineTo(ox + S - 6, oy + S * 0.8);
+    ctx.moveTo(ox + S - 6, oy + S * 0.2);
+    ctx.lineTo(ox + 6, oy + S * 0.8);
+    ctx.stroke();
+    return;
+  }
+  if (block.id === ID.Hay && face !== 2) {
+    paintSide(ctx, ox, oy, face === 0 ? block.top : block.side);
+    ctx.fillStyle = "rgba(140, 90, 20, 0.35)";
+    for (let i = 0; i < 4; i++) ctx.fillRect(ox + 4, oy + 8 + i * (S / 5), S - 8, 3);
+    return;
+  }
+  if (block.id === ID.Bookshelf && face !== 0 && face !== 2) {
+    paintSide(ctx, ox, oy, block.side);
+    ctx.fillStyle = "#f4f1ea";
+    ctx.fillRect(ox + 8, oy + 10, S - 16, 8);
+    ctx.fillRect(ox + 8, oy + 26, S - 16, 8);
+    ctx.fillRect(ox + 8, oy + 42, S - 16, 8);
+    ctx.fillStyle = "#e23b2f";
+    ctx.fillRect(ox + 10, oy + 10, 6, 8);
+    ctx.fillRect(ox + 22, oy + 26, 6, 8);
     return;
   }
   if (face === 0) paintTop(ctx, ox, oy, block.top, block.id === ID.Log);

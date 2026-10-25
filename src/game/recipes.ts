@@ -203,6 +203,60 @@ export const RECIPES: Recipe[] = [
   r("packed-ice", "Packed ice", "4 frost shards", [[ID.Frost, 4]], ID.IceSheet, 1, { cat: "build" }),
   r("loaf", "Camp loaf", "3 grain", [[ID.Wheat, 3]], ID.Bread, 1, { cat: "food" }),
   r("cookie", "Ash cookie", "2 grain + 1 cinder", [[ID.Wheat, 2], [ID.Cinder, 1]], ID.Cookie, 4, { cat: "food" }),
+  r("slices", "Pumpkin slices", "1 pumpkin → 4", [[ID.Pumpkin, 1]], ID.Slice, 4, { shape: [ID.Pumpkin], w: 1, h: 1, cat: "food" }),
+  r("melon-cut", "Melon slices", "1 melon → 6", [[ID.Melon, 1]], ID.MelonCut, 6, { shape: [ID.Melon], w: 1, h: 1, cat: "food" }),
+  r("honey", "Honey", "1 wax + 1 bottle", [[ID.Wax, 1], [ID.Bottle, 1]], ID.Honey, 1, {
+    shape: [ID.Wax, ID.Bottle],
+    w: 1,
+    h: 2,
+    cat: "food",
+  }),
+  r("stew", "Stew", "1 mushroom + 1 red cap + 1 grain", [[ID.Mushroom, 1], [ID.MushroomRed, 1], [ID.Wheat, 1]], ID.Stew, 1, {
+    shape: [ID.Mushroom, ID.MushroomRed, ID.Wheat],
+    w: 1,
+    h: 3,
+    cat: "food",
+  }),
+  r("pie", "Pie", "1 slice + 1 egg + 1 grain", [[ID.Slice, 1], [ID.Egg, 1], [ID.Wheat, 1]], ID.Pie, 1, {
+    shape: [ID.Slice, ID.Egg, ID.Wheat],
+    w: 1,
+    h: 3,
+    cat: "food",
+  }),
+  r("paper", "Paper", "3 reeds → 3", [[ID.Reed, 3]], ID.Paper, 3, { shape: [ID.Reed, ID.Reed, ID.Reed], w: 1, h: 3, cat: "build" }),
+  r("book", "Book", "3 paper", [[ID.Paper, 3]], ID.Book, 1, { shape: [ID.Paper, ID.Paper, ID.Paper], w: 1, h: 3, cat: "build" }),
+  r("shelf", "Shelf", "6 planks + 3 books", [[ID.Planks, 6], [ID.Book, 3]], ID.Bookshelf, 1, {
+    shape: [P, P, P, ID.Book, ID.Book, ID.Book, P, P, P],
+    w: 3,
+    h: 3,
+    cat: "build",
+  }),
+  r("hay", "Hay bale", "9 grain", [[ID.Wheat, 9]], ID.Hay, 1, {
+    shape: [ID.Wheat, ID.Wheat, ID.Wheat, ID.Wheat, ID.Wheat, ID.Wheat, ID.Wheat, ID.Wheat, ID.Wheat],
+    w: 3,
+    h: 3,
+    cat: "build",
+  }),
+  r("grain", "Grain from hay", "1 bale → 9", [[ID.Hay, 1]], ID.Wheat, 9, { shape: [ID.Hay], w: 1, h: 1, cat: "food" }),
+  r("lantern", "Lantern", "1 ingot + 1 torch", [[I, 1], [ID.Torch, 1]], ID.Lantern, 1, {
+    shape: [I, ID.Torch],
+    w: 1,
+    h: 2,
+    cat: "build",
+  }),
+  r("compass", "Compass", "4 ingots + 1 red dust", [[I, 4], [ID.Dust, 1]], ID.Compass, 1, {
+    shape: [0, I, 0, I, ID.Dust, I, 0, I, 0],
+    w: 3,
+    h: 3,
+    cat: "tools",
+  }),
+  r("web", "Web", "4 string", [[ID.String, 4]], ID.Web, 1, {
+    shape: [ID.String, ID.String, ID.String, ID.String],
+    w: 2,
+    h: 2,
+    cat: "build",
+  }),
+  r("barrel", "Barrel", "7 planks", [[P, 7]], ID.Barrel, 1, { cat: "build" }),
 ];
 
 export const SMELT: Record<number, number> = {
@@ -222,6 +276,7 @@ export const SMELT: Record<number, number> = {
 
 export function fuelTime(id: number): number {
   if (id === ID.Coal) return 8;
+  if (id === ID.Hay) return 4;
   if (id === ID.Amber) return 14;
   if (id === ID.Log) return 3;
   if (id === ID.Planks) return 1.5;
