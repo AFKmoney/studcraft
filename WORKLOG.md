@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (food on the aim line shows hunger restored). Icon batch below is still in progress — do not redo public/icons.
+**Last update:** 2026-10-25 (right-click harvests ripe carrot, potato, beetroot). Icon batch below is still in progress — do not redo public/icons.
 
 
 ### Physics + 3D 1:1 (this cycle)
@@ -460,17 +460,26 @@ Food hunger is on the aim line. Do not append it again. The bow line stays as it
 - When the aim line is the held item and it has `food`, it appends ` · +N`. The bow branch is unchanged.
 - Both aim-line assignments. Files: `src/game/game.ts` only. No icons.
 
+### Next move — TAKEN and DONE (see below)
+Ripe vegetables harvest on right-click. Do not add a second handler.
+
+### 2026-10-25 — Grok (ripe vegetable harvest)
+- Right-click CarrotRipe, PotatoRipe, or BeetRipe. You get one vegetable. If you already held another of the same kind, one goes back in as shoots on farmland. Wheat is unchanged.
+- Files: `src/game/game.ts` (`useBlock` only). Did not touch the aim line or icons.
+- Basalt, Calcite, and Tuff had been numbered 229–231, the same as wheat stages and carrot shoots. They are now **241–243**. The crops keep their ids.
+
 ### Next move — UNCLAIMED, take this
-**Right-click a ripe carrot, potato, or beetroot to pick it.**
-- Same idea as ripe wheat in `useBlock`: take the vegetable, leave the shoots only if you still hold one of that vegetable to replant.
-- CarrotRipe, PotatoRipe, BeetRipe only. Do not change the wheat harvest.
-- Files: `src/game/game.ts` (`useBlock` only).
+**Bone meal steps a vegetable shoot one stage.**
+- In `meal()`, a carrot, potato, or beet shoot becomes the ripe plant. Wheat, stems, and the new harvest stay as they are.
+- Files: `src/game/game.ts` (`meal` only).
 DO NOT TOUCH:
-- the aim-line bow branch and the food ` · +N`
+- the ripe-wheat harvest and the vegetable harvest in `useBlock`
+- the aim line
 - `public/icons`, `src/game/icons.tsx`, `src/game/world.ts`
 - `sky()`, `src/game/GameView.tsx`, `src/styles.css`, `src/game/mesher.ts`
 
 *Agents: append below. Keep it factual and short.*
+
 
 
 
@@ -495,7 +504,7 @@ DO NOT TOUCH:
 - Logged.
 
 ### Next move
-- Superseded. The live unclaimed move is the ripe-vegetable harvest at the bottom. Do not invent a second one.
+- Superseded. Ripe vegetables now harvest on right-click. The live unclaimed move is bone meal on a vegetable shoot.
 
 
 ### 2026-10-25 — Grok (food hunger on aim line)
@@ -507,16 +516,28 @@ DO NOT TOUCH:
 - Logged.
 
 ### Next move
-- Ready for next unclaimed.
+- Superseded. The harvest is in. The live unclaimed move is bone meal on a vegetable shoot.
 
 ### 2026-10-25 — Grok (right-click ripe veg)
 - Took the unclaimed "Right-click a ripe carrot, potato, or beetroot to pick it".
 - In useBlock: CarrotRipe, PotatoRipe, BeetRipe give the vegetable.
-- Replants the shoots only if you still hold one of that vegetable (or creative).
+- Replants only when you already held a spare (count above 1 after the pick). The one you just picked stays. Creative replants without spending.
+- The first version always called `spend`, so creative never replanted and survival never kept the food.
 - Wheat harvest unchanged.
-- Files: game.ts (useBlock only).
-- Did not touch aim-line bow/food, icons, world, sky, GameView, styles, or mesher.
-- Logged.
+- Basalt, Calcite, and Tuff were 229–231, the same numbers as Crop1, Crop2, and CarrotCrop. They are **241, 242, 243**. Crops stay put.
+- Their craft rows had been pasted into the Recipe type and would not parse. They sit in the recipe list now.
+- Files: `src/game/game.ts`, `src/game/blocks.ts`. Did not touch icons or the aim line.
 
-### Next move
-- Ready for next unclaimed.
+### Next move — UNCLAIMED, take this
+**Bone meal steps a vegetable shoot one stage.**
+- In `meal()`, a carrot, potato, or beet shoot becomes the ripe plant. Wheat, stems, and the harvest stay as they are.
+- Files: `src/game/game.ts` (`meal` only).
+DO NOT TOUCH:
+- the ripe-wheat harvest and the vegetable harvest in `useBlock`
+- Basalt **241**, Calcite **242**, Tuff **243**
+- the aim line
+- `public/icons`, `src/game/icons.tsx`, `src/game/world.ts`
+- `sky()`, `src/game/GameView.tsx`, `src/styles.css`, `src/game/mesher.ts`
+
+*Agents: append below. Keep it factual and short.*
+

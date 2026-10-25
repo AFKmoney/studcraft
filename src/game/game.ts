@@ -1708,11 +1708,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       return true;
     }
     if (hit.id === ID.CarrotRipe || hit.id === ID.PotatoRipe || hit.id === ID.BeetRipe) {
-      const veg = hit.id === ID.CarrotRipe ? ID.Carrot : hit.id === ID.PotatoRipe ? ID.Potato : ID.Beetroot;
+      const item = hit.id === ID.CarrotRipe ? ID.Carrot : hit.id === ID.PotatoRipe ? ID.Potato : ID.Beetroot;
       const shoot = hit.id === ID.CarrotRipe ? ID.CarrotCrop : hit.id === ID.PotatoRipe ? ID.PotatoCrop : ID.BeetCrop;
       world.set(hit.x, hit.y, hit.z, ID.Air);
-      if (!creative) addInv(veg, 1);
-      if (world.get(hit.x, hit.y - 1, hit.z) === ID.Farmland && (creative || (inv[veg] ?? 0) > 0) && spend(veg, 1)) {
+      if (!creative) addInv(item, 1);
+      const soil = world.get(hit.x, hit.y - 1, hit.z) === ID.Farmland;
+      const spare = creative || (inv[item] ?? 0) > 1;
+      if (soil && spare && (creative || spend(item, 1))) {
         world.set(hit.x, hit.y, hit.z, shoot);
         say("Replanted");
       } else say("Harvested");

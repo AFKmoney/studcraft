@@ -4,11 +4,7 @@ export type Recipe = {
   id: string;
   name: string;
   detail: string;
-  need: [number, number][
-  r("basalt", "Basalt brick", "4 stone → 4", [[ID.Stone, 4]], ID.Basalt, 4, { cat: "build" }),
-  r("calcite", "Calcite brick", "4 sand → 4", [[ID.Sand, 4]], ID.Calcite, 4, { cat: "build" }),
-  r("tuff", "Tuff brick", "4 cobble → 4", [[ID.Cobble, 4]], ID.Tuff, 4, { cat: "build" }),
-];
+  need: [number, number][];
   out: number;
   n: number;
   special?: "hammer";
@@ -43,6 +39,9 @@ export const RECIPES: Recipe[] = [
   r("bench", "Bench", "4 planks", [[P, 4]], ID.Bench, 1, { shape: [P, P, P, P], w: 2, h: 2, cat: "build" }),
   r("hammer", "Brick hammer", "3 stone + 2 planks", [[ID.Stone, 3], [P, 2]], 0, 1, { special: "hammer", cat: "tools" }),
   r("glass", "Windows", "2 sand → 2", [[ID.Sand, 2]], ID.Glass, 2, { cat: "build" }),
+  r("basalt", "Basalt brick", "4 stone → 4", [[ID.Stone, 4]], ID.Basalt, 4, { cat: "build" }),
+  r("calcite", "Calcite brick", "4 sand → 4", [[ID.Sand, 4]], ID.Calcite, 4, { cat: "build" }),
+  r("tuff", "Tuff brick", "4 cobble → 4", [[ID.Cobble, 4]], ID.Tuff, 4, { cat: "build" }),
   r("pick-w", "Wood pick", "3 planks + 2 sticks", [[P, 3], [S, 2]], ID.PickW, 1, {
     shape: [P, P, P, 0, S, 0, 0, S, 0],
     w: 3,

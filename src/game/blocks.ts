@@ -225,9 +225,6 @@ export const ID = {
   Banner: 223,
   Lead: 224,
   EndCrystal: 225,
-  Basalt: 229,
-  Calcite: 230,
-  Tuff: 231,
   Carrot: 226,
   Potato: 227,
   Beetroot: 228,
@@ -243,6 +240,9 @@ export const ID = {
   MelonStem: 238,
   BakedPotato: 239,
   CookedFish: 240,
+  Basalt: 241,
+  Calcite: 242,
+  Tuff: 243,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
