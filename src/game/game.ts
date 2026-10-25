@@ -6987,11 +6987,77 @@ function radial(x: number, y: number, dz: number) {
 
 let plasticOn = true;
 
+// SIREN creature shading (Philippe, 2026-10-25): mob and folk surfaces
+// carry NO detail textures. Their micro-surface is a small sinusoidal
+// representation field evaluated per fragment in the shared creature
+// program — two layers of sine waves (the SIREN trick: sin activations
+// all the way down) produce per-brick tint variation, darkened stud
+// seams, a satin micro-bump and a fresnel sheen. The detail costs a
+// handful of sin() calls and zero bytes of storage, and every creature
+// material shares ONE compiled program through skin(). Realistic mode
+// only; the performance profile keeps its plain Lambert untouched.
+const sirenAmt = { value: 1 };
+
+function sirenize(mat: THREE.MeshStandardMaterial) {
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uSirenAmt = sirenAmt;
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec3 vSirenPos;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvSirenPos = position;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+varying vec3 vSirenPos;
+uniform float uSirenAmt;
+float sirenHash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.45, 37.719))) * 43758.5453); }
+vec3 sirenField(vec3 p) {
+  vec3 a = sin(p * 1.7 + sin(p.zxy * 2.3));
+  vec3 b = sin(p * 3.1 + a * 1.4);
+  return a * 0.65 + b * 0.35;
+}`,
+      )
+      .replace(
+        "#include <map_fragment>",
+        `#include <map_fragment>
+{
+  vec3 scell = vSirenPos * 7.0;
+  diffuseColor.rgb *= 0.93 + 0.14 * sirenHash(floor(scell));
+  vec3 sf = abs(fract(scell) - 0.5);
+  float seam = smoothstep(0.36, 0.5, max(sf.x, max(sf.y, sf.z)));
+  diffuseColor.rgb *= 1.0 - seam * 0.16 * uSirenAmt;
+  float micro = sin(vSirenPos.x * 130.0) * sin(vSirenPos.y * 130.0) * sin(vSirenPos.z * 130.0);
+  diffuseColor.rgb *= 1.0 + micro * 0.03 * uSirenAmt;
+}`,
+      )
+      .replace(
+        "#include <roughnessmap_fragment>",
+        `#include <roughnessmap_fragment>
+roughnessFactor = clamp(roughnessFactor + (sirenHash(floor(vSirenPos * 23.0)) - 0.5) * 0.22 * uSirenAmt, 0.05, 1.0);`,
+      )
+      .replace(
+        "#include <normal_fragment_begin>",
+        `#include <normal_fragment_begin>
+normal = normalize(normal + sirenField(vSirenPos * 48.0) * 0.05 * uSirenAmt);`,
+      )
+      .replace(
+        "#include <opaque_fragment>",
+        `{
+  float fres = pow(1.0 - clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0), 3.0);
+  outgoingLight += diffuseColor.rgb * fres * 0.16 * uSirenAmt;
+}
+#include <opaque_fragment>`,
+      );
+  };
+  mat.customProgramCacheKey = () => "siren-creature-1";
+  return mat;
+}
+
 function skin(
   color: number | string,
   extra: { transparent?: boolean; opacity?: number; depthWrite?: boolean; depthTest?: boolean; side?: THREE.Side } = {},
 ) {
-  if (plasticOn) return new THREE.MeshStandardMaterial({ color, roughness: 0.38, metalness: 0, ...extra });
+  if (plasticOn) return sirenize(new THREE.MeshStandardMaterial({ color, roughness: 0.38, metalness: 0, ...extra }));
   return new THREE.MeshLambertMaterial({ color, ...extra });
 }
 

@@ -1247,3 +1247,29 @@ BO2-4: Illagers + hamlet raids.
 
 ### Next move (claimed by Muse)
 BO2-5: structures (ocean monument, Nether fortress/bastion, woodland mansion).
+
+## v3.5 — 2026-10-25 (SIREN creature shading — Philippe's order, 2026-10-25 12:52)
+
+Philippe's brief: the mobs and NPCs get the real shader too — hyper beautiful, hyper light, via **Sinusoidal Representation Networks**. The honest translation into this engine: creature surfaces carry **no detail textures at all**; their micro-surface is a small sinusoidal field evaluated per fragment inside the shared creature program.
+
+### What shipped
+- `sirenize()` in game.ts patches every material born through `skin()` — the single factory behind every mob, villager, golem and the player's own figure — when Realistic mode is on. All patched materials share **one compiled program** (`customProgramCacheKey`), so the whole bestiary pays one compile and a handful of `sin()` per fragment. Zero textures, zero added geometry, zero per-kind code.
+- The field (two sine layers, SIREN-style: `sin(W·p + sin(W·p))`) drives, in object space so it moves with the creature:
+  - **Per-brick tint variation** — a sinusoidal hash over ~14 cm cells re-tints the diffuse ±7%, the same per-brick shade law the world mesher follows.
+  - **Stud seams** — cell borders darken up to 16%, so large smooth bodies (golem, ravager, dragon) read as assembled bricks instead of soap bars.
+  - **Satin micro-bump** — the field's gradient perturbs the fragment normal (amplitude 0.05): a soft plastic sheen that shifts as you move, instead of a flat CG matte.
+  - **Per-cell roughness patches** (±0.11) — real LEGO plastic is not uniformly worn; the specular response now varies patch to patch.
+  - **Fresnel rim** — silhouettes catch a faint diffuse-tinted rim (0.16, cubed falloff), separating creatures from the background at a glance.
+- The Performance profile is **untouched**: `skin()` still returns plain Lambert there, no patch, no cost — the A54's fast mode stays exactly as fast. Toggling Réaliste rebuilds creature materials through the existing convert() path, which routes through skin(), so the field appears/disappears with the setting like the plastic look itself.
+
+### QA
+- tsc clean (0 errors).
+- qa62 (seed 23, Realistic on): five test creatures spawn (5/5), zero page errors and zero WebGL shader-compile complaints — the patched program builds first try.
+- The qa62 close-up (golem at arm's length, 4x crop) shows the field working: a subtle brick-grid seam network across the body, cell-by-cell tint variation in the grey, and a bright fresnel band riding the silhouette edge. The grade is deliberately gentle at gameplay distance; every amplitude lives in one place (sirenize) if Philippe wants it hotter.
+- The Performance profile is untouched by construction (plain Lambert branch of skin()); on-device FPS stays Philippe's A54 verdict, as always.
+
+### Files
+`src/game/game.ts`, `WORKLOG.md`, `apk/src/main/AndroidManifest.xml` (versionCode 26 / versionName 3.5). APK + web zip rebuilt.
+
+### Next move (claimed by Muse)
+BO2-5: structures (ocean monument, Nether fortress/bastion, woodland mansion).
