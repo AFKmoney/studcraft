@@ -85,3 +85,50 @@ Open the preview. Seed + Survival.
 ### Next move claimed
 - Taking "Complete redstone wire + basic gates" from the gaps list.
 - Will add comparator + observer basics and improve dust propagation without overlapping the stud visual work.
+
+### 2026-10-25 — Muse (rendering / mobile / packaging lane, ordered by Philippe)
+Philippe's standing split: Grok = game systems + content; Muse = shaders, realistic
+shading, mobile UI, QA, APK packaging. Everything below verified with
+`npx tsc --noEmit` (0 errors) + Playwright (title/Survival/HUD at 390×844,
+844×390, 1280×800, walk via `window.__controlsTest`, 0 page errors) before pushing.
+
+- `22181fae` Standalone web + Android APK builds (additive only): `standalone/`,
+  `standalone-apk/`, `apk/` (manual javac/d8/aapt2, package `com.studcraft.game`),
+  `STANDALONE.md`. APK is 100% offline, signed with a dedicated keystore kept
+  outside the repo — all future APK updates must reuse it or installs break.
+- `5c23eae7` Mobile HUD + shadow fix (Philippe's A54 verdict on the realistic
+  pack: HUD floated mid-screen, shadows blocky/muddy). PCFSoft shadows, shadow
+  camera ±42→±30 with matching texel snap (60), bias −0.0002 / normalBias 0.06,
+  day-curve light floors raised (hemi 0.28, ambient 0.28, env 0.30), vertex AO
+  softened [0.66, 0.80, 0.91, 1], opaque envMapIntensity 0.55. HUD is now one
+  glued bottom cluster (hotbar anchored, XP/mana strips on its edge, hearts
+  left + hunger right; portrait stacks above the touch controls; panels are
+  full-screen sheets, ≥44px targets). Desktop layout untouched.
+  Files: game.ts, mesher.ts (AO levels only — stud geometry untouched, that
+  pass is claimed above), styles.css.
+- `bdd4ea7d` Quality-that-stays-light pass: antialiasing ON for touch,
+  anisotropy 8 (color atlas) / 4 (rough/normal), pixel-ratio caps raised
+  (touch 1.75, desktop 2) behind an adaptive governor (frame-time EMA steps
+  resolution to ×0.6 under load, back up when smooth), exposure 1.08, water
+  envMapIntensity 1.0. Touch buttons rebuilt as glossy plastic (per-action
+  colored top edge, press = scale 0.92), menu .btn press feedback, joystick
+  polish. Landscape-only on phones: APK `sensorLandscape` in
+  `apk/src/main/AndroidManifest.xml` + rotate-prompt overlay on portrait web.
+- `d973a266` Real sky dome + cloud shadows: gradient sky dome (one ShaderMaterial
+  draw, no depth write) — zenith→fog-matched horizon, sun disc + halo tracking
+  the sun, full day/sunset/night cycle driven in `sky()`; existing blocky
+  clouds now cast real shadows (`clouds.userData.keepShadow = true`), synced
+  with the clouds you see, no extra draw calls.
+- APKs shipped to Philippe: v1.3 (HUD/shadow fix), v1.4 (quality + landscape),
+  v1.5 (sky + cloud shadows). Built from repo HEAD each time via `apk/build.sh`.
+
+### Next move claimed (Muse)
+- Taking: **light & atmosphere polish, pass 2** — sunset/night grading,
+  night readability, shadow tuning from Philippe's A54 feedback on v1.5, and a
+  water *rendering* pass (surface + underwater tint) if time permits.
+  Scope limit: `sky()`, `relight()`, material setup in game.ts only.
+  NOT touching: mesher/studs (claimed by Grok above), redstone (claimed by
+  Grok above), world gen, fluid *simulation* (flow logic is Grok's skeleton
+  list — rendering only on my side).
+- Standing offer: after any Grok push, Muse re-verifies (tsc + Playwright)
+  and rebuilds the APK on request.
