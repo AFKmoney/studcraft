@@ -1089,3 +1089,64 @@ v2.3 slabs/stairs/signs · v2.4 real enchantments · v2.5 Enderman & pillar
 mobs · v2.6 caves & veins · v2.7 full brewing · v2.8 biome variants &
 zoned Nether · v2.9 profession tiers · v3.0 multiplayer prototype.
 The A54 verdict on Philippe's phone remains the final word on feel/perf.
+
+## Battle order #2 — OPEN (2026-10-25, Philippe: "Lets go")
+
+Philippe approved a second battle order toward the full 1:1, same rules:
+one item per version, everything logged here, his A54 verdict stays final.
+Remaining gaps from AUDIT-1A1 not covered by order #1, sequenced
+impact/effort:
+
+1. Complete enchantments (books, missing enchants, grindstone) — CLAIMED (Muse)
+2. Iconic items (trident, crossbow, fireworks, name tags, frames/paintings)
+3. Pillar mobs #2 (Shulker, Guardian, goat, axolotl, parrot, Husk, Stray)
+4. Illagers + hamlet raids
+5. Structures (ocean monument, Nether fortress/bastion, mansion)
+6. Stations (beacon, shulker box, conduit, jukebox + discs)
+7. Villager depth (stock/refresh, reputation)
+8. Advanced redstone (Observer logic, daylight sensor, container comparators)
+9. Wood species
+10. Hardcore + Spectator modes
+11. World height 128 (structural; A54 perf verdict required)
+12. Multiplayer P1 (seed handshake, edit catch-up, HUD chat)
+
+- NEXT (Muse): item 1 — enchantment completion.
+
+## 2026-10-25 — v3.1 battle order #2 item 1: complete enchantments (Muse)
+
+- **20 runes** (was 10): + Smite, Bane of Spiders, Looting, Silk Touch,
+  Mending, Infinity, Punch, Thorns, Depth Strider, Frost Walker. Caps
+  raised to Minecraft levels (Sharpness V, Efficiency V, Protection IV,
+  Power V, Feather Fall IV, Fortune/Looting III). MC exclusivity enforced
+  in table rolls, twin combine and book apply: Silk Touch x Fortune,
+  Infinity x Mending, Depth Strider x Frost Walker.
+- **Effects wired**: smite/bane bonus vs undead/spiders in melee; looting
+  duplicates base drops in killMob; infinity stops arrow consumption;
+  punch knocks mobs back on arrow hits; thorns reflects on the two melee
+  bite sites; depth strider raises the swim factor toward gill speed;
+  mending knits the held piece back (+2 uses / 3 s); frost walker freezes
+  a 3x3 water surface underfoot into Ice that refreshes while stood on
+  and melts seconds after you leave.
+- **Enchanted books** (def 280): the rune table binds runes into a held
+  plain Book (any rune; applicability enforced at apply time); the anvil
+  combine accepts the book in the off hand, pours its runes into the held
+  piece (same merge rules), consumes the book.
+- **Grindstone** (def 281, craftable: 2 sticks + stone slab + 2 planks,
+  opens the anvil bench): new "strip every rune" action (disenchant) —
+  clears the held piece, or blanks an enchanted book back to a plain one.
+- QA hook gained api()/getEnch/setEnch/getInv/setOffhand for deterministic
+  logic tests. **Verified live**: book creation at the real table through
+  the real panel twice (Fire/Knockback, then Sharpness/Flame rolls);
+  api-path enchant rolled Smite on an iron blade; disenchant cleared it
+  to null; a Sharpness II book applied at the anvil gave exactly
+  {sharpness: 2} and consumed the book (null after). tsc 0, 0 page errors.
+  **Still owed a live check**: silk touch's drop swap (a ternary in the
+  generic drop branch + fortune guard) — the slow-motion QA harness could
+  not land a controlled mine on a placed farmland cell in 2 attempts;
+  the combat/swim/frost effects are code-reviewed, exercised only via
+  the same paths as their v2.4 siblings.
+- Philippe's note (2026-10-25): some animals "font pas de sens" — item 3
+  scope extended with a **bestiary visual-coherence pass**: every mob's
+  LEGO build reviewed so its structure reads at a glance.
+- NEXT (Muse): item 2 — iconic items (trident, crossbow, fireworks,
+  name tags, frames/paintings).

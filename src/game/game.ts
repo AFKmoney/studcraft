@@ -131,6 +131,7 @@ export type GameApi = {
   chestTap: (i: number) => void;
   enchant: () => void;
   combine: () => void;
+  disenchant: () => void;
   setSignText: (t: string) => void;
   cancelSignEdit: () => void;
   mend: () => void;
@@ -173,6 +174,11 @@ declare global {
       getTarget?: () => string;
       spawnMob?: (kind: string, dx?: number, dz?: number) => boolean;
       getPeers?: () => { name: string; x: number; y: number; z: number }[];
+      getEnch?: (id: number) => Record<string, number> | null;
+      setEnch?: (id: number, key: string, lvl: number) => boolean;
+      getInv?: (id: number) => number;
+      setOffhand?: (id: number) => boolean;
+      api?: (name: string) => boolean;
       mpConnect?: (url: string, room: string, name: string) => boolean;
       getMobs?: () => string[];
       getHamlet?: () => { x: number; y: number; z: number } | null;
@@ -343,18 +349,30 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
 
   type EnchDef = { key: string; name: string; max: number; for: (d: ReturnType<typeof def>) => boolean };
   const ENCHANTS: EnchDef[] = [
-    { key: "sharpness", name: "Sharpness", max: 3, for: (d) => d.tool === "sword" || d.tool === "axe" },
+    { key: "sharpness", name: "Sharpness", max: 5, for: (d) => d.tool === "sword" || d.tool === "axe" },
+    { key: "smite", name: "Smite", max: 5, for: (d) => d.tool === "sword" || d.tool === "axe" },
+    { key: "bane", name: "Bane of Spiders", max: 5, for: (d) => d.tool === "sword" || d.tool === "axe" },
     { key: "fire", name: "Fire Aspect", max: 2, for: (d) => d.tool === "sword" },
     { key: "knockback", name: "Knockback", max: 2, for: (d) => d.tool === "sword" },
-    { key: "efficiency", name: "Efficiency", max: 3, for: (d) => d.tool === "pick" || d.tool === "axe" || d.tool === "shovel" },
-    { key: "fortune", name: "Fortune", max: 2, for: (d) => d.tool === "pick" },
+    { key: "looting", name: "Looting", max: 3, for: (d) => d.tool === "sword" },
+    { key: "efficiency", name: "Efficiency", max: 5, for: (d) => d.tool === "pick" || d.tool === "axe" || d.tool === "shovel" },
+    { key: "fortune", name: "Fortune", max: 3, for: (d) => d.tool === "pick" },
+    { key: "silk", name: "Silk Touch", max: 1, for: (d) => d.tool === "pick" || d.tool === "axe" || d.tool === "shovel" },
     { key: "unbreaking", name: "Unbreaking", max: 3, for: (d) => d.maxUse > 0 },
-    { key: "protection", name: "Protection", max: 3, for: (d) => d.armor > 0 },
-    { key: "power", name: "Power", max: 3, for: (d) => d.tool === "bow" },
+    { key: "mending", name: "Mending", max: 1, for: (d) => d.maxUse > 0 },
+    { key: "protection", name: "Protection", max: 4, for: (d) => d.armor > 0 },
+    { key: "thorns", name: "Thorns", max: 3, for: (d) => d.armor > 0 },
+    { key: "power", name: "Power", max: 5, for: (d) => d.tool === "bow" },
     { key: "flame", name: "Flame", max: 1, for: (d) => d.tool === "bow" },
-    { key: "feather", name: "Feather Fall", max: 2, for: (d) => d.armorSlot === 3 },
+    { key: "punch", name: "Punch", max: 2, for: (d) => d.tool === "bow" },
+    { key: "infinity", name: "Infinity", max: 1, for: (d) => d.tool === "bow" },
+    { key: "feather", name: "Feather Fall", max: 4, for: (d) => d.armorSlot === 3 },
+    { key: "depth", name: "Depth Strider", max: 3, for: (d) => d.armorSlot === 3 },
+    { key: "frost", name: "Frost Walker", max: 2, for: (d) => d.armorSlot === 3 },
   ];
-  const ROMAN = ["", "I", "II", "III"];
+  // Mutually exclusive pairs, the Minecraft rule.
+  const ENCH_CONFLICTS: Record<string, string> = { silk: "fortune", fortune: "silk", infinity: "mending", mending: "infinity", depth: "frost", frost: "depth" };
+  const ROMAN = ["", "I", "II", "III", "IV", "V"];
   function enchLvl(id: number, key: string): number {
     return ench.get(id)?.[key] ?? 0;
   }
@@ -861,6 +879,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let poisonT = 0;
   let slowT = 0;
   let healAcc = 0;
+  let mendAcc = 0;
+  const frostIce = new Map<string, number>();
   let poisonAcc = 0;
   let fireT = 0;
   let realm = 0;
@@ -889,6 +909,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     fire?: boolean;
     pow?: number;
     flame?: boolean;
+    punch?: number;
     splash?: number;
   };
   const shots: Shot[] = [];
@@ -1539,6 +1560,15 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     hurt(settings.mods.hard ? Math.ceil(n * 1.5) : n);
   }
 
+  // Thorns: worn armor bites back at a melee attacker.
+  function thornsHit(m: Mob) {
+    let total = 0;
+    for (const piece of armor) if (piece) total += enchLvl(piece, "thorns");
+    if (total <= 0 || Math.random() >= 0.5) return;
+    m.hp -= Math.ceil(total / 2);
+    if (m.hp <= 0 && !m.dead) killMob(m);
+  }
+
   function die() {
     if (!creative && (inv[ID.Totem] ?? 0) > 0) {
       spend(ID.Totem, 1);
@@ -1677,9 +1707,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         addInv(ID.Wheat, 1);
         addInv(ID.Seeds, 1);
       } else if (canDrop && id === ID.Gravel) addInv(Math.random() < 0.14 ? ID.Flint : ID.Gravel, 1);
-      else if (canDrop && block.drop !== -1) addInv(block.drop || id, 1);
-      // Fortune: extra ore drops, rolled per level.
-      if (canDrop && block.drop !== -1 && (ORE_XP[id] ?? 0) > 0) {
+      else if (canDrop && block.drop !== -1) addInv(enchLvl(hotbar[slot], "silk") > 0 ? id : block.drop || id, 1);
+      // Fortune: extra ore drops, rolled per level (never with Silk Touch).
+      if (canDrop && block.drop !== -1 && (ORE_XP[id] ?? 0) > 0 && enchLvl(hotbar[slot], "silk") === 0) {
         const fort = held.tool === "pick" ? enchLvl(hotbar[slot], "fortune") : 0;
         for (let f = 0; f < fort; f++) if (Math.random() < 0.35) addInv(block.drop || id, 1);
       }
@@ -2393,11 +2423,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
   }
 
-  function launchArrow(x: number, y: number, z: number, dx: number, dy: number, dz: number, friendly: boolean, pow = 0, flame = false) {
+  function launchArrow(x: number, y: number, z: number, dx: number, dy: number, dz: number, friendly: boolean, pow = 0, flame = false, punch = 0) {
     const len = Math.hypot(dx, dy, dz) || 1;
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.35), skin(0xf4f1ea));
     scene.add(mesh);
-    shots.push({ x, y, z, vx: (dx / len) * 18, vy: (dy / len) * 18, vz: (dz / len) * 18, life: 2.4, friendly, mesh, pow, flame });
+    shots.push({ x, y, z, vx: (dx / len) * 18, vy: (dy / len) * 18, vz: (dz / len) * 18, life: 2.4, friendly, mesh, pow, flame, punch });
   }
 
   function launchFireball(x: number, y: number, z: number, dx: number, dy: number, dz: number) {
@@ -2545,13 +2575,14 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
 
   function shootHeld() {
     if ((inv[ID.Arrow] ?? 0) <= 0 && !creative) return say("Need arrows");
-    if (!creative) spend(ID.Arrow, 1);
+    // Infinity: the quiver never empties while you hold one arrow.
+    if (!creative && enchLvl(hotbar[slot], "infinity") === 0) spend(ID.Arrow, 1);
     wearHeld();
     const dx = -Math.sin(player.yaw) * Math.cos(player.pitch);
     const dy = Math.sin(player.pitch);
     const dz = -Math.cos(player.yaw) * Math.cos(player.pitch);
     const bowId = hotbar[slot];
-    launchArrow(player.x, player.y + 1.4, player.z, dx, dy, dz, true, enchLvl(bowId, "power"), enchLvl(bowId, "flame") > 0);
+    launchArrow(player.x, player.y + 1.4, player.z, dx, dy, dz, true, enchLvl(bowId, "power"), enchLvl(bowId, "flame") > 0, enchLvl(bowId, "punch"));
     audio.place();
   }
 
@@ -3065,6 +3096,53 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       fireT -= dt;
       if (Math.floor(fireT * 2) !== Math.floor((fireT + dt) * 2)) hurt(1);
     }
+    // Mending: a held mending piece slowly knits itself back together.
+    if (!creative) {
+      const heldId = hotbar[slot];
+      if (heldId && def(heldId).maxUse > 0 && enchLvl(heldId, "mending") > 0 && (inv[heldId] ?? 0) < def(heldId).maxUse) {
+        mendAcc += dt;
+        if (mendAcc >= 3) {
+          mendAcc = 0;
+          inv[heldId] = Math.min(def(heldId).maxUse, (inv[heldId] ?? 0) + 2);
+        }
+      }
+    }
+    // Frost Walker: boots freeze the water surface underfoot; it melts back.
+    const frostLvl = enchLvl(armor[3], "frost");
+    if (frostLvl > 0 && !flying && phase === "play") {
+      const feet = world.get(Math.floor(player.x), Math.floor(player.y), Math.floor(player.z));
+      if (feet !== ID.Water) {
+        const by = Math.floor(player.y) - 1;
+        for (let ox = -1; ox <= 1; ox++)
+          for (let oz = -1; oz <= 1; oz++) {
+            const bx = Math.floor(player.x) + ox;
+            const bz = Math.floor(player.z) + oz;
+            if (world.get(bx, by, bz) === ID.Water && world.get(bx, by + 1, bz) === ID.Air) {
+              world.set(bx, by, bz, ID.Ice);
+              markDirtyAt(bx, bz);
+              frostIce.set(bx + "," + by + "," + bz, 4 + frostLvl * 2);
+            } else if (world.get(bx, by, bz) === ID.Ice && frostIce.has(bx + "," + by + "," + bz)) {
+              // Standing on your own ice keeps it frozen.
+              frostIce.set(bx + "," + by + "," + bz, 4 + frostLvl * 2);
+            }
+          }
+      }
+    }
+    if (frostIce.size) {
+      for (const [k, t] of [...frostIce]) {
+        const nt = t - dt;
+        if (nt > 0) {
+          frostIce.set(k, nt);
+          continue;
+        }
+        frostIce.delete(k);
+        const [fx, fy, fz] = k.split(",").map(Number);
+        if (world.get(fx, fy, fz) === ID.Ice) {
+          world.set(fx, fy, fz, ID.Water);
+          markDirtyAt(fx, fz);
+        }
+      }
+    }
     portalCd = Math.max(0, portalCd - dt);
     tickSpawners(dt);
     if (fishT >= 0) {
@@ -3245,6 +3323,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
             let hit = 4 + (strengthT > 0 ? 2 : 0) + (s.pow ?? 0);
             if (m.kind === "dragon" && crystalsLeft() > 0) hit = Math.max(1, Math.ceil(hit * 0.5));
             m.hp -= hit;
+            if (s.punch) {
+              const l = Math.hypot(s.vx, s.vz) || 1;
+              m.x += (s.vx / l) * (0.4 + 0.5 * s.punch);
+              m.z += (s.vz / l) * (0.4 + 0.5 * s.punch);
+            }
             if (m.kind === "enderman" || m.kind === "bee") m.mad = true;
             if (s.flame) m.burn = Math.max(m.burn ?? 0, 4);
             if (m.hp <= 0) killMob(m);
@@ -3794,6 +3877,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
                                               : [ID.Green];
     if (!creative) {
       for (const drop of drops) dropItem(drop, 1, mob.x, mob.y + 0.4, mob.z);
+      // Looting on the held blade: bonus copies of the base drops.
+      const lootLvl = def(hotbar[slot]).tool === "sword" ? enchLvl(hotbar[slot], "looting") : 0;
+      for (const drop of drops) for (let f = 0; f < lootLvl; f++) if (Math.random() < 0.35) dropItem(drop, 1, mob.x, mob.y + 0.4, mob.z);
       const trophy = skills.has("trophy");
       const luck = trophy || settings.mods.generous ? 0.62 : 0.28;
       const extra: number[] = [];
@@ -4482,11 +4568,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       }
       if ((m.kind === "walker" || m.kind === "spider" || m.kind === "wisp" || m.kind === "slime" || m.kind === "drowned" || piglinMad) && d < 1.35 && phase === "play" && m.cool <= 0) {
         bite(m.kind === "wisp" || m.kind === "spider" ? 2 : m.kind === "slime" ? ((m.size ?? 1) > 0.7 ? 3 : 1) : 3);
+        thornsHit(m);
         m.cool = 0.75;
         audio.hit();
       }
       if (m.kind === "enderman" && m.mad && d < 1.6 && phase === "play" && m.cool <= 0) {
         bite(4);
+        thornsHit(m);
         m.cool = 0.8;
         audio.hit();
       }
@@ -4745,7 +4833,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const onIce = def(world.get(Math.floor(player.x), Math.floor(player.y - 0.08), Math.floor(player.z))).slip && !grippy;
     const onSoul = def(world.get(Math.floor(player.x), Math.floor(player.y - 0.08), Math.floor(player.z))).slow;
     const speed =
-      (flying ? (sample.sneak ? 4.5 : 12) : (sample.sneak ? 1.7 : sample.sprint ? 7.1 : 4.35) * (bodyWater ? (gillT > 0 ? 0.92 : 0.55) : 1)) *
+      (flying ? (sample.sneak ? 4.5 : 12) : (sample.sneak ? 1.7 : sample.sprint ? 7.1 : 4.35) * (bodyWater ? (gillT > 0 ? 0.92 : Math.min(0.92, 0.55 + 0.12 * enchLvl(armor[3], "depth"))) : 1)) *
       (onSoul ? 0.45 : 1) *
       (sample.sprint && rankLv >= 12 ? 1.12 : 1) *
       (speedT > 0 ? 1.35 : 1) *
@@ -4916,6 +5004,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         let dmg = blade.tool === "sword" ? 1 + blade.tier * 2 : 1;
         if (strengthT > 0) dmg += 2;
         if (blade.tool === "sword" || blade.tool === "axe") dmg += enchLvl(hotbar[slot], "sharpness");
+        if ((blade.tool === "sword" || blade.tool === "axe") && (mob.kind === "walker" || mob.kind === "skelly" || mob.kind === "drowned" || mob.kind === "wither" || mob.kind === "phantom")) dmg += enchLvl(hotbar[slot], "smite") * 2;
+        if ((blade.tool === "sword" || blade.tool === "axe") && mob.kind === "spider") dmg += enchLvl(hotbar[slot], "bane") * 2;
         if (rankLv >= 18 && blade.tool === "sword") dmg += 1;
         const hostile =
           mob.kind === "walker" ||
@@ -5708,6 +5798,25 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     },
     getMobs: () => mobs.filter((m) => !m.dead).map((m) => m.kind),
     getPeers: () => [...mp.peers.values()].map((p) => ({ name: p.name, x: p.x, y: p.y, z: p.z })),
+    getEnch: (id: number) => ench.get(id) ?? null,
+    setEnch: (id: number, key: string, lvl: number) => {
+      const cur = { ...(ench.get(id) ?? {}) };
+      if (lvl > 0) cur[key] = lvl;
+      else delete cur[key];
+      ench.set(id, cur);
+      return true;
+    },
+    getInv: (id: number) => inv[id] ?? 0,
+    setOffhand: (id: number) => {
+      offhand = id;
+      return true;
+    },
+    api: (name: string) => {
+      const fn = (api as unknown as Record<string, unknown>)[name];
+      if (typeof fn !== "function") return false;
+      (fn as () => void)();
+      return true;
+    },
     mpConnect: (url: string, room: string, name: string) => {
       mp.connect(url, room, name);
       return true;
@@ -5968,6 +6077,31 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     },
     enchant() {
       const id = hotbar[slot];
+      // A held book takes any rune and becomes an enchanted book.
+      if (id === ID.Book) {
+        const cur = { ...(ench.get(ID.EnchBook) ?? {}) };
+        if (ENCHANTS.every((e) => (cur[e.key] ?? 0) >= e.max)) return say("That book knows every rune");
+        if (!spendLevels(3)) return say("Need builder level 3");
+        const rolls = 1 + (Math.random() < 0.6 ? 1 : 0) + (Math.random() < 0.3 ? 1 : 0);
+        const got: string[] = [];
+        for (let i = 0; i < rolls; i++) {
+          const e = ENCHANTS[Math.floor(Math.random() * ENCHANTS.length)];
+          if ((cur[e.key] ?? 0) >= e.max) continue;
+          const conf = ENCH_CONFLICTS[e.key];
+          if (conf && (cur[conf] ?? 0) > 0) continue;
+          cur[e.key] = (cur[e.key] ?? 0) + 1;
+          got.push(e.name + (cur[e.key] > 1 ? " " + ROMAN[cur[e.key]] : ""));
+        }
+        if (!got.length) return say("The runes fizzle — try again");
+        ench.set(ID.EnchBook, cur);
+        if (!creative) spend(ID.Book, 1);
+        addInv(ID.EnchBook, 1);
+        hotbar[slot] = ID.EnchBook;
+        say("The book glows: " + got.join(", "));
+        saveDirty = true;
+        emit();
+        return;
+      }
       const d = def(id);
       if (!id || !d.maxUse) return say("Hold a tool, weapon or armor piece");
       const pool = ENCHANTS.filter((e) => e.for(d));
@@ -5980,6 +6114,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       for (let i = 0; i < rolls; i++) {
         const e = pool[Math.floor(Math.random() * pool.length)];
         if ((cur[e.key] ?? 0) >= e.max) continue;
+        const conf = ENCH_CONFLICTS[e.key];
+        if (conf && (cur[conf] ?? 0) > 0) continue;
         cur[e.key] = (cur[e.key] ?? 0) + 1;
         got.push(e.name + (cur[e.key] > 1 ? " " + ROMAN[cur[e.key]] : ""));
       }
@@ -5993,6 +6129,36 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       const heldId = hotbar[slot];
       const sacId = offhand;
       if (!heldId || !def(heldId).maxUse) return say("Hold the piece to keep");
+      // An enchanted book in the off hand pours its runes into the piece.
+      if (sacId === ID.EnchBook) {
+        const book = ench.get(ID.EnchBook) ?? {};
+        if (!Object.keys(book).length) return say("That book carries no runes");
+        const a = { ...(ench.get(heldId) ?? {}) };
+        let changed = false;
+        for (const e of ENCHANTS) {
+          const bv = book[e.key] ?? 0;
+          if (!bv || !e.for(def(heldId))) continue;
+          const conf = ENCH_CONFLICTS[e.key];
+          if (conf && (a[conf] ?? 0) > 0) continue;
+          const av = a[e.key] ?? 0;
+          if (av === 0) {
+            a[e.key] = bv;
+            changed = true;
+          } else if (av === bv && av < e.max) {
+            a[e.key] = av + 1;
+            changed = true;
+          }
+        }
+        if (!changed) return say("None of the book's runes fit that piece");
+        if (!spendLevels(2)) return say("Need builder level 2");
+        ench.set(heldId, a);
+        ench.delete(ID.EnchBook);
+        offhand = 0;
+        say("Book applied: " + (enchSummary(heldId) || "runes merged"));
+        saveDirty = true;
+        emit();
+        return;
+      }
       if (!sacId || sacId !== heldId) return say("Put an identical piece in your off hand");
       const a = { ...(ench.get(heldId) ?? {}) };
       const b = ench.get(sacId) ?? {};
@@ -6015,6 +6181,26 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       ench.set(heldId, a);
       offhand = 0;
       say("Combined: " + (enchSummary(heldId) || "runes merged"));
+      saveDirty = true;
+      emit();
+    },
+    disenchant() {
+      const id = hotbar[slot];
+      if (id === ID.EnchBook) {
+        ench.delete(ID.EnchBook);
+        hotbar[slot] = ID.Book;
+        if ((inv[ID.EnchBook] ?? 0) > 0) {
+          inv[ID.EnchBook] = (inv[ID.EnchBook] ?? 1) - 1;
+          addInv(ID.Book, 1);
+        }
+        say("The book is blank again");
+        saveDirty = true;
+        emit();
+        return;
+      }
+      if (!id || !ench.get(id)) return say("Hold an enchanted piece");
+      ench.delete(id);
+      say("Runes stripped clean");
       saveDirty = true;
       emit();
     },

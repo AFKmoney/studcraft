@@ -279,6 +279,8 @@ export const ID = {
   PotionTar: 277,
   SplashVenom: 278,
   SplashTar: 279,
+  EnchBook: 280,
+  Grindstone: 281,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -775,6 +777,8 @@ item(ID.PotionVenom, "Venom brew", "#3aaa4c");
 item(ID.PotionTar, "Tar brew", "#4a3424");
 item(ID.SplashVenom, "Venom splash", "#3aaa4c");
 item(ID.SplashTar, "Tar splash", "#4a3424");
+item(ID.EnchBook, "Enchanted book", "#7a4ad4");
+put(b(ID.Grindstone, "Grindstone", "#8e959c", "#a7aeb4", "#6d4426", "#4a2e1a", { hard: 1.5, tough: true, work: "anvil" }));
 item(ID.Copper, "Copper", "#e07a3d");
 item(ID.Bronze, "Bronze", "#cd7f32");
 item(ID.Amber, "Amber", "#ffbf3a");
@@ -1239,6 +1243,8 @@ export const CATALOG = [
   ID.PotionTar,
   ID.SplashVenom,
   ID.SplashTar,
+  ID.EnchBook,
+  ID.Grindstone,
 ];
 
 export const COLORS = [ID.Red, ID.Orange, ID.Yellow, ID.Green, ID.Blue, ID.Azure, ID.Pink, ID.White, ID.Black];

@@ -125,6 +125,7 @@ export const RECIPES: Recipe[] = [
   r("portal", "Gate void", "4 void bricks", [[ID.Obsidian, 4]], ID.Portal, 1),
   r("enchant", "Rune table", "4 void + 2 gems + 1 plank", [[ID.Obsidian, 4], [ID.Diamond, 2], [P, 1]], ID.Enchanter, 1),
   r("anvil", "Anvil", "3 iron bricks + 4 ingots", [[ID.IronBlock, 3], [I, 4]], ID.Anvil, 1),
+  r("grindstone", "Grindstone", "2 sticks + 1 stone slab + 2 planks", [[S, 2], [ID.SlabStone, 1], [P, 2]], ID.Grindstone, 1),
   r("brew", "Kettle", "1 ember rod + 3 cobble", [[ID.Blaze, 1], [C, 3]], ID.Brew, 1),
   r("bow", "Bow", "3 sticks + 3 string", [[S, 3], [ID.String, 3]], ID.Bow, 1),
   r("arrow", "Arrows", "1 flint + 1 stick + 1 feather → 4", [[ID.Flint, 1], [S, 1], [ID.Feather, 1]], ID.Arrow, 4),

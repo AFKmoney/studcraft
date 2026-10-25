@@ -837,8 +837,11 @@ function StationScreen({ game }: { game: GameApi }) {
                 ✨ Spend 3 levels — enchant the held piece
               </button>
               <p className="fine">
-                Random runes for what you hold: blades take Sharpness, Fire Aspect, Knockback; picks take Efficiency and Fortune; bows take
-                Power and Flame; armor takes Protection; boots can learn Feather Fall. Anything sturdy can learn Unbreaking.
+                Random runes for what you hold: blades take Sharpness, Smite, Bane of Spiders, Fire Aspect, Knockback and Looting; picks take
+                Efficiency, Fortune or Silk Touch; bows take Power, Flame, Punch and Infinity; armor takes Protection and Thorns; boots can
+                learn Feather Fall, Depth Strider or Frost Walker. Anything sturdy can learn Unbreaking and Mending. Hold a plain book and
+                the table binds the runes into an enchanted book instead — apply it later at the anvil from your off hand. Rivals never mix:
+                Silk Touch refuses Fortune, Infinity refuses Mending, Frost Walker refuses Depth Strider.
               </p>
               {hud.heldEnch && <p className="fine">Held now: ✦ {hud.heldEnch}</p>}
             </div>
@@ -853,6 +856,9 @@ function StationScreen({ game }: { game: GameApi }) {
               </button>
               <button className="btn big" onClick={() => game.combine()}>
                 Spend 2 levels — combine with the off-hand twin (same rune, same level → one level higher)
+              </button>
+              <button className="btn big" onClick={() => game.disenchant()}>
+                Grindstone — strip every rune off the held piece
               </button>
               {hud.heldEnch && <p className="fine">Held now: ✦ {hud.heldEnch}</p>}
             </div>
@@ -1050,7 +1056,7 @@ function Ranks({ hud, known }: { hud: GameApi["hud"]; known: Set<number> }) {
         <span style={{ width: `${pct}%` }} />
       </div>
       <p className="fine">
-        {hud.xp} / {hud.xpNeed} studs. The rune table enchants the held piece for 3 levels — real runes now (Sharpness, Fortune, Protection, Flame…), and the anvil combines a piece with its off-hand twin to push a rune one level higher. Tin and copper hide in mid stone. Amber, chrome, and sapphire sit deeper.
+        {hud.xp} / {hud.xpNeed} studs. The rune table enchants the held piece for 3 levels — 20 runes now (Sharpness V, Silk Touch, Mending, Frost Walker…), binds them into books too, and the anvil combines a piece with its off-hand twin — or an enchanted book — to push a rune higher. The grindstone strips runes clean. Tin and copper hide in mid stone. Amber, chrome, and sapphire sit deeper.
         Prism hugs the baseplate core and the End. Resin sweats on the nether floor.
       </p>
       <ul className="perk-list">
