@@ -845,6 +845,10 @@ item(ID.Paper, "Paper", "#f4f1ea");
 item(ID.Book, "Book", "#8d3e18");
 item(ID.Compass, "Compass", "#e23b2f");
 item(ID.Horn, "Horn", "#e8d0a8");
+item(ID.Clock, "Clock", "#f0c43a");
+item(ID.Map, "Map", "#c4924a");
+item(ID.Banner, "Banner", "#e23b2f");
+item(ID.Lead, "Lead", "#f4f1ea");
 
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];
@@ -1047,6 +1051,10 @@ export const CATALOG = [
   ID.Book,
   ID.Compass,
   ID.Horn,
+  ID.Clock,
+  ID.Map,
+  ID.Banner,
+  ID.Lead,
 ];
 
 export const COLORS = [ID.Red, ID.Orange, ID.Yellow, ID.Green, ID.Blue, ID.Azure, ID.Pink, ID.White, ID.Black];

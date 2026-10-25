@@ -38,6 +38,11 @@ function glyph(block: BlockDef, fill: string): ReactNode {
   if (block.id === ID.Arrow) return <Dart fill={fill} />;
   if (block.id === ID.Stick || block.id === ID.Rod) return <Rod fill={fill} />;
   if (block.id === ID.Compass) return <CompassMark fill={fill} />;
+  if (block.id === ID.Clock) return <ClockMark fill={fill} />;
+  if (block.id === ID.Map) return <MapMark fill={fill} />;
+  if (block.id === ID.Banner) return <BannerMark fill={fill} />;
+  if (block.id === ID.Lead) return <LeadMark fill={fill} />;
+  if (block.id === ID.EndCrystal) return <CrystalMark fill={fill} />;
   if (block.id === ID.Horn) return <HornMark fill={fill} />;
   if (block.id === ID.Book || block.id === ID.Bookshelf) return <BookMark fill={fill} />;
   if (block.id === ID.Paper) return <PaperMark fill={fill} />;
@@ -53,6 +58,48 @@ function CompassMark({ fill }: { fill: string }) {
       <circle cx="16" cy="16" r="11" fill="#2a241c" stroke={fill} strokeWidth="2" />
       <path d="M16 6l3 10-3-2-3 2z" fill={fill} />
       <path d="M16 26l-3-10 3 2 3-2z" fill="#f4f1ea" opacity="0.8" />
+    </g>
+  );
+}
+function ClockMark({ fill }: { fill: string }) {
+  return (
+    <g>
+      <circle cx="16" cy="16" r="11" fill="#2a241c" stroke={fill} strokeWidth="2" />
+      <path d="M16 16V8" stroke={fill} strokeWidth="2" strokeLinecap="round" />
+      <path d="M16 16l5 3" stroke="#f4f1ea" strokeWidth="1.6" strokeLinecap="round" />
+    </g>
+  );
+}
+function MapMark({ fill }: { fill: string }) {
+  return (
+    <g>
+      <rect x="6" y="5" width="20" height="22" rx="1" fill={fill} />
+      <path d="M10 20l4-6 3 3 5-7" fill="none" stroke="#2f7d3a" strokeWidth="1.6" />
+      <circle cx="14" cy="14" r="1.4" fill="#3b96e4" />
+    </g>
+  );
+}
+function BannerMark({ fill }: { fill: string }) {
+  return (
+    <g>
+      <rect x="15" y="4" width="2" height="24" fill="#c4924a" />
+      <path d="M17 6h10l-2 4 2 4H17z" fill={fill} />
+    </g>
+  );
+}
+function LeadMark({ fill }: { fill: string }) {
+  return (
+    <g>
+      <path d="M8 8c8 2 8 8 4 10s-2 6 6 8" fill="none" stroke={fill} strokeWidth="2.2" strokeLinecap="round" />
+      <circle cx="22" cy="24" r="2.2" fill="none" stroke={fill} strokeWidth="1.6" />
+    </g>
+  );
+}
+function CrystalMark({ fill }: { fill: string }) {
+  return (
+    <g>
+      <path d="M16 4l7 8-7 16-7-16z" fill={fill} />
+      <path d="M9 12h14" stroke="#fff" strokeOpacity="0.7" strokeWidth="1.2" />
     </g>
   );
 }
