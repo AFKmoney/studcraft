@@ -1118,3 +1118,5 @@ export const CREATIVE_BAR = [
   ID.Bench,
   ID.Furnace,
 ];
+BLOCKS[ID.Gravel].fall = true;
+BLOCKS[ID.Soul].fall = true;

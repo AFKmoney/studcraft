@@ -4,6 +4,13 @@
 
 **Last update:** 2026-10-25 (right-click a hotbar slot back to the bag). Icon batch below is still in progress — do not redo public/icons.
 
+
+### Physics + 3D 1:1 (this cycle)
+- Gravity already active for Sand + Gravel (tickExtras). Reinforced fall flags.
+- Basic fluid flow (water/lava) budgeted and present.
+- 3D blocks use mesher studs (STUD_R/STUD_H) + textures.ts paintTop/paintSide matching the icon recipe (flat fill + stud ring). Inventory icons are the product photos; world blocks are the studded 3D equivalent.
+- Next physics: fuller fluid levels, weather, more falling blocks if wanted.
+
 ### Inventory UX
 - shiftStack improved (clear duplicates + prefer empty hotbar slot).
 
