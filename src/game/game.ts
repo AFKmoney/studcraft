@@ -3795,7 +3795,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
                 let wet = raining;
                 for (const [ox, , oz] of NEIGHBORS) if (world.get(x + ox, y - 1, z + oz) === ID.Water) wet = true;
                 if (Math.random() < (wet ? 0.7 : 0.4)) {
-                  let next = cur;
+                  let next: number = cur;
                   if (cur === ID.Crop) next = ID.Crop1;
                   else if (cur === ID.Crop1) next = ID.Crop2;
                   else if (cur === ID.Crop2) next = ID.CropRipe;
