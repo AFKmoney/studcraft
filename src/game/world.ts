@@ -115,6 +115,8 @@ export class World {
     if (h >= 50 || (h >= 44 && heat < 0.46)) return "Snow cap";
     if (h <= SEA + 4 && wet > 0.57) return "Fen";
     if (heat > 0.7 && wet < 0.42 && h >= 34) return "Ash ridge";
+    if (heat > 0.58 && wet > 0.55 && h < 46) return "Jungle";
+    if (wet > 0.7 && heat < 0.5 && h < 42) return "Mushroom";
     if (heat > 0.52 && wet < 0.42 && h < 48) return "Desert";
     if (wet > 0.62) return "Grove";
     if (wet < 0.38) return "Sand flats";
@@ -158,6 +160,12 @@ export class World {
         } else if (biome === "Snow cap") {
           top = ID.Snow;
           fill = ID.Dirt;
+        } else if (biome === "Jungle") {
+          top = ID.Moss;
+          fill = ID.Dirt;
+        } else if (biome === "Mushroom") {
+          top = ID.Moss;
+          fill = ID.Mud;
         }
         if (biome === "Shore" && hash2(x, z, this.seed + 4) > 0.78) top = ID.Clay;
         for (let y = 0; y < HEIGHT; y++) {
@@ -254,13 +262,15 @@ export class World {
             Math.abs(this.heightAt(x + 1, z) - h) > 1 || Math.abs(this.heightAt(x, z + 1) - h) > 1;
           const t = hash2(x, z, this.seed);
           const biome = this.biomeAt(x, z);
-          if (!slope && t < 0.012) {
+          if (!slope && (t < 0.012 || (biome === "Jungle" && t < 0.03))) {
             if (biome === "Ash ridge" || biome === "Desert") {
               const rate = biome === "Desert" ? 0.008 : 0.004;
               if (t < rate) {
                 const tall = 1 + (hash2(x, z, this.seed + 6) > 0.5 ? 1 : 0);
                 for (let i = 1; i <= tall; i++) this.paint(data, baseX, baseZ, x, h + i, z, ID.Cactus);
               }
+            } else if (biome === "Mushroom") {
+              if (t < 0.01) this.paint(data, baseX, baseZ, x, h + 1, z, t < 0.005 ? ID.MushroomRed : ID.Mushroom);
             } else if (biome !== "Snow cap" && biome !== "Sand flats") this.writeTree(data, baseX, baseZ, x, h, z);
           } else if (biome === "Grove" && t > 0.9 && t < 0.94 && x >= baseX && x < baseX + CS && z >= baseZ && z < baseZ + CS) {
             const y = h + 1;

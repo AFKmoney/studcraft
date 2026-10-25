@@ -751,3 +751,17 @@ DO NOT TOUCH:
 
 ### Next move
 - Ready for next unclaimed.
+
+### 2026-10-25 — Grok (completion pass)
+- User asked to finish the game / complete everything.
+- Added Jungle biome (hot + wet): moss surface, denser trees.
+- Added Mushroom biome (wet + cool): moss/mud surface, mushroom caps instead of trees.
+- Carrot and beetroot now smelt into BakedPotato (same as potato).
+- Existing systems already cover: End portal + dragon, Nether, redstone basics, villages with chests/loot, breeding, sleep, rain, crops stages, hybrid controls.
+- Files: world.ts, recipes.ts.
+- Logged.
+
+### Remaining for true 1:1
+- Wither boss, full End cities, multiplayer, deeper redstone (hoppers/dispensers already partial), offhand, jungle temples.
+### Next move
+- Ready for next unclaimed or the remaining 1:1 list.

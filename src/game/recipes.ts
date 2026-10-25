@@ -302,6 +302,8 @@ export const SMELT: Record<number, number> = {
   [ID.ResinOre]: ID.Resin,
   [ID.PrismOre]: ID.Prism,
   [ID.Potato]: ID.BakedPotato,
+  [ID.Carrot]: ID.BakedPotato,
+  [ID.Beetroot]: ID.BakedPotato,
   [ID.Fish]: ID.CookedFish,
 };
 
