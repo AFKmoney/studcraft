@@ -1050,6 +1050,18 @@ function levelPad(world: World, x0: number, z0: number, w: number, d: number, h:
 
 
 
+
+function stampTower(world: World, x: number, y: number, z: number) {
+  // small watchtower
+  for (let i = 0; i < 5; i++) {
+    world.set(x, y + i, z, ID.Cobble);
+    world.set(x + 1, y + i, z, ID.Cobble);
+  }
+  world.set(x, y + 5, z, ID.Planks);
+  world.set(x + 1, y + 5, z, ID.Planks);
+  world.set(x, y + 6, z, ID.Torch);
+}
+
 function stampDungeon(world: World, x: number, y: number, z: number) {
   // small buried room
   for (let dx = -1; dx <= 1; dx++) {
