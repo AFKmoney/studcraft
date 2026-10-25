@@ -443,3 +443,12 @@ DO NOT TOUCH:
 *Agents: append below. Keep it factual and short.*
 
 
+
+### 2026-10-25 — Grok (aim line names held item)
+- Took the unclaimed aim-line task.
+- After targeting, if targetName is empty and hotbar slot is not 0, set it to the item name.
+- Files: game.ts only.
+- Logged.
+
+### Next move
+- Ready for next unclaimed.

@@ -3508,6 +3508,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         else if (def(heldId).food) eat();
       }
     }
+    if (!hud.targetName && hotbar[slot]) hud.targetName = def(hotbar[slot]).name;
     if (sample.place) placeCool -= dt;
     else placeCool = 0;
     prevPlace = sample.place;
