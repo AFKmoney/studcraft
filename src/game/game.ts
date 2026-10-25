@@ -9,7 +9,7 @@ import { manaMaxFor, skillById, spellsFor } from "./skills";
 import { QUESTS, traderOf, type TraderRole } from "./quests";
 import { clearSave, deleteWorld, hasSave, listWorlds, loadLatest, loadSettings, loadWorld, writeSettings, writeWorld, type SaveV1, type WorldSlot } from "./save";
 import { buildAtlas } from "./textures";
-import { CS, HEIGHT, World, decorate, folkLayout, penSheep, paintEndCrystals, END_PILLARS, type Decor, type FolkSpot } from "./world";
+import { CS, HEIGHT, World, decorate, folkLayout, penSheep, type Decor, type FolkSpot } from "./world";
 import { parseSeed } from "./noise";
 
 export type Phase = "title" | "play" | "pause" | "inventory" | "dead";
@@ -450,6 +450,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     metalness: 0,
     roughnessMap: atlases.rough,
     normalMap: atlases.normal,
+    emissiveMap: atlases.glow,
+    emissive: new THREE.Color(0xffffff),
+    emissiveIntensity: 1.15,
     vertexColors: true,
     envMapIntensity: 0.55,
   });
@@ -505,6 +508,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     metalness: 0,
     alphaTest: 0.45,
     side: THREE.DoubleSide,
+    emissiveMap: atlases.glow,
+    emissive: new THREE.Color(0xffffff),
+    emissiveIntensity: 1.15,
     vertexColors: true,
     envMapIntensity: 0.15,
   });
@@ -1448,11 +1454,6 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (id === ID.Cactus) bumpQuest("break", "cactus");
     if (id === ID.Reed) bumpQuest("break", "reed");
     if (id === ID.Bloom) bumpQuest("break", "bloom");
-    if (id === ID.Pumpkin) bumpQuest("break", "pumpkin");
-    if (id === ID.Melon) bumpQuest("break", "melon");
-    if (id === ID.Mushroom || id === ID.MushroomRed) bumpQuest("break", "shroom");
-    if (id === ID.Web) bumpQuest("break", "web");
-    if (id === ID.EndCrystal) popCrystal(x, y, z);
     burst(x + 0.5, y + 0.5, z + 0.5, block.color, 14);
     audio.break();
     swing = 1;
@@ -1537,7 +1538,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         bestD = d;
       }
       if (!best) return say("The spark fizzles");
-      best.hp -= best.kind === "dragon" && crystalsLeft() > 0 ? 3 : 5;
+      best.hp -= 5;
       burst(best.x, best.y + 0.6, best.z, "#f5c518", 10);
       audio.hit();
       if (best.hp <= 0) killMob(best);
@@ -1991,50 +1992,17 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
     world.set(488, 29, 488, ID.Portal);
     world.set(488, 30, 488, ID.Portal);
-    // Overworld End portal frame near origin offset
-    const fx = 180, fz = 180, fy = 32;
-    const ring = [
-      [-2,-2],[-1,-2],[0,-2],[1,-2],[2,-2],
-      [2,-1],[2,0],[2,1],[2,2],
-      [1,2],[0,2],[-1,2],[-2,2],
-      [-2,1],[-2,0],[-2,-1]
-    ];
-    for (const [ox, oz] of ring) {
-      world.set(fx + ox, fy, fz + oz, ID.EndFrame);
-      world.set(fx + ox, fy - 1, fz + oz, ID.Obsidian);
-    }
-    // pillars in the End — crystals sit on the columns
-    // painted after the air carve so the columns are not eaten
     fill(-520, 48, -520, -488, 48, -488, ID.EndStone);
     fill(-518, 49, -518, -490, 56, -490, ID.Air);
     world.set(-504, 49, -504, ID.Portal);
     world.set(-504, 50, -504, ID.Portal);
     for (let i = 0; i < 6; i++) world.set(-516 + i * 3, 49, -506, ID.PrismOre);
-    paintEndCrystals((x, y, z, id) => world.set(x, y, z, id));
     for (let cz = Math.floor(468 / CS); cz <= Math.floor(508 / CS); cz++) {
       for (let cx = Math.floor(468 / CS); cx <= Math.floor(508 / CS); cx++) dirty.add(cx + "," + cz);
     }
     for (let cz = Math.floor(-520 / CS); cz <= Math.floor(-488 / CS); cz++) {
       for (let cx = Math.floor(-520 / CS); cx <= Math.floor(-488 / CS); cx++) dirty.add(cx + "," + cz);
     }
-  }
-
-  function crystalsLeft() {
-    let n = 0;
-    for (const [x, z] of END_PILLARS) if (world.get(x, 63, z) === ID.EndCrystal) n++;
-    return n;
-  }
-
-  function popCrystal(x: number, y: number, z: number) {
-    const left = crystalsLeft();
-    const wyrm = mobs.find((m) => m.kind === "dragon" && !m.dead);
-    if (wyrm) {
-      wyrm.hp -= 8;
-      if (wyrm.hp <= 0) killMob(wyrm);
-      else say(left + " crystals left. The wyrm weakens.");
-    } else say(left ? left + " crystals still on the pillars" : "The pillars are dark");
-    if (Math.hypot(player.x - (x + 0.5), player.z - (z + 0.5)) < 3.5) hurt(3);
-    burst(x + 0.5, y + 1.2, z + 0.5, "#e85ad4", 16);
   }
 
   function hopRealm(to: number) {
@@ -2195,9 +2163,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         for (const m of mobs) {
           if (m.dead || m.kind === "boat" || m.kind === "cart") continue;
           if (Math.hypot(m.x - s.x, m.z - s.z) < 0.7 && Math.abs(m.y + 0.6 - s.y) < 1) {
-            let hit = 4 + (strengthT > 0 ? 2 : 0);
-            if (m.kind === "dragon" && crystalsLeft() > 0) hit = Math.max(1, Math.ceil(hit * 0.5));
-            m.hp -= hit;
+            m.hp -= 4 + (strengthT > 0 ? 2 : 0);
             if (m.hp <= 0) killMob(m);
             dead = true;
             audio.hit();
@@ -2468,7 +2434,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       yaw: Math.random() * Math.PI * 2,
       hp:
         kind === "dragon"
-          ? 12 + crystalsLeft() * 8
+          ? 40
           : kind === "golem"
             ? 24
             : kind === "ghast"
@@ -3315,7 +3281,6 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           mob.kind === "dragon";
         if (skills.has("mark") && blade.tool === "sword" && hostile) dmg += 1;
         if (player.vy < -0.2 && !player.grounded) dmg = Math.ceil(dmg * 1.5);
-        if (mob.kind === "dragon" && crystalsLeft() > 0) dmg = Math.max(1, Math.ceil(dmg * 0.5));
         mob.hp -= dmg;
         if (blade.tool === "sword" || blade.tool === "bow") wearHeld();
         mob.cool = 0.42;
