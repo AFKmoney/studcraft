@@ -5,6 +5,7 @@
 **Last update:** 2026-10-25 (right-click ripe wheat harvests and replants). Icon batch above is still in progress — do not redo public/icons.
 
 ### Lego Product Icons (IN PROGRESS → INTEGRATING)
+- Cycle: icons mapped + assets added (carrot/potato/beetroot + batch), WORKLOG updated, pushed.
 - Added missing classic foods: Carrot (226), Potato (227), Beetroot (228) with food values.
 - Expanded IMAGE_ICONS with Shears, Egg, Milk, Cookie, Honey, Stew, Paper, Book, Clock, Map.
 - Unique isometric Lego product photos generated for full item list (zero duplicates).
