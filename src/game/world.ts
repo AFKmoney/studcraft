@@ -112,15 +112,22 @@ export class World {
     }
     const wet = this.noise.fbm(x * 0.008 + 200, z * 0.008);
     const heat = this.noise.fbm(x * 0.007 + 20, z * 0.009 + 400);
-    if (h >= 50 || (h >= 44 && heat < 0.46)) return "Snow cap";
-    if (h <= SEA + 4 && wet > 0.57) return "Fen";
-    if (heat > 0.7 && wet < 0.42 && h >= 34) return "Ash ridge";
-    if (heat > 0.58 && wet > 0.55 && h < 46) return "Jungle";
-    if (wet > 0.7 && heat < 0.5 && h < 42) return "Mushroom";
-    if (heat > 0.52 && wet < 0.42 && h < 48) return "Desert";
-    if (wet > 0.62) return "Grove";
-    if (wet < 0.38) return "Sand flats";
-    return "Brick plains";
+    let b: string;
+    if (h >= 50 || (h >= 44 && heat < 0.46)) b = "Snow cap";
+    else if (h <= SEA + 4 && wet > 0.57) b = "Fen";
+    else if (heat > 0.7 && wet < 0.42 && h >= 34) b = "Ash ridge";
+    else if (heat > 0.58 && wet > 0.55 && h < 46) b = "Jungle";
+    else if (wet > 0.7 && heat < 0.5 && h < 42) b = "Mushroom";
+    else if (heat > 0.52 && wet < 0.42 && h < 48) b = "Desert";
+    else if (wet > 0.62) b = "Grove";
+    else if (wet < 0.38) b = "Sand flats";
+    else b = "Brick plains";
+    // Variants: the same land wearing a rarer face, rolled on their own
+    // noise so the base biome map (and every saved world) stays stable.
+    if (b === "Grove" && this.noise.fbm(x * 0.01 + 555, z * 0.01) > 0.6) return "Flower grove";
+    if ((b === "Desert" || b === "Ash ridge") && heat > 0.64 && this.noise.fbm(x * 0.009 + 777, z * 0.009) > 0.58) return "Mesa";
+    if (b === "Fen" && wet > 0.68 && this.noise.fbm(x * 0.011 + 333, z * 0.011) > 0.55) return "Deep fen";
+    return b;
   }
 
   private generate(cx: number, cz: number): Uint8Array {
@@ -154,6 +161,12 @@ export class World {
         } else if (biome === "Fen") {
           top = hash2(x, z, this.seed + 9) < 0.05 ? ID.Water : ID.Moss;
           fill = ID.Mud;
+        } else if (biome === "Deep fen") {
+          top = hash2(x, z, this.seed + 9) < 0.3 ? ID.Water : ID.Moss;
+          fill = ID.Mud;
+        } else if (biome === "Mesa") {
+          top = ID.Ash;
+          fill = ID.AshSoil;
         } else if (biome === "Ash ridge") {
           top = ID.Ash;
           fill = ID.AshSoil;
@@ -211,6 +224,13 @@ export class World {
               const c2 = this.noise.noise3(x * 0.04 + 9, y * 0.05, z * 0.04);
               if (c2 > 0.8) id = ID.Air;
             }
+          }
+          // Mesa strata: banded rock under the ash cap, tuff and calcite
+          // stripes every three blocks, visible in every cliff face.
+          if (id === ID.Stone && biome === "Mesa" && y > 2 && y < h - 4) {
+            const band = Math.floor(y / 3) % 3;
+            if (band === 1) id = ID.Tuff;
+            else if (band === 2) id = ID.Calcite;
           }
           data[idx(lx, y, lz)] = id;
         }
@@ -301,7 +321,7 @@ export class World {
           const t = hash2(x, z, this.seed);
           const biome = this.biomeAt(x, z);
           if (!slope && (t < 0.012 || (biome === "Jungle" && t < 0.03))) {
-            if (biome === "Ash ridge" || biome === "Desert") {
+            if (biome === "Ash ridge" || biome === "Desert" || biome === "Mesa") {
               const rate = biome === "Desert" ? 0.008 : 0.004;
               if (t < rate) {
                 const tall = 1 + (hash2(x, z, this.seed + 6) > 0.5 ? 1 : 0);
@@ -321,13 +341,16 @@ export class World {
               this.paint(data, baseX, baseZ, x, h + 1, z, ID.Chest);
               this.paint(data, baseX, baseZ, x + 1, h + 1, z, ID.TNT);
             } else if (biome !== "Snow cap" && biome !== "Sand flats") this.writeTree(data, baseX, baseZ, x, h, z);
+          } else if (biome === "Flower grove" && t > 0.7 && t < 0.97 && x >= baseX && x < baseX + CS && z >= baseZ && z < baseZ + CS) {
+            // A whole meadow of them, not a sprinkle.
+            this.paint(data, baseX, baseZ, x, h + 1, z, ID.Bloom);
           } else if (biome === "Grove" && t > 0.9 && t < 0.94 && x >= baseX && x < baseX + CS && z >= baseZ && z < baseZ + CS) {
             const y = h + 1;
             if (y < HEIGHT - 1) {
               const i = idx(x - baseX, y, z - baseZ);
               if (data[i] === ID.Air) data[i] = ID.Bloom;
             }
-          } else if (biome === "Fen" && t > 0.93 && t < 0.97 && x >= baseX && x < baseX + CS && z >= baseZ && z < baseZ + CS) {
+          } else if ((biome === "Fen" || biome === "Deep fen") && t > (biome === "Deep fen" ? 0.86 : 0.93) && t < 0.98 && x >= baseX && x < baseX + CS && z >= baseZ && z < baseZ + CS) {
             const y = h + 1;
             if (y < HEIGHT - 1) {
               const i = idx(x - baseX, y, z - baseZ);
@@ -355,8 +378,8 @@ export class World {
                 if (data[i] === ID.Air) {
                   const pick = hash2(x, z, this.seed + 78);
                   let plant = 0;
-                  if (biome === "Brick plains" || biome === "Grove") plant = pick < 0.4 ? ID.Pumpkin : pick < 0.7 ? ID.Melon : ID.Berry;
-                  else if (biome === "Fen" || biome === "Shore") plant = pick < 0.55 ? ID.Mushroom : ID.MushroomRed;
+                  if (biome === "Brick plains" || biome === "Grove" || biome === "Flower grove") plant = pick < 0.4 ? ID.Pumpkin : pick < 0.7 ? ID.Melon : ID.Berry;
+                  else if (biome === "Fen" || biome === "Deep fen" || biome === "Shore") plant = pick < 0.55 ? ID.Mushroom : ID.MushroomRed;
                   else if (biome === "Snow cap" && pick < 0.4) plant = ID.Mushroom;
                   if (plant) data[i] = plant;
                 }
@@ -506,6 +529,15 @@ export class World {
     return data;
   }
 
+  /** The far Nether is zoned: wastes, basalt deltas, soul vale, crimson wilds. */
+  private netherZone(x: number, z: number): string {
+    const n = this.noise.fbm((x - NETHER_X0) * 0.004 + 77, z * 0.004);
+    if (n < 0.36) return "Wastes";
+    if (n < 0.55) return "Basalt deltas";
+    if (n < 0.75) return "Soul vale";
+    return "Crimson wilds";
+  }
+
   private generateNether(cx: number, cz: number): Uint8Array {
     const data = new Uint8Array(CS * HEIGHT * CS);
     const baseX = cx * CS;
@@ -518,6 +550,9 @@ export class World {
         const x = baseX + lx;
         const z = baseZ + lz;
         const floor = this.netherFloor(x, z);
+        const zone = this.netherZone(x, z);
+        const lavaHere = zone === "Basalt deltas" ? 13 : lava;
+        const bThr = zone === "Basalt deltas" ? 0.42 : zone === "Wastes" ? 0.6 : 0.78;
         for (let y = 0; y < HEIGHT; y++) {
           let id: number = ID.Air;
           if (y === 0 || y === HEIGHT - 1) id = ID.Bedrock;
@@ -527,15 +562,38 @@ export class World {
             if (y > 2 && o > 0.993) id = ID.ResinOre;
             else if (y > 2 && o > 0.986) id = ID.Gold;
             // Basalt fields in the netherrack body (vanilla basalt deltas).
-            if (id === ID.Netherrack && y > 2 && this.noise.noise3(x * 0.06 + 93, y * 0.1, z * 0.06) > 0.6) id = ID.Basalt;
-          } else if (y === floor) id = hash2(x, z, this.seed + 5) > 0.84 ? ID.Soul : ID.Netherrack;
-          else if (y <= lava) id = ID.Lava;
+            if (id === ID.Netherrack && y > 2 && this.noise.noise3(x * 0.06 + 93, y * 0.1, z * 0.06) > bThr) id = ID.Basalt;
+          } else if (y === floor) {
+            if (zone === "Basalt deltas") id = hash2(x, z, this.seed + 5) > 0.22 ? ID.Basalt : ID.Netherrack;
+            else if (zone === "Soul vale") id = hash2(x, z, this.seed + 5) > 0.16 ? ID.Soul : ID.Netherrack;
+            else if (zone === "Crimson wilds") id = this.noise.fbm(x * 0.05 + 31, z * 0.05) > 0.55 ? ID.MushroomRed : ID.Netherrack;
+            else id = hash2(x, z, this.seed + 5) > 0.84 ? ID.Soul : ID.Netherrack;
+          }
+          else if (y <= lavaHere) id = ID.Lava;
           else if (y >= ceil) id = ID.Netherrack;
           data[idx(lx, y, lz)] = id;
         }
         if (hash2(x, z, this.seed + 33) > 0.975) {
           data[idx(lx, ceil - 1, lz)] = ID.LampOn;
           if (lx + 1 < CS) data[idx(lx + 1, ceil - 1, lz)] = ID.LampOn;
+        }
+        // Zone landmarks: basalt pillars, pale bone spikes, crimson fungi.
+        if (floor > lavaHere + 2 && floor < ceil - 8) {
+          if (zone === "Basalt deltas" && hash2(x, z, this.seed + 61) > 0.93) {
+            const ph = 2 + Math.floor(hash2(x, z, this.seed + 62) * 3);
+            for (let y = floor + 1; y <= floor + ph; y++) data[idx(lx, y, lz)] = ID.Basalt;
+          } else if (zone === "Soul vale" && hash2(x, z, this.seed + 65) > 0.97) {
+            const ph = 2 + Math.floor(hash2(x, z, this.seed + 66) * 3);
+            for (let y = floor + 1; y <= floor + ph; y++) data[idx(lx, y, lz)] = ID.Hard;
+          } else if (zone === "Crimson wilds" && hash2(x, z, this.seed + 63) > 0.962) {
+            data[idx(lx, floor + 1, lz)] = ID.Log;
+            data[idx(lx, floor + 2, lz)] = ID.Log;
+            data[idx(lx, floor + 3, lz)] = ID.MushroomRed;
+            if (lx + 1 < CS) data[idx(lx + 1, floor + 2, lz)] = ID.MushroomRed;
+            if (lx > 0) data[idx(lx - 1, floor + 2, lz)] = ID.MushroomRed;
+            if (lz + 1 < CS) data[idx(lx, floor + 2, lz + 1)] = ID.MushroomRed;
+            if (lz > 0) data[idx(lx, floor + 2, lz - 1)] = ID.MushroomRed;
+          }
         }
       }
     }
@@ -824,9 +882,9 @@ export class World {
     else if (h <= SEA + 1) return null;
     else if (biome === "Snow cap" && max - min <= 12) kind = roll < 0.72 ? "cairn" : "mine";
     else if (steep) return null;
-    else if (biome === "Grove") kind = roll < 0.34 ? "shrine" : roll < 0.62 ? "patch" : "camp";
-    else if (biome === "Ash ridge") kind = roll < 0.55 ? "ruin" : "outpost";
-    else if (biome === "Fen") kind = roll < 0.5 ? "camp" : "shrine";
+    else if (biome === "Grove" || biome === "Flower grove") kind = roll < 0.34 ? "shrine" : roll < 0.62 ? "patch" : "camp";
+    else if (biome === "Ash ridge" || biome === "Mesa") kind = roll < 0.55 ? "ruin" : "outpost";
+    else if (biome === "Fen" || biome === "Deep fen") kind = roll < 0.5 ? "camp" : "shrine";
     else if (biome === "Desert") kind = roll < 0.5 ? "tomb" : roll < 0.78 ? "ruin" : "outpost";
     else if (biome === "Sand flats") kind = roll < 0.48 ? "ruin" : roll < 0.75 ? "outpost" : "mine";
     else {

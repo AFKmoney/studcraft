@@ -1005,3 +1005,28 @@ Brewing grew from 4 one-step brews to a real alchemy system (10 new items, 270-2
   all brewed; Regen brew drunk -> "Regen" active; venom splash thrown at own
   feet -> "Venom" active ~4 s later. 0 errors, tsc 0.
 - NEXT (Muse): item 6 - biome variants + zoned Nether.
+
+## 2026-10-25 — v2.8 battle order item 6: biome variants + zoned Nether (Muse)
+
+- **Overworld variants** (rolled on their own noise in biomeOf, so the base
+  biome map and every saved world stay stable):
+  - **Flower grove** (from Grove): meadows of blooms (27 % of columns carry a
+    flower, vs the Grove's sprinkle), bees/cats/foxes/wolves spawn there too.
+  - **Mesa** (from hot Desert/Ash ridge): ash cap over banded rock - tuff and
+    calcite strata every 3 blocks under the surface, cacti and crabs included.
+  - **Deep fen** (from the wettest Fen): 30 % water tops over mud (vs 5 %),
+    denser reeds, frogs/slimes/drowned/wisps all treat it as Fen.
+  - Site kinds and farm-plant rolls know the variants too.
+- **The far Nether is zoned** (zone noise in generateNether): Wastes (classic),
+  Basalt deltas (basalt floors, lower lava, basalt pillars), Soul vale (soul
+  sand floors that really slow you, pale Hard spikes), Crimson wilds
+  (mushroom-red floors, giant crimson fungi).
+- **The portal Nether room got the same four faces**: wastes NW, basalt floor +
+  pillars NE, soul floor + spikes SW, crimson fungi SE around the portal pad.
+- QA (seed 23): mesa 850+ columns with 61 strata confirmations; flower groves
+  76-92 bloom columns per quadrant; deep-fen boxes over the 22 % water line;
+  far-nether band hunt found all four zones (best bands: basalt 94 %, soul
+  79 %, crimson 32 % of floors); a placed Gate void was walked into, the hop
+  landed at the portal pad and all 8 quadrant cell assertions read exact.
+  0 errors, tsc 0.
+- NEXT (Muse): item 7 - villager professions with tiered trades.

@@ -2632,6 +2632,37 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
     world.set(488, 29, 488, ID.Portal);
     world.set(488, 30, 488, ID.Portal);
+    // Four zones around the portal: wastes north-west (the classic floor),
+    // basalt pillars north-east, slow soul sand south-west, crimson fungi
+    // south-east. The portal pad itself stays plain netherrack.
+    const qhash = (x: number, z: number) => {
+      const s = Math.sin(x * 41.3 + z * 289.1) * 24634.6345;
+      return s - Math.floor(s);
+    };
+    for (let x = 470; x <= 506; x++) {
+      for (let z = 470; z <= 506; z++) {
+        if (Math.abs(x - 488) <= 1 && Math.abs(z - 488) <= 1) continue;
+        const quad = (x < 488 ? 0 : 1) + (z < 488 ? 0 : 2);
+        if (quad === 1) world.set(x, 28, z, ID.Basalt);
+        else if (quad === 2) world.set(x, 28, z, ID.Soul);
+        else if (quad === 3 && qhash(x, z) > 0.72) world.set(x, 28, z, ID.MushroomRed);
+      }
+    }
+    for (const [px, pz, ph] of [[494, 476, 5], [500, 482, 7], [503, 473, 4]] as const) {
+      for (let y = 29; y < 29 + ph; y++) world.set(px, y, pz, ID.Basalt);
+    }
+    for (const [px, pz, ph] of [[476, 496, 3], [482, 501, 4]] as const) {
+      for (let y = 29; y < 29 + ph; y++) world.set(px, y, pz, ID.Hard);
+    }
+    for (const [fx, fz] of [[496, 496], [502, 500], [493, 503]] as const) {
+      world.set(fx, 29, fz, ID.Log);
+      world.set(fx, 30, fz, ID.Log);
+      world.set(fx, 31, fz, ID.MushroomRed);
+      world.set(fx + 1, 30, fz, ID.MushroomRed);
+      world.set(fx - 1, 30, fz, ID.MushroomRed);
+      world.set(fx, 30, fz + 1, ID.MushroomRed);
+      world.set(fx, 30, fz - 1, ID.MushroomRed);
+    }
     // Overworld End portal frame near origin offset
     const fx = 180, fz = 180, fy = 32;
     const ring = [
@@ -3920,7 +3951,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (drownedAcc > 9) {
         drownedAcc = 0;
         const biome = world.biomeAt(player.x, player.z);
-        if ((biome === "Ocean" || biome === "Shore" || biome === "Fen") && mobs.filter((m) => m.kind === "drowned" && !m.dead).length < 2) {
+        if ((biome === "Ocean" || biome === "Shore" || biome === "Fen" || biome === "Deep fen") && mobs.filter((m) => m.kind === "drowned" && !m.dead).length < 2) {
           const a = Math.random() * Math.PI * 2;
           const dist = 10 + Math.random() * 8;
           const x = player.x + Math.cos(a) * dist;
@@ -3948,35 +3979,35 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           const dist = 8 + Math.random() * 10;
           return [player.x + Math.cos(a) * dist, player.z + Math.sin(a) * dist] as const;
         };
-        if ((biome === "Fen" || biome === "Brick plains") && alive("frog") < 2) {
+        if ((biome === "Fen" || biome === "Deep fen" || biome === "Brick plains") && alive("frog") < 2) {
           const [x, z] = spot();
           spawnKind("frog", x, z);
         }
-        if (!settings.mods.peaceful && (biome === "Fen" || biome === "Brick plains") && alive("slime") < 2) {
+        if (!settings.mods.peaceful && (biome === "Fen" || biome === "Deep fen" || biome === "Brick plains") && alive("slime") < 2) {
           const [x, z] = spot();
           spawnKind("slime", x, z);
         }
-        if ((biome === "Grove" || biome === "Brick plains") && alive("fox") < 2) {
+        if ((biome === "Grove" || biome === "Flower grove" || biome === "Brick plains") && alive("fox") < 2) {
           const [x, z] = spot();
           spawnKind("fox", x, z);
         }
-        if ((biome === "Grove" || biome === "Brick plains") && alive("wolf") < 2) {
+        if ((biome === "Grove" || biome === "Flower grove" || biome === "Brick plains") && alive("wolf") < 2) {
           const [x, z] = spot();
           spawnKind("wolf", x, z);
         }
-        if ((biome === "Shore" || biome === "Sand flats" || biome === "Ash ridge") && alive("crab") < 2) {
+        if ((biome === "Shore" || biome === "Sand flats" || biome === "Ash ridge" || biome === "Mesa") && alive("crab") < 2) {
           const [x, z] = spot();
           spawnKind("crab", x, z);
         }
-        if (!settings.mods.peaceful && night && (biome === "Fen" || biome === "Grove" || biome === "Snow cap") && alive("wisp") < 2) {
+        if (!settings.mods.peaceful && night && (biome === "Fen" || biome === "Deep fen" || biome === "Grove" || biome === "Flower grove" || biome === "Snow cap") && alive("wisp") < 2) {
           const [x, z] = spot();
           spawnKind("wisp", x, z);
         }
-        if (!night && (biome === "Grove" || biome === "Brick plains") && alive("bee") < 3) {
+        if (!night && (biome === "Grove" || biome === "Flower grove" || biome === "Brick plains") && alive("bee") < 3) {
           const [x, z] = spot();
           spawnKind("bee", x, z);
         }
-        if ((biome === "Grove" || biome === "Brick plains") && alive("cat") < 2) {
+        if ((biome === "Grove" || biome === "Flower grove" || biome === "Brick plains") && alive("cat") < 2) {
           const [x, z] = spot();
           spawnKind("cat", x, z);
         }
