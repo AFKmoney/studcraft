@@ -267,6 +267,8 @@ export const ID = {
   StairsCobble2: 265,
   StairsCobble3: 266,
   Sign: 267,
+  EnderPearl: 268,
+  InkSac: 269,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -751,6 +753,8 @@ put(b(ID.Spawner, "Spawner", "#2a2a32", "#3aaa4c", "#3a3a44", "#1a1a22", { hard:
 put(b(ID.MasterBrick, "Master brick", "#f5c518", "#ffe14a", "#e23b2f", "#b02620", { hard: 5, tough: true, need: 4 }));
 put(b(ID.ChromeBrick, "Chrome brick", "#d5dee6", "#f4f7fa", "#b7c4ce", "#8e9aa6", { hard: 2.4, tough: true, need: 3 }));
 item(ID.Tin, "Tin", "#d5ddd0");
+item(ID.EnderPearl, "Ender pearl", "#2a9a86");
+item(ID.InkSac, "Ink sac", "#23232e");
 item(ID.Copper, "Copper", "#e07a3d");
 item(ID.Bronze, "Bronze", "#cd7f32");
 item(ID.Amber, "Amber", "#ffbf3a");
@@ -1203,6 +1207,8 @@ export const CATALOG = [
   ID.StairsStone0,
   ID.StairsCobble0,
   ID.Sign,
+  ID.EnderPearl,
+  ID.InkSac,
 ];
 
 export const COLORS = [ID.Red, ID.Orange, ID.Yellow, ID.Green, ID.Blue, ID.Azure, ID.Pink, ID.White, ID.Black];

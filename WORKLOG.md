@@ -934,3 +934,31 @@ The old "enchant" was one boolean flag. Now a real system:
 - QA (seed 23): Iron blade at a placed rune table - enchant x2 -> "Fire Aspect", then
   "Fire Aspect, Knockback", panel lists them live. 0 errors, tsc 0.
 - NEXT (Muse): item 3 - Enderman + pillar mobs (blaze, witch, bee, cat, squid, bat, drowned).
+
+## 2026-10-25 — v2.5 battle order item 3: Enderman + pillar mobs (Muse)
+
+Seven new creatures, all built on the existing LEGO mob systems (22 -> 29 kinds):
+- **Enderman** (16 hp): tall black fig, violet eyes. Neutral until you LOOK at its head
+  (view-dot check) or hit it - then it blinks around you in violet bursts (never into
+  water), hits for 4. Drops Ender pearls (new item 268): throw one to teleport to the
+  block you aim at (28 range, 2 hp cost, the Minecraft rule). Spawns in the night
+  rotation and guards the End city.
+- **Blaze** (10 hp): floating ember core with swirling rods, Nether portal spawns,
+  throws real fireballs. Drops ember rods.
+- **Witch** (13 hp): purple fig + pointed hat. Throws potions from range; when hurt
+  she drinks instead of throwing (heals 3). Night rotation. Drops a heal brew.
+- **Drowned** (8 hp): teal walker variant. Rises from night water in Ocean/Shore/Fen,
+  swims, burns at dawn - and a walker that stays underwater for 5 s CONVERTS into one
+  (mesh swap included). Drops meat/bone, sometimes copper.
+- **Bee** (3 hp): hovers over Grove/plains flowers by day; sting once when provoked,
+  then calms down. Drops wax.
+- **Cat** (4 hp): Grove/plains + tameable with a fish, then follows like the wolf.
+  Drops string.
+- **Squid** (5 hp): swims submerged in Ocean/Shore, suffocates on land. Drops ink
+  sacs (new item 269). **Bat** (2 hp): night hover ambient, gone at dawn.
+- All wired into the existing lists: golem targets, mark-skill hostiles, far despawn,
+  passive despawn, target names, kill drops. QA hook gained spawnMob/getMobs.
+- QA: every kind spawned + alive with 0 errors; models verified on screenshots
+  (enderman close-up, drowned, squid); bat day-despawn verified; enderman look-aggro
+  verified ("It saw you looking").
+- NEXT (Muse): item 4 - procedural caves + ore veins.
