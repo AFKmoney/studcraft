@@ -813,9 +813,16 @@ function StationScreen({ game }: { game: GameApi }) {
             </>
           )}
           {hud.panel === "enchant" && (
-            <button className="btn btn-primary big" onClick={() => game.enchant()}>
-              ✨ Spend 3 levels — rune the blade
-            </button>
+            <div className="stack">
+              <button className="btn btn-primary big" onClick={() => game.enchant()}>
+                ✨ Spend 3 levels — enchant the held piece
+              </button>
+              <p className="fine">
+                Random runes for what you hold: blades take Sharpness, Fire Aspect, Knockback; picks take Efficiency and Fortune; bows take
+                Power and Flame; armor takes Protection; boots can learn Feather Fall. Anything sturdy can learn Unbreaking.
+              </p>
+              {hud.heldEnch && <p className="fine">Held now: ✦ {hud.heldEnch}</p>}
+            </div>
           )}
           {hud.panel === "anvil" && (
             <div className="stack">
@@ -825,6 +832,10 @@ function StationScreen({ game }: { game: GameApi }) {
               <button className="btn big" onClick={() => game.temper()}>
                 Spend 1 level — temper the held tool
               </button>
+              <button className="btn big" onClick={() => game.combine()}>
+                Spend 2 levels — combine with the off-hand twin (same rune, same level → one level higher)
+              </button>
+              {hud.heldEnch && <p className="fine">Held now: ✦ {hud.heldEnch}</p>}
             </div>
           )}
           {hud.panel === "brew" && (
@@ -985,7 +996,7 @@ function Ranks({ hud, known }: { hud: GameApi["hud"]; known: Set<number> }) {
         <span style={{ width: `${pct}%` }} />
       </div>
       <p className="fine">
-        {hud.xp} / {hud.xpNeed} studs. Rune table spends 3 levels. Anvil tempers a held tool for 1 level. Tin and copper hide in mid stone. Amber, chrome, and sapphire sit deeper.
+        {hud.xp} / {hud.xpNeed} studs. The rune table enchants the held piece for 3 levels — real runes now (Sharpness, Fortune, Protection, Flame…), and the anvil combines a piece with its off-hand twin to push a rune one level higher. Tin and copper hide in mid stone. Amber, chrome, and sapphire sit deeper.
         Prism hugs the baseplate core and the End. Resin sweats on the nether floor.
       </p>
       <ul className="perk-list">

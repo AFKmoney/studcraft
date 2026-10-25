@@ -915,3 +915,22 @@ Philippe ordered the full AUDIT-1A1 battle order, in order, everything logged he
   as rotated variant; sign round-trip: editor opens, text carved, target reads the text back,
   editor reopens prefilled. 0 errors. tsc 0.
 - NEXT (Muse): item 2 - real enchantments (per-item, levels, anvil combine).
+
+## 2026-10-25 — v2.4 battle order item 2: real enchantments (Muse)
+
+The old "enchant" was one boolean flag. Now a real system:
+- **10 enchants, per item def, with levels, saved** (SaveV1.ench): Sharpness III, Fire Aspect II,
+  Knockback II (swords/axes), Efficiency III + Fortune II (tools), Unbreaking III (anything with
+  durability), Protection III (armor), Power III + Flame (bows), Feather Fall II (boots).
+- Rune table: hold a piece, spend 3 builder levels, gain 1-3 rune levels rolled from the piece's
+  pool (duplicates stack to max). Panel shows the held piece's runes (hud.heldEnch).
+- Anvil combine: identical piece in the off hand is consumed; same rune at the same level rises
+  one level (the Minecraft rule), 2 levels. Mend/temper unchanged.
+- Effects wired: sharpness +dmg, fire aspect/flame set mobs burning (new burn DoT in updateMobs,
+  1 dmg / 0.75 s), knockback scales the hit push, efficiency speeds mining, fortune rolls extra
+  ore drops, unbreaking skips durability loss, protection adds armor resist (cap 0.64 -> 0.8),
+  feather fall cuts fall damage, power adds arrow damage (shots carry pow/flame from the bow).
+- The global `sharp` flag is gone; hud "Rune" indicator now lights when the held piece has runes.
+- QA (seed 23): Iron blade at a placed rune table - enchant x2 -> "Fire Aspect", then
+  "Fire Aspect, Knockback", panel lists them live. 0 errors, tsc 0.
+- NEXT (Muse): item 3 - Enderman + pillar mobs (blaze, witch, bee, cat, squid, bat, drowned).

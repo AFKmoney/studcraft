@@ -39,6 +39,7 @@ export type SaveV1 = {
   }[];
   comps?: { x: number; y: number; z: number; dir: number; delay: number }[];
   signs?: { x: number; y: number; z: number; t: string }[];
+  ench?: [number, [string, number][]][];
   runes?: [number, string[]][];
   folk?: { x: number; z: number; role: string }[];
   village?: { x: number; z: number } | null;

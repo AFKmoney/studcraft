@@ -44,6 +44,7 @@ export type Hud = {
   compass: number;
   realm: string;
   effect: string;
+  heldEnch: string;
   creative: boolean;
   flying: boolean;
   hammer: boolean;
@@ -125,6 +126,7 @@ export type GameApi = {
   furnaceTap: (part: number) => void;
   chestTap: (i: number) => void;
   enchant: () => void;
+  combine: () => void;
   setSignText: (t: string) => void;
   cancelSignEdit: () => void;
   mend: () => void;
@@ -223,6 +225,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     compass: 0,
     realm: "Overworld",
     effect: "",
+    heldEnch: "",
     creative: true,
     flying: false,
     hammer: false,
@@ -321,6 +324,34 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   const power = new Map<string, number>();
   const comps = new Map<string, { dir: number; delay: number }>();
   const signs = new Map<string, string>();
+  // Real enchantments, per item def: { sharpness: 2, unbreaking: 1, ... }.
+  const ench = new Map<number, Record<string, number>>();
+
+  type EnchDef = { key: string; name: string; max: number; for: (d: ReturnType<typeof def>) => boolean };
+  const ENCHANTS: EnchDef[] = [
+    { key: "sharpness", name: "Sharpness", max: 3, for: (d) => d.tool === "sword" || d.tool === "axe" },
+    { key: "fire", name: "Fire Aspect", max: 2, for: (d) => d.tool === "sword" },
+    { key: "knockback", name: "Knockback", max: 2, for: (d) => d.tool === "sword" },
+    { key: "efficiency", name: "Efficiency", max: 3, for: (d) => d.tool === "pick" || d.tool === "axe" || d.tool === "shovel" },
+    { key: "fortune", name: "Fortune", max: 2, for: (d) => d.tool === "pick" },
+    { key: "unbreaking", name: "Unbreaking", max: 3, for: (d) => d.maxUse > 0 },
+    { key: "protection", name: "Protection", max: 3, for: (d) => d.armor > 0 },
+    { key: "power", name: "Power", max: 3, for: (d) => d.tool === "bow" },
+    { key: "flame", name: "Flame", max: 1, for: (d) => d.tool === "bow" },
+    { key: "feather", name: "Feather Fall", max: 2, for: (d) => d.armorSlot === 3 },
+  ];
+  const ROMAN = ["", "I", "II", "III"];
+  function enchLvl(id: number, key: string): number {
+    return ench.get(id)?.[key] ?? 0;
+  }
+  function enchSummary(id: number): string {
+    const e = ench.get(id);
+    if (!e) return "";
+    return Object.entries(e)
+      .filter(([, v]) => v > 0)
+      .map(([k, v]) => (ENCHANTS.find((x) => x.key === k)?.name ?? k) + (v > 1 ? " " + ROMAN[v] : ""))
+      .join(", ");
+  }
   const repOut = new Map<string, boolean>();
   const repTimer = new Map<string, number>();
   let rsAcc = 0;
@@ -663,6 +694,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   scene.add(fig.group);
 
   type Mob = {
+    burn?: number;
+    burnAcc?: number;
     kind: "sheep" | "creeper" | "cow" | "walker" | "pig" | "chicken" | "spider" | "skelly" | "villager" | "ghast" | "dragon" | "horse" | "phantom" | "piglin" | "boat" | "cart" | "frog" | "fox" | "crab" | "wisp" | "slime" | "wolf" | "golem" | "wither";
     x: number;
     y: number;
@@ -801,7 +834,6 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let speedT = 0;
   let strengthT = 0;
   let fireT = 0;
-  let sharp = false;
   let realm = 0;
   let portalCd = 0;
   let realmsReady = false;
@@ -826,6 +858,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     friendly: boolean;
     mesh: THREE.Mesh;
     fire?: boolean;
+    pow?: number;
+    flame?: boolean;
   };
   const shots: Shot[] = [];
   type Drop = { id: number; n: number; x: number; y: number; z: number; vy: number; mesh: THREE.Mesh };
@@ -898,9 +932,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const wyrm = mobs.find((m) => m.kind === "dragon" && !m.dead);
     hud.boss = wyrm ? "End Wyrm" : "";
     hud.bossHp = wyrm ? Math.max(0, Math.min(1, wyrm.hp / (wyrm.maxHp ?? wyrm.hp))) : 0;
-    hud.effect = [speedT > 0 ? "Dash" : "", strengthT > 0 ? "Might" : "", fireT > 0 ? "Fire" : "", sharp ? "Rune" : ""]
+    hud.effect = [speedT > 0 ? "Dash" : "", strengthT > 0 ? "Might" : "", fireT > 0 ? "Fire" : "", enchSummary(hotbar[slot]) ? "Rune" : ""]
       .filter(Boolean)
       .join(" ");
+    hud.heldEnch = enchSummary(hotbar[slot]);
     hud.creative = creative;
     hud.flying = flying;
     hud.hammer = hammer;
@@ -1011,6 +1046,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const d = def(id);
     if (!d.maxUse || creative) return;
     if (skills.has("joint") && Math.random() < 0.4) return;
+    const unb = enchLvl(id, "unbreaking");
+    if (unb > 0 && Math.random() < unb * 0.22) return;
     inv[id] = (inv[id] ?? 0) - 1;
     if (inv[id] <= 0) {
       inv[id] = 0;
@@ -1065,6 +1102,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     chests.clear();
     comps.clear();
     signs.clear();
+    ench.clear();
     power.clear();
     repOut.clear();
     repTimer.clear();
@@ -1192,6 +1230,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     for (const c of data.comps ?? []) comps.set(c.x + "," + c.y + "," + c.z, { dir: c.dir, delay: c.delay });
     signs.clear();
     for (const s of data.signs ?? []) signs.set(s.x + "," + s.y + "," + s.z, s.t);
+    ench.clear();
+    for (const [id, list] of data.ench ?? []) ench.set(id, Object.fromEntries(list));
     hotbar = data.hotbar?.length === 9 ? [...data.hotbar] : [...CREATIVE_BAR];
     for (const k of Object.keys(inv)) delete inv[Number(k)];
     for (const [id, n] of data.inv ?? []) inv[id] = n;
@@ -1384,6 +1424,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         let dmg = Math.round((-player.vy - 13) * 1.5);
         if (rankLv >= 15) dmg = Math.round(dmg * 0.55);
         if (skills.has("raise")) dmg = Math.round(dmg * 0.75);
+        const feather = enchLvl(armor[3], "feather");
+        if (feather > 0) dmg = Math.round(dmg * (1 - 0.18 * feather));
         if (dmg > 0) hurt(dmg);
       }
       if (delta > 0) player.y = Math.floor(player.y + BODY) - BODY - 1e-3;
@@ -1428,8 +1470,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
     if (rankLv >= 8) n *= 0.86;
     let resist = 0;
-    for (const id of armor) resist += def(id).armor;
-    const dealt = Math.max(1, Math.round(n * (1 - Math.min(0.64, resist))));
+    let prot = 0;
+    for (const id of armor) {
+      resist += def(id).armor;
+      prot += enchLvl(id, "protection");
+    }
+    const dealt = Math.max(1, Math.round(n * (1 - Math.min(0.8, resist + prot * 0.03))));
     health = Math.max(0, health - dealt);
     invuln = 0.7;
     hurtAgo = 0;
@@ -1581,6 +1627,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         addInv(ID.Seeds, 1);
       } else if (canDrop && id === ID.Gravel) addInv(Math.random() < 0.14 ? ID.Flint : ID.Gravel, 1);
       else if (canDrop && block.drop !== -1) addInv(block.drop || id, 1);
+      // Fortune: extra ore drops, rolled per level.
+      if (canDrop && block.drop !== -1 && (ORE_XP[id] ?? 0) > 0) {
+        const fort = held.tool === "pick" ? enchLvl(hotbar[slot], "fortune") : 0;
+        for (let f = 0; f < fort; f++) if (Math.random() < 0.35) addInv(block.drop || id, 1);
+      }
       if (canDrop && id === ID.PrismOre && Math.random() < 0.22) addInv(ID.Core, 1);
       const right =
         (held.tool === "pick" && (block.tough || block.need > 0)) ||
@@ -2282,11 +2333,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
   }
 
-  function launchArrow(x: number, y: number, z: number, dx: number, dy: number, dz: number, friendly: boolean) {
+  function launchArrow(x: number, y: number, z: number, dx: number, dy: number, dz: number, friendly: boolean, pow = 0, flame = false) {
     const len = Math.hypot(dx, dy, dz) || 1;
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.35), skin(0xf4f1ea));
     scene.add(mesh);
-    shots.push({ x, y, z, vx: (dx / len) * 18, vy: (dy / len) * 18, vz: (dz / len) * 18, life: 2.4, friendly, mesh });
+    shots.push({ x, y, z, vx: (dx / len) * 18, vy: (dy / len) * 18, vz: (dz / len) * 18, life: 2.4, friendly, mesh, pow, flame });
   }
 
   function launchFireball(x: number, y: number, z: number, dx: number, dy: number, dz: number) {
@@ -2303,7 +2354,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const dx = -Math.sin(player.yaw) * Math.cos(player.pitch);
     const dy = Math.sin(player.pitch);
     const dz = -Math.cos(player.yaw) * Math.cos(player.pitch);
-    launchArrow(player.x, player.y + 1.4, player.z, dx, dy, dz, true);
+    const bowId = hotbar[slot];
+    launchArrow(player.x, player.y + 1.4, player.z, dx, dy, dz, true, enchLvl(bowId, "power"), enchLvl(bowId, "flame") > 0);
     audio.place();
   }
 
@@ -2852,9 +2904,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         for (const m of mobs) {
           if (m.dead || m.kind === "boat" || m.kind === "cart") continue;
           if (Math.hypot(m.x - s.x, m.z - s.z) < 0.7 && Math.abs(m.y + 0.6 - s.y) < 1) {
-            let hit = 4 + (strengthT > 0 ? 2 : 0);
+            let hit = 4 + (strengthT > 0 ? 2 : 0) + (s.pow ?? 0);
             if (m.kind === "dragon" && crystalsLeft() > 0) hit = Math.max(1, Math.ceil(hit * 0.5));
             m.hp -= hit;
+            if (s.flame) m.burn = Math.max(m.burn ?? 0, 4);
             if (m.hp <= 0) killMob(m);
             dead = true;
             audio.hit();
@@ -3700,6 +3753,20 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       // freeze between thinks, far ones stop thinking entirely. Near
       // animals always run at full rate.
       dt = baseDt;
+      // Fire Aspect / Flame burn: 1 dmg per 0.75s while burn lasts.
+      if ((m.burn ?? 0) > 0) {
+        m.burn = (m.burn ?? 0) - dt;
+        m.burnAcc = (m.burnAcc ?? 0) + dt;
+        if (m.burnAcc >= 0.75) {
+          m.burnAcc = 0;
+          m.hp -= 1;
+          burst(m.x, m.y + 1, m.z, "#ff7a2a", 3);
+          if (m.hp <= 0) {
+            killMob(m);
+            continue;
+          }
+        }
+      }
       if (d > 44 && m.kind !== "dragon" && m.kind !== "wither" && m.kind !== "ghast") {
         const passive = m.kind === "sheep" || m.kind === "cow" || m.kind === "pig" || m.kind === "chicken" || m.kind === "fox" || m.kind === "crab" || m.kind === "frog";
         if (d > 64 && passive && !m.tame && !m.lead && !(m.baby && m.baby > 0) && m.homeX === undefined) {
@@ -4013,6 +4080,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         const [x, y, z] = key.split(",").map(Number);
         return { x, y, z, t };
       }),
+      ench: [...ench.entries()].map(([id, e]) => [id, Object.entries(e)] as [number, [string, number][]]),
       folk: folkSpots.map((f) => ({ x: f.x, z: f.z, role: f.role })),
       village: villageAt,
       quests: quests.map((q) => ({ id: q.id, n: q.n, done: q.done })),
@@ -4304,7 +4372,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         const blade = def(hotbar[slot]);
         let dmg = blade.tool === "sword" ? 1 + blade.tier * 2 : 1;
         if (strengthT > 0) dmg += 2;
-        if (sharp && blade.tool === "sword") dmg += 2;
+        if (blade.tool === "sword" || blade.tool === "axe") dmg += enchLvl(hotbar[slot], "sharpness");
         if (rankLv >= 18 && blade.tool === "sword") dmg += 1;
         const hostile =
           mob.kind === "walker" ||
@@ -4320,12 +4388,14 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         if (player.vy < -0.2 && !player.grounded) dmg = Math.ceil(dmg * 1.5);
         if (mob.kind === "dragon" && crystalsLeft() > 0) dmg = Math.max(1, Math.ceil(dmg * 0.5));
         mob.hp -= dmg;
+        if (blade.tool === "sword" && enchLvl(hotbar[slot], "fire") > 0) mob.burn = Math.max(mob.burn ?? 0, 2 + enchLvl(hotbar[slot], "fire"));
         if (blade.tool === "sword" || blade.tool === "bow") wearHeld();
         mob.cool = 0.42;
         mob.fuse = Math.max(0, mob.fuse - 0.25);
         const len = Math.hypot(player.x - mob.x, player.z - mob.z) || 1;
-        mob.x += ((mob.x - player.x) / len) * 0.4;
-        mob.z += ((mob.z - player.z) / len) * 0.4;
+        const kb = 0.4 + (blade.tool === "sword" ? enchLvl(hotbar[slot], "knockback") * 0.3 : 0);
+        mob.x += ((mob.x - player.x) / len) * kb;
+        mob.z += ((mob.z - player.z) / len) * kb;
         audio.hit();
         swing = 1;
         if (mob.hp <= 0) killMob(mob);
@@ -4354,6 +4424,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         if (hotbar[slot] === ID.Shears && (hit.id === ID.Leaves || hit.id === ID.TallGrass)) mult = 6;
         if (rankLv >= 2) mult *= 1.15;
         let need = (creative ? 0.08 : block.hard) / mult;
+        const eff = enchLvl(hotbar[slot], "efficiency");
+        if (eff > 0 && mult > 1) need /= 1 + 0.3 * eff;
         if (hammer && block.tough) need *= 0.38;
         hud.mine = Math.min(1, mineTime / need);
         if (mineTime >= need) breakBlock(hit.x, hit.y, hit.z);
@@ -5332,16 +5404,55 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       emit();
     },
     enchant() {
+      const id = hotbar[slot];
+      const d = def(id);
+      if (!id || !d.maxUse) return say("Hold a tool, weapon or armor piece");
+      const pool = ENCHANTS.filter((e) => e.for(d));
+      if (!pool.length) return say("Nothing can enchant that");
+      const cur = { ...(ench.get(id) ?? {}) };
+      if (pool.every((e) => (cur[e.key] ?? 0) >= e.max)) return say("That piece is fully enchanted");
       if (!spendLevels(3)) return say("Need builder level 3");
-      sharp = true;
-      say("Sword rune set");
-      // choice: sharp or fire
-      if (Math.random() < 0.5) say("Fire aspect"); else say("Sharpness");
-      // also boost nearby tools
-      for (let i = 0; i < 9; i++) {
-        const id = hotbar[i];
-        if (def(id).tool) inv[id] = (inv[id] ?? 0) + 10;
+      const rolls = 1 + (Math.random() < 0.6 ? 1 : 0) + (Math.random() < 0.3 ? 1 : 0);
+      const got: string[] = [];
+      for (let i = 0; i < rolls; i++) {
+        const e = pool[Math.floor(Math.random() * pool.length)];
+        if ((cur[e.key] ?? 0) >= e.max) continue;
+        cur[e.key] = (cur[e.key] ?? 0) + 1;
+        got.push(e.name + (cur[e.key] > 1 ? " " + ROMAN[cur[e.key]] : ""));
       }
+      if (!got.length) return say("The runes fizzle — try again");
+      ench.set(id, cur);
+      say("Enchanted: " + got.join(", "));
+      saveDirty = true;
+      emit();
+    },
+    combine() {
+      const heldId = hotbar[slot];
+      const sacId = offhand;
+      if (!heldId || !def(heldId).maxUse) return say("Hold the piece to keep");
+      if (!sacId || sacId !== heldId) return say("Put an identical piece in your off hand");
+      const a = { ...(ench.get(heldId) ?? {}) };
+      const b = ench.get(sacId) ?? {};
+      let changed = false;
+      for (const e of ENCHANTS) {
+        const bv = b[e.key] ?? 0;
+        if (!bv) continue;
+        const av = a[e.key] ?? 0;
+        if (av === 0) {
+          a[e.key] = bv;
+          changed = true;
+        } else if (av === bv && av < e.max) {
+          a[e.key] = av + 1;
+          changed = true;
+        }
+      }
+      if (!changed && !Object.keys(b).length) return say("The off-hand piece carries no runes");
+      if (!changed) return say("No rune can rise — already stronger or maxed");
+      if (!spendLevels(2)) return say("Need builder level 2");
+      ench.set(heldId, a);
+      offhand = 0;
+      say("Combined: " + (enchSummary(heldId) || "runes merged"));
+      saveDirty = true;
       emit();
     },
     mend() {
