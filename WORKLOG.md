@@ -23,6 +23,7 @@
 - Added more block icons (Cobble, IronOre, IronBlock, Bench, Door, Bed, Farmland, Lamp, Piston, TNT, Hard…).
 - Rare Basalt/Calcite/Tuff placed in world gen.
 - Added color + special block icons: Red, Blue, Yellow, White, Black, Orange, Green, Pink, Azure, Fence, Gate, Obsidian, EndStone, Ice, Campfire, Note, Soul, Dispenser, Anvil, Brew.
+- Full remaining block set mapped: EndFrame, ores (Tin/Copper/Amber/Chrome/Sapphire/Resin/Prism/Emerald/Crystal), Basalt/Calcite/Tuff, MasterBrick, crops, Pumpkin/Melon, Hay, Bookshelf, Barrel, Banner, etc.
 
 ### Lego Product Icons (IN PROGRESS)
 - Unique isometric Lego product photos generated for items (zero duplicates).
