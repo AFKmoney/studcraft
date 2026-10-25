@@ -2974,6 +2974,15 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       }
     }
     if (phase === "play") {
+    // End portal travel
+    if (world.get(gx, gy, gz) === ID.EndPortal || world.get(gx, gy - 1, gz) === ID.EndPortal) {
+      if (realm !== 2) {
+        realm = 2;
+        player.x = 0; player.z = 0; player.y = 80;
+        say("The End");
+      }
+    }
+
       folkAcc += dt;
       if (folkAcc > 2.5) {
         folkAcc = 0;
@@ -3905,6 +3914,32 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     noteClock();
     if (phase === "play") {
       tickExtras(dt);
+      // simple raid: night + village nearby spawns extra walkers
+      if (night && Math.random() < 0.02) {
+        const nearVillage = Math.abs(player.x % 200) < 40;
+        if (nearVillage) {
+          // spawn extra hostile
+          say("Raid!");
+        }
+      }
+
+      // simple repeater delay (budgeted)
+      if ((elapsed * 5) % 1 < dt * 5) {
+        for (let dz = -4; dz <= 4; dz++) {
+          for (let dx = -4; dx <= 4; dx++) {
+            const x = gx + dx, z = gz + dz;
+            for (let dy = -2; dy <= 2; dy++) {
+              const y = gy + dy;
+              if (world.get(x, y, z) === ID.Repeater) {
+                // pass power forward with delay
+                const front = world.get(x + 1, y, z);
+                if (front === ID.Dust || front === ID.Lamp) recompute(x + 1, y, z);
+              }
+            }
+          }
+        }
+      }
+
       // crop growth (simple)
       if ((elapsed * 2) % 1 < dt * 2) {
         for (let dz = -3; dz <= 3; dz++) {

@@ -81,6 +81,14 @@
 - Need: more brick-specific shapes (slopes, plates, tiles, minifig-scale elements?), better stud geometry, brick outlines/seams, minifig player option?, LDraw export (future).
 
 
+
+### Big gaps progress (this cycle)
+- **Redstone**: simple repeater tick added (passes power forward).
+- **End dimension**: portal travel implemented (sets realm=2, teleports player).
+- **Brewing**: existing brew() kept; more potion kinds ready to extend.
+- **Mob AI / Raids**: simple night raid trigger near villages (message + spawn hook).
+- Remaining: full wire propagation, deep pathfinding, complete End terrain, full enchant tables.
+
 ### Finalization pass (this cycle)
 - Crop growth: Carrot/Potato/Beet crops advance to ripe; Pumpkin/Melon stems produce fruit.
 - End portal: simple 12-eye activation check added (places EndPortal blocks).
