@@ -9,7 +9,7 @@ import { manaMaxFor, skillById, spellsFor } from "./skills";
 import { QUESTS, traderOf, type TraderRole } from "./quests";
 import { clearSave, deleteWorld, hasSave, listWorlds, loadLatest, loadSettings, loadWorld, writeSettings, writeWorld, type SaveV1, type WorldSlot } from "./save";
 import { buildAtlas } from "./textures";
-import { CS, HEIGHT, NETHER_X0, World, decorate, folkLayout, penSheep, type Decor, type FolkSpot } from "./world";
+import { CS, HEIGHT, World, decorate, folkLayout, penSheep, type Decor, type FolkSpot } from "./world";
 import { parseSeed } from "./noise";
 
 export type Phase = "title" | "play" | "pause" | "inventory" | "dead";
@@ -289,14 +289,6 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   const furnaces = new Map<string, Furn>();
   const chests = new Map<string, { ids: number[]; ns: number[] }>();
   const pistonHot = new Set<string>();
-  const pistonHold = new Map<string, number>();
-  const facing = new Map<string, number>();
-  const repDelay = new Map<string, number>();
-  const repLeft = new Map<string, { t: number; on: boolean }>();
-  const repOut = new Set<string>();
-  let redAcc = 0;
-  const fluidSources = new Map<string, number>();
-  const fluidSpread = new Set<string>();
   let slot = 0;
   let hotbar: number[] = [...CREATIVE_BAR];
   const inv: Record<number, number> = {};
@@ -369,6 +361,49 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     new THREE.MeshBasicMaterial({ color: 0xe7eef8 }),
   );
   scene.add(sunMesh, moonMesh);
+  const skyU = {
+    topColor: { value: new THREE.Color(0x2a6ad4) },
+    horizonColor: { value: new THREE.Color(0x8ec8f5) },
+    sunDirection: { value: new THREE.Vector3(0, 1, 0.2) },
+    sunColor: { value: new THREE.Color(0xffe9b8) },
+    uGlow: { value: 1 },
+  };
+  const skyDome = new THREE.Mesh(
+    new THREE.SphereGeometry(380, 32, 15),
+    new THREE.ShaderMaterial({
+      uniforms: skyU,
+      side: THREE.BackSide,
+      depthWrite: false,
+      depthTest: false,
+      vertexShader: `
+        varying vec3 vDir;
+        void main() {
+          vDir = position;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }`,
+      fragmentShader: `
+        varying vec3 vDir;
+        uniform vec3 topColor;
+        uniform vec3 horizonColor;
+        uniform vec3 sunDirection;
+        uniform vec3 sunColor;
+        uniform float uGlow;
+        void main() {
+          vec3 d = normalize(vDir);
+          float h = clamp(d.y, -1.0, 1.0);
+          vec3 col = mix(horizonColor, topColor, pow(max(h, 0.0), 0.5));
+          if (h < 0.0) col = mix(horizonColor, horizonColor * 0.55, clamp(-h * 3.0, 0.0, 1.0));
+          float s = max(dot(d, normalize(sunDirection)), 0.0);
+          col += sunColor * (pow(s, 350.0) * 1.4 + pow(s, 10.0) * 0.16) * uGlow;
+          gl_FragColor = vec4(col, 1.0);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }`,
+    }),
+  );
+  skyDome.renderOrder = -1;
+  skyDome.frustumCulled = false;
+  scene.add(skyDome);
   const lamps: THREE.PointLight[] = [];
   for (let i = 0; i < 4; i++) {
     const lamp = new THREE.PointLight(0xffc56b, 0, 9, 1.4);
@@ -506,7 +541,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     skin(0xffffff, { transparent: true, opacity: 0.88, depthWrite: false }),
     32,
   );
-  clouds.userData.keepShadow = false;
+  clouds.userData.keepShadow = true;
   const cloudData = Array.from({ length: 32 }, () => ({
     ox: Math.random() * 180 - 90,
     oz: Math.random() * 180 - 90,
@@ -573,7 +608,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   scene.add(fig.group);
 
   type Mob = {
-    kind: "sheep" | "creeper" | "cow" | "walker" | "pig" | "chicken" | "spider" | "skelly" | "villager" | "ghast" | "dragon" | "horse" | "phantom" | "piglin" | "boat" | "cart" | "frog" | "fox" | "crab" | "wisp" | "slime" | "wolf" | "golem" | "enderman" | "witch" | "blaze" | "drowned";
+    kind: "sheep" | "creeper" | "cow" | "walker" | "pig" | "chicken" | "spider" | "skelly" | "villager" | "ghast" | "dragon" | "horse" | "phantom" | "piglin" | "boat" | "cart" | "frog" | "fox" | "crab" | "wisp" | "slime" | "wolf" | "golem";
     x: number;
     y: number;
     z: number;
@@ -704,7 +739,6 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let portalCd = 0;
   let realmsReady = false;
   let fishT = -1;
-  let bobber: THREE.Mesh | null = null;
   let dragonUp = false;
   let mount: Mob | null = null;
   let returnSpot = { x: 0, y: 80, z: 0 };
@@ -939,9 +973,6 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     furnaces.clear();
     chests.clear();
     pistonHot.clear();
-    facing.clear();
-    fluidSources.clear();
-    fluidSpread.clear();
     quests = QUESTS.map((q) => ({ id: q.id, n: 0, done: false }));
     traderRole = "grocer";
   }
@@ -1090,12 +1121,6 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       const wolf = spawnKind("wolf", pet.x, pet.z);
       wolf.tame = true;
     }
-    fluidSources.clear();
-    fluidSpread.clear();
-    for (const [x, y, z, id] of data.fluids ?? []) {
-      if (world.get(x, y, z) === id) fluidSources.set(cellKey(x, y, z), id);
-    }
-    if (fluidSources.size) reflowFluids();
     stream(narrow ? 6 : 10);
   }
 
@@ -1414,28 +1439,6 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (id === ID.Reed) bumpQuest("break", "reed");
     if (id === ID.Bloom) bumpQuest("break", "bloom");
     burst(x + 0.5, y + 0.5, z + 0.5, block.color, 14);
-    if (id === ID.Water || id === ID.Lava) {
-      const key = cellKey(x, y, z);
-      const wasSource = fluidSources.has(key);
-      fluidSources.delete(key);
-      fluidSpread.delete(key);
-      if (wasSource) reflowFluids();
-      else spillAt(x, y, z);
-    } else spillAt(x, y, z);
-    if (
-      id === ID.Dust ||
-      id === ID.Lever ||
-      id === ID.LeverOn ||
-      id === ID.RedTorch ||
-      id === ID.RedTorchOn ||
-      id === ID.Repeater ||
-      id === ID.Piston ||
-      id === ID.Lamp ||
-      id === ID.LampOn
-    ) {
-      facing.delete(cellKey(x, y, z));
-      recompute(x, y, z);
-    }
     audio.break();
     swing = 1;
     saveDirty = true;
@@ -1584,163 +1587,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     emit();
   }
 
-  const DIRS = [
-    [1, 0, 0],
-    [-1, 0, 0],
-    [0, 1, 0],
-    [0, -1, 0],
-    [0, 0, 1],
-    [0, 0, -1],
-  ] as const;
-
-  function aimDir() {
-    if (player.pitch < -0.55) return 2;
-    if (player.pitch > 0.55) return 3;
-    const x = -Math.sin(player.yaw);
-    const z = -Math.cos(player.yaw);
-    if (Math.abs(x) > Math.abs(z)) return x > 0 ? 0 : 1;
-    return z > 0 ? 4 : 5;
-  }
-
-  function cellKey(x: number, y: number, z: number) {
-    return x + "," + y + "," + z;
-  }
-
-  function canSoak(id: number) {
-    return id === ID.Air || def(id).plant;
-  }
-
-  function placeFlow(x: number, y: number, z: number, id: number) {
-    const key = cellKey(x, y, z);
-    if (fluidSources.has(key)) return;
-    const cur = world.get(x, y, z);
-    if (cur === id) return;
-    if (cur === ID.Water && id === ID.Lava) {
-      fluidSources.delete(key);
-      world.set(x, y, z, ID.Obsidian);
-      fluidSpread.delete(key);
-      markDirtyAt(x, z);
-      return;
-    }
-    if (cur === ID.Lava && id === ID.Water) {
-      fluidSources.delete(key);
-      world.set(x, y, z, ID.Cobble);
-      fluidSpread.delete(key);
-      markDirtyAt(x, z);
-      return;
-    }
-    if (!canSoak(cur)) return;
-    if (!world.set(x, y, z, id)) return;
-    fluidSpread.add(key);
-    markDirtyAt(x, z);
-  }
-
-  function floodFluid(sx: number, sy: number, sz: number, id: number) {
-    const reach = id === ID.Lava ? 3 : 7;
-    const seen = new Set<string>([cellKey(sx, sy, sz)]);
-    const q: { x: number; y: number; z: number; d: number }[] = [{ x: sx, y: sy, z: sz, d: 0 }];
-    let guard = 0;
-    while (q.length && guard++ < 480) {
-      const c = q.shift();
-      if (!c || c.y <= 1) continue;
-      const below = world.get(c.x, c.y - 1, c.z);
-      if (canSoak(below) || (below === ID.Water && id === ID.Lava) || (below === ID.Lava && id === ID.Water)) {
-        placeFlow(c.x, c.y - 1, c.z, id);
-        const k = cellKey(c.x, c.y - 1, c.z);
-        if (!seen.has(k) && world.get(c.x, c.y - 1, c.z) === id) {
-          seen.add(k);
-          q.push({ x: c.x, y: c.y - 1, z: c.z, d: 0 });
-        }
-        continue;
-      }
-      if (c.d >= reach) continue;
-      for (const [ox, , oz] of [
-        [1, 0, 0],
-        [-1, 0, 0],
-        [0, 0, 1],
-        [0, 0, -1],
-      ] as const) {
-        const nx = c.x + ox;
-        const nz = c.z + oz;
-        const k = cellKey(nx, c.y, nz);
-        if (seen.has(k)) continue;
-        placeFlow(nx, c.y, nz, id);
-        if (world.get(nx, c.y, nz) === id) {
-          seen.add(k);
-          q.push({ x: nx, y: c.y, z: nz, d: c.d + 1 });
-        }
-      }
-    }
-  }
-
-  function reflowFluids() {
-    const stale = [...fluidSpread];
-    fluidSpread.clear();
-    for (const key of stale) {
-      const [x, y, z] = key.split(",").map(Number);
-      if (fluidSources.has(key)) continue;
-      const id = world.get(x, y, z);
-      if (id === ID.Water || id === ID.Lava) {
-        world.set(x, y, z, ID.Air);
-        markDirtyAt(x, z);
-      }
-    }
-    const dead: string[] = [];
-    for (const [key, id] of fluidSources) {
-      const [x, y, z] = key.split(",").map(Number);
-      if (world.get(x, y, z) !== id) dead.push(key);
-    }
-    for (const key of dead) fluidSources.delete(key);
-    for (const [key, id] of fluidSources) {
-      const [x, y, z] = key.split(",").map(Number);
-      floodFluid(x, y, z, id);
-    }
-    saveDirty = true;
-  }
-
-  function addSource(x: number, y: number, z: number, id: number) {
-    fluidSources.set(cellKey(x, y, z), id);
-    reflowFluids();
-  }
-
-  function spillAt(x: number, y: number, z: number) {
-    for (const [ox, oy, oz] of DIRS) {
-      const nx = x + ox;
-      const ny = y + oy;
-      const nz = z + oz;
-      const id = world.get(nx, ny, nz);
-      if (id !== ID.Water && id !== ID.Lava) continue;
-      const key = cellKey(nx, ny, nz);
-      if (fluidSpread.has(key) && !fluidSources.has(key)) continue;
-      floodFluid(nx, ny, nz, id);
-      return;
-    }
-  }
-
-  function supportHot(x: number, y: number, z: number, pow: Map<string, number>) {
-    const by = y - 1;
-    for (const [ox, , oz] of [
-      [1, 0, 0],
-      [-1, 0, 0],
-      [0, 0, 1],
-      [0, 0, -1],
-    ] as const) {
-      const id = world.get(x + ox, by, z + oz);
-      const k = cellKey(x + ox, by, z + oz);
-      if (id === ID.Dust && (pow.get(k) ?? 0) > 0) return true;
-      if (id === ID.LeverOn || id === ID.PlateOn || id === ID.RedTorchOn) return true;
-      if (id === ID.Repeater && repOut.has(k)) {
-        const face = facing.get(k) ?? 4;
-        const fwd = DIRS[face];
-        if (x + ox + fwd[0] === x && by + fwd[1] === by && z + oz + fwd[2] === z) return true;
-      }
-    }
-    return false;
-  }
-
   function recompute(x: number, y: number, z: number) {
-    const R = 10;
-    const cells: { x: number; y: number; z: number; id: number }[] = [];
+    const R = 8;
+    const powered = new Set<string>();
+    const q: { x: number; y: number; z: number; d: number }[] = [];
     for (let dy = -R; dy <= R; dy++) {
       for (let dz = -R; dz <= R; dz++) {
         for (let dx = -R; dx <= R; dx++) {
@@ -1748,146 +1598,54 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           const by = y + dy;
           const bz = z + dz;
           if (by < 1 || by >= HEIGHT - 1) continue;
-          cells.push({ x: bx, y: by, z: bz, id: world.get(bx, by, bz) });
+          if (world.get(bx, by, bz) !== ID.LeverOn && world.get(bx, by, bz) !== ID.PlateOn) continue;
+          for (const [ox, oy, oz] of NEIGHBORS) q.push({ x: bx + ox, y: by + oy, z: bz + oz, d: 1 });
         }
       }
     }
-    const pow = new Map<string, number>();
-    const dustQ: { x: number; y: number; z: number; d: number }[] = [];
-    const pushDust = (bx: number, by: number, bz: number, d: number) => {
-      if (d > 15) return;
-      const id = world.get(bx, by, bz);
-      if (id !== ID.Dust) return;
-      const key = cellKey(bx, by, bz);
-      const prev = pow.get(key) ?? 0;
-      const level = 16 - d;
-      if (level <= prev) return;
-      pow.set(key, level);
-      dustQ.push({ x: bx, y: by, z: bz, d });
-    };
-    for (const c of cells) {
-      if (c.id !== ID.LeverOn && c.id !== ID.PlateOn) continue;
-      pow.set(cellKey(c.x, c.y, c.z), 15);
-      for (const [ox, oy, oz] of DIRS) pushDust(c.x + ox, c.y + oy, c.z + oz, 1);
-    }
-    while (dustQ.length) {
-      const cur = dustQ.pop();
-      if (!cur) continue;
-      for (const [ox, oy, oz] of DIRS) pushDust(cur.x + ox, cur.y + oy, cur.z + oz, cur.d + 1);
-    }
-    for (const c of cells) {
-      if (c.id !== ID.RedTorch && c.id !== ID.RedTorchOn) continue;
-      const hot = supportHot(c.x, c.y, c.z, pow);
-      const next = hot ? ID.RedTorch : ID.RedTorchOn;
-      if (next !== c.id && world.set(c.x, c.y, c.z, next)) {
-        markDirtyAt(c.x, c.z);
-        c.id = next;
-      }
-      if (c.id === ID.RedTorchOn) pow.set(cellKey(c.x, c.y, c.z), 15);
-    }
-    for (const c of cells) {
-      if (c.id !== ID.Repeater) continue;
-      const key = cellKey(c.x, c.y, c.z);
-      const face = facing.get(key) ?? 4;
-      const back = DIRS[face ^ 1];
-      const bk = cellKey(c.x + back[0], c.y + back[1], c.z + back[2]);
-      const bid = world.get(c.x + back[0], c.y + back[1], c.z + back[2]);
-      const input =
-        (pow.get(bk) ?? 0) > 0 || bid === ID.LeverOn || bid === ID.PlateOn || bid === ID.RedTorchOn || (bid === ID.Repeater && repOut.has(bk));
-      const now = repOut.has(key);
-      if (input !== now) {
-        const job = repLeft.get(key);
-        if (job) job.on = input;
-        else repLeft.set(key, { t: repDelay.get(key) ?? 1, on: input });
-      } else repLeft.delete(key);
-      if (now) pow.set(key, 15);
-    }
-    for (const c of cells) {
-      if (!def(c.id).solid || c.id === ID.Dust) continue;
-      let strong = false;
-      for (const [ox, oy, oz] of DIRS) {
-        const id = world.get(c.x + ox, c.y + oy, c.z + oz);
-        const k = cellKey(c.x + ox, c.y + oy, c.z + oz);
-        if (id === ID.RedTorchOn && ox === 0 && oy === 1 && oz === 0) continue;
-        if (id === ID.LeverOn || id === ID.RedTorchOn) strong = true;
-        if (id === ID.Repeater && repOut.has(k)) {
-          const face = facing.get(k) ?? 4;
-          const fwd = DIRS[face];
-          if (ox + fwd[0] === 0 && oy + fwd[1] === 0 && oz + fwd[2] === 0) strong = true;
-        }
-      }
-      if (strong) pow.set(cellKey(c.x, c.y, c.z), 15);
-    }
-    for (const c of cells) {
-      if (c.id === ID.RedTorchOn || world.get(c.x, c.y, c.z) === ID.RedTorchOn) {
-        for (const [ox, oy, oz] of DIRS) {
-          if (oy === -1 && ox === 0 && oz === 0) continue;
-          pushDust(c.x + ox, c.y + oy, c.z + oz, 1);
-        }
-      }
-      const key = cellKey(c.x, c.y, c.z);
-      if (c.id === ID.Repeater && repOut.has(key)) {
-        const face = facing.get(key) ?? 4;
-        const fwd = DIRS[face];
-        pushDust(c.x + fwd[0], c.y + fwd[1], c.z + fwd[2], 1);
-      }
-      if (def(c.id).solid && (pow.get(key) ?? 0) > 0 && c.id !== ID.Dust) {
-        for (const [ox, oy, oz] of DIRS) pushDust(c.x + ox, c.y + oy, c.z + oz, 1);
-      }
-    }
-    while (dustQ.length) {
-      const cur = dustQ.pop();
-      if (!cur) continue;
-      for (const [ox, oy, oz] of DIRS) pushDust(cur.x + ox, cur.y + oy, cur.z + oz, cur.d + 1);
+    while (q.length) {
+      const cur = q.pop();
+      if (!cur || cur.d > 15) continue;
+      const key = cur.x + "," + cur.y + "," + cur.z;
+      if (powered.has(key)) continue;
+      if (world.get(cur.x, cur.y, cur.z) !== ID.Dust) continue;
+      powered.add(key);
+      for (const [ox, oy, oz] of NEIGHBORS) q.push({ x: cur.x + ox, y: cur.y + oy, z: cur.z + oz, d: cur.d + 1 });
     }
     const near = (bx: number, by: number, bz: number) => {
-      for (const [ox, oy, oz] of DIRS) {
+      for (const [ox, oy, oz] of NEIGHBORS) {
         const id = world.get(bx + ox, by + oy, bz + oz);
-        const k = cellKey(bx + ox, by + oy, bz + oz);
-        if (id === ID.LeverOn || id === ID.PlateOn || id === ID.RedTorchOn) return true;
-        if (id === ID.Repeater && repOut.has(k)) {
-          const face = facing.get(k) ?? 4;
-          const fwd = DIRS[face];
-          if (bx + ox + fwd[0] === bx && by + oy + fwd[1] === by && bz + oz + fwd[2] === bz) return true;
-        }
-        if ((pow.get(k) ?? 0) > 0 && id === ID.Dust) return true;
+        if (id === ID.LeverOn || id === ID.PlateOn) return true;
+        if (powered.has(bx + ox + "," + (by + oy) + "," + (bz + oz))) return true;
       }
       return false;
     };
-    for (const c of cells) {
-      const id = world.get(c.x, c.y, c.z);
-      if (id === ID.Lamp || id === ID.LampOn) {
-        const next = near(c.x, c.y, c.z) ? ID.LampOn : ID.Lamp;
-        if (next !== id && world.set(c.x, c.y, c.z, next)) markDirtyAt(c.x, c.z);
-      }
-      if (id === ID.Piston) {
-        const key = cellKey(c.x, c.y, c.z);
-        const on = near(c.x, c.y, c.z);
-        const face = facing.get(key) ?? 2;
-        const [dx, dy, dz] = DIRS[face];
-        if (on && !pistonHot.has(key)) {
-          pistonHot.add(key);
-          const ahead = world.get(c.x + dx, c.y + dy, c.z + dz);
-          const dest = world.get(c.x + dx * 2, c.y + dy * 2, c.z + dz * 2);
-          if (ahead > 0 && ahead !== ID.Bedrock && ahead !== ID.Piston && def(ahead).solid && !def(ahead).fluid && (dest === ID.Air || def(dest).plant)) {
-            world.set(c.x + dx, c.y + dy, c.z + dz, ID.Air);
-            world.set(c.x + dx * 2, c.y + dy * 2, c.z + dz * 2, ahead);
-            pistonHold.set(key, ahead);
-            markDirtyAt(c.x + dx, c.z + dz);
-            markDirtyAt(c.x + dx * 2, c.z + dz * 2);
+    for (let dy = -R; dy <= R; dy++) {
+      for (let dz = -R; dz <= R; dz++) {
+        for (let dx = -R; dx <= R; dx++) {
+          const bx = x + dx;
+          const by = y + dy;
+          const bz = z + dz;
+          if (by < 1 || by >= HEIGHT - 1) continue;
+          const id = world.get(bx, by, bz);
+          if (id === ID.Lamp || id === ID.LampOn) {
+            const next = near(bx, by, bz) ? ID.LampOn : ID.Lamp;
+            if (next !== id && world.set(bx, by, bz, next)) markDirtyAt(bx, bz);
           }
-        }
-        if (!on && pistonHot.has(key)) {
-          pistonHot.delete(key);
-          const held = pistonHold.get(key) ?? 0;
-          pistonHold.delete(key);
-          const front = world.get(c.x + dx, c.y + dy, c.z + dz);
-          const far = world.get(c.x + dx * 2, c.y + dy * 2, c.z + dz * 2);
-          if (held && far === held && (front === ID.Air || def(front).plant)) {
-            world.set(c.x + dx * 2, c.y + dy * 2, c.z + dz * 2, ID.Air);
-            world.set(c.x + dx, c.y + dy, c.z + dz, held);
-            markDirtyAt(c.x + dx, c.z + dz);
-            markDirtyAt(c.x + dx * 2, c.z + dz * 2);
+          if (id === ID.Piston) {
+            const key = bx + "," + by + "," + bz;
+            const on = near(bx, by, bz);
+            if (on && !pistonHot.has(key)) {
+              pistonHot.add(key);
+              const above = world.get(bx, by + 1, bz);
+              const above2 = world.get(bx, by + 2, bz);
+              if (above > 0 && above !== ID.Bedrock && above !== ID.Piston && def(above).solid && above2 === ID.Air) {
+                world.set(bx, by + 1, bz, ID.Air);
+                world.set(bx, by + 2, bz, above);
+                markDirtyAt(bx, bz);
+              }
+            }
+            if (!on) pistonHot.delete(key);
           }
         }
       }
@@ -1899,14 +1657,6 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (block.door || block.gate) {
       const next = hit.id === ID.Door || hit.id === ID.Gate ? (hit.id === ID.Door ? ID.DoorOpen : ID.GateOpen) : hit.id === ID.DoorOpen ? ID.Door : ID.Gate;
       if (world.set(hit.x, hit.y, hit.z, next)) markDirtyAt(hit.x, hit.z);
-      audio.place();
-      return true;
-    }
-    if (hit.id === ID.Repeater) {
-      const key = cellKey(hit.x, hit.y, hit.z);
-      const n = ((repDelay.get(key) ?? 1) % 4) + 1;
-      repDelay.set(key, n);
-      say("Repeater " + n);
       audio.place();
       return true;
     }
@@ -1973,24 +1723,6 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (held === ID.Rod && (hit.id === ID.Water || def(world.get(hit.x + hit.nx, hit.y + hit.ny, hit.z + hit.nz)).fluid)) {
       fishT = 0;
       say("Line out");
-      if (bobber) scene.remove(bobber);
-      const geo = new THREE.SphereGeometry(0.12, 6, 6);
-      const mat = new THREE.MeshStandardMaterial({ color: 0xcc2222, roughness: 0.4, metalness: 0.1 });
-      bobber = new THREE.Mesh(geo, mat);
-      const dx = -Math.sin(player.yaw);
-      const dz = -Math.cos(player.yaw);
-      const dist = 3.5;
-      const bx = player.x + dx * dist;
-      const bz = player.z + dz * dist;
-      let by = player.y;
-      for (let yy = Math.floor(player.y) + 2; yy >= Math.floor(player.y) - 4; yy--) {
-        if (world.get(Math.floor(bx), yy, Math.floor(bz)) === ID.Water) {
-          by = yy + 0.6;
-          break;
-        }
-      }
-      bobber.position.set(bx, by, bz);
-      scene.add(bobber);
       return;
     }
     if (held === ID.Eye) {
@@ -2025,20 +1757,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       return;
     }
     if (held === ID.Bucket && (hit.id === ID.Water || hit.id === ID.Lava)) {
-      const key = cellKey(hit.x, hit.y, hit.z);
-      if (fluidSpread.has(key) && !fluidSources.has(key)) {
-        say("That stream has no source");
-        return;
-      }
       const fill = hit.id === ID.Lava ? ID.LavaBucket : ID.WaterBucket;
       if (world.set(hit.x, hit.y, hit.z, ID.Air)) {
         markDirtyAt(hit.x, hit.z);
-        fluidSources.delete(key);
-        fluidSpread.delete(key);
         spend(ID.Bucket, 1);
         addInv(fill, 1);
         audio.place();
-        reflowFluids();
+        saveDirty = true;
       }
       return;
     }
@@ -2052,7 +1777,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         markDirtyAt(px, pz);
         addInv(ID.Bucket, 1);
         audio.place();
-        addSource(px, py, pz, pour);
+        saveDirty = true;
       }
       return;
     }
@@ -2082,9 +1807,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (!world.set(px, py, pz, held)) return;
     markDirtyAt(px, pz);
     if (!creative) spend(held, 1);
-    if (held === ID.Water || held === ID.Lava) addSource(px, py, pz, held);
-    if (held === ID.Piston || held === ID.Repeater || held === ID.RedTorch) facing.set(cellKey(px, py, pz), aimDir());
-    if (held === ID.Dust || held === ID.Lever || held === ID.Lamp || held === ID.Piston || held === ID.RedTorch || held === ID.Repeater) recompute(px, py, pz);
+    if (held === ID.Dust || held === ID.Lever || held === ID.Lamp || held === ID.Piston) recompute(px, py, pz);
     if (held === ID.Torch) bumpQuest("place", "torch");
     burst(px + 0.5, py + 0.8, pz + 0.5, heldDef.color, 6);
     audio.place();
@@ -2235,30 +1958,32 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     say(kind === "boat" ? "Boat" : "Cart");
   }
 
-  function openNether(x: number, z: number) {
-    const floor = world.netherFloor(x, z);
-    for (let dy = 1; dy <= 4; dy++) {
-      for (let dz = -1; dz <= 1; dz++) {
-        for (let dx = -1; dx <= 1; dx++) world.set(x + dx, floor + dy, z + dz, ID.Air);
-      }
-    }
-    world.set(x, floor + 1, z, ID.Portal);
-    world.set(x, floor + 2, z, ID.Portal);
-    markDirtyAt(x, z);
-    return floor + 1.2;
-  }
-
   function carveRealms() {
     if (realmsReady) return;
     realmsReady = true;
     const fill = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, id: number) => {
       for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) world.set(x, y, z, id);
     };
-    fill(-520, 58, -520, -488, 58, -488, ID.EndStone);
-    fill(-518, 59, -518, -490, 66, -490, ID.Air);
-    world.set(-504, 59, -504, ID.Portal);
-    world.set(-504, 60, -504, ID.Portal);
-    for (let i = 0; i < 6; i++) world.set(-516 + i * 3, 59, -506, ID.PrismOre);
+    fill(468, 28, 468, 508, 28, 508, ID.Netherrack);
+    fill(470, 29, 470, 506, 40, 506, ID.Air);
+    fill(468, 41, 468, 508, 41, 508, ID.Netherrack);
+    for (let i = 0; i < 8; i++) world.set(480 + ((i * 3) % 12) - 6, 29, 490, ID.Lava);
+    for (let i = 0; i < 14; i++) {
+      const rx = 474 + ((i * 5) % 28);
+      const rz = 474 + ((i * 7) % 26);
+      world.set(rx, 29, rz, ID.ResinOre);
+      world.set(rx + 1, 29, rz, ID.ResinOre);
+    }
+    world.set(488, 29, 488, ID.Portal);
+    world.set(488, 30, 488, ID.Portal);
+    fill(-520, 48, -520, -488, 48, -488, ID.EndStone);
+    fill(-518, 49, -518, -490, 56, -490, ID.Air);
+    world.set(-504, 49, -504, ID.Portal);
+    world.set(-504, 50, -504, ID.Portal);
+    for (let i = 0; i < 6; i++) world.set(-516 + i * 3, 49, -506, ID.PrismOre);
+    for (let cz = Math.floor(468 / CS); cz <= Math.floor(508 / CS); cz++) {
+      for (let cx = Math.floor(468 / CS); cx <= Math.floor(508 / CS); cx++) dirty.add(cx + "," + cz);
+    }
     for (let cz = Math.floor(-520 / CS); cz <= Math.floor(-488 / CS); cz++) {
       for (let cx = Math.floor(-520 / CS); cx <= Math.floor(-488 / CS); cx++) dirty.add(cx + "," + cz);
     }
@@ -2276,27 +2001,20 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       say("Overworld");
     } else if (to === 1) {
       if (realm === 0) returnSpot = { x: player.x, y: player.y, z: player.z };
-      const nx = NETHER_X0 + 160 + (((Math.floor(player.x / 8) % 1600) + 1600) % 1600);
-      const nz = 160 + (((Math.floor(player.z / 8) % 1600) + 1600) % 1600);
-      const ny = openNether(nx, nz);
-      player.x = nx + 0.5;
-      player.y = ny;
-      player.z = nz + 1.5;
+      player.x = 488.5;
+      player.y = 31;
+      player.z = 486.5;
       realm = 1;
       say("Nether");
-      if (mobs.filter((m) => m.kind === "ghast" && !m.dead).length < 1) spawnKind("ghast", nx + 14, nz - 10);
+      if (mobs.filter((m) => m.kind === "ghast" && !m.dead).length < 1) spawnKind("ghast", 500, 496);
       if (mobs.filter((m) => m.kind === "piglin" && !m.dead).length < 2) {
-        spawnKind("piglin", nx - 8, nz + 6);
-        spawnKind("piglin", nx + 9, nz + 8);
-      }
-      if (mobs.filter((m) => m.kind === "blaze" && !m.dead).length < 2) {
-        spawnKind("blaze", nx + 6, nz - 7);
-        spawnKind("blaze", nx - 5, nz + 11);
+        spawnKind("piglin", 478, 480);
+        spawnKind("piglin", 496, 500);
       }
     } else {
       if (realm === 0) returnSpot = { x: player.x, y: player.y, z: player.z };
       player.x = -504.5;
-      player.y = 61;
+      player.y = 51;
       player.z = -500.5;
       realm = 2;
       say("The End");
@@ -2320,45 +2038,15 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (Math.floor(fireT * 2) !== Math.floor((fireT + dt) * 2)) hurt(1);
     }
     portalCd = Math.max(0, portalCd - dt);
-    redAcc += dt;
-    if (redAcc >= 0.15) {
-      redAcc = 0;
-      let changed = false;
-      for (const [key, job] of [...repLeft]) {
-        job.t -= 1;
-        if (job.t > 0) continue;
-        repLeft.delete(key);
-        if (job.on) repOut.add(key);
-        else repOut.delete(key);
-        changed = true;
-      }
-      if (changed) recompute(Math.floor(player.x), Math.floor(player.y), Math.floor(player.z));
-    }
     if (fishT >= 0) {
       fishT += dt;
-      if (bobber) {
-        bobber.position.y += Math.sin(elapsed * 5) * 0.002;
-        bobber.rotation.y += dt * 1.2;
-      }
-      const wait = 2.8 + (skills.has("angler") ? 0.4 : 1.2) * Math.random();
-      if (fishT > wait) {
+      if (fishT > 3.2) {
         fishT = -1;
-        if (bobber) {
-          scene.remove(bobber);
-          bobber = null;
-        }
-        const biome = world.biomeAt(Math.floor(player.x), Math.floor(player.z));
-        let catchId: number = ID.Fish;
-        const roll = Math.random();
-        if (roll < 0.08) catchId = ID.Emerald;
-        else if (roll < 0.18 && biome === "Shore") catchId = ID.Shell;
-        else if (roll < 0.25) catchId = ID.String;
-        if (skills.has("angler") && Math.random() < 0.35) addInv(catchId, 1); // bonus
-        addInv(catchId, 1);
-        if (Math.random() < 0.12) addInv(ID.String, 1);
+        addInv(Math.random() < 0.7 ? ID.Fish : ID.Emerald, 1);
+        if (Math.random() < 0.15) addInv(ID.String, 1);
         wearHeld();
-        say("Bite!");
-        gainXp(skills.has("angler") ? 4 : 2);
+        say("Bite");
+        gainXp(2);
       }
     }
     for (let i = fuses.length - 1; i >= 0; i--) {
@@ -2741,11 +2429,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
                   : scale < 0.8
                     ? 4
                     : 10
-                : kind === "enderman"
-                  ? 20
-                  : kind === "witch" || kind === "blaze" || kind === "drowned"
-                    ? 10
-                    : kind === "walker" || kind === "wolf"
+                : kind === "walker" || kind === "wolf"
                   ? 8
                   : kind === "wisp"
                     ? 6
@@ -2893,15 +2577,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
                                           : []
                                         : mob.kind === "wolf"
                                           ? [ID.Bone]
-                                          : mob.kind === "enderman"
-                                            ? [ID.Eye]
-                                            : mob.kind === "witch"
-                                              ? [ID.Bottle, ID.PotionHeal]
-                                              : mob.kind === "blaze"
-                                                ? [ID.Blaze]
-                                                : mob.kind === "drowned"
-                                                  ? [ID.Copper]
-                                                  : mob.kind === "golem"
+                                          : mob.kind === "golem"
                                             ? [ID.Ingot]
                                             : mob.kind === "villager"
                                               ? [ID.Emerald]
@@ -3033,10 +2709,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         const x = player.x + Math.cos(a) * dist;
         const z = player.z + Math.sin(a) * dist;
         const roll = Math.random();
-        if (roll < 0.22) spawnKind("skelly", x, z);
-        else if (roll < 0.4) spawnKind("spider", x, z);
-        else if (roll < 0.55) spawnKind("enderman", x, z);
-        else if (roll < 0.68) spawnKind("witch", x, z);
+        if (roll < 0.34) spawnKind("skelly", x, z);
+        else if (roll < 0.6) spawnKind("spider", x, z);
         else spawnWalker(x, z);
       }
       if (sinceSleep > 420 && mobs.filter((m) => m.kind === "phantom" && !m.dead).length < 1) {
@@ -3063,10 +2737,6 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           const [x, z] = spot();
           spawnKind("frog", x, z);
         }
-        if ((biome === "Shore" || biome === "Sand flats") && !settings.mods.peaceful && night && alive("drowned") < 2) {
-          const [x, z] = spot();
-          spawnKind("drowned", x, z);
-        }
         if (!settings.mods.peaceful && (biome === "Fen" || biome === "Brick plains") && alive("slime") < 2) {
           const [x, z] = spot();
           spawnKind("slime", x, z);
@@ -3082,20 +2752,6 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         if ((biome === "Shore" || biome === "Sand flats" || biome === "Ash ridge") && alive("crab") < 2) {
           const [x, z] = spot();
           spawnKind("crab", x, z);
-        }
-        if (biome === "Nether" && !settings.mods.peaceful) {
-          if (alive("ghast") < 1) {
-            const [x, z] = spot();
-            spawnKind("ghast", x, z);
-          }
-          if (alive("piglin") < 2) {
-            const [x, z] = spot();
-            spawnKind("piglin", x, z);
-          }
-          if (alive("blaze") < 1) {
-            const [x, z] = spot();
-            spawnKind("blaze", x, z);
-          }
         }
         if (!settings.mods.peaceful && night && (biome === "Fen" || biome === "Grove" || biome === "Snow cap") && alive("wisp") < 2) {
           const [x, z] = spot();
@@ -3133,17 +2789,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         }
       }
       const farHost =
-        m.kind === "creeper" ||
-        m.kind === "walker" ||
-        m.kind === "skelly" ||
-        m.kind === "spider" ||
-        m.kind === "phantom" ||
-        m.kind === "wisp" ||
-        m.kind === "slime" ||
-        m.kind === "enderman" ||
-        m.kind === "witch" ||
-        m.kind === "drowned" ||
-        m.kind === "blaze";
+        m.kind === "creeper" || m.kind === "walker" || m.kind === "skelly" || m.kind === "spider" || m.kind === "phantom" || m.kind === "wisp" || m.kind === "slime";
       if (farHost && (d > 42 || phase !== "play")) {
         m.dead = true;
         scene.remove(m.mesh);
@@ -3184,17 +2830,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         !!foe ||
         flyer ||
         piglinMad ||
-        ((m.kind === "creeper" ||
-          m.kind === "walker" ||
-          m.kind === "skelly" ||
-          m.kind === "spider" ||
-          m.kind === "wisp" ||
-          m.kind === "slime" ||
-          m.kind === "enderman" ||
-          m.kind === "witch" ||
-          m.kind === "drowned" ||
-          m.kind === "blaze") &&
-          d < (m.kind === "skelly" || m.kind === "witch" || m.kind === "blaze" ? 18 : m.kind === "slime" ? 12 : 16));
+        ((m.kind === "creeper" || m.kind === "walker" || m.kind === "skelly" || m.kind === "spider" || m.kind === "wisp" || m.kind === "slime") &&
+          d < (m.kind === "skelly" ? 18 : m.kind === "slime" ? 12 : 16));
       if (foe) m.yaw = Math.atan2(-(foe.x - m.x), -(foe.z - m.z));
       else if (m.kind === "wolf" && m.tame && d > 3.2 && d < 32) m.yaw = Math.atan2(-dx, -dz);
       else if (chase) m.yaw = Math.atan2(-dx, -dz);
@@ -3255,8 +2892,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           m.y = gy;
         }
       }
-      if ((m.kind === "walker" || m.kind === "spider" || m.kind === "wisp" || m.kind === "slime" || m.kind === "enderman" || m.kind === "drowned" || piglinMad) && d < 1.45 && phase === "play" && m.cool <= 0) {
-        bite(m.kind === "wisp" || m.kind === "spider" ? 2 : m.kind === "enderman" ? 4 : m.kind === "slime" ? ((m.size ?? 1) > 0.7 ? 3 : 1) : 3);
+      if ((m.kind === "walker" || m.kind === "spider" || m.kind === "wisp" || m.kind === "slime" || piglinMad) && d < 1.35 && phase === "play" && m.cool <= 0) {
+        bite(m.kind === "wisp" || m.kind === "spider" ? 2 : m.kind === "slime" ? ((m.size ?? 1) > 0.7 ? 3 : 1) : 3);
         m.cool = 0.75;
         audio.hit();
       }
@@ -3269,10 +2906,6 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (m.kind === "skelly" && d < 16 && d > 3 && phase === "play" && m.cool <= 0) {
         launchArrow(m.x, m.y + 1, m.z, dx, 0.2, dz, false);
         m.cool = 1.5;
-      }
-      if ((m.kind === "witch" || m.kind === "blaze") && d < 16 && d > 3.5 && phase === "play" && m.cool <= 0) {
-        launchArrow(m.x, m.y + 1.2, m.z, dx, 0.35, dz, false);
-        m.cool = m.kind === "blaze" ? 1.1 : 1.8;
       }
       if (m.kind === "creeper" && d < 2.15 && phase === "play") {
         m.fuse += dt;
@@ -3342,10 +2975,6 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       mana,
       spell: spellIx,
       pets: mobs.filter((m) => m.kind === "wolf" && m.tame && !m.dead).map((m) => ({ x: m.x, z: m.z })),
-      fluids: [...fluidSources].map(([key, id]) => {
-        const [x, y, z] = key.split(",").map(Number);
-        return [x, y, z, id] as [number, number, number, number];
-      }),
     };
   }
 
@@ -3602,15 +3231,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
                                       : "Wild hound"
                                     : mob.kind === "golem"
                                       ? "Hamlet golem"
-                                      : mob.kind === "enderman"
-                                        ? "End stud"
-                                        : mob.kind === "witch"
-                                          ? "Witch"
-                                          : mob.kind === "blaze"
-                                            ? "Blaze"
-                                            : mob.kind === "drowned"
-                                              ? "Drowned"
-                                              : mob.kind === "villager"
+                                      : mob.kind === "villager"
                           ? traderOf(mob.role).name
                           : mob.kind === "horse"
                             ? "Steed"
@@ -3641,11 +3262,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           mob.kind === "ghast" ||
           mob.kind === "piglin" ||
           mob.kind === "wisp" ||
-          mob.kind === "dragon" ||
-          mob.kind === "enderman" ||
-          mob.kind === "witch" ||
-          mob.kind === "blaze" ||
-          mob.kind === "drowned";
+          mob.kind === "dragon";
         if (skills.has("mark") && blade.tool === "sword" && hostile) dmg += 1;
         if (player.vy < -0.2 && !player.grounded) dmg = Math.ceil(dmg * 1.5);
         mob.hp -= dmg;
@@ -3655,14 +3272,6 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         const len = Math.hypot(player.x - mob.x, player.z - mob.z) || 1;
         mob.x += ((mob.x - player.x) / len) * 0.4;
         mob.z += ((mob.z - player.z) / len) * 0.4;
-        if (mob.kind === "enderman" && Math.random() < 0.65) {
-          const a = Math.random() * Math.PI * 2;
-          const dist = 4 + Math.random() * 6;
-          mob.x += Math.cos(a) * dist;
-          mob.z += Math.sin(a) * dist;
-          mob.y = groundY(mob.x, mob.z);
-          say("It slipped");
-        }
         audio.hit();
         swing = 1;
         if (mob.hp <= 0) killMob(mob);
@@ -3834,6 +3443,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     moonMesh.visible = sunH < 0.25;
     (stars.material as THREE.PointsMaterial).opacity = Math.max(0, Math.min(1, -sunH * 1.4));
     stars.position.set(player.x, 0, player.z);
+    const zenHex = sunH > 0 ? lerpHex(0x2c4a73, 0x2a6ad4, Math.min(1, sunH * 1.6)) : lerpHex(0x2c4a73, 0x030612, Math.min(1, -sunH * 1.2));
+    skyU.topColor.value.setHex(zenHex);
+    skyU.horizonColor.value.setHex(fogHex);
+    skyU.sunDirection.value.set(sunX, sunH, 0.18).normalize();
+    skyU.uGlow.value = THREE.MathUtils.clamp(sunH * 1.8 + 0.25, 0, 1);
+    skyDome.position.set(player.x, player.y, player.z);
   }
 
   function renderCamera(dt: number) {
@@ -5169,17 +4784,8 @@ function buildLego(kind: string, scale: number): LegoBody {
           ? makeFig(0xe8e0d0, 0xd4cbb8, 0xf7f4ee, "skull", 0xf4f1ea)
           : kind === "piglin"
             ? makeFig(0xf0c43a, 0x8d5a34, 0xf2a2c0, "snout", 0xf2a2c0)
-            : kind === "enderman"
-              ? makeFig(0x1a1030, 0x120c18, 0x0c0810, "mad", 0x1a1030)
-              : kind === "witch"
-                ? makeFig(0x4a2080, 0x2a1848, 0x1a1030, "nose", 0xc48a6a)
-                : kind === "blaze"
-                  ? makeFig(0xf0c43a, 0xf07820, 0xffe14a, "mad", 0xffe14a)
-                  : kind === "drowned"
-                    ? makeFig(0x2f6a4a, 0x1e4030, 0x143028, "mad", 0x6a8a62)
-                    : null;
+            : null;
   const built = figKind ?? beast(kind);
-  if (kind === "enderman") built.group.scale.multiplyScalar(1.45);
   if (scale !== 1) built.group.scale.multiplyScalar(scale);
   return built;
 }
