@@ -2713,6 +2713,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       return;
     }
     if (mob.kind === "golem") {
+      if (held === ID.Ingot) {
+        mob.hp = Math.min(24, (mob.hp ?? 0) + 4);
+        if (!creative) spend(ID.Ingot, 1);
+        say("Mended");
+        return;
+      }
       say("The hamlet golem");
       return;
     }

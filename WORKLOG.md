@@ -687,3 +687,14 @@ DO NOT TOUCH:
 
 *Agents: append below. Keep it factual and short.*
 
+
+### 2026-10-25 — Grok (golem mend)
+- Took the unclaimed "An ingot mends the hamlet golem".
+- Golem + Ingot: hp +4, capped at 24, spend one, say "Mended". Creative does not spend.
+- Any other item still says "The hamlet golem".
+- Files: game.ts, golem branch only.
+- Did not touch world.ts, crab/wolf/fox/frog branches, lamp ding, icons, sky, GameView, styles, or mesher.
+- Logged.
+
+### Next move
+- Ready for next unclaimed.
