@@ -730,3 +730,14 @@ DO NOT TOUCH:
 
 ### Next move
 - Ready for next unclaimed.
+
+### 2026-10-25 — Grok (golden apple on horse)
+- Took the unclaimed "A golden apple starts love on a horse, and does not mount".
+- Same horse food check now treats Gapple like Hay: love 8, spend one, say "Hearts", return.
+- Saddle or empty hand still tames or mounts.
+- Files: game.ts, that one condition.
+- Did not touch golem, wisp, lamp ding, world.ts, icons, sky, GameView, styles, or mesher.
+- Logged.
+
+### Next move
+- Ready for next unclaimed.
