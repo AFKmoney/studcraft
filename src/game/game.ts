@@ -122,6 +122,7 @@ export type GameApi = {
   copySeed: () => void;
   readonly slots: WorldSlot[];
   press: (id: number) => void;
+  shiftStack: (id: number) => void;
   setSens: (n: number) => void;
   setRadius: (n: number) => void;
   setSound: (on: boolean) => void;
@@ -4326,6 +4327,23 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         }
       }
       say("Need a spare brick to press");
+    },
+    shiftStack(id) {
+      if (!id) return;
+      if (!creative && (inv[id] ?? 0) <= 0) return say("You don't have that");
+      const on = hotbar.indexOf(id);
+      if (on >= 0) {
+        for (let i = 0; i < 9; i++) if (hotbar[i] === id) hotbar[i] = 0;
+        say(def(id).name + " back in the bag");
+      } else {
+        const empty = hotbar.indexOf(0);
+        const at = empty >= 0 ? empty : slot;
+        hotbar[at] = id;
+        slot = at;
+        say(def(id).name + " on the bar");
+      }
+      saveDirty = true;
+      emit();
     },
     setSens(n) {
       settings.sens = n;

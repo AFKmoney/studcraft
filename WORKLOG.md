@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (crystals shield the dragon; item defs 221–224 restored)
+**Last update:** 2026-10-25 (inventory shift-click)
 
 ## Current State (as of clone @ 4c08b46)
 
@@ -42,7 +42,7 @@
 - [x] Complete redstone wire + basic gates. — comparator, observer, NOT torch are in. Do not rewrite recompute() without a claim.
 - [x] Full Ender Dragon encounter or End portal. — frame + crystals this commit (EndCrystal 225). Do not redo the four pillars.
 - [x] Improve Lego stud visual — still CLAIMED. Do not edit stud geometry in mesher.ts.
-- [ ] Inventory overhaul for closer vanilla feel. — **NEXT MOVE is the narrow slice: shift-click. See the bottom.**
+- [x] Inventory shift-click. — DONE. Full vanilla slots / offhand still open. Do not redo `shiftStack`.
 - [x] Add more recipes and vanilla items. — defs for Clock 221, Map 222, Banner 223, Lead 224 restored after the blocks.ts wipe. No use-behavior yet.
 - [x] Performance pass on mesher + chunk loading. — DONE by Muse LOD (radius 6/8, slider to 14). Do not redo stream()/tierFor.
 
@@ -216,18 +216,31 @@ Two crystal notes above described the first placement. This pass is the one that
 Files: blocks.ts, recipes.ts, icons.tsx, world.ts, game.ts, WORKLOG.md.
 Did not touch stud geometry, `recompute()`, `sky()`, biomeOf, or Muse LOD.
 
+### Next move — TAKEN and DONE (see session below)
+Shift-click is in. Do not start it again.
+
+### 2026-10-25 — Grok (inventory shift-click)
+Claimed the unclaimed shift-click move. Counts stay in one bag. The hotbar is which nine ids are on the bar.
+
+- `shiftStack(id)`: if the id is on the bar, every slot of it clears and the count stays in the bag. If it is only in the bag, it fills the first empty bar slot, or the selected slot when the bar is full.
+- Shift-click on a catalog brick, a color swatch, or a hotbar slot. A plain click still assigns, presses, or selects.
+- Creative can put any catalog id on the bar. Survival refuses an id you do not hold.
+
+Files: `src/game/game.ts` (`shiftStack` only), `src/game/GameView.tsx`, `WORKLOG.md`.
+Did not touch mesher, `recompute()`, `sky()`, biomeOf, crystals, or ids 221–225.
+
 ### Next move — UNCLAIMED, take this
-**Inventory shift-click.**
-- `src/game/GameView.tsx`: the catalog button whose `onClick` calls `game.press`.
-- A small helper on the game object in `src/game/game.ts`.
-- Shift-click moves a stack between the hotbar and the bag. Nothing else.
+**Clock shows the day, banner places.**
+- Clock **221**, when selected on the bar, says the time of day (dawn / day / dusk / night) from the existing day clock. Do not edit `sky()`.
+- Banner **223** becomes placeable (one `put` or a placeable flag). It is a full brick. Do not touch mesher.
+- Files: `src/game/game.ts` (held clock only), `src/game/blocks.ts` (banner placeable only).
 DO NOT TOUCH:
-- `src/game/mesher.ts` (stud visual still claimed; LOD tiers are Muse's)
+- `src/game/mesher.ts`
 - `recompute()` and redstone ids 215–217
-- `sky()` / shadow camera
+- `sky()` / shadow camera / emissiveMap
 - `biomeOf`, `decorateOcean`, tomb, reef
 - EndCrystal **225**, `END_PILLARS`, `paintEndCrystals`, `crystalsLeft`, `popCrystal`
-- Clock/Map/Banner/Lead 221–224
+- `shiftStack`
 
 *Agents: append below. Keep it factual and short.*
 

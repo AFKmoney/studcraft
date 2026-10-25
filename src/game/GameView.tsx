@@ -279,7 +279,11 @@ function Hud({ game }: { game: GameApi }) {
       )}
       <div className="hotbar">
         {hud.hotbar.map((item, i) => (
-          <button key={i} className={i === hud.slot ? "slot on" : "slot"} onClick={() => game.setSlot(i)}>
+          <button
+            key={i}
+            className={i === hud.slot ? "slot on" : "slot"}
+            onClick={(e) => (e.shiftKey && item.id > 0 ? game.shiftStack(item.id) : game.setSlot(i))}
+          >
             <small>{i + 1}</small>
             {item.id > 0 && <ItemIcon id={item.id} />}
             {item.id > 0 && item.count >= 0 && <em>{item.count}</em>}
@@ -515,9 +519,12 @@ function Inventory({ game }: { game: GameApi }) {
               <button
                 key={id}
                 data-empty={empty}
-                onClick={() => {
-                  game.hold(id);
-                  game.assign(id);
+                onClick={(e) => {
+                  if (e.shiftKey) game.shiftStack(id);
+                  else {
+                    game.hold(id);
+                    game.assign(id);
+                  }
                 }}
               >
                 <ItemIcon id={id} />
@@ -559,11 +566,16 @@ function Inventory({ game }: { game: GameApi }) {
           </div>
         )}
         <p className="lede" style={{ marginTop: 12 }}>
-          Color press spends one spare brick. Cursor: {hud.cursor ? def(hud.cursor).name : "empty"}.
+          Shift-click a brick to move it between the bar and the bag. Color press spends one spare brick. Cursor: {hud.cursor ? def(hud.cursor).name : "empty"}.
         </p>
         <div className="colors">
           {COLORS.map((id) => (
-            <button key={id} style={{ background: def(id).color }} aria-label={def(id).name} onClick={() => game.press(id)} />
+            <button
+              key={id}
+              style={{ background: def(id).color }}
+              aria-label={def(id).name}
+              onClick={(e) => (e.shiftKey ? game.shiftStack(id) : game.press(id))}
+            />
           ))}
         </div>
         <button className="btn btn-primary" onClick={() => game.toggleInventory()}>
