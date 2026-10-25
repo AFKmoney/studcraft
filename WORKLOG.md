@@ -1150,3 +1150,43 @@ impact/effort:
   LEGO build reviewed so its structure reads at a glance.
 - NEXT (Muse): item 2 — iconic items (trident, crossbow, fireworks,
   name tags, frames/paintings).
+
+
+## v3.2 — 2026-10-25 (Battle order #2, item 2: iconic items + music)
+
+### Item 2 — iconic items (defs 282–287, append-only)
+- **Trident (282)** — gear, sword-class tier 4. Use = throw (`throwTrident()`): flat 9 dmg projectile, 0.9 s cooldown instead of consuming the weapon (per-def inventory counts durability, can't remove one unit — documented rule). 22 % drop from Drowned.
+- **Crossbow (283)** — gear, bow-class tier 4. `shootHeld` branch: power +2, bolt is `pierce: true` — flies through mobs, each mob hit once per bolt (`Shot.hitSet`). Pierce = code-verified only (no live two-mob alignment test yet).
+- **Firework (284)** — use = `launchFirework()`: rocket rises, spark trail, bursts at ~1.15 s (26 coloured + 8 white particles + explode sound). No elytra boost (no elytra in game — documented omission).
+- **NameTag (285)** — use on a mob: prompt for a name → `mob.name` + nameplate sprite above the mob; consumed in survival; **named mobs are exempt from far-despawn**. Session-only (names are not in the save format yet).
+- **Frame (286) + Painting (287)** — placeable flat panels: new `flat` flag on BlockDef, mesher draws a thin double-faced panel. Recipes for all six items (crossbow 3 sticks + 2 ingots + 2 string; firework Powder + Paper → 2; nametag Paper + String; frame 4 sticks + Pelt; painting 4 sticks + White).
+- QA56 live-verified: trident kill, name tag end-to-end (mob named "Bricky", plate visible), painting placed, crossbow bolt in flight.
+
+### v3.1 owed-verification campaign (Philippe's order: "fait ce qui est encore dû")
+Every enchantment effect shipped code-verified in v3.1 was exercised live in survival QA (seed 23, Playwright):
+- **Silk Touch ✅ live** — control: IronOre mined with plain iron pick → RawIron ×1, no ore. Silk I pick → the IronOre block itself ×1, RawIron 0. (breakBlock's whole drop block is creative-gated — survival setup required.)
+- **Smite V ✅ live** — walker (8 hp): control iron blade 2 swings, Smite V iron blade 1 swing.
+- **Looting III ✅ live** — 2 spider kills → String 0→3, then 3→4 (total 4 vs base rate 2; control rate proven separately at exactly 1/kill, pickups settle-polled). Two earlier zero results were test artifacts, not game bugs: (a) mob drops only spawn in survival, (b) the QA hook's old `give()` made 1-durability blades that snapped on the killing swing, zeroing the hotbar slot before `killMob` read the enchant.
+- **Depth Strider III ✅ live** — swim speed cap 2.38 → 3.94, exactly the design factors (4.33 × 0.55 → 4.33 × 0.91).
+- **Thorns III ✅ live** — full armour set, each piece Thorns III: walker died to reflected damage after contact (QA-spawned walkers park just outside the 1.35 bite radius — a scripted nudge into contact range was needed; reflection itself fired from the game's melee path).
+- **Frost Walker II ✅ live** — freezes a 3×3 of water one cell BELOW feet level (`by = floor(player.y) − 1`, needs air above the water): shore trench cell read Ice (94) immediately after pouring. Flat puddles at feet level do not freeze — that is the mechanic's geometry, not a bug.
+- **Infinity ✅ live** — survival, bow + exactly 1 arrow: two shots fired, arrow count still 1 after both.
+- **Mending — code-verified only** (branch read line-by-line: survival-only, held item +2 uses per 3 game-second tick). Two live attempts died to SwiftShader slow-motion boots before reaching the idle window; not observed live yet.
+- **Crossbow arrow-spend — code-verified** (same `spend(ID.Arrow, 1)` line Infinity bypasses, whose contrast was observed live; crossbow firing itself live-proven in QA56).
+
+### Bugs found by the campaign — fixed in this version
+1. **Armour-slot predicates (game bug, since v2.4)** — Feather Falling / Depth Strider / Frost Walker enchant checks tested `armorSlot === 3` (leggings) while their effects read `armor[3]` (boots = `armorSlot 4`). Feather Falling could never roll via normal enchanting. All three predicates → `armorSlot === 4`.
+2. **Firework + Trident dead against blocks (game bug)** — the use-item chain only ran in the no-target branch; aiming at a block routed to `tryPlace`, which only knew bows. `tryPlace` now also routes `throwTrident()` / `launchFirework()`. Live-proven after fix: firework launched aimed at the ground, 2 rockets observed.
+3. **QA hook `give()` (tooling, not a game bug)** — the test hook used `addInv` count semantics, handing out 1-use tools/armour; it now calls the game's own `give()` (full durability, armour auto-equips).
+4. **Music would have shipped silent (packaging bug, caught before release)** — both standalone/APK vite configs set `publicDir` to `public/icons-160` (icons only), so `public/music/` was never served by the dev server (SPA fallback returned index.html for every `.mp3`) and never copied into `dist-game/`/`dist-apk/`. Fix: new shared vite plugin `vite.musicAssets.ts` wired into both configs — dev middleware serves `public/music/` at `/music`, `closeBundle` copies it into the build output. Verified after fix: dev server returns the MP3 as `audio/mpeg`, byte-identical to the file on disk; icons still serve (no publicDir regression).
+
+### Music system (Philippe's Suno tracks)
+- 14 tracks in `public/music/`, renamed per Philippe's directive: `music-day-1..4.mp3`, `music-night-1..4.mp3`, `music-nether-1..2.mp3`, `music-boss-1..4.mp3` (day-4 arrived as .m4a, converted to MP3 192k; folder total 39 MB — the APK grows by that much).
+- **Music director** in game.ts: one `HTMLAudioElement` (volume 0.45), armed by the first pointer/key gesture (autoplay policy). Context each tick: boss (a dragon/wither is alive) > nether (realm 2) > night (`sin(worldTime·2π) < −0.12`) > day; the title screen plays day tracks. A playing track always finishes; when it ends, a **35–90 s silence gap** (Philippe asked for moments with NO music), then the next track of the *current* context, per-context rotation. `settings.sound` off pauses playback.
+- **Music QA (qa58 series + qa59)** — the director was live-observed in five SwiftShader runs: arms on the first gesture, context resolves `day`, and the initial 4 s silence gap counts down monotonically (best run 3.9 → 0.9) with zero page errors and zero audio-error resets. The harness renders the game at ~1/24 speed with `dt` capped at 0.05 s/frame, so no run's window survived to the flip itself — the flip branch is code-verified (gap ≤ 0 → next track of the current context → `play()`). The playback pipeline itself is hard-verified end-to-end (qa59): the exact `music-day-1.mp3` served by the dev server plays in Chromium — `play()` resolved, `paused=false`, readyState 4, duration 73.2 s, clock advancing. On a real device the initial gap is 4 real seconds.
+
+### Files
+`src/game/blocks.ts`, `src/game/recipes.ts`, `src/game/game.ts`, `src/game/mesher.ts`, `WORKLOG.md`, `apk/src/main/AndroidManifest.xml` (versionCode 23 / versionName 3.2), `public/music/*.mp3` (14 new), `vite.musicAssets.ts` (new), `vite.standalone.config.ts`, `vite.apk.config.ts`. APK + web zip rebuilt.
+
+### Next move (claimed by Muse)
+BO2-3: pillar mobs #2 (Shulker, Guardian, goat, axolotl, parrot, Husk, Stray) + the bestiary visual-coherence pass Philippe ordered 2026-10-25 08:52 (every animal must make structural/visual sense).

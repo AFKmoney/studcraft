@@ -281,6 +281,12 @@ export const ID = {
   SplashTar: 279,
   EnchBook: 280,
   Grindstone: 281,
+  Trident: 282,
+  Crossbow: 283,
+  Firework: 284,
+  NameTag: 285,
+  Frame: 286,
+  Painting: 287,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -331,6 +337,7 @@ export type BlockDef = {
   slab: boolean;
   stairs: boolean;
   sign: boolean;
+  flat: boolean;
   dir: number;
 };
 
@@ -388,6 +395,7 @@ function b(
     slab: false,
     stairs: false,
     sign: false,
+    flat: false,
     dir: 0,
     ...extra,
   };
@@ -778,6 +786,12 @@ item(ID.PotionTar, "Tar brew", "#4a3424");
 item(ID.SplashVenom, "Venom splash", "#3aaa4c");
 item(ID.SplashTar, "Tar splash", "#4a3424");
 item(ID.EnchBook, "Enchanted book", "#7a4ad4");
+item(ID.Firework, "Firework rocket", "#e85a4a");
+item(ID.NameTag, "Name tag", "#e8dcc0");
+gear(ID.Trident, "Trident", "#2a9a86", "sword", 4, 240);
+gear(ID.Crossbow, "Crossbow", "#8a6428", "bow", 4, 240);
+put(b(ID.Frame, "Item frame", "#a67c3a", "#c4924a", "#8a6428", "#6d4a22", { hard: 0.4, solid: false, flat: true }));
+put(b(ID.Painting, "Painting", "#e8b64a", "#7ab648", "#4a7ac0", "#8a5426", { hard: 0.4, solid: false, flat: true }));
 put(b(ID.Grindstone, "Grindstone", "#8e959c", "#a7aeb4", "#6d4426", "#4a2e1a", { hard: 1.5, tough: true, work: "anvil" }));
 item(ID.Copper, "Copper", "#e07a3d");
 item(ID.Bronze, "Bronze", "#cd7f32");
@@ -1245,6 +1259,12 @@ export const CATALOG = [
   ID.SplashTar,
   ID.EnchBook,
   ID.Grindstone,
+  ID.Trident,
+  ID.Crossbow,
+  ID.Firework,
+  ID.NameTag,
+  ID.Frame,
+  ID.Painting,
 ];
 
 export const COLORS = [ID.Red, ID.Orange, ID.Yellow, ID.Green, ID.Blue, ID.Azure, ID.Pink, ID.White, ID.Black];

@@ -179,6 +179,13 @@ declare global {
       getInv?: (id: number) => number;
       setOffhand?: (id: number) => boolean;
       api?: (name: string) => boolean;
+      getShots?: () => number;
+      getRockets?: () => number;
+      getMusic?: () => string;
+      getMobNames?: () => string[];
+      getArmor?: () => number[];
+      give?: (id: number, n: number) => boolean;
+      setInv?: (id: number, n: number) => boolean;
       mpConnect?: (url: string, room: string, name: string) => boolean;
       getMobs?: () => string[];
       getHamlet?: () => { x: number; y: number; z: number } | null;
@@ -366,9 +373,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     { key: "flame", name: "Flame", max: 1, for: (d) => d.tool === "bow" },
     { key: "punch", name: "Punch", max: 2, for: (d) => d.tool === "bow" },
     { key: "infinity", name: "Infinity", max: 1, for: (d) => d.tool === "bow" },
-    { key: "feather", name: "Feather Fall", max: 4, for: (d) => d.armorSlot === 3 },
-    { key: "depth", name: "Depth Strider", max: 3, for: (d) => d.armorSlot === 3 },
-    { key: "frost", name: "Frost Walker", max: 2, for: (d) => d.armorSlot === 3 },
+    { key: "feather", name: "Feather Fall", max: 4, for: (d) => d.armorSlot === 4 },
+    { key: "depth", name: "Depth Strider", max: 3, for: (d) => d.armorSlot === 4 },
+    { key: "frost", name: "Frost Walker", max: 2, for: (d) => d.armorSlot === 4 },
   ];
   // Mutually exclusive pairs, the Minecraft rule.
   const ENCH_CONFLICTS: Record<string, string> = { silk: "fortune", fortune: "silk", infinity: "mending", mending: "infinity", depth: "frost", frost: "depth" };
@@ -730,6 +737,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     burn?: number;
     burnAcc?: number;
     slowT?: number;
+    name?: string;
     mad?: boolean;
     tpT?: number;
     convT?: number;
@@ -910,8 +918,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     pow?: number;
     flame?: boolean;
     punch?: number;
+    trident?: boolean;
+    pierce?: boolean;
+    hitSet?: Set<Mob>;
     splash?: number;
   };
+  const rockets: { mesh: THREE.Mesh; t: number; color: string; trail: number }[] = [];
   const shots: Shot[] = [];
   type Drop = { id: number; n: number; x: number; y: number; z: number; vy: number; mesh: THREE.Mesh };
   const drops: Drop[] = [];
@@ -2240,7 +2252,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const sneaking = keys.has("ShiftLeft") || keys.has("ShiftRight");
     const held = hotbar[slot];
     const heldDef = def(held);
-    if (held === ID.Bow) return shootHeld();
+    if (held === ID.Bow || held === ID.Crossbow) return shootHeld();
+    if (held === ID.Trident) return throwTrident();
+    if (held === ID.Firework) return launchFirework();
     if (hit.id === ID.Soul && held === ID.WitherSkull && (creative || (inv[ID.WitherSkull] ?? 0) >= 3)) {
       if (!creative) spend(ID.WitherSkull, 3);
       spawnKind("wither", hit.x + 0.5, hit.z + 0.5);
@@ -2423,11 +2437,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
   }
 
-  function launchArrow(x: number, y: number, z: number, dx: number, dy: number, dz: number, friendly: boolean, pow = 0, flame = false, punch = 0) {
+  function launchArrow(x: number, y: number, z: number, dx: number, dy: number, dz: number, friendly: boolean, pow = 0, flame = false, punch = 0, pierce = false) {
     const len = Math.hypot(dx, dy, dz) || 1;
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.35), skin(0xf4f1ea));
     scene.add(mesh);
-    shots.push({ x, y, z, vx: (dx / len) * 18, vy: (dy / len) * 18, vz: (dz / len) * 18, life: 2.4, friendly, mesh, pow, flame, punch });
+    shots.push({ x, y, z, vx: (dx / len) * 18, vy: (dy / len) * 18, vz: (dz / len) * 18, life: 2.4, friendly, mesh, pow, flame, punch, pierce });
   }
 
   function launchFireball(x: number, y: number, z: number, dx: number, dy: number, dz: number) {
@@ -2582,7 +2596,36 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const dy = Math.sin(player.pitch);
     const dz = -Math.cos(player.yaw) * Math.cos(player.pitch);
     const bowId = hotbar[slot];
-    launchArrow(player.x, player.y + 1.4, player.z, dx, dy, dz, true, enchLvl(bowId, "power"), enchLvl(bowId, "flame") > 0, enchLvl(bowId, "punch"));
+    // A crossbow hits harder and its bolt punches through the first mob.
+    const cross = bowId === ID.Crossbow;
+    launchArrow(player.x, player.y + 1.4, player.z, dx, dy, dz, true, enchLvl(bowId, "power") + (cross ? 2 : 0), enchLvl(bowId, "flame") > 0, enchLvl(bowId, "punch"), cross);
+    audio.place();
+  }
+
+  let tridentCd = 0;
+  function throwTrident() {
+    if (tridentCd > 0) return;
+    tridentCd = 0.9;
+    wearHeld();
+    const dx = -Math.sin(player.yaw) * Math.cos(player.pitch);
+    const dy = Math.sin(player.pitch);
+    const dz = -Math.cos(player.yaw) * Math.cos(player.pitch);
+    const len = Math.hypot(dx, dy, dz) || 1;
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.8), skin(0x2a9a86));
+    scene.add(mesh);
+    shots.push({ x: player.x, y: player.y + 1.4, z: player.z, vx: (dx / len) * 17, vy: (dy / len) * 17, vz: (dz / len) * 17, life: 2.6, friendly: true, mesh, trident: true });
+    audio.place();
+  }
+
+  const FIREWORK_COLORS = ["#e85a4a", "#f5c518", "#3ec8c8", "#e85ad4", "#7ab648"];
+  function launchFirework() {
+    if (!creative && (inv[ID.Firework] ?? 0) <= 0) return say("No rockets");
+    if (!creative) spend(ID.Firework, 1);
+    const color = FIREWORK_COLORS[Math.floor(Math.random() * FIREWORK_COLORS.length)];
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.34, 0.14), skin(0xe85a4a));
+    mesh.position.set(player.x, player.y + 1.2, player.z);
+    scene.add(mesh);
+    rockets.push({ mesh, t: 0, color, trail: 0 });
     audio.place();
   }
 
@@ -3320,7 +3363,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
               dead = true;
               break;
             }
-            let hit = 4 + (strengthT > 0 ? 2 : 0) + (s.pow ?? 0);
+            if (s.pierce) {
+              s.hitSet ??= new Set();
+              if (s.hitSet.has(m)) continue;
+              s.hitSet.add(m);
+            }
+            let hit = s.trident ? 9 : 4 + (strengthT > 0 ? 2 : 0) + (s.pow ?? 0);
             if (m.kind === "dragon" && crystalsLeft() > 0) hit = Math.max(1, Math.ceil(hit * 0.5));
             m.hp -= hit;
             if (s.punch) {
@@ -3331,9 +3379,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
             if (m.kind === "enderman" || m.kind === "bee") m.mad = true;
             if (s.flame) m.burn = Math.max(m.burn ?? 0, 4);
             if (m.hp <= 0) killMob(m);
-            dead = true;
             audio.hit();
-            break;
+            if (!s.pierce) {
+              dead = true;
+              break;
+            }
           }
         }
       } else if (!dead && !s.friendly && Math.hypot(player.x - s.x, player.z - s.z) < 0.6 && Math.abs(player.y + 1 - s.y) < 1.2) {
@@ -3346,6 +3396,25 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       else shots[w++] = s;
     }
     shots.length = w;
+    // Firework rockets: climb, trail sparks, burst.
+    tridentCd = Math.max(0, tridentCd - dt);
+    for (let i = rockets.length - 1; i >= 0; i--) {
+      const r = rockets[i];
+      r.t += dt;
+      r.trail -= dt;
+      r.mesh.position.y += 10.5 * dt;
+      if (r.trail <= 0) {
+        r.trail = 0.07;
+        burst(r.mesh.position.x, r.mesh.position.y - 0.3, r.mesh.position.z, "#ffd76a", 1);
+      }
+      if (r.t >= 1.15) {
+        burst(r.mesh.position.x, r.mesh.position.y, r.mesh.position.z, r.color, 26);
+        burst(r.mesh.position.x, r.mesh.position.y, r.mesh.position.z, "#ffffff", 8);
+        audio.explode();
+        scene.remove(r.mesh);
+        rockets.splice(i, 1);
+      }
+    }
     w = 0;
     for (const d of drops) {
       d.vy -= 12 * dt;
@@ -3661,6 +3730,18 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
 
   function interactMob(mob: Mob) {
     const held = hotbar[slot];
+    if (held === ID.NameTag && mob.kind !== "boat" && mob.kind !== "cart") {
+      const name = (window.prompt("Name this brick friend", mob.name ?? "") ?? "").trim().slice(0, 20);
+      if (name) {
+        mob.name = name;
+        const plate = nameSprite(name);
+        plate.position.set(0, 2.25, 0);
+        mob.mesh.add(plate);
+        if (!creative) spend(ID.NameTag, 1);
+        say("Named " + name + " — it will stay");
+      }
+      return;
+    }
     if (mob.kind === "sheep" && held === ID.Shears && !(mob.sheared && mob.sheared > 0)) {
       dropItem(ID.White, 2, mob.x, mob.y + 0.5, mob.z);
       mob.sheared = 45;
@@ -3892,6 +3973,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (mob.kind === "wisp" && Math.random() < luck) extra.push(ID.Frost);
       if (mob.kind === "enderman" && Math.random() < luck) extra.push(ID.EnderPearl);
       if (mob.kind === "drowned" && Math.random() < luck) extra.push(ID.Copper);
+      if (mob.kind === "drowned" && Math.random() < 0.22) extra.push(ID.Trident);
       if (mob.kind === "squid" && Math.random() < luck) extra.push(ID.InkSac);
       if (mob.kind === "witch" && Math.random() < luck * 0.6) extra.push(ID.Bottle);
       if ((mob.kind === "creeper" || mob.kind === "ghast") && Math.random() < luck * 0.7) extra.push(ID.Cinder);
@@ -4272,7 +4354,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       }
       if (d > 44 && m.kind !== "dragon" && m.kind !== "wither" && m.kind !== "ghast") {
         const passive = m.kind === "sheep" || m.kind === "cow" || m.kind === "pig" || m.kind === "chicken" || m.kind === "fox" || m.kind === "crab" || m.kind === "frog" || m.kind === "cat" || m.kind === "bee" || m.kind === "squid" || m.kind === "bat";
-        if (d > 64 && passive && !m.tame && !m.lead && !(m.baby && m.baby > 0) && m.homeX === undefined) {
+        if (d > 64 && passive && !m.tame && !m.lead && !m.name && !(m.baby && m.baby > 0) && m.homeX === undefined) {
           m.dead = true;
           scene.remove(m.mesh);
           continue;
@@ -5101,12 +5183,14 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (heldId) {
         const held = def(heldId);
         hud.targetName = held.maxUse ? held.name + " · " + (inv[heldId] ?? 0) + " left" : held.name;
-        if (heldId === ID.Bow) hud.targetName += " · " + (inv[ID.Arrow] ?? 0) + " arrows";
+        if (heldId === ID.Bow || heldId === ID.Crossbow) hud.targetName += " · " + (inv[ID.Arrow] ?? 0) + " arrows";
         else if (held.food) hud.targetName += " · +" + held.food;
       }
       if (sample.first && sample.place && !prevPlace) {
         if (heldId === ID.Tome) castSpell();
-        else if (heldId === ID.Bow) shootHeld();
+        else if (heldId === ID.Bow || heldId === ID.Crossbow) shootHeld();
+        else if (heldId === ID.Trident) throwTrident();
+        else if (heldId === ID.Firework) launchFirework();
         else if (heldId === ID.Eye) hopRealm(2);
         else if (heldId === ID.PotionHeal || heldId === ID.PotionSpeed || heldId === ID.PotionStr || heldId === ID.Focus || heldId === ID.Milk || heldId === ID.Gapple || heldId === ID.PotionRegen || heldId === ID.PotionFire || heldId === ID.PotionLeap || heldId === ID.PotionGill || heldId === ID.PotionVeil || heldId === ID.PotionVenom || heldId === ID.PotionTar) drink(heldId);
         else if (heldId === ID.SplashVenom || heldId === ID.SplashTar) throwSplash(heldId);
@@ -5181,8 +5265,56 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
   }
 
+  // ---- Music director -------------------------------------------------
+  // Philippe's Suno loops, by context. Menu + day share the day list; the
+  // Nether and boss fights have their own. Tracks alternate with random
+  // silence gaps between them (35-90 s) - the game breathes. A playing
+  // track always finishes; the list is re-picked when the next one starts.
+  const MUSIC_LISTS: Record<string, string[]> = {
+    day: ["./music/music-day-1.mp3", "./music/music-day-2.mp3", "./music/music-day-3.mp3", "./music/music-day-4.mp3"],
+    night: ["./music/music-night-1.mp3", "./music/music-night-2.mp3", "./music/music-night-3.mp3", "./music/music-night-4.mp3"],
+    nether: ["./music/music-nether-1.mp3", "./music/music-nether-2.mp3"],
+    boss: ["./music/music-boss-1.mp3", "./music/music-boss-2.mp3", "./music/music-boss-3.mp3", "./music/music-boss-4.mp3"],
+  };
+  const musicEl = new Audio();
+  musicEl.volume = 0.45;
+  musicEl.preload = "auto";
+  let musicArmed = false; // browsers refuse audio before the first gesture
+  let musicGap = 4; // first track starts soon after the first tap
+  let musicCtx = "";
+  const musicIdx: Record<string, number> = { day: 0, night: 0, nether: 0, boss: 0 };
+  window.addEventListener("pointerdown", () => { musicArmed = true; }, { capture: true });
+  window.addEventListener("keydown", () => { musicArmed = true; }, { capture: true });
+  musicEl.addEventListener("ended", () => { musicGap = 35 + Math.random() * 55; });
+  musicEl.addEventListener("error", () => { musicGap = 20; });
+  function musicContext(): string {
+    if (phase === "play") {
+      if (mobs.some((m) => !m.dead && (m.kind === "dragon" || m.kind === "wither"))) return "boss";
+      if (realm === 2) return "nether";
+      return Math.sin(worldTime * Math.PI * 2) < -0.12 ? "night" : "day";
+    }
+    return "day"; // title screen runs the day list
+  }
+  function musicTick(dt: number) {
+    if (!settings.sound) {
+      if (!musicEl.paused) musicEl.pause();
+      return;
+    }
+    if (!musicEl.paused) return; // a track is playing: let it finish
+    if (!musicArmed) return;
+    musicCtx = musicContext();
+    musicGap -= dt;
+    if (musicGap > 0) return;
+    const list = MUSIC_LISTS[musicCtx];
+    const src = list[musicIdx[musicCtx] % list.length];
+    musicIdx[musicCtx]++;
+    musicEl.src = src;
+    musicEl.play().catch(() => { musicGap = 6; });
+  }
+
   function sky(dt: number) {
     worldTime = (worldTime + dt / 200) % 1;
+    musicTick(dt);
     const ang = worldTime * Math.PI * 2;
     const sunH = Math.sin(ang);
     const sunX = Math.cos(ang);
@@ -5815,6 +5947,19 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       const fn = (api as unknown as Record<string, unknown>)[name];
       if (typeof fn !== "function") return false;
       (fn as () => void)();
+      return true;
+    },
+    getShots: () => shots.length,
+    getRockets: () => rockets.length,
+    getMusic: () => musicCtx + "|" + (musicEl.paused ? "paused" : "playing") + "|" + (musicEl.src.split("/").pop() ?? "") + "|gap=" + musicGap.toFixed(1),
+    getMobNames: () => mobs.filter((m) => m.name).map((m) => m.name as string),
+    getArmor: () => [...armor],
+    give: (id: number, n: number) => {
+      give(id, n);
+      return true;
+    },
+    setInv: (id: number, n: number) => {
+      inv[id] = n;
       return true;
     },
     mpConnect: (url: string, room: string, name: string) => {

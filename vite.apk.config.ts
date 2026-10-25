@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { musicAssets } from "./vite.musicAssets";
 
 // APK build: one classic script + one stylesheet, no ES modules, so the
 // Android WebView can run it straight from file:///android_asset/ offline.
@@ -8,7 +9,7 @@ export default defineConfig({
   root: "standalone-apk",
   publicDir: "../public/icons-160",
   base: "./",
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), musicAssets()],
   build: {
     outDir: "../dist-apk",
     emptyOutDir: true,

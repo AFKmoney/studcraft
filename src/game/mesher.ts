@@ -164,7 +164,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
     if (!id) return 0;
     const block = def(id);
     // Slabs/stairs/signs never fully hide a neighbour's face or cast full AO.
-    return block.solid && !block.glass && !block.fluid && !block.slab && !block.stairs && !block.sign ? 1 : 0;
+    return block.solid && !block.glass && !block.fluid && !block.slab && !block.stairs && !block.sign && !block.flat ? 1 : 0;
   }
 
   function shadeAt(x: number, y: number, z: number, nx: number, ny: number, nz: number, vx: number, vy: number, vz: number) {
@@ -190,7 +190,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
         const id = world.get(x, y, z);
         if (id === 0) continue;
         const self = def(id);
-        if (self.torch || self.door || self.ladder || self.dust || self.lever || self.gate || self.plate || self.rail || self.cactus || self.slab || self.stairs || self.sign) {
+        if (self.torch || self.door || self.ladder || self.dust || self.lever || self.gate || self.plate || self.rail || self.cactus || self.slab || self.stairs || self.sign || self.flat) {
           const tile = faceTile(id, 1);
           const top = faceTile(id, 0);
           if (self.slab) {
@@ -206,6 +206,9 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
           } else if (self.sign) {
             addBox(opaque, x + 0.44, y, z + 0.44, x + 0.56, y + 0.55, z + 0.56, tile);
             addBox(opaque, x + 0.06, y + 0.5, z + 0.4, x + 0.94, y + 0.98, z + 0.54, tile);
+          } else if (self.flat) {
+            // A framed panel hung mid-cell: thin, double-faced, walk-through.
+            addBox(opaque, x + 0.07, y + 0.07, z + 0.44, x + 0.93, y + 0.93, z + 0.56, tile);
           } else if (self.torch) {
             addBox(opaque, x + 0.42, y, z + 0.42, x + 0.58, y + 0.55, z + 0.58, tile);
             addBox(opaque, x + 0.32, y + 0.52, z + 0.32, x + 0.68, y + 0.78, z + 0.68, top);
@@ -271,7 +274,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
             if (n.solid && !n.glass) continue;
           } else if (self.glass) {
             if (nid === id) continue;
-          } else if (n.solid && !n.glass && !n.slab && !n.stairs && !n.sign) {
+          } else if (n.solid && !n.glass && !n.slab && !n.stairs && !n.sign && !n.flat) {
             continue;
           }
 
