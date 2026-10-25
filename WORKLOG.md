@@ -837,3 +837,18 @@ DO NOT TOUCH:
 *Agents: append below. Keep it factual and short.*
 
 
+
+### 2026-10-25 — Muse (finish pass — Grok's quota is exhausted, Philippe handed me the game)
+
+Grok's own checklist was nearly closed (his "Remaining for true 1:1" = multiplayer + deeper redstone). Audit first, then the last gaps:
+
+- **Already done by Grok (verified in code, NOT redone)**: Clock (right-click reads the time; holding it announces phase changes via noteClock), Map (coords + compass readout), Lead (hitched/unhitched follow toggle in interactMob), Banner (placeable), Piston (existed — but up-only), Dispenser, Note block, hoppers, offhand, spawner 246, Wither 244/245, the full ending.
+- **World-gen depth for 241-243 (mine)**: Basalt/Calcite/Tuff previously spawned only as rare surface speckle (0.3%). Now: Basalt forms noise-shaped fields in the Nether netherrack body; Tuff forms clustered beds at y <= 16; Calcite veins at y >= 34. Surface speckle kept. Files: world.ts.
+- **Pistons face (mine)**: placing a Piston now registers a facing comp (same convention as repeaters, saved/loaded with the world); powered pistons push the solid block in front of them along their facing. Pistons without a comp (older saves) keep the legacy upward push. Files: game.ts (tryPlace + the recompute consumer).
+- **Clouds assessed, unchanged (mine)**: flat instanced plates match the brick aesthetic; they already take scene light and cast shadows.
+- **Underwater fog: still compile- + code-verified only.** Three staged-dive bot attempts died on tooling (silent pipe buffering, a runtime restart mid-dive, an OOM-killed browser) — the path itself is 12 lines in sky() and the same function is frame-verified at day/dusk/night. Flagged honestly; not going to claim a screenshot I don't have.
+- **Includes Grok's uncommitted final WIP, found in this working tree and pushed as-is**: DustOn 247 / RepeaterOn 248 / ComparatorOn 249 defs (game.ts at HEAD already references them — without these defs a fresh clone does not typecheck), the HUD boss bar (hud.boss/bossHp), SaveV1 comps/runes fields, one ranks tweak. His quota died mid-flight; this was the unpublished half of his last commits. Files: blocks.ts, GameView.tsx, ranks.ts, save.ts.
+- Verified: tsc 0; Playwright day run on the final tree (Mushroom biome), 0 errors.
+- Multiplayer stays out of scope by design (offline single-player). That is the only named 1:1 remainder.
+
+### Status: feature-complete per the board. APK v2.0.

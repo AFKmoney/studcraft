@@ -246,6 +246,9 @@ export const ID = {
   WitherSkull: 244,
   NetherStar: 245,
   Spawner: 246,
+  DustOn: 247,
+  RepeaterOn: 248,
+  ComparatorOn: 249,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -512,6 +515,16 @@ put(
     solid: false,
     hard: 0.05,
     dust: true,
+  }),
+);
+put(
+  b(ID.DustOn, "Lit red dust", "#ff6a3d", "#ffd23d", "#e23b2f", "#b02620", {
+    solid: false,
+    placeable: false,
+    hard: 0.05,
+    dust: true,
+    light: 0.45,
+    drop: ID.Dust,
   }),
 );
 put(
@@ -820,10 +833,30 @@ put(
   }),
 );
 put(
+  b(ID.RepeaterOn, "Lit repeater", "#f5c518", "#ff5a4a", "#6e645c", "#4a4038", {
+    solid: false,
+    placeable: false,
+    hard: 0.2,
+    dust: true,
+    light: 0.5,
+    drop: ID.Repeater,
+  }),
+);
+put(
   b(ID.Comparator, "Comparator", "#8e959c", "#e23b2f", "#4a4038", "#2a2218", {
     solid: false,
     hard: 0.2,
     dust: true,
+  }),
+);
+put(
+  b(ID.ComparatorOn, "Lit comparator", "#f5c518", "#ff5a4a", "#4a4038", "#2a2218", {
+    solid: false,
+    placeable: false,
+    hard: 0.2,
+    dust: true,
+    light: 0.5,
+    drop: ID.Comparator,
   }),
 );
 put(

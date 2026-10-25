@@ -200,6 +200,10 @@ export class World {
                 const pick = hash3(x, y, z, this.seed + 91) % 3;
                 id = pick === 0 ? ID.Basalt : pick === 1 ? ID.Calcite : ID.Tuff;
               }
+              // Deep tuff beds + high calcite veins ( clustered, noise-shaped ):
+              // the surface speckle above stays; these give 241-243 real homes.
+              if (id === ID.Stone && y <= 16 && this.noise.noise3(x * 0.09 + 31, y * 0.14, z * 0.09) > 0.64) id = ID.Tuff;
+              else if (id === ID.Stone && y >= 34 && this.noise.noise3(x * 0.08 + 57, y * 0.12, z * 0.08) > 0.68) id = ID.Calcite;
               else if (id === ID.Stone && y >= 4 && y <= 12 && hash3(x, y, z, this.seed + 78) > 0.9992) id = ID.ResinOre;
               else if (id === ID.Stone && y >= 6 && y <= 24 && hash3(x, y, z, this.seed + 81) > 0.9988) id = ID.CrystalOre;
             }
@@ -476,6 +480,8 @@ export class World {
             const o = hash3(x, y, z, this.seed + 90);
             if (y > 2 && o > 0.993) id = ID.ResinOre;
             else if (y > 2 && o > 0.986) id = ID.Gold;
+            // Basalt fields in the netherrack body (vanilla basalt deltas).
+            if (id === ID.Netherrack && y > 2 && this.noise.noise3(x * 0.06 + 93, y * 0.1, z * 0.06) > 0.6) id = ID.Basalt;
           } else if (y === floor) id = hash2(x, z, this.seed + 5) > 0.84 ? ID.Soul : ID.Netherrack;
           else if (y <= lava) id = ID.Lava;
           else if (y >= ceil) id = ID.Netherrack;

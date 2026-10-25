@@ -31,6 +31,8 @@ export type Hud = {
   oxygen: number;
   rain: boolean;
   weather: string;
+  boss: string;
+  bossHp: number;
   armor: number[];
   grid: number[];
   cursor: number;
@@ -198,6 +200,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     oxygen: 10,
     rain: false,
     weather: "clear",
+    boss: "",
+    bossHp: 0,
     armor: [0, 0, 0, 0],
     grid: [0, 0, 0, 0, 0, 0, 0, 0, 0],
     cursor: 0,
@@ -298,6 +302,21 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   const furnaces = new Map<string, Furn>();
   const chests = new Map<string, { ids: number[]; ns: number[] }>();
   const pistonHot = new Set<string>();
+  const noteHot = new Set<string>();
+  const dispenserHot = new Set<string>();
+  // Redstone state: stored signal level (0-15) per component cell, facing +
+  // delay for repeaters/comparators, and each repeater's latched output.
+  const power = new Map<string, number>();
+  const comps = new Map<string, { dir: number; delay: number }>();
+  const repOut = new Map<string, boolean>();
+  const repTimer = new Map<string, number>();
+  let rsAcc = 0;
+  const RS_DIRS: ReadonlyArray<readonly [number, number]> = [
+    [0, -1],
+    [1, 0],
+    [0, 1],
+    [-1, 0],
+  ];
   let slot = 0;
   let hotbar: number[] = [...CREATIVE_BAR];
   let offhand = 0;
@@ -655,6 +674,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     roam?: boolean;
     size?: number;
     charged?: boolean;
+    path?: { x: number; z: number }[] | null;
+    pathI?: number;
+    pathT?: number;
+    mode?: string;
+    modeT?: number;
+    bossT?: number;
+    maxHp?: number;
   };
   const mobs: Mob[] = [];
 
@@ -765,6 +791,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let fishT = -1;
   let spawnerAcc = 0;
   let dragonUp = false;
+  let cityGuarded = false;
   let won = false;
   let mount: Mob | null = null;
   let returnSpot = { x: 0, y: 80, z: 0 };
@@ -781,6 +808,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     life: number;
     friendly: boolean;
     mesh: THREE.Mesh;
+    fire?: boolean;
   };
   const shots: Shot[] = [];
   type Drop = { id: number; n: number; x: number; y: number; z: number; vy: number; mesh: THREE.Mesh };
@@ -848,6 +876,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const dzs = spawnPoint.z - player.z;
     hud.compass = Math.atan2(-dxs, -dzs);
     hud.realm = realm === 1 ? "Nether" : realm === 2 ? "End" : "Overworld";
+    const wyrm = mobs.find((m) => m.kind === "dragon" && !m.dead);
+    hud.boss = wyrm ? "End Wyrm" : "";
+    hud.bossHp = wyrm ? Math.max(0, Math.min(1, wyrm.hp / (wyrm.maxHp ?? wyrm.hp))) : 0;
     hud.effect = [speedT > 0 ? "Dash" : "", strengthT > 0 ? "Might" : "", fireT > 0 ? "Fire" : "", sharp ? "Rune" : ""]
       .filter(Boolean)
       .join(" ");
@@ -1013,6 +1044,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     panel = "bag";
     furnaces.clear();
     chests.clear();
+    comps.clear();
+    power.clear();
+    repOut.clear();
+    repTimer.clear();
     pistonHot.clear();
     quests = QUESTS.map((q) => ({ id: q.id, n: 0, done: false }));
     traderRole = "grocer";
@@ -1034,6 +1069,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     realm = 0;
     realmsReady = false;
     dragonUp = false;
+    cityGuarded = false;
     won = false;
     fuses.length = 0;
   }
@@ -1127,8 +1163,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     armor[3] = data.armor?.[3] ?? 0;
     furnaces.clear();
     chests.clear();
+    comps.clear();
+    power.clear();
+    repOut.clear();
+    repTimer.clear();
     for (const f of data.furnaces ?? []) furnaces.set(f.x + "," + f.y + "," + f.z, { ...f });
     for (const c of data.chests ?? []) chests.set(c.x + "," + c.y + "," + c.z, { ids: c.ids.slice(), ns: c.ns.slice() });
+    for (const c of data.comps ?? []) comps.set(c.x + "," + c.y + "," + c.z, { dir: c.dir, delay: c.delay });
     hotbar = data.hotbar?.length === 9 ? [...data.hotbar] : [...CREATIVE_BAR];
     for (const k of Object.keys(inv)) delete inv[Number(k)];
     for (const [id, n] of data.inv ?? []) inv[id] = n;
@@ -1452,6 +1493,14 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (id === ID.Air || id === ID.Bedrock || block.hard === Infinity) return;
     world.set(x, y, z, ID.Air);
     markDirtyAt(x, z);
+    if (isComponent(id)) {
+      const k = rsKey(x, y, z);
+      comps.delete(k);
+      repOut.delete(k);
+      repTimer.delete(k);
+      power.delete(k);
+      recompute(x, y, z);
+    } else if (isComponent(world.get(x, y + 1, z))) recompute(x, y, z);
     if (!creative) {
       const held = def(hotbar[slot]);
       const tier = held.tool === "pick" ? held.tier : 0;
@@ -1646,73 +1695,250 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     emit();
   }
 
-  function recompute(x: number, y: number, z: number) {
-    const R = 8;
-    const powered = new Set<string>();
-    const q: { x: number; y: number; z: number; d: number }[] = [];
+  // ── Redstone engine ──────────────────────────────────────────────
+  // Signal levels are STORED per cell (0-15) and solved to a fixpoint
+  // over the neighbourhood of the edit. Dust loses 1 level per step,
+  // repeaters refresh to 15 after their delay (1-4 ticks, set by
+  // right-click), comparators pass their back input when it beats the
+  // sides, and red torches are inverters: on unless the block under
+  // them is powered.
+  function rsKey(x: number, y: number, z: number) {
+    return x + "," + y + "," + z;
+  }
+
+  function isComponent(id: number) {
+    return (
+      id === ID.Dust || id === ID.DustOn ||
+      id === ID.Lever || id === ID.LeverOn ||
+      id === ID.Plate || id === ID.PlateOn ||
+      id === ID.RedTorch || id === ID.RedTorchOn ||
+      id === ID.Repeater || id === ID.RepeaterOn ||
+      id === ID.Comparator || id === ID.ComparatorOn ||
+      id === ID.Lamp || id === ID.LampOn ||
+      id === ID.Piston || id === ID.Note || id === ID.Dispenser
+    );
+  }
+
+  function isDirectional(id: number) {
+    return id === ID.Repeater || id === ID.RepeaterOn || id === ID.Comparator || id === ID.ComparatorOn;
+  }
+
+  // What cell (fx,fy,fz) emits toward the adjacent cell (tx,ty,tz),
+  // reading levels from `levels` (the stored map or a working copy).
+  function emittedToward(fx: number, fy: number, fz: number, tx: number, ty: number, tz: number, levels: Map<string, number>) {
+    const id = world.get(fx, fy, fz);
+    if (id === ID.RedTorchOn) {
+      // A torch never powers the block it stands on (its support).
+      if (tx === fx && tz === fz && ty === fy - 1) return 0;
+      return 15;
+    }
+    if (id === ID.LeverOn || id === ID.PlateOn) return 15;
+    if (id === ID.Dust || id === ID.DustOn) return levels.get(rsKey(fx, fy, fz)) ?? 0;
+    if (id === ID.Repeater || id === ID.RepeaterOn) {
+      const c = comps.get(rsKey(fx, fy, fz));
+      if (!c) return 0;
+      const d = RS_DIRS[c.dir];
+      if (fx + d[0] === tx && fz + d[1] === tz && fy === ty) return repOut.get(rsKey(fx, fy, fz)) ? 15 : 0;
+      return 0;
+    }
+    if (id === ID.Comparator || id === ID.ComparatorOn) {
+      const c = comps.get(rsKey(fx, fy, fz));
+      if (!c) return 0;
+      const d = RS_DIRS[c.dir];
+      if (fx + d[0] === tx && fz + d[1] === tz && fy === ty) return levels.get(rsKey(fx, fy, fz)) ?? 0;
+      return 0;
+    }
+    return 0;
+  }
+
+  function inputAt(x: number, y: number, z: number, levels: Map<string, number>) {
+    let best = 0;
+    for (const [ox, oy, oz] of NEIGHBORS) {
+      const v = emittedToward(x + ox, y + oy, z + oz, x, y, z, levels);
+      if (v > best) best = v;
+    }
+    return best;
+  }
+
+  function recompute(cx: number, cy: number, cz: number) {
+    const R = 17;
+    type Cell = { x: number; y: number; z: number; id: number };
+    const cells: Cell[] = [];
     for (let dy = -R; dy <= R; dy++) {
       for (let dz = -R; dz <= R; dz++) {
         for (let dx = -R; dx <= R; dx++) {
-          const bx = x + dx;
-          const by = y + dy;
-          const bz = z + dz;
-          if (by < 1 || by >= HEIGHT - 1) continue;
-          if (world.get(bx, by, bz) !== ID.LeverOn && world.get(bx, by, bz) !== ID.PlateOn) continue;
-          for (const [ox, oy, oz] of NEIGHBORS) q.push({ x: bx + ox, y: by + oy, z: bz + oz, d: 1 });
-        }
-      }
-    }
-    while (q.length) {
-      const cur = q.pop();
-      if (!cur || cur.d > 15) continue;
-      const key = cur.x + "," + cur.y + "," + cur.z;
-      if (powered.has(key)) continue;
-      if (world.get(cur.x, cur.y, cur.z) !== ID.Dust) continue;
-      powered.add(key);
-      const lvl = Math.max(0, 15 - cur.d);
-      if (lvl > 0) for (const [ox, oy, oz] of NEIGHBORS) q.push({ x: cur.x + ox, y: cur.y + oy, z: cur.z + oz, d: cur.d + 1 });
-    }
-    const near = (bx: number, by: number, bz: number) => {
-      for (const [ox, oy, oz] of NEIGHBORS) {
-        const id = world.get(bx + ox, by + oy, bz + oz);
-        if (id === ID.LeverOn || id === ID.PlateOn) return true;
-        if (powered.has(bx + ox + "," + (by + oy) + "," + (bz + oz))) return true;
-      }
-      return false;
-    };
-    for (let dy = -R; dy <= R; dy++) {
-      for (let dz = -R; dz <= R; dz++) {
-        for (let dx = -R; dx <= R; dx++) {
-          const bx = x + dx;
-          const by = y + dy;
-          const bz = z + dz;
+          const bx = cx + dx;
+          const by = cy + dy;
+          const bz = cz + dz;
           if (by < 1 || by >= HEIGHT - 1) continue;
           const id = world.get(bx, by, bz);
-          if (id === ID.Lamp || id === ID.LampOn) {
-            const next = near(bx, by, bz) ? ID.LampOn : ID.Lamp;
-            if (next !== id && world.set(bx, by, bz, next)) markDirtyAt(bx, bz);
-          }
-          if (id === ID.Piston) {
-            const key = bx + "," + by + "," + bz;
-            const on = near(bx, by, bz);
-            if (on && !pistonHot.has(key)) {
-              pistonHot.add(key);
-              const above = world.get(bx, by + 1, bz);
-              const above2 = world.get(bx, by + 2, bz);
-              if (above > 0 && above !== ID.Bedrock && above !== ID.Piston && def(above).solid && above2 === ID.Air) {
-                world.set(bx, by + 1, bz, ID.Air);
-                world.set(bx, by + 2, bz, above);
-                markDirtyAt(bx, bz);
-              }
-            }
-            if (!on) pistonHot.delete(key);
+          if (isComponent(id)) cells.push({ x: bx, y: by, z: bz, id });
+        }
+      }
+    }
+    // Prune stored levels for cells in range that are gone.
+    for (const k of [...power.keys()]) {
+      const [px, py, pz] = k.split(",").map(Number);
+      if (Math.abs(px - cx) <= R && Math.abs(py - cy) <= R && Math.abs(pz - cz) <= R && !cells.some((c) => c.x === px && c.y === py && c.z === pz)) power.delete(k);
+    }
+    if (!cells.length) return;
+    const levels = new Map<string, number>();
+    for (const c of cells) levels.set(rsKey(c.x, c.y, c.z), power.get(rsKey(c.x, c.y, c.z)) ?? 0);
+    // Solve to a fixpoint.
+    for (let pass = 0; pass < 14; pass++) {
+      let changed = false;
+      for (const c of cells) {
+        const k = rsKey(c.x, c.y, c.z);
+        let next = 0;
+        if (c.id === ID.LeverOn || c.id === ID.PlateOn) next = 15;
+        else if (c.id === ID.Lever || c.id === ID.Plate) next = 0;
+        else if (c.id === ID.RedTorch || c.id === ID.RedTorchOn) {
+          // Inverter: lit unless its support block is powered.
+          next = inputAt(c.x, c.y - 1, c.z, levels) > 0 ? 0 : 15;
+        } else if (c.id === ID.Dust || c.id === ID.DustOn) {
+          next = Math.max(0, inputAt(c.x, c.y, c.z, levels) - 1);
+        } else if (c.id === ID.Repeater || c.id === ID.RepeaterOn) {
+          next = repOut.get(k) ? 15 : 0;
+        } else if (c.id === ID.Comparator || c.id === ID.ComparatorOn) {
+          const comp = comps.get(k);
+          if (comp) {
+            const d = RS_DIRS[comp.dir];
+            const back = emittedToward(c.x - d[0], c.y, c.z - d[1], c.x, c.y, c.z, levels);
+            const sideA = emittedToward(c.x + d[1], c.y, c.z + d[0], c.x, c.y, c.z, levels);
+            const sideB = emittedToward(c.x - d[1], c.y, c.z - d[0], c.x, c.y, c.z, levels);
+            next = back > 0 && back >= Math.max(sideA, sideB) ? back : 0;
           }
         }
+        if ((levels.get(k) ?? 0) !== next) {
+          levels.set(k, next);
+          changed = true;
+        }
+      }
+      if (!changed) break;
+    }
+    // Commit stored levels + reflect state into block variants.
+    for (const c of cells) {
+      const k = rsKey(c.x, c.y, c.z);
+      const lvl = levels.get(k) ?? 0;
+      power.set(k, lvl);
+      let want = 0;
+      if ((c.id === ID.Dust || c.id === ID.DustOn)) want = lvl > 0 ? ID.DustOn : ID.Dust;
+      else if ((c.id === ID.RedTorch || c.id === ID.RedTorchOn)) want = lvl > 0 ? ID.RedTorchOn : ID.RedTorch;
+      else if ((c.id === ID.Repeater || c.id === ID.RepeaterOn)) want = repOut.get(k) ? ID.RepeaterOn : ID.Repeater;
+      else if ((c.id === ID.Comparator || c.id === ID.ComparatorOn)) want = lvl > 0 ? ID.ComparatorOn : ID.Comparator;
+      if (want && want !== c.id && world.set(c.x, c.y, c.z, want)) {
+        markDirtyAt(c.x, c.z);
+        c.id = want;
+      }
+    }
+    // Consumers.
+    for (const c of cells) {
+      const k = rsKey(c.x, c.y, c.z);
+      if (c.id === ID.Lamp || c.id === ID.LampOn) {
+        const next = inputAt(c.x, c.y, c.z, levels) > 0 ? ID.LampOn : ID.Lamp;
+        if (next !== c.id && world.set(c.x, c.y, c.z, next)) markDirtyAt(c.x, c.z);
+      } else if (c.id === ID.Piston) {
+        const on = inputAt(c.x, c.y, c.z, levels) > 0;
+        if (on && !pistonHot.has(k)) {
+          pistonHot.add(k);
+          // Pistons placed with a facing comp push along their facing (the
+          // repeater convention); older pistons without a comp keep the
+          // original upward push.
+          const comp = comps.get(k);
+          const d = comp ? RS_DIRS[comp.dir] : null;
+          const tx = d ? c.x + d[0] : c.x;
+          const ty = d ? c.y : c.y + 1;
+          const tz = d ? c.z + d[1] : c.z;
+          const bx = d ? tx + d[0] : c.x;
+          const by = d ? ty : c.y + 2;
+          const bz = d ? tz + d[1] : c.z;
+          const front = world.get(tx, ty, tz);
+          const beyond = world.get(bx, by, bz);
+          if (front > 0 && front !== ID.Bedrock && front !== ID.Piston && def(front).solid && beyond === ID.Air) {
+            world.set(tx, ty, tz, ID.Air);
+            world.set(bx, by, bz, front);
+            markDirtyAt(c.x, c.z);
+            if (bx !== c.x || bz !== c.z) markDirtyAt(bx, bz);
+          }
+        }
+        if (!on) pistonHot.delete(k);
+      } else if (c.id === ID.Note) {
+        const lvl = inputAt(c.x, c.y, c.z, levels);
+        if (lvl > 0 && !noteHot.has(k)) {
+          noteHot.add(k);
+          audio.note(lvl);
+        }
+        if (lvl === 0) noteHot.delete(k);
+      } else if (c.id === ID.Dispenser) {
+        const on = inputAt(c.x, c.y, c.z, levels) > 0;
+        if (on && !dispenserHot.has(k)) {
+          dispenserHot.add(k);
+          // Fire away from the strongest input side.
+          let bx = 0;
+          let bz = 0;
+          let best = 0;
+          for (const [ox, oy, oz] of NEIGHBORS) {
+            if (oy !== 0) continue;
+            const v = emittedToward(c.x + ox, c.y, c.z + oz, c.x, c.y, c.z, levels);
+            if (v > best) {
+              best = v;
+              bx = -ox;
+              bz = -oz;
+            }
+          }
+          if (bx || bz) launchArrow(c.x + 0.5, c.y + 0.6, c.z + 0.5, bx, 0.12, bz, false);
+        }
+        if (!on) dispenserHot.delete(k);
       }
     }
   }
 
+  // One redstone tick = 0.1 s. Repeaters sample their back input and
+  // flip their latched output after their configured delay.
+  function tickRedstone(dt: number) {
+    rsAcc += dt;
+    while (rsAcc >= 0.1) {
+      rsAcc -= 0.1;
+      for (const [k, comp] of [...comps.entries()]) {
+        const [x, y, z] = k.split(",").map(Number);
+        const id = world.get(x, y, z);
+        if (id !== ID.Repeater && id !== ID.RepeaterOn) continue;
+        if (Math.hypot(x - player.x, z - player.z) > 48) continue;
+        const d = RS_DIRS[comp.dir];
+        const want = emittedToward(x - d[0], y, z - d[1], x, y, z, power) > 0;
+        const cur = repOut.get(k) ?? false;
+        if (want === cur) {
+          repTimer.delete(k);
+          continue;
+        }
+        const left = (repTimer.get(k) ?? comp.delay) - 1;
+        if (left <= 0) {
+          repOut.set(k, want);
+          repTimer.delete(k);
+          recompute(x, y, z);
+        } else repTimer.set(k, left);
+      }
+    }
+  }
+
+  function facingDir() {
+    const fx = -Math.sin(player.yaw);
+    const fz = -Math.cos(player.yaw);
+    if (Math.abs(fx) > Math.abs(fz)) return fx > 0 ? 1 : 3;
+    return fz > 0 ? 2 : 0;
+  }
+
   function useBlock(hit: { id: number; x: number; y: number; z: number }) {
+    if (hit.id === ID.Repeater || hit.id === ID.RepeaterOn) {
+      const k = rsKey(hit.x, hit.y, hit.z);
+      const comp = comps.get(k) ?? { dir: facingDir(), delay: 1 };
+      comp.delay = (comp.delay % 4) + 1;
+      comps.set(k, comp);
+      say("Repeater delay " + comp.delay);
+      audio.place();
+      saveDirty = true;
+      return true;
+    }
     if (hit.id === ID.Lamp) {
       say("Ding");
       audio.note(12);
@@ -1943,10 +2169,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       say("Can't snap a brick into yourself");
       return;
     }
-    if (!world.set(px, py, pz, held)) return;
+    const placeId = held === ID.RedTorch ? ID.RedTorchOn : held;
+    if (!world.set(px, py, pz, placeId)) return;
     markDirtyAt(px, pz);
     if (!creative) spend(held, 1);
-    if (held === ID.Dust || held === ID.Lever || held === ID.Lamp || held === ID.Piston) recompute(px, py, pz);
+    if (placeId === ID.Repeater || placeId === ID.Comparator || placeId === ID.Piston) comps.set(rsKey(px, py, pz), { dir: facingDir(), delay: 1 });
+    if (isComponent(placeId) || isComponent(world.get(px, py + 1, pz))) recompute(px, py, pz);
     if (held === ID.Torch) bumpQuest("place", "torch");
     burst(px + 0.5, py + 0.8, pz + 0.5, heldDef.color, 6);
     audio.place();
@@ -1985,6 +2213,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.35), skin(0xf4f1ea));
     scene.add(mesh);
     shots.push({ x, y, z, vx: (dx / len) * 18, vy: (dy / len) * 18, vz: (dz / len) * 18, life: 2.4, friendly, mesh });
+  }
+
+  function launchFireball(x: number, y: number, z: number, dx: number, dy: number, dz: number) {
+    const len = Math.hypot(dx, dy, dz) || 1;
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.36, 0.36), skin(0xff7a2a));
+    scene.add(mesh);
+    shots.push({ x, y, z, vx: (dx / len) * 11, vy: (dy / len) * 11, vz: (dz / len) * 11, life: 3.6, friendly: false, mesh, fire: true });
   }
 
   function shootHeld() {
@@ -2134,13 +2369,107 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       world.set(fx + ox, fy, fz + oz, ID.EndFrame);
       world.set(fx + ox, fy - 1, fz + oz, ID.Obsidian);
     }
-    // pillars in the End — crystals sit on the columns
-    // painted after the air carve so the columns are not eaten
-    fill(-520, 48, -520, -488, 48, -488, ID.EndStone);
-    fill(-518, 49, -518, -490, 56, -490, ID.Air);
+    // ── The End: a floating island with real terrain, not a slab ──
+    // Domed pale island (flat arena in the middle for the pillars and
+    // the gate), a causeway west to a platform holding an End city:
+    // two hollow towers with ladders, loot chests and lantern light.
+    const ECX = -504;
+    const ECZ = -504;
+    const ehash = (x: number, z: number) => {
+      const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453;
+      return s - Math.floor(s);
+    };
+    const endTop = (x: number, z: number) => {
+      const dx = x - ECX;
+      const dz = z - ECZ;
+      const r = Math.hypot(dx, dz);
+      const wob = Math.sin(x * 0.35) * Math.cos(z * 0.33) * 1.7 * Math.min(1, Math.max(0, (r - 14) / 10));
+      const rr = r + wob;
+      if (Math.abs(dz) <= 3 && dx <= 0) return { h: 48, rr }; // west causeway, flush with the gate plateau
+      if (rr < 15) return { h: 48, rr };
+      let h = 48 + Math.round(2.2 * Math.sin(x * 0.16 + 1.7) * Math.cos(z * 0.14 + 0.4));
+      if (rr > 33) h -= Math.round((rr - 33) * 0.55);
+      return { h, rr };
+    };
+    for (let x = ECX - 46; x <= ECX + 46; x++) {
+      for (let z = ECZ - 46; z <= ECZ + 46; z++) {
+        const { h, rr } = endTop(x, z);
+        if (rr > 42) continue;
+        let bottom = h;
+        for (let y = h; y >= 34; y--) {
+          if (rr + (h - y) * 1.9 >= 42.5) break;
+          world.set(x, y, z, ID.EndStone);
+          bottom = y;
+        }
+        for (let y = h + 1; y <= 68; y++) if (world.get(x, y, z) !== ID.Air) world.set(x, y, z, ID.Air);
+        for (let y = 10; y < bottom; y++) if (world.get(x, y, z) !== ID.Air) world.set(x, y, z, ID.Air);
+        // void blooms: pale stalks with dark crystal-cluster heads
+        if (rr > 16 && rr < 37 && Math.abs(z - ECZ) > 5) {
+          const gx = Math.floor(x / 7);
+          const gz = Math.floor(z / 7);
+          if (x === gx * 7 + 3 && z === gz * 7 + 3 && ehash(gx, gz) > 0.45) {
+            const tall = 3 + Math.floor(ehash(z, x) * 3);
+            for (let y = h + 1; y <= h + tall; y++) world.set(x, y, z, ID.EndStone);
+            world.set(x, h + tall + 1, z, ID.EndFrame);
+            world.set(x + 1, h + tall, z, ID.EndFrame);
+            world.set(x, h + tall, z + 1, ID.EndFrame);
+          }
+        }
+        if (rr < 30 && ehash(x * 3 + 1, z * 5 + 2) > 0.996) world.set(x, h, z, ID.PrismOre);
+      }
+    }
+    // City platform west, joined by the causeway bridge.
+    fill(-568, 45, -518, -546, 48, -490, ID.EndStone);
+    fill(-568, 49, -518, -546, 64, -490, ID.Air);
+    for (let y = 10; y < 45; y++) for (let z = -518; z <= -490; z++) for (let x = -568; x <= -546; x++) if (world.get(x, y, z) !== ID.Air) world.set(x, y, z, ID.Air);
+    fill(-546, 48, -506, -543, 48, -502, ID.EndStone);
+    fill(-546, 49, -506, -543, 52, -502, ID.Air);
+    // Towers: hollow, floored, ladder shafts, a chest at the top.
+    const tower = (x0: number, z0: number, w: number, top: number, floors: number[]) => {
+      const x1 = x0 + w - 1;
+      const z1 = z0 + w - 1;
+      for (let y = 49; y <= top; y++) {
+        for (let x = x0; x <= x1; x++) {
+          for (let z = z0; z <= z1; z++) {
+            const edge = x === x0 || x === x1 || z === z0 || z === z1;
+            const corner = (x === x0 || x === x1) && (z === z0 || z === z1);
+            if (floors.includes(y)) {
+              if (y === top && x === x0 + 1 && z === z0 + 1) continue; // roof hatch over the ladder shaft
+              world.set(x, y, z, ID.EndStone);
+              continue;
+            }
+            if (!edge) continue;
+            if (corner) world.set(x, y, z, ID.EndFrame);
+            else if (y % 6 === 2 && (x === Math.floor((x0 + x1) / 2) || z === Math.floor((z0 + z1) / 2))) world.set(x, y, z, ID.Air);
+            else world.set(x, y, z, ID.EndStone);
+          }
+        }
+      }
+      world.set(x1, 49, Math.floor((z0 + z1) / 2), ID.Air);
+      world.set(x1, 50, Math.floor((z0 + z1) / 2), ID.Air);
+      for (let y = 49; y < top; y++) world.set(x0 + 1, y, z0 + 1, ID.Ladder);
+      world.set(x0 + 2, top, z0 + 2, ID.Lantern);
+    };
+    tower(-566, -512, 9, 64, [54, 59, 64]);
+    tower(-556, -498, 7, 58, [53, 58]);
+    // City loot — filled once; a looted chest stays looted.
+    const cityLoot = (x: number, y: number, z: number, loot: [number, number][]) => {
+      world.set(x, y, z, ID.Chest);
+      const key = x + "," + y + "," + z;
+      if (!chests.has(key)) {
+        const bin = ensureChest(key);
+        loot.forEach(([id, n], i) => {
+          bin.ids[i] = id;
+          bin.ns[i] = n;
+        });
+      }
+    };
+    cityLoot(-562, 65, -508, [[ID.Diamond, 3], [ID.Prism, 2], [ID.PotionHeal, 2], [ID.Totem, 1], [ID.Scrap, 3]]);
+    cityLoot(-553, 59, -495, [[ID.Gapple, 2], [ID.Scrap, 4], [ID.Blaze, 2], [ID.Arrow, 12]]);
     world.set(-504, 49, -504, ID.Portal);
     world.set(-504, 50, -504, ID.Portal);
     for (let i = 0; i < 6; i++) world.set(-516 + i * 3, 49, -506, ID.PrismOre);
+    // pillars last — crystals sit on the columns, never eaten by carves
     paintEndCrystals((x, y, z, id) => world.set(x, y, z, id));
     // End city towers
     for (const [tx, tz] of [[-530, -530], [-470, -530], [-500, -470]]) {
@@ -2156,8 +2485,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     for (let cz = Math.floor(468 / CS); cz <= Math.floor(508 / CS); cz++) {
       for (let cx = Math.floor(468 / CS); cx <= Math.floor(508 / CS); cx++) dirty.add(cx + "," + cz);
     }
-    for (let cz = Math.floor(-520 / CS); cz <= Math.floor(-488 / CS); cz++) {
-      for (let cx = Math.floor(-520 / CS); cx <= Math.floor(-488 / CS); cx++) dirty.add(cx + "," + cz);
+    for (let cz = Math.floor(-552 / CS); cz <= Math.floor(-456 / CS); cz++) {
+      for (let cx = Math.floor(-572 / CS); cx <= Math.floor(-456 / CS); cx++) dirty.add(cx + "," + cz);
     }
   }
 
@@ -2211,6 +2540,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (!dragonUp && !won) {
         dragonUp = true;
         spawnKind("dragon", -504, -508);
+      }
+      if (!cityGuarded) {
+        cityGuarded = true;
+        spawnKind("skelly", -556, -500);
+        spawnKind("skelly", -560, -516);
+        spawnKind("skelly", -548, -504);
       }
     }
     player.vx = player.vy = player.vz = 0;
@@ -2453,7 +2788,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           }
         }
       } else if (!dead && !s.friendly && Math.hypot(player.x - s.x, player.z - s.z) < 0.6 && Math.abs(player.y + 1 - s.y) < 1.2) {
-        bite(3);
+        bite(s.fire ? 6 : 3);
+        if (s.fire) fireT = Math.max(fireT, 3);
         dead = true;
       }
       if (dead) scene.remove(s.mesh);
@@ -2716,7 +3052,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       yaw: Math.random() * Math.PI * 2,
       hp:
         kind === "dragon"
-          ? 12 + crystalsLeft() * 8
+          ? 140 + crystalsLeft() * 15
           : kind === "golem"
             ? 24
             : kind === "ghast"
@@ -2751,6 +3087,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       tame: false,
       size: kind === "slime" ? scale : 1,
     };
+    if (kind === "dragon") {
+      mob.maxHp = mob.hp;
+      mob.mode = "circle";
+      mob.modeT = 4;
+    }
     scene.add(body.group);
     mobs.push(mob);
     return mob;
@@ -2897,6 +3238,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   function killMob(mob: Mob) {
     mob.dead = true;
     scene.remove(mob.mesh);
+    if (mob.kind === "dragon") {
+      world.set(-504, 51, -504, ID.DragonEgg);
+      markDirtyAt(-504, -504);
+    }
     const drops =
       mob.kind === "sheep"
         ? mob.sheared
@@ -3056,6 +3401,140 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
   }
 
+  // ── Pathfinding ─────────────────────────────────────────────────
+  // A* over surface cells. A cell is walkable when the mob's own
+  // movement test passes there (headroom at surface +0.1/+1.1), the
+  // climb from the current cell is at most ~1 brick and the drop at
+  // most ~3. Falls back to plain steering when no route exists.
+  function lineClear(x0: number, z0: number, x1: number, z1: number, baseY: number) {
+    const dist = Math.hypot(x1 - x0, z1 - z0);
+    const steps = Math.max(1, Math.ceil(dist / 0.7));
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const sx = x0 + (x1 - x0) * t;
+      const sz = z0 + (z1 - z0) * t;
+      const gy = groundY(sx, sz);
+      if (Math.abs(gy - baseY) > 1.6) return false;
+      if (solidAt(Math.floor(sx), Math.floor(gy + 0.1), Math.floor(sz)) || solidAt(Math.floor(sx), Math.floor(gy + 1.1), Math.floor(sz))) return false;
+    }
+    return true;
+  }
+
+  function findPath(sx: number, sz: number, tx: number, tz: number): { x: number; z: number }[] | null {
+    const S = { x: Math.floor(sx), z: Math.floor(sz) };
+    const T = { x: Math.floor(tx), z: Math.floor(tz) };
+    if (Math.abs(T.x - S.x) > 26 || Math.abs(T.z - S.z) > 26) return null;
+    if (S.x === T.x && S.z === T.z) return [];
+    type Node = { x: number; z: number; gy: number; g: number; f: number; parent: string | null };
+    const nodes = new Map<string, Node>();
+    const closed = new Set<string>();
+    const start: Node = { x: S.x, z: S.z, gy: groundY(S.x + 0.5, S.z + 0.5), g: 0, f: Math.hypot(T.x - S.x, T.z - S.z), parent: null };
+    nodes.set(S.x + "," + S.z, start);
+    const open: Node[] = [start];
+    let expansions = 0;
+    while (open.length && expansions++ < 750) {
+      let bi = 0;
+      for (let i = 1; i < open.length; i++) if (open[i].f < open[bi].f) bi = i;
+      const cur = open.splice(bi, 1)[0];
+      const ck = cur.x + "," + cur.z;
+      if (closed.has(ck)) continue;
+      closed.add(ck);
+      if (cur.x === T.x && cur.z === T.z) {
+        const path: { x: number; z: number }[] = [];
+        let n: Node | undefined = cur;
+        while (n && n.parent) {
+          path.push({ x: n.x, z: n.z });
+          n = nodes.get(n.parent);
+        }
+        path.reverse();
+        return path;
+      }
+      for (const [ox, oz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]] as const) {
+        const nx = cur.x + ox;
+        const nz = cur.z + oz;
+        const nk = nx + "," + nz;
+        if (closed.has(nk)) continue;
+        const gy = groundY(nx + 0.5, nz + 0.5);
+        if (gy - cur.gy > 1.3 || cur.gy - gy > 3.4) continue;
+        if (solidAt(nx, Math.floor(gy + 0.1), nz) || solidAt(nx, Math.floor(gy + 1.1), nz)) continue;
+        if (ox !== 0 && oz !== 0) {
+          const g1 = groundY(nx + 0.5, cur.z + 0.5);
+          const g2 = groundY(cur.x + 0.5, nz + 0.5);
+          if (Math.abs(g1 - cur.gy) > 1.3 || Math.abs(g2 - cur.gy) > 1.3) continue;
+          if (solidAt(nx, Math.floor(g1 + 0.1), cur.z) || solidAt(cur.x, Math.floor(g2 + 0.1), nz)) continue;
+        }
+        const g = cur.g + (ox !== 0 && oz !== 0 ? 1.41 : 1) + Math.max(0, gy - cur.gy) * 1.5;
+        const ex = nodes.get(nk);
+        if (ex && ex.g <= g) continue;
+        const node: Node = { x: nx, z: nz, gy, g, f: g + Math.hypot(T.x - nx, T.z - nz), parent: ck };
+        nodes.set(nk, node);
+        open.push(node);
+      }
+    }
+    return null;
+  }
+
+  // ── The End wyrm ────────────────────────────────────────────────
+  // Circles the player, rains fireballs, then swoops in to bite.
+  // Living crystals mend it, so the pillars come first. Under 35%
+  // health it enrages: faster, meaner, swoops twice as often.
+  function dragonTick(m: Mob, dt: number, d: number) {
+    const maxHp = m.maxHp ?? m.hp;
+    const enraged = m.hp < maxHp * 0.35;
+    if (crystalsLeft() > 0 && phase === "play") m.hp = Math.min(maxHp, m.hp + 1.1 * dt);
+    m.modeT = (m.modeT ?? 0) - dt;
+    m.bossT = (m.bossT ?? 0) - dt;
+    const gy = groundY(m.x, m.z);
+    let wantY = gy + 8;
+    let sp = enraged ? 4.6 : 3.4;
+    let targetYaw: number;
+    if (m.mode === "swoop") {
+      targetYaw = Math.atan2(-(player.x - m.x), -(player.z - m.z));
+      wantY = player.y + 1.0;
+      sp = enraged ? 6.6 : 5.4;
+      if (d < 3.2 || (m.modeT ?? 0) <= 0) {
+        m.mode = "climb";
+        m.modeT = 1.4;
+      }
+    } else if (m.mode === "climb") {
+      targetYaw = Math.atan2(-(m.x - player.x), -(m.z - player.z));
+      wantY = gy + 13;
+      sp = 4.4;
+      if ((m.modeT ?? 0) <= 0) {
+        m.mode = "circle";
+        m.modeT = enraged ? 3.2 : 5.5;
+      }
+    } else {
+      m.mode = "circle";
+      const ang = Math.atan2(m.z - player.z, m.x - player.x) + dt * 0.45;
+      const ox = player.x + Math.cos(ang) * 11;
+      const oz = player.z + Math.sin(ang) * 11;
+      targetYaw = Math.atan2(-(ox - m.x), -(oz - m.z));
+      if ((m.modeT ?? 0) <= 0 && phase === "play" && d < 26) {
+        m.mode = "swoop";
+        m.modeT = 2.4;
+      }
+      if ((m.bossT ?? 0) <= 0 && phase === "play" && d < 30) {
+        m.bossT = enraged ? 2.3 : 3.4;
+        launchFireball(m.x, m.y - 0.4, m.z, player.x - m.x, player.y + 0.8 - m.y, player.z - m.z);
+        audio.note(4);
+      }
+    }
+    let diff = targetYaw - m.yaw;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    const turn = (enraged ? 2.4 : 1.7) * dt;
+    m.yaw += Math.max(-turn, Math.min(turn, diff));
+    m.x += -Math.sin(m.yaw) * sp * dt;
+    m.z += -Math.cos(m.yaw) * sp * dt;
+    m.y += (wantY - m.y) * Math.min(1, dt * (m.mode === "swoop" ? 3.2 : 1.8));
+    if (d < 2.9 && phase === "play" && m.cool <= 0) {
+      bite(enraged ? 7 : 5);
+      m.cool = 1.1;
+      audio.hit();
+    }
+  }
+
   function updateMobs(dt: number) {
     const ang = worldTime * Math.PI * 2;
     const night = Math.sin(ang) < -0.12;
@@ -3210,6 +3689,30 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           m.yaw += (Math.random() - 0.5) * 2.4;
         }
       }
+      // Real pathfinding: chasing ground mobs route around walls and
+      // terrain with A* instead of steering blindly into them.
+      if (!flyer && chase && phase === "play") {
+        const txp = foe ? foe.x : player.x;
+        const tzp = foe ? foe.z : player.z;
+        m.pathT = (m.pathT ?? 0) - dt;
+        if (m.pathT <= 0) {
+          m.pathT = 0.5;
+          if (lineClear(m.x, m.z, txp, tzp, m.y)) m.path = null;
+          else {
+            const last = m.path && m.path.length ? m.path[m.path.length - 1] : null;
+            const stale = !m.path || (m.pathI ?? 0) >= m.path.length || (last ? Math.hypot(last.x + 0.5 - txp, last.z + 0.5 - tzp) > 3 : false);
+            if (stale) {
+              m.path = findPath(m.x, m.z, txp, tzp);
+              m.pathI = 0;
+            }
+          }
+        }
+        if (m.path && (m.pathI ?? 0) < m.path.length) {
+          const wp = m.path[m.pathI ?? 0];
+          if (Math.hypot(wp.x + 0.5 - m.x, wp.z + 0.5 - m.z) < 0.7) m.pathI = (m.pathI ?? 0) + 1;
+          else m.yaw = Math.atan2(-(wp.x + 0.5 - m.x), -(wp.z + 0.5 - m.z));
+        }
+      }
       if ((m.kind === "villager" || m.kind === "golem") && m.homeX !== undefined && m.homeZ !== undefined) {
         const hx = m.homeX - m.x;
         const hz = m.homeZ - m.z;
@@ -3222,7 +3725,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           m.yaw = Math.atan2(-hx, -hz);
         }
       }
-      if (flyer) {
+      if (flyer && m.kind === "dragon") {
+        dragonTick(m, dt, d);
+      } else if (flyer) {
         const alt = m.kind === "dragon" ? 7 : 4;
         const sp = m.kind === "dragon" ? 3.4 : 2.1;
         m.x += -Math.sin(m.yaw) * sp * dt;
@@ -3348,6 +3853,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         return { x, y, z, ids: bin.ids.slice(), ns: bin.ns.slice() };
       }),
       furnaces: [...furnaces.values()].map((f) => ({ ...f })),
+      comps: [...comps.entries()].map(([key, c]) => {
+        const [x, y, z] = key.split(",").map(Number);
+        return { x, y, z, dir: c.dir, delay: c.delay };
+      }),
       folk: folkSpots.map((f) => ({ x: f.x, z: f.z, role: f.role })),
       village: villageAt,
       quests: quests.map((q) => ({ id: q.id, n: q.n, done: q.done })),
@@ -4086,6 +4595,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           }
         }
       }
+      tickRedstone(dt);
       for (const f of furnaces.values()) {
         if (Math.hypot(f.x - player.x, f.z - player.z) > 20) continue;
         if (f.burn > 0) f.burn -= dt;

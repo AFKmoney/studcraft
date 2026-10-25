@@ -244,6 +244,32 @@ function Hud({ game }: { game: GameApi }) {
           {Math.floor(hud.x)} {Math.floor(hud.y)} {Math.floor(hud.z)} · seed {hud.seedText || hud.seed}
         </span>
       </div>
+      {hud.boss && (
+        <div
+          style={{
+            position: "absolute",
+            top: 54,
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: "min(460px, 72vw)",
+            textAlign: "center",
+            pointerEvents: "none",
+            zIndex: 5,
+          }}
+        >
+          <div style={{ color: "#e9d5ff", fontWeight: 700, letterSpacing: 2, fontSize: 13, textShadow: "0 1px 3px #000" }}>{hud.boss}</div>
+          <div style={{ height: 10, marginTop: 4, border: "1px solid #2a1848", background: "rgba(10,6,24,0.72)", borderRadius: 3, overflow: "hidden" }}>
+            <div
+              style={{
+                height: "100%",
+                width: `${Math.round(hud.bossHp * 100)}%`,
+                background: hud.bossHp < 0.35 ? "#e23b2f" : "#a855f7",
+                transition: "width 0.25s ease",
+              }}
+            />
+          </div>
+        </div>
+      )}
       {!hud.locked && !hud.message && <p className="look-hint">Drag to look · click to capture the mouse</p>}
       {hud.message && (
         <p className="toast">

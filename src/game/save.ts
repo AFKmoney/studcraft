@@ -37,6 +37,8 @@ export type SaveV1 = {
     cook: number;
     burn: number;
   }[];
+  comps?: { x: number; y: number; z: number; dir: number; delay: number }[];
+  runes?: [number, string[]][];
   folk?: { x: number; z: number; role: string }[];
   village?: { x: number; z: number } | null;
   quests?: { id: string; n: number; done: boolean }[];

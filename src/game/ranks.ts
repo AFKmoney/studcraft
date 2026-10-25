@@ -144,7 +144,7 @@ export const MOB_XP: Record<string, number> = {
   ghast: 10,
   piglin: 7,
   phantom: 6,
-  dragon: 40,
+  dragon: 150,
   villager: 2,
   frog: 2,
   fox: 3,
