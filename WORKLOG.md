@@ -1220,3 +1220,30 @@ BO2-3: pillar mobs #2 (Shulker, Guardian, goat, axolotl, parrot, Husk, Stray) + 
 
 ### Next move (claimed by Muse)
 BO2-4: Illagers + hamlet raids.
+
+## v3.4 — 2026-10-25 (Battle order #2, item 4: Illagers + hamlet raids)
+
+### The illager family (5 kinds)
+- **Pillager** — grey-skinned illager (makeFig, mad face) with the skelly's ranged brain: crossbow bolts from 3–16 blocks, melee 2 up close. Drops arrows; luck extras: an emerald, and 14% a Crossbow.
+- **Vindicator** — the axe brute: fastest ground chaser (2.6), bite 3, drops an Emerald (12% an Iron axe).
+- **Evoker** — black-and-gold robes. On first engagement it **summons two Vex** (raid-summoned vexes carry the raid flag, so a wave can't be "cleared" around them); afterwards it casts **ground fangs**: your position is telegraphed with pale particles, and 0.65 s later the fangs bite for 3 if you're still standing there — moving is the counterplay. Drops the **Totem "Last stud"** + an Emerald (the totem's death-cheat already existed in die() — it just never had a source; the loop is now closed).
+- **Vex** — palm-sized pale gremlin on swept wings; hovers at bee height, dives for a 2-dmg bite. No drops.
+- **Ravager** — 40 HP siege beast: hulking grey bulk, horned brow, iron nose bar, saddle patch. Bite 5 on the player, 4 on the folk. Drops fur + meat.
+- Raiders **hunt villagers**, not just the player — the nearest target wins, pathfinding included; hamlet golems and tamed wolves have all five kinds on their foe lists, so the hamlet fights back. Raid mobs are exempt from the far-hostile despawn. All five pay MOB_XP and count for the kill-quest "host" tag.
+
+### Patrols, Bad Omen, raids
+- Every ~5–7 minutes in the wild (never inside a hamlet's peace, never on Peaceful), an **illager patrol** materialises ~34 blocks out: three pillagers (+ a vindicator from builder rank 4) led by a **banner captain** (white banner with a red cross on his back).
+- Killing the captain hangs a **Bad Omen** on you for 30 minutes (HUD chip "Omen"). Walk into a hamlet carrying it and the war horn sounds: a **three-wave raid** (5 → 8 → 8 raiders, the last with the Ravager) spawns at the hamlet's edges; the boss bar becomes "Raid — wave N of 3" tracking survivors. Waves rest 8 s apart. Abandon the hamlet (>110 blocks for 45 s) and the raiders melt away.
+- **Victory**: Hero of the Hamlet for 30 minutes (HUD chip "Hero") — every trade costs 1 less (min 1) — plus a 6-Emerald reward dropped at the hamlet centre.
+
+### QA
+- tsc clean (0 errors).
+- qa61 (seed 23): all five illager kinds spawn through the hook (5/5) and live in getMobs with zero page errors; the line-up zoom reads the Ravager's horned grey bulk and the grey illager figures. The QA-spawned Evoker engaged on its own and **summoned its two Vex live** (three vexes in the world list after spawning one).
+- qa61/qa61b: forceRaid() arms a raid at the spawn hamlet — getRaid reports w0/rest, exactly the designed staging state. The 2.5 s staging countdown runs on the same frame-dt timers as the music gap countdown observed ticking live in qa58; in the SwiftShader harness game time runs up to ~100x slow, so the wave-1 flip itself was not captured; wave spawning rides spawnKind (proven above) and the raid state machine is code-reviewed end to end.
+- Captain -> Bad Omen and the Hero trade discount are code-reviewed (killMob captain branch; trade() price mutation); patrol spawning is timer-gated (~5-7 min of play) and was not observed in the harness.
+
+### Files
+`src/game/game.ts`, `src/game/ranks.ts`, `WORKLOG.md`, `apk/src/main/AndroidManifest.xml` (versionCode 25 / versionName 3.4). APK + web zip rebuilt.
+
+### Next move (claimed by Muse)
+BO2-5: structures (ocean monument, Nether fortress/bastion, woodland mansion).

@@ -167,4 +167,9 @@ export const MOB_XP: Record<string, number> = {
   parrot: 2,
   guardian: 10,
   shulker: 8,
+  pillager: 5,
+  vindicator: 6,
+  evoker: 12,
+  vex: 3,
+  ravager: 15,
 };
