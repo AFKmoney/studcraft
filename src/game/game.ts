@@ -184,6 +184,8 @@ declare global {
       getMusic?: () => string;
       getRaid?: () => string;
       forceRaid?: () => boolean;
+      getLandmark?: () => string;
+      scanLandmarks?: () => string[];
       getMobNames?: () => string[];
       getArmor?: () => number[];
       give?: (id: number, n: number) => boolean;
@@ -329,6 +331,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let heroT = 0;
   let patrolT = 200;
   let raid: { cx: number; cz: number; wave: number; phase: "rest" | "fight"; t: number; total: number; awayT: number } | null = null;
+  let guardT = 0;
+  let lastLmKey = "";
   let regenAcc = 0;
   let growAcc = 0;
   let lightAcc = 0;
@@ -1911,7 +1915,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       const rz = Math.floor(z / 192);
       const site = world.hamletAt(rx, rz);
       const near = site && Math.hypot(x - site.x, z - site.z) < 48;
-      stockChest(bin, x, y, z, world.seed, near ? "hamlet" : "wild");
+      const lm = world.nearestLandmark(x, z);
+      const lmKind = lm && Math.hypot(x - lm.x, z - lm.z) < 40 ? lm.kind : null;
+      stockChest(bin, x, y, z, world.seed, lmKind === "monument" ? "deep" : lmKind === "mansion" ? "hamlet" : lmKind ? "nether" : near ? "hamlet" : "wild");
     }
     if (next === "furnace") ensureFurnace(x + "," + y + "," + z, x, y, z);
     if (phase !== "inventory") {
@@ -3143,6 +3149,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     omenT = Math.max(0, omenT - dt);
     heroT = Math.max(0, heroT - dt);
     raidTick(dt);
+    guardT = Math.max(0, guardT - dt);
+    if (guardT <= 0) {
+      guardT = 4;
+      ensureLandmarkGuards();
+    }
     if (fireResT > 0) fireT = 0;
     if (regenT > 0) {
       healAcc += dt;
@@ -3790,6 +3801,53 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         raid.phase = "rest";
         raid.t = 8;
         say("Wave " + raid.wave + " broken — but horns sound again in the distance…");
+      }
+    }
+  }
+
+  // Landmark guardians: each set-piece structure keeps its own defenders,
+  // topped up whenever the player wanders close (folk pattern).
+  function ensureLandmarkGuards() {
+    if (flat || phase !== "play" || realm === 2) return;
+    const lm = world.nearestLandmark(player.x, player.z);
+    if (!lm) return;
+    if (Math.hypot(lm.x - player.x, lm.z - player.z) > 76) return;
+    const key = lm.kind + "@" + lm.x + "," + lm.z;
+    const greet = (msg: string) => {
+      if (lastLmKey !== key) {
+        lastLmKey = key;
+        say(msg, 3600);
+      }
+    };
+    const count = (kind: Mob["kind"], rad: number) => mobs.filter((m) => m.kind === kind && !m.dead && Math.hypot(m.x - lm.x, m.z - lm.z) < rad).length;
+    if (lm.kind === "monument") {
+      greet("Something ancient sleeps beneath these waves…");
+      const guards = mobs.filter((m) => m.kind === "guardian" && !m.dead && Math.hypot(m.x - lm.x, m.z - lm.z) < 32);
+      if (!guards.some((m) => (m.maxHp ?? 0) >= 30)) {
+        const elder = spawnKind("guardian", lm.x + 2, lm.z, 1.7);
+        elder.hp = 32;
+        elder.maxHp = 32;
+      }
+      for (let i = guards.length; i < 3; i++) spawnKind("guardian", lm.x - 4 + i * 3, lm.z + 4);
+    } else if (lm.kind === "mansion") {
+      greet("A dark mansion broods between the trees.");
+      if (count("vindicator", 32) === 0) {
+        spawnKind("vindicator", lm.x + 12, lm.z + 10);
+        spawnKind("vindicator", lm.x - 12, lm.z - 9);
+      }
+      if (count("evoker", 32) === 0) spawnKind("evoker", lm.x, lm.z + 11);
+    } else if (lm.kind === "fortress") {
+      greet("An ember-brick fortress spans the lava sea.");
+      if (count("blaze", 36) === 0) {
+        spawnKind("blaze", lm.x - 8, lm.z);
+        spawnKind("blaze", lm.x + 8, lm.z);
+      }
+    } else {
+      greet("A basalt bastion — and piglins guard its gold.");
+      if (count("piglin", 32) === 0) {
+        spawnKind("piglin", lm.x, lm.z + 15);
+        spawnKind("piglin", lm.x + 4, lm.z + 15);
+        spawnKind("piglin", lm.x - 4, lm.z + 15);
       }
     }
   }
@@ -6291,6 +6349,21 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (!site || raid) return false;
       startRaid(site.x + 15, site.z + 14);
       return true;
+    },
+    getLandmark: () => {
+      const lm = world.nearestLandmark(player.x, player.z);
+      return lm ? lm.kind + "@" + lm.x + "," + lm.z + " y=" + lm.y + " d=" + Math.round(Math.hypot(lm.x - player.x, lm.z - player.z)) : "-";
+    },
+    scanLandmarks: () => {
+      const out: string[] = [];
+      const gx = Math.floor(player.x / 384);
+      const gz = Math.floor(player.z / 384);
+      for (let dz = -3; dz <= 3; dz++)
+        for (let dx = -3; dx <= 3; dx++) {
+          const lm = world.landmarkAt(gx + dx, gz + dz) ?? world.netherLandmarkAt(gx + dx, gz + dz);
+          if (lm) out.push(lm.kind + "@" + lm.x + "," + lm.z + " y=" + lm.y + " d=" + Math.round(Math.hypot(lm.x - player.x, lm.z - player.z)));
+        }
+      return out;
     },
     getMobNames: () => mobs.filter((m) => m.name).map((m) => m.name as string),
     getArmor: () => [...armor],

@@ -1273,3 +1273,28 @@ Philippe's brief: the mobs and NPCs get the real shader too — hyper beautiful,
 
 ### Next move (claimed by Muse)
 BO2-5: structures (ocean monument, Nether fortress/bastion, woodland mansion).
+
+## v3.6 — 2026-10-25 (BO2-5: landmark structures)
+
+Four set-piece structures join the small site system, on their own coarse grid (one candidate per 384-block cell, biome-gated, hamlets keep a 78-block clearance). Each is painted chunk-by-chunk from a pure pattern function (`landmarkBlock` in world.ts), the same determinism contract as hamlets: any chunk rebuilds its slice identically, saves and seeds untouched.
+
+### What shipped
+- **Ocean monument** (deep-ocean cells, seabed-anchored): stepped Prism pyramid (37×37) with a hollow core chamber — gold heart (3×3×2), a chest, door gaps and two entrance tunnels bored through the mid-tier, four spires topped with lamps. In these shallow brick oceans the crown breaks the surface, which makes it findable from shore.
+- **Woodland mansion** (flat Grove / Flower grove / Brick plains): two floors, plank walls with log corners and glass windows, bookshelf row, bench, beds, chests, a ladder stairwell through a slab hole, ash-brick gabled roof. Its grounds are patrolled by **2 vindicators + 1 evoker**.
+- **Nether fortress** (Nether band): an ember-brick bridge deck 45 long on netherrack pillars, fence rails, a lamp-lit mid platform and two open-gallery towers with floors, ladders, chests and crenellations. Guarded by **2 blazes**.
+- **Bastion** (Nether band): a ruined basalt keep (hash-breached ramparts) around an obsidian-ringed **gold heart** with a chest; magma flecks in the courtyard floor. Guarded by **3 piglins** at the gate.
+- **Guardians system** (`ensureLandmarkGuards`, folk pattern): approaching within 76 blocks tops up each landmark's defenders — the monument gets an **elder guardian** (1.7× scale, 32 HP) plus 2 guardians — and speaks a one-line discovery hint, once per landmark per session. Guards use the normal far-despawn, so leaving cleans up and returning re-staffs.
+- **Loot wiring**: chests opened within 40 blocks of a landmark stock from the matching table — monument → `deep`, mansion → `hamlet`, fortress/bastion → `nether` — instead of the default wild table.
+- Rarity tuned against measured terrain (seed-23 ocean histogram: real deep water is scarce): monument gate = Ocean biome at seabed ≤ SEA−3 with a 45% roll; mansion 18% roll; Nether landmarks 22% of band cells. Mansions went from 7 per ±3 cells to ~4% of all cells after tuning.
+- QA hooks: `getLandmark()` (nearest) and `scanLandmarks()` (7×7 cells).
+
+### QA
+- tsc clean (0 errors).
+- **Node probes against the real World class** (all four pattern functions, block-exact): monument 10/10 signature cells (gold heart, chest, spire lamp + shaft, prism body, outer step, tunnel, chamber, door); fortress deck/rails/lamp posts/pillars/tower chest/crenellations; bastion gold heart/chest/wall/gate; mansion wall/ridge/chest. Cross-seed census: monuments generate (8 across 40 seeds in ±6 cells — seed 23's continent is simply dry), mansions ~4% of cells, Nether pair ~20% of band cells.
+- **qa63 live (browser, seed 23)**: world boots with 0 page errors; the first run (pre-rarity-tuning) found 7 mansions in ±3 cells and probed every signature block live — walls, floors, ridge, chests, interiors, 35/35 match. After the rarity tuning, the live scan and the node census agree exactly (0 within ±3 cells of spawn; seed 23's nearest mansion stands at −1386, −600, ~1510 blocks out — a proper expedition). Guard spawning, greetings and chest loot kinds are code-reviewed on the folk/raid plumbing (same slow-harness limits as the raid wave flip: the A54 is the real verdict).
+
+### Files
+`src/game/world.ts`, `src/game/game.ts`, `WORKLOG.md`, `apk/src/main/AndroidManifest.xml` (versionCode 27 / versionName 3.6). APK + web zip rebuilt.
+
+### Next move (claimed by Muse)
+BO2-6: stations (beacon, shulker box, conduit, jukebox + discs).

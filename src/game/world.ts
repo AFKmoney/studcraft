@@ -32,6 +32,10 @@ export function paintEndCrystals(set: (x: number, y: number, z: number, id: numb
 
 export type HamletSite = { x: number; z: number; y: number };
 
+export type LandmarkKind = "monument" | "mansion" | "fortress" | "bastion";
+export type Landmark = { x: number; z: number; y: number; kind: LandmarkKind };
+export const LM_STEP = 384;
+
 export function hamletOrigin(seed: number, rx: number, rz: number): { x: number; z: number } | null {
   const forced = rx === 0 && rz === 0;
   if (!forced && hash2(rx, rz, seed + 404) > 0.36) return null;
@@ -394,6 +398,7 @@ export class World {
     this.paintCellar(data, baseX, baseZ);
     this.paintHamlet(data, baseX, baseZ);
     this.paintSites(data, baseX, baseZ);
+    this.paintLandmarkLayer(data, baseX, baseZ, false);
     this.paintGate(data, baseX, baseZ);
     this.scatterCaps(data, baseX, baseZ);
     this.chunks.set(this.ck(cx, cz), data);
@@ -610,6 +615,7 @@ export class World {
       this.force(data, baseX, baseZ, ax + 3, 31, az, ID.Lava);
       this.force(data, baseX, baseZ, ax, 31, az + 3, ID.ResinOre);
     }
+    this.paintLandmarkLayer(data, baseX, baseZ, true);
     this.chunks.set(this.ck(cx, cz), data);
     return data;
   }
@@ -784,6 +790,243 @@ export class World {
           const id = hamletBlock(x - site.x, y - site.y, z - site.z);
           if (id < 0) continue;
           this.force(data, baseX, baseZ, x, y, z, id);
+        }
+      }
+    }
+  }
+
+  // ---- Landmarks: the big set-piece structures (battle order #2, item 5).
+  // One candidate per 384-block cell, biome-gated like hamlets, painted
+  // chunk-by-chunk from a pure pattern function so any chunk can rebuild
+  // its slice deterministically.
+  landmarkAt(gx: number, gz: number): Landmark | null {
+    if (this.flat) return null;
+    if (hash2(gx, gz, this.seed + 2400) < 0.5) return null;
+    const x = gx * LM_STEP + 120 + Math.floor(hash2(gx, gz, this.seed + 2401) * (LM_STEP - 240));
+    const z = gz * LM_STEP + 120 + Math.floor(hash2(gx, gz, this.seed + 2402) * (LM_STEP - 240));
+    if (inNether(x)) return null;
+    const rx = Math.floor(x / REGION);
+    const rz = Math.floor(z / REGION);
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const ham = this.hamletAt(rx + dx, rz + dz);
+        if (ham && Math.abs(ham.x + 15 - x) < 78 && Math.abs(ham.z + 14 - z) < 78) return null;
+      }
+    }
+    const h = this.heightAt(x, z);
+    const biome = this.biomeOf(x, z, h);
+    if (biome === "Ocean" && h <= SEA - 3) {
+      if (hash2(gx, gz, this.seed + 2403) > 0.45) return null;
+      return { x, z, y: h, kind: "monument" };
+    }
+    if ((biome === "Grove" || biome === "Flower grove" || biome === "Brick plains") && h > SEA + 1) {
+      if (hash2(gx, gz, this.seed + 2403) > 0.18) return null;
+      let min = 999;
+      let max = 0;
+      for (const [sx, sz] of [
+        [-9, -7],
+        [9, -7],
+        [-9, 7],
+        [9, 7],
+        [0, 0],
+      ] as const) {
+        const s = this.heightAt(x + sx, z + sz);
+        if (s < min) min = s;
+        if (s > max) max = s;
+      }
+      if (max - min > 4) return null;
+      return { x, z, y: max, kind: "mansion" };
+    }
+    return null;
+  }
+
+  netherLandmarkAt(gx: number, gz: number): Landmark | null {
+    if (this.flat) return null;
+    if (hash2(gx, gz, this.seed + 2500) < 0.78) return null;
+    const x = gx * LM_STEP + 120 + Math.floor(hash2(gx, gz, this.seed + 2501) * (LM_STEP - 240));
+    const z = gz * LM_STEP + 120 + Math.floor(hash2(gx, gz, this.seed + 2502) * (LM_STEP - 240));
+    if (!inNether(x)) return null;
+    const kind = hash2(gx, gz, this.seed + 2503) < 0.5 ? "fortress" : "bastion";
+    if (kind === "bastion") return { x, z, y: this.netherFloor(x, z), kind };
+    let deck = 24;
+    for (const [sx, sz] of [
+      [-20, 0],
+      [20, 0],
+      [0, -4],
+      [0, 4],
+      [0, 0],
+    ] as const) {
+      deck = Math.max(deck, this.netherFloor(x + sx, z + sz) + 1);
+    }
+    return { x, z, y: Math.min(deck, 36), kind };
+  }
+
+  nearestLandmark(x: number, z: number): Landmark | null {
+    const nether = inNether(x);
+    const gx = Math.floor(x / LM_STEP);
+    const gz = Math.floor(z / LM_STEP);
+    let best: Landmark | null = null;
+    let bestD = Infinity;
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const lm = nether ? this.netherLandmarkAt(gx + dx, gz + dz) : this.landmarkAt(gx + dx, gz + dz);
+        if (!lm) continue;
+        const d = (lm.x - x) * (lm.x - x) + (lm.z - z) * (lm.z - z);
+        if (d < bestD) {
+          bestD = d;
+          best = lm;
+        }
+      }
+    }
+    return best;
+  }
+
+  private landmarkBlock(lm: Landmark, dx: number, dy: number, dz: number): number {
+    if (lm.kind === "monument") {
+      const r = Math.max(Math.abs(dx), Math.abs(dz));
+      if (r > 18 || dy < -3 || dy > 13) return -1;
+      const spire = Math.abs(dx) === 10 && Math.abs(dz) === 10;
+      if (spire && dy >= 6 && dy <= 12) return dy === 12 ? ID.Lamp : ID.Prism;
+      const stepH = r <= 4 ? 9 : r <= 8 ? 7 : r <= 12 ? 5 : r <= 15 ? 3 : 1;
+      if (dy > stepH) return r <= 4 && dy === 10 ? ID.Prism : -1;
+      if (dz === 0 && Math.abs(dx) >= 4 && Math.abs(dx) <= 8 && (dy === 4 || dy === 5)) return ID.Air;
+      const inCore = Math.abs(dx) <= 3 && Math.abs(dz) <= 3;
+      if (inCore && dy >= 4 && dy <= 7) {
+        if (Math.abs(dx) <= 1 && Math.abs(dz) <= 1) return dy <= 5 ? ID.Gold : ID.Air;
+        if (dx === 2 && dz === 2 && dy === 4) return ID.Chest;
+        if (Math.abs(dx) === 3 || Math.abs(dz) === 3) {
+          if ((Math.abs(dx) === 3 && dz === 0 && dy <= 5) || (Math.abs(dz) === 3 && dx === 0 && dy <= 5)) return ID.Air;
+          return ID.Prism;
+        }
+        return ID.Air;
+      }
+      return ID.Prism;
+    }
+    if (lm.kind === "mansion") {
+      if (Math.abs(dx) > 10 || Math.abs(dz) > 8 || dy < -2 || dy > 11) return -1;
+      const inX = Math.abs(dx) <= 9;
+      const inZ = Math.abs(dz) <= 7;
+      if (!inX || !inZ) return dy >= 1 && dy <= 9 ? ID.Air : -1;
+      const wall = Math.abs(dx) === 9 || Math.abs(dz) === 7;
+      if (dy < 0) return ID.Cobble;
+      if (dy === 0) return wall ? ID.Cobble : ID.Planks;
+      const corner = Math.abs(dx) === 9 && Math.abs(dz) === 7;
+      if (dy === 8 || dy === 9 || dy === 10 || dy === 11) {
+        const roofY = Math.abs(dz) >= 5 ? 8 : Math.abs(dz) >= 3 ? 9 : Math.abs(dz) >= 1 ? 10 : 11;
+        if (dy === roofY) return ID.Ash;
+        if (wall && Math.abs(dx) === 9 && dy < roofY) return ID.Planks;
+        return dy < roofY ? ID.Air : -1;
+      }
+      if (dy === 4) {
+        if (wall) return ID.Planks;
+        if (dx >= 7 && dz === -6) return ID.Ladder;
+        if (dx >= 7 && dx <= 8 && dz >= -6 && dz <= -5) return ID.Air;
+        return ID.Planks;
+      }
+      if (wall) {
+        if (corner) return ID.Log;
+        if (dz === 7 && dx === 0 && dy <= 2) return ID.Air;
+        if ((dy === 2 || dy === 6) && ((Math.abs(dx) === 9 && Math.abs(dz) % 3 === 0) || (Math.abs(dz) === 7 && Math.abs(dx) % 3 === 0))) return ID.Glass;
+        return ID.Planks;
+      }
+      // Interior furniture.
+      if (dy === 1 && dx === -7 && dz === -5) return ID.Chest;
+      if ((dy === 1 || dy === 2) && dz === 6 && dx >= -7 && dx <= -5) return ID.Bookshelf;
+      if (dy === 1 && dx === 0 && dz === -3) return ID.Bench;
+      if (dy === 2 && (dx === -8 || dx === 8) && dz === 0) return ID.Torch;
+      if (dy === 5 && dx === 7 && dz === -5) return ID.Bed;
+      if (dy === 5 && dx === -7 && dz === 5) return ID.Chest;
+      if (dy === 6 && (dx === -8 || dx === 8) && dz === 0) return ID.Torch;
+      if ((dx === 8 || dx === 7) && dz === -6 && dy >= 1 && dy <= 7) return ID.Ladder;
+      return ID.Air;
+    }
+    if (lm.kind === "fortress") {
+      if (Math.abs(dx) > 22 || Math.abs(dz) > 6 || dy < -18 || dy > 8) return -1;
+      const tower = Math.abs(dx) >= 17;
+      if (dy < 0) {
+        if (dx % 8 === 0 && Math.abs(dz) <= 2) return ID.Netherrack;
+        if (tower && Math.abs(dz) <= 5 && dy >= -3) return ID.Netherrack;
+        return -1;
+      }
+      if (dy === 0) {
+        if (Math.abs(dz) <= 2) return ID.Netherrack;
+        if (tower && Math.abs(dz) <= 5) return ID.Netherrack;
+        if (Math.abs(dx) <= 2 && Math.abs(dz) <= 4) return ID.Netherrack;
+        return -1;
+      }
+      if (tower) {
+        const shell = Math.abs(dx) === 22 || Math.abs(dz) === 5;
+        if (dy === 3) {
+          if (dx === 18 || dx === -18) return dz === 0 ? ID.Ladder : ID.Netherrack;
+          if (Math.abs(dx) >= 18 && Math.abs(dz) <= 4) return ID.Netherrack;
+          return ID.Air;
+        }
+        if (shell && dy <= 6) return ID.Netherrack;
+        if (dy === 7) return shell && (dx + dz) % 2 === 0 ? ID.Netherrack : ID.Air;
+        if (dy === 1 && Math.abs(dx) === 20 && dz === -3) return ID.Chest;
+        if (dy === 1 && (dx === 18 || dx === -18) && dz === 0) return ID.Ladder;
+        if (dy === 2 && (dx === 18 || dx === -18) && dz === 0) return ID.Ladder;
+        if ((dy === 4 || dy === 5 || dy === 6) && (dx === 18 || dx === -18) && dz === 0) return ID.Ladder;
+        if (dy === 6 && Math.abs(dx) === 20 && dz === 3) return ID.Lamp;
+        return ID.Air;
+      }
+      if (dy === 1 && Math.abs(dz) === 2 && Math.abs(dx) > 2) return ID.Fence;
+      if (dy === 1 && Math.abs(dx) === 2 && Math.abs(dz) === 4) return ID.Lamp;
+      return -1;
+    }
+    // Bastion: a ruined basalt keep around a gold heart.
+    if (Math.abs(dx) > 12 || Math.abs(dz) > 12 || dy < -2 || dy > 9) return -1;
+    const ruin = hash3(lm.x + dx, dy * 7 + 31, lm.z + dz, this.seed + 2600);
+    const wall = Math.abs(dx) === 12 || Math.abs(dz) === 12;
+    if (dy < 0) return ID.Basalt;
+    if (dy === 0) {
+      if (wall) return ID.Basalt;
+      return ruin < 0.06 ? ID.Lava : ID.Basalt;
+    }
+    const core = Math.max(Math.abs(dx), Math.abs(dz));
+    if (core <= 3 && dy === 1) {
+      if (Math.abs(dx) <= 1 && Math.abs(dz) <= 1) return ID.Gold;
+      if (dx === 2 && dz === 2) return ID.Chest;
+      return ID.Obsidian;
+    }
+    if (core <= 3 && dy === 2 && Math.abs(dx) <= 1 && Math.abs(dz) <= 1) return ID.Gold;
+    if (wall) {
+      const gate = dz === 12 && Math.abs(dx) <= 1;
+      if (gate && dy <= 3) return ID.Air;
+      if (dy <= 7) return ruin < 0.1 && dy >= 4 ? ID.Air : ID.Basalt;
+      if (dy === 8) return ruin < 0.3 ? ID.Air : ID.Basalt;
+      return -1;
+    }
+    if (dx === 0 && Math.abs(dz) >= 6 && Math.abs(dz) <= 10 && dy <= 3) return ID.Basalt;
+    if (dz === -6 && Math.abs(dx) >= 4 && Math.abs(dx) <= 9 && dy <= 3) return ID.Basalt;
+    return ID.Air;
+  }
+
+  private paintLandmarkLayer(data: Uint8Array, baseX: number, baseZ: number, nether: boolean) {
+    const g0x = Math.floor((baseX - 30) / LM_STEP) - 1;
+    const g1x = Math.floor((baseX + CS + 30) / LM_STEP) + 1;
+    const g0z = Math.floor((baseZ - 30) / LM_STEP) - 1;
+    const g1z = Math.floor((baseZ + CS + 30) / LM_STEP) + 1;
+    for (let gz = g0z; gz <= g1z; gz++) {
+      for (let gx = g0x; gx <= g1x; gx++) {
+        const lm = nether ? this.netherLandmarkAt(gx, gz) : this.landmarkAt(gx, gz);
+        if (!lm) continue;
+        const rx = lm.kind === "fortress" ? 23 : lm.kind === "monument" ? 19 : 13;
+        const rz = lm.kind === "fortress" ? 7 : lm.kind === "monument" ? 19 : 13;
+        const dyMin = lm.kind === "fortress" ? -18 : lm.kind === "monument" ? -3 : -2;
+        const dyMax = lm.kind === "monument" ? 13 : lm.kind === "mansion" ? 11 : lm.kind === "fortress" ? 8 : 9;
+        const x0 = Math.max(baseX, lm.x - rx);
+        const x1 = Math.min(baseX + CS, lm.x + rx + 1);
+        const z0 = Math.max(baseZ, lm.z - rz);
+        const z1 = Math.min(baseZ + CS, lm.z + rz + 1);
+        for (let z = z0; z < z1; z++) {
+          for (let x = x0; x < x1; x++) {
+            for (let dy = dyMin; dy <= dyMax; dy++) {
+              const id = this.landmarkBlock(lm, x - lm.x, dy, z - lm.z);
+              if (id < 0) continue;
+              this.force(data, baseX, baseZ, x, lm.y + dy, z, id);
+            }
+          }
         }
       }
     }
