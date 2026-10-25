@@ -1707,6 +1707,20 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       saveDirty = true;
       return true;
     }
+    if (hit.id === ID.CarrotRipe || hit.id === ID.PotatoRipe || hit.id === ID.BeetRipe) {
+      const veg = hit.id === ID.CarrotRipe ? ID.Carrot : hit.id === ID.PotatoRipe ? ID.Potato : ID.Beetroot;
+      const shoot = hit.id === ID.CarrotRipe ? ID.CarrotCrop : hit.id === ID.PotatoRipe ? ID.PotatoCrop : ID.BeetCrop;
+      world.set(hit.x, hit.y, hit.z, ID.Air);
+      if (!creative) addInv(veg, 1);
+      if (world.get(hit.x, hit.y - 1, hit.z) === ID.Farmland && (creative || (inv[veg] ?? 0) > 0) && spend(veg, 1)) {
+        world.set(hit.x, hit.y, hit.z, shoot);
+        say("Replanted");
+      } else say("Harvested");
+      markDirtyAt(hit.x, hit.z);
+      audio.break();
+      saveDirty = true;
+      return true;
+    }
     const block = def(hit.id);
     if (block.door || block.gate) {
       const next = hit.id === ID.Door || hit.id === ID.Gate ? (hit.id === ID.Door ? ID.DoorOpen : ID.GateOpen) : hit.id === ID.DoorOpen ? ID.Door : ID.Gate;

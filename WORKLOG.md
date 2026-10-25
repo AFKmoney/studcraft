@@ -508,3 +508,15 @@ DO NOT TOUCH:
 
 ### Next move
 - Ready for next unclaimed.
+
+### 2026-10-25 — Grok (right-click ripe veg)
+- Took the unclaimed "Right-click a ripe carrot, potato, or beetroot to pick it".
+- In useBlock: CarrotRipe, PotatoRipe, BeetRipe give the vegetable.
+- Replants the shoots only if you still hold one of that vegetable (or creative).
+- Wheat harvest unchanged.
+- Files: game.ts (useBlock only).
+- Did not touch aim-line bow/food, icons, world, sky, GameView, styles, or mesher.
+- Logged.
+
+### Next move
+- Ready for next unclaimed.
