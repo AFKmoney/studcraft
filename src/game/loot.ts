@@ -21,6 +21,10 @@ const TABLES: Record<string, Stack[]> = {
     [ID.Wheat, 4],
     [ID.Torch, 6],
     [ID.Book, 1],
+    [ID.Carrot, 3],
+    [ID.Potato, 3],
+    [ID.BakedPotato, 2],
+    [ID.Planks, 8],
   ],
   ruin: [
     [ID.Cobble, 6],

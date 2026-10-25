@@ -10,6 +10,7 @@ import { QUESTS, traderOf, type TraderRole } from "./quests";
 import { clearSave, deleteWorld, hasSave, listWorlds, loadLatest, loadSettings, loadWorld, writeSettings, writeWorld, type SaveV1, type WorldSlot } from "./save";
 import { buildAtlas } from "./textures";
 import { CS, HEIGHT, World, decorate, folkLayout, penSheep, paintEndCrystals, END_PILLARS, type Decor, type FolkSpot } from "./world";
+import { stockChest } from "./loot";
 import { parseSeed } from "./noise";
 
 export type Phase = "title" | "play" | "pause" | "inventory" | "dead";
@@ -1614,7 +1615,14 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   function openPanel(next: "bag" | "bench" | "furnace" | "chest" | "enchant" | "anvil" | "brew" | "trade", x = 0, y = 0, z = 0) {
     panel = next;
     focus = { x, y, z };
-    if (next === "chest") ensureChest(x + "," + y + "," + z);
+    if (next === "chest") {
+      const bin = ensureChest(x + "," + y + "," + z);
+      const rx = Math.floor(x / 192);
+      const rz = Math.floor(z / 192);
+      const site = world.hamletAt(rx, rz);
+      const near = site && Math.hypot(x - site.x, z - site.z) < 48;
+      stockChest(bin, x, y, z, world.seed, near ? "hamlet" : "wild");
+    }
     if (next === "furnace") ensureFurnace(x + "," + y + "," + z, x, y, z);
     if (phase !== "inventory") {
       const locked = document.pointerLockElement === canvas;
