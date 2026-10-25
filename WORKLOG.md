@@ -1342,3 +1342,25 @@ The four working stations, each wired into systems the game already had (effect 
 
 ### Next move (claimed by Muse)
 BO2-7: villager depth (stock/refresh, reputation).
+
+## v3.9 — 2026-10-25 (BO2-7: villager depth — stock, restock, reputation)
+
+Trades used to be infinite and reputation-free. Now the hamlet economy has memory.
+
+### What shipped
+- **Stock**: every offer has a limited stock (8 uses for novice offers, 5 journeyman, 3 master; an offer can override). Trading depletes it; the trade panel shows what's left and greys out empty offers.
+- **Restock**: the folk restock **twice a day** (morning and afternoon marks in the day cycle). Time also heals reputations — every restock drifts each hamlet's reputation one point back toward neutral.
+- **Reputation, per hamlet**: trading +1 (up to +30), claiming a quest +5, winning a raid defence +15, hitting a villager −3 (killing one −20), hitting the golem −2 (killing it −10). Prices follow it: **Liked (+20)** = 1 cheaper on everything (stacks with the Hero discount), **Suspect (−10)** = +1, **Disliked (−30)** = +2 — and at **−50 the hamlet refuses to trade at all** until you earn your name back. The trade panel shows the hamlet's word for you (Stranger → Known → Liked / Wary → Suspect → Disliked → Outcast).
+- **Golems enforce it**: at reputation −30 or worse, the hamlet golem treats you as a foe — it hunts and hits like any hostile until your name recovers.
+- Reputation and stock persist in the save, keyed per hamlet; profession XP stays global per role, as before.
+
+### QA
+- tsc clean (0 errors).
+- qa66 live (browser, seed 23, hamlet at 68,53): baseline read exact (rep 0, Stranger, stocks 8/5/3 by tier); 3 trades moved stock 8→5 and reputation 0→+3; at rep +25 prices dropped (8→7 wheat) and the trade executed at the lower price (stock 5→4); at rep −60 prices rose (8→10) and trades were refused (stock frozen); restock refilled everything to full. 0 game errors.
+- Code-verified only: golem aggression at −30 (needs staged combat the harness can't aim), restock on the real day-cycle marks (qa used the on-demand hook; the crossing logic is the same function), reputation from villager/golem kills (the by-player damage flag is shared with the live-proven hit path).
+
+### Files
+`src/game/game.ts`, `src/game/GameView.tsx` (trade panel: reputation line, stock labels), `src/game/quests.ts` (offer stock override), `src/game/save.ts`, `WORKLOG.md`, `apk/src/main/AndroidManifest.xml` (versionCode 30 / versionName 3.9). APK + web zip + PC exe rebuilt.
+
+### Next move (claimed by Muse)
+BO2-8: advanced redstone (Observer, daylight sensor, container comparators).

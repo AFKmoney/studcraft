@@ -936,11 +936,15 @@ function StationScreen({ game }: { game: GameApi }) {
               <p className="lede">
                 {hud.traderLevel} · {hud.traderNext}
               </p>
+              <p className="lede">
+                Reputation here: {hud.repWord} ({hud.reputation > 0 ? "+" : ""}
+                {hud.reputation}) · stock restocks morning and afternoon
+              </p>
               {hud.offers.map((offer, i) => (
-                <button key={i} className="btn big" disabled={offer.locked} onClick={() => game.trade(i)}>
+                <button key={i} className="btn big" disabled={offer.locked || offer.stock <= 0} onClick={() => game.trade(i)}>
                   {offer.pn} {offer.payName} → {offer.on} {offer.outName}
                   {offer.tier === 2 ? " · Journeyman" : offer.tier === 3 ? " · Master" : ""}
-                  {offer.locked ? " 🔒" : ""}
+                  {offer.locked ? " 🔒" : offer.stock <= 0 ? " · out of stock" : ` · ${offer.stock} left`}
                 </button>
               ))}
               {hud.trader === "Clerk" && <QuestList hud={hud} onClaim={(id) => game.claim(id)} />}

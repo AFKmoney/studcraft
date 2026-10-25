@@ -1,6 +1,6 @@
 import { ID } from "./blocks";
 
-export type Offer = { pay: number; pn: number; out: number; on: number; tier?: number };
+export type Offer = { pay: number; pn: number; out: number; on: number; tier?: number; stock?: number };
 
 /** Villager professions level up as you trade with that profession:
  *  tier-2 offers unlock at 4 trades, tier-3 (master) at 12. */

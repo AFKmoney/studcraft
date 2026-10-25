@@ -44,6 +44,8 @@ export type SaveV1 = {
   signs?: { x: number; y: number; z: number; t: string }[];
   ench?: [number, [string, number][]][];
   tradeXp?: Record<string, number>;
+  tradeStock?: Record<string, number[]>;
+  reputation?: Record<string, number>;
   runes?: [number, string[]][];
   folk?: { x: number; z: number; role: string }[];
   village?: { x: number; z: number } | null;

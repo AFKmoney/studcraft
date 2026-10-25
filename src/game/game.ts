@@ -71,7 +71,9 @@ export type Hud = {
   traderBlurb: string;
   beaconLevel: number;
   beaconBuff: string;
-  offers: { pay: number; pn: number; out: number; on: number; payName: string; outName: string; tier: number; locked: boolean }[];
+  offers: { pay: number; pn: number; out: number; on: number; payName: string; outName: string; tier: number; locked: boolean; stock: number }[];
+  reputation: number;
+  repWord: string;
   traderLevel: string;
   traderNext: string;
   netStatus: string;
@@ -194,6 +196,10 @@ declare global {
       setBlock?: (x: number, y: number, z: number, id: number) => boolean;
       getStations?: () => string;
       setStation?: (kind: string, x: number, y: number, z: number, val: string) => boolean;
+      getVillage?: () => string;
+      setRep?: (n: number) => boolean;
+      tradeAt?: (i: number) => boolean;
+      restockNow?: () => boolean;
       getMobNames?: () => string[];
       getArmor?: () => number[];
       give?: (id: number, n: number) => boolean;
@@ -287,6 +293,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     traderBlurb: "",
     beaconLevel: 0,
     beaconBuff: "",
+    reputation: 0,
+    repWord: "Stranger",
     offers: [],
     traderLevel: "",
     traderNext: "",
@@ -473,6 +481,68 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let quests: { id: string; n: number; done: boolean }[] = QUESTS.map((q) => ({ id: q.id, n: 0, done: false }));
   let traderRole: TraderRole = "grocer";
   let tradeXp: Record<string, number> = {};
+  // Villager depth (v3.9): per-hamlet trade stock (keyed "hx,hz:role") and
+  // reputation (keyed "hx,hz"). Stock depletes as you trade and restocks
+  // twice a day; reputation moves prices, and at its worst the golems and
+  // the traders themselves turn on you.
+  let tradeStock: Record<string, number[]> = {};
+  let reputation: Record<string, number> = {};
+  let traderKeySet: string | null = null;
+  let prevWorldTime = 0;
+  function repKeyFor(x: number, z: number): string {
+    if (villageAt && Math.hypot(x - villageAt.x, z - villageAt.z) < 100) return villageAt.x + "," + villageAt.z;
+    return Math.round(x) + "," + Math.round(z);
+  }
+  function curTraderKey(): string {
+    return traderKeySet ?? repKeyFor(player.x, player.z);
+  }
+  function repAtKey(key: string): number {
+    return reputation[key] ?? 0;
+  }
+  function addRep(key: string, n: number) {
+    const next = Math.max(-100, Math.min(60, (reputation[key] ?? 0) + n));
+    if (next !== (reputation[key] ?? 0)) {
+      reputation[key] = next;
+      saveDirty = true;
+    }
+  }
+  function repWord(rep: number): string {
+    return rep >= 20 ? "Liked" : rep >= 1 ? "Known" : rep === 0 ? "Stranger" : rep >= -9 ? "Wary" : rep >= -29 ? "Suspect" : rep >= -49 ? "Disliked" : "Outcast";
+  }
+  function priceFor(base: number, key: string): number {
+    let pn = base;
+    const rep = reputation[key] ?? 0;
+    if (rep >= 20) pn -= 1;
+    if (rep <= -10) pn += 1;
+    if (rep <= -30) pn += 1;
+    if (heroT > 0) pn -= 1;
+    return Math.max(1, pn);
+  }
+  function stockMaxFor(offer: { tier?: number; stock?: number }): number {
+    return offer.stock ?? ((offer.tier ?? 1) >= 3 ? 3 : (offer.tier ?? 1) === 2 ? 5 : 8);
+  }
+  function stockFor(key: string): number[] {
+    const offers = traderOf(key.split(":").pop() as TraderRole).offers;
+    let s = tradeStock[key];
+    if (!s || s.length !== offers.length) {
+      const prev = s;
+      s = offers.map((o, i) => prev?.[i] ?? stockMaxFor(o));
+      tradeStock[key] = s;
+    }
+    return s;
+  }
+  function restockTrades() {
+    for (const key of Object.keys(tradeStock)) {
+      const offers = traderOf(key.split(":").pop() as TraderRole).offers;
+      tradeStock[key] = offers.map((o, i) => Math.max(tradeStock[key][i] ?? 0, stockMaxFor(o)));
+    }
+    // Time heals: reputations drift one point toward neutral at each restock.
+    for (const key of Object.keys(reputation)) {
+      if (reputation[key] > 0) reputation[key] -= 1;
+      else if (reputation[key] < 0) reputation[key] += 1;
+    }
+    saveDirty = true;
+  }
 
   const player = {
     x: spawnPoint.x,
@@ -905,6 +975,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     burn?: number;
     burnAcc?: number;
     slowT?: number;
+    byPlayerT?: number;
     name?: string;
     mad?: boolean;
     tpT?: number;
@@ -1214,15 +1285,20 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     hud.traderLevel = TIER_NAMES[tLv];
     hud.netStatus = mp.connected ? "🌐 Room " + mp.room + " · " + (mp.peers.size + 1) + " online" : "";
     hud.traderNext = tLv >= 3 ? tXp + " trades · Master" : tXp + " trades · " + (TIER_XP[tLv] - tXp) + " to " + TIER_NAMES[tLv + 1];
-    hud.offers = trader.offers.map((o) => ({
+    const tKey = curTraderKey();
+    const tStocks = stockFor(tKey + ":" + traderRole);
+    hud.reputation = repAtKey(tKey);
+    hud.repWord = repWord(hud.reputation);
+    hud.offers = trader.offers.map((o, oi) => ({
       pay: o.pay,
-      pn: o.pn,
+      pn: priceFor(o.pn, tKey),
       out: o.out,
       on: o.on,
       payName: def(o.pay).name.toLowerCase(),
       outName: def(o.out).name.toLowerCase(),
       tier: o.tier ?? 1,
       locked: (o.tier ?? 1) > tLv,
+      stock: tStocks[oi] ?? 0,
     }));
     let alert = "";
     hud.quests = QUESTS.map((q) => {
@@ -1375,6 +1451,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     pistonHot.clear();
     quests = QUESTS.map((q) => ({ id: q.id, n: 0, done: false }));
     traderRole = "grocer";
+    tradeStock = {};
+    reputation = {};
+    traderKeySet = null;
   }
 
   function resetHotbarCreative() {
@@ -1504,6 +1583,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     ench.clear();
     for (const [id, list] of data.ench ?? []) ench.set(id, Object.fromEntries(list));
     tradeXp = data.tradeXp ?? {};
+    tradeStock = {};
+    for (const [k, v] of Object.entries(data.tradeStock ?? {})) tradeStock[k] = v.slice();
+    reputation = { ...(data.reputation ?? {}) };
+    traderKeySet = null;
     hotbar = data.hotbar?.length === 9 ? [...data.hotbar] : [...CREATIVE_BAR];
     for (const k of Object.keys(inv)) delete inv[Number(k)];
     for (const [id, n] of data.inv ?? []) inv[id] = n;
@@ -3622,6 +3705,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
             let hit = s.trident ? 9 : 4 + (strengthT > 0 ? 2 : 0) + (s.pow ?? 0);
             if (m.kind === "dragon" && crystalsLeft() > 0) hit = Math.max(1, Math.ceil(hit * 0.5));
             m.hp -= hit;
+            if (m.kind === "villager" || m.kind === "golem") {
+              m.byPlayerT = 6;
+              addRep(repKeyFor(m.homeX ?? m.x, m.homeZ ?? m.z), m.kind === "villager" ? -3 : -2);
+            }
             if (s.punch) {
               const l = Math.hypot(s.vx, s.vz) || 1;
               m.x += (s.vx / l) * (0.4 + 0.5 * s.punch);
@@ -3970,6 +4057,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (!raid) return;
     if (victory) {
       heroT = 1800;
+      addRep(repKeyFor(raid.cx, raid.cz), 15);
       dropItem(ID.Emerald, 6, raid.cx, groundY(raid.cx, raid.cz) + 1, raid.cz);
       say("The hamlet stands! The folk name you Hero of the Hamlet — trades run cheaper for a while.");
     } else {
@@ -4382,6 +4470,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
     if (mob.kind === "villager") {
       traderRole = (mob.role as TraderRole) || "grocer";
+      traderKeySet = repKeyFor(mob.homeX ?? mob.x, mob.homeZ ?? mob.z);
       openPanel("trade");
       return;
     }
@@ -4405,6 +4494,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   function killMob(mob: Mob) {
     mob.dead = true;
     scene.remove(mob.mesh);
+    if ((mob.byPlayerT ?? 0) > 0) {
+      if (mob.kind === "villager") addRep(repKeyFor(mob.homeX ?? mob.x, mob.homeZ ?? mob.z), -20);
+      else if (mob.kind === "golem") addRep(repKeyFor(mob.homeX ?? mob.x, mob.homeZ ?? mob.z), -10);
+    }
     if (mob.kind === "dragon") {
       world.set(-504, 51, -504, ID.DragonEgg);
       markDirtyAt(-504, -504);
@@ -4893,6 +4986,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       // A veiled player is simply not seen beyond arm's reach.
       const seen = invisT <= 0 || d < 2.5;
       if ((m.slowT ?? 0) > 0) m.slowT = (m.slowT ?? 0) - dt;
+      if ((m.byPlayerT ?? 0) > 0) m.byPlayerT = (m.byPlayerT ?? 0) - dt;
       if (m.kind === "boat" || m.kind === "cart") {
         m.mesh.position.set(m.x, m.y + (settings.studs ? STUD_H : 0), m.z);
         m.mesh.rotation.y = m.yaw;
@@ -5101,6 +5195,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       const flyer = m.kind === "ghast" || m.kind === "phantom" || m.kind === "dragon" || m.kind === "wither" || m.kind === "blaze";
       const piglinMad = m.kind === "piglin" && hotbar[slot] !== ID.Gold && hotbar[slot] !== ID.Ingot;
       const townGuard = m.kind === "golem" || (m.kind === "wolf" && m.tame);
+      // A hamlet that hates you (reputation -30 or worse) sends its golem.
+      const golemMad = m.kind === "golem" && phase === "play" && repAtKey(repKeyFor(m.homeX ?? m.x, m.homeZ ?? m.z)) <= -30 && d < 14;
       const foe = townGuard
         ? mobs.find(
             (o) =>
@@ -5146,7 +5242,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           seen) ||
         (m.kind === "guardian" && d < 16 && seen) ||
         ((m.kind === "pillager" || m.kind === "vindicator" || m.kind === "ravager" || m.kind === "evoker") && d < 18 && seen) ||
-        (m.kind === "vex" && d < 20 && seen);
+        (m.kind === "vex" && d < 20 && seen) ||
+        golemMad;
       if (foe) m.yaw = Math.atan2(-(foe.x - m.x), -(foe.z - m.z));
       else if (prey) m.yaw = Math.atan2(-(prey.x - m.x), -(prey.z - m.z));
       else if ((m.kind === "wolf" || m.kind === "cat" || m.kind === "parrot") && m.tame && d > 3.2 && d < 32) m.yaw = Math.atan2(-dx, -dz);
@@ -5319,6 +5416,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         m.mad = false;
         audio.hit();
       }
+      if (m.kind === "golem" && golemMad && d < 1.7 && phase === "play" && m.cool <= 0) {
+        bite(4);
+        thornsHit(m);
+        m.cool = 0.9;
+        audio.hit();
+      }
       if (foe && Math.hypot(foe.x - m.x, foe.z - m.z) < 1.7 && m.cool <= 0) {
         foe.hp -= m.kind === "golem" ? 6 : 3;
         m.cool = 0.65;
@@ -5486,6 +5589,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       shulkerQueue: shulkerQueue.map((q) => ({ ids: q.ids.slice(), ns: q.ns.slice() })),
       ench: [...ench.entries()].map(([id, e]) => [id, Object.entries(e)] as [number, [string, number][]]),
       tradeXp: { ...tradeXp },
+      tradeStock: Object.fromEntries(Object.entries(tradeStock).map(([k, v]) => [k, v.slice()])),
+      reputation: { ...reputation },
       folk: folkSpots.map((f) => ({ x: f.x, z: f.z, role: f.role })),
       village: villageAt,
       quests: quests.map((q) => ({ id: q.id, n: q.n, done: q.done })),
@@ -5816,6 +5921,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         if (player.vy < -0.2 && !player.grounded) dmg = Math.ceil(dmg * 1.5);
         if (mob.kind === "dragon" && crystalsLeft() > 0) dmg = Math.max(1, Math.ceil(dmg * 0.5));
         mob.hp -= dmg;
+        if (mob.kind === "villager" || mob.kind === "golem") {
+          mob.byPlayerT = 6;
+          addRep(repKeyFor(mob.homeX ?? mob.x, mob.homeZ ?? mob.z), mob.kind === "villager" ? -3 : -2);
+        }
         if (mob.kind === "enderman" || mob.kind === "bee") mob.mad = true;
         if (blade.tool === "sword" && enchLvl(hotbar[slot], "fire") > 0) mob.burn = Math.max(mob.burn ?? 0, 2 + enchLvl(hotbar[slot], "fire"));
         if (blade.tool === "sword" || blade.tool === "bow") wearHeld();
@@ -6057,6 +6166,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
 
   function sky(dt: number) {
     worldTime = (worldTime + dt / 200) % 1;
+    // Villager restock (v3.9): twice a day, morning and afternoon.
+    for (const mark of [0.04, 0.3]) {
+      const crossed = (prevWorldTime < mark && worldTime >= mark) || (worldTime < prevWorldTime && (mark >= prevWorldTime || mark < worldTime));
+      if (crossed) restockTrades();
+    }
+    prevWorldTime = worldTime;
     musicTick(dt);
     // Weather director easing (v3.7): live values trail the state over
     // ~10 s, and the cloud deck drifts with the eased wind.
@@ -6784,6 +6899,26 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       wxCur.wind = d.wind;
       return true;
     },
+    getVillage: () =>
+      "key=" + curTraderKey() + " rep=" + repAtKey(curTraderKey()) + " word=" + repWord(repAtKey(curTraderKey())) +
+      " offers=" + hud.offers.map((o) => o.pn + "x" + o.stock).join(","),
+    setRep: (n: number) => {
+      // Test hook: set the current hamlet's reputation directly.
+      reputation[curTraderKey()] = n;
+      saveDirty = true;
+      emit();
+      return true;
+    },
+    tradeAt: (i: number) => {
+      api.trade(i);
+      return true;
+    },
+    restockNow: () => {
+      // Test hook: the twice-a-day restock, on demand.
+      restockTrades();
+      emit();
+      return true;
+    },
     setBlock: (x: number, y: number, z: number, id: number) => {
       // Test hook: direct world edit (stations are scan-based, so they
       // pick these up exactly like player-placed blocks).
@@ -7299,14 +7434,23 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     trade(i) {
       const offer = traderOf(traderRole).offers[i];
       if (!offer) return;
+      const key = curTraderKey();
+      const rep = repAtKey(key);
+      if (rep <= -50) return say("This hamlet won't trade with you — your name is mud here. Earn it back: quests, patience, and keeping the folk safe.");
       const tier = offer.tier ?? 1;
       const before = tradeLevelFor(tradeXp[traderRole] ?? 0);
       if (tier > before) return say("Locked — this " + traderOf(traderRole).name.toLowerCase() + " is a " + TIER_NAMES[before] + ". Trade more to reach " + TIER_NAMES[tier] + ".");
-      const pn = heroT > 0 ? Math.max(1, offer.pn - 1) : offer.pn;
+      const stocks = stockFor(key + ":" + traderRole);
+      if (!creative && (stocks[i] ?? 0) <= 0) return say("Out of stock — the folk restock morning and afternoon.");
+      const pn = priceFor(offer.pn, key);
       if (!creative && (inv[offer.pay] ?? 0) < pn) return say("Need " + pn + " " + def(offer.pay).name.toLowerCase());
-      if (!creative) spend(offer.pay, pn);
+      if (!creative) {
+        spend(offer.pay, pn);
+        stocks[i] -= 1;
+      }
       give(offer.out, offer.on);
       tradeXp[traderRole] = (tradeXp[traderRole] ?? 0) + 1;
+      if (rep < 30) addRep(key, 1);
       const after = tradeLevelFor(tradeXp[traderRole]);
       if (after > before) say(traderOf(traderRole).name + " is now a " + TIER_NAMES[after] + "! New offers unlocked.");
       else say("Traded");
@@ -7362,6 +7506,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       } else if (prog.n < q.need) return say(q.detail);
       prog.done = true;
       prog.n = q.need;
+      addRep(repKeyFor(player.x, player.z), 5);
       const before = rankLv;
       for (const [rid, rn] of q.reward) give(rid, rn);
       gainXp(q.xp);
