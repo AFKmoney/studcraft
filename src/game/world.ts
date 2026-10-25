@@ -1049,6 +1049,20 @@ function levelPad(world: World, x0: number, z0: number, w: number, d: number, h:
 
 
 
+
+function stampDungeon(world: World, x: number, y: number, z: number) {
+  // small buried room
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        world.set(x + dx, y + dy, z + dz, ID.Air);
+      }
+    }
+  }
+  world.set(x, y, z, ID.Chest);
+  world.set(x + 1, y, z, ID.Spawner);
+}
+
 function stampWreck(world: World, x: number, y: number, z: number) {
   // small shipwreck: logs + chest
   world.set(x, y, z, ID.Log);

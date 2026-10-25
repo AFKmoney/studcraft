@@ -24,6 +24,7 @@
 - Added rare beacon (iron pillar + diamond) in Brick plains.
 - Added rare mine entrance (hole + ore).
 - Added rare shipwreck (logs + chest) on shore/ocean.
+- Added rare buried dungeon (room + chest + spawner).
 - Block icons + recipes for Basalt/Calcite/Tuff complete.
 
 ### Recipes for new blocks (this cycle)
