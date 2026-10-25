@@ -67,14 +67,21 @@ export class World {
   }
 
   private biomeOf(x: number, z: number, h: number): string {
-    if (h <= SEA - 6) return "Ocean";
-    if (h <= SEA) return "Shore";
+    if (h <= SEA) {
+      const nearLand =
+        this.heightAt(x + 5, z) > SEA ||
+        this.heightAt(x - 5, z) > SEA ||
+        this.heightAt(x, z + 5) > SEA ||
+        this.heightAt(x, z - 5) > SEA;
+      if (h <= SEA - 3 || !nearLand) return "Ocean";
+      return "Shore";
+    }
     const wet = this.noise.fbm(x * 0.008 + 200, z * 0.008);
     const heat = this.noise.fbm(x * 0.007 + 20, z * 0.009 + 400);
     if (h >= 50 || (h >= 44 && heat < 0.46)) return "Snow cap";
     if (h <= SEA + 4 && wet > 0.57) return "Fen";
-    if (heat > 0.72 && wet < 0.32) return "Desert";
-    if (heat > 0.64 && wet < 0.46) return "Ash ridge";
+    if (heat > 0.7 && wet < 0.42 && h >= 34) return "Ash ridge";
+    if (heat > 0.52 && wet < 0.42 && h < 48) return "Desert";
     if (wet > 0.62) return "Grove";
     if (wet < 0.38) return "Sand flats";
     return "Brick plains";
@@ -101,7 +108,11 @@ export class World {
         const biome = this.biomeOf(x, z, h);
         let top: number = ID.Grass;
         let fill: number = ID.Dirt;
-        if (biome === "Shore" || biome === "Sand flats" || biome === "Desert") {
+        if (biome === "Ocean") {
+          const roll = hash2(x, z, this.seed + 15);
+          top = roll > 0.72 ? ID.Gravel : roll > 0.58 ? ID.Clay : ID.Sand;
+          fill = roll > 0.72 ? ID.Gravel : ID.Sand;
+        } else if (biome === "Shore" || biome === "Sand flats" || biome === "Desert") {
           top = ID.Sand;
           fill = ID.Sand;
         } else if (biome === "Fen") {
@@ -206,7 +217,8 @@ export class World {
           const biome = this.biomeAt(x, z);
           if (!slope && t < 0.012) {
             if (biome === "Ash ridge" || biome === "Desert") {
-              if (t < 0.004) {
+              const rate = biome === "Desert" ? 0.008 : 0.004;
+              if (t < rate) {
                 const tall = 1 + (hash2(x, z, this.seed + 6) > 0.5 ? 1 : 0);
                 for (let i = 1; i <= tall; i++) this.paint(data, baseX, baseZ, x, h + i, z, ID.Cactus);
               }
@@ -223,13 +235,13 @@ export class World {
               const i = idx(x - baseX, y, z - baseZ);
               if (data[i] === ID.Air) data[i] = ID.Reed;
             }
-          } else if (t > 0.94 && t < 0.97 && x >= baseX && x < baseX + CS && z >= baseZ && z < baseZ + CS) {
+          } else if (biome !== "Desert" && t > 0.94 && t < 0.97 && x >= baseX && x < baseX + CS && z >= baseZ && z < baseZ + CS) {
             const y = h + 1;
             if (y < HEIGHT - 1) {
               const i = idx(x - baseX, y, z - baseZ);
               if (data[i] === ID.Air) data[i] = t > 0.955 ? ID.Flower : ID.FlowerRed;
             }
-          } else if (t > 0.9 && t <= 0.94 && x >= baseX && x < baseX + CS && z >= baseZ && z < baseZ + CS) {
+          } else if (biome !== "Desert" && t > 0.9 && t <= 0.94 && x >= baseX && x < baseX + CS && z >= baseZ && z < baseZ + CS) {
             const y = h + 1;
             if (y < HEIGHT - 1) {
               const i = idx(x - baseX, y, z - baseZ);
@@ -257,6 +269,7 @@ export class World {
       }
     }
 
+    this.decorateOcean(data, baseX, baseZ);
     this.paintCellar(data, baseX, baseZ);
     this.paintHamlet(data, baseX, baseZ);
     this.paintSites(data, baseX, baseZ);
@@ -518,6 +531,29 @@ export class World {
     }
   }
 
+  private decorateOcean(data: Uint8Array, baseX: number, baseZ: number) {
+    const idx = (lx: number, y: number, lz: number) => lx + lz * CS + y * CS * CS;
+    for (let lz = 0; lz < CS; lz++) {
+      for (let lx = 0; lx < CS; lx++) {
+        const x = baseX + lx;
+        const z = baseZ + lz;
+        const h = this.heightAt(x, z);
+        if (this.biomeOf(x, z, h) !== "Ocean") continue;
+        if (hash2(x, z, this.seed + 880) > 0.16) continue;
+        const tall = 2 + Math.floor(hash2(x, z, this.seed + 881) * 4);
+        for (let i = 1; i <= tall; i++) {
+          const y = h + i;
+          if (y >= SEA || y >= HEIGHT - 1) break;
+          const cell = data[idx(lx, y, lz)];
+          if (cell !== ID.Water && cell !== ID.Air) break;
+          const under = data[idx(lx, y - 1, lz)];
+          if (i === 1 && under !== ID.Sand && under !== ID.Gravel && under !== ID.Clay) break;
+          data[idx(lx, y, lz)] = ID.Reed;
+        }
+      }
+    }
+  }
+
   private paintCellar(data: Uint8Array, baseX: number, baseZ: number) {
     if (this.flat || hash2(baseX, baseZ, this.seed + 88) < 0.988) return;
     const site = this.hamletAt(Math.floor(baseX / REGION), Math.floor(baseZ / REGION));
@@ -592,9 +628,10 @@ export class World {
         const site = this.siteAt(gx, gz);
         if (!site) continue;
         if (site.x + 8 < baseX || site.x - 3 >= baseX + CS || site.z + 8 < baseZ || site.z - 3 >= baseZ + CS) continue;
-        if (site.kind !== "wreck" && site.kind !== "mine") {
-          const rad = site.kind === "outpost" ? 6 : 5;
-          const floor = site.kind === "cairn" ? ID.Snow : site.kind === "shrine" ? ID.Hard : ID.Grass;
+        if (site.kind !== "wreck" && site.kind !== "mine" && site.kind !== "reef") {
+          const rad = site.kind === "outpost" || site.kind === "tomb" ? 6 : 5;
+          const floor =
+            site.kind === "cairn" ? ID.Snow : site.kind === "shrine" ? ID.Hard : site.kind === "tomb" ? ID.Sand : ID.Grass;
           for (let dz = -1; dz <= rad; dz++) {
             for (let dx = -1; dx <= rad; dx++) {
               this.force(data, baseX, baseZ, site.x + dx, site.y, site.z + dz, floor);
@@ -618,7 +655,7 @@ export class World {
 
   siteAt(gx: number, gz: number): Site | null {
     if (this.flat) return null;
-    if (hash2(gx, gz, this.seed + 1200) > 0.58) return null;
+    const gate = hash2(gx, gz, this.seed + 1200);
     const span = SITE_STEP - 36;
     const x = gx * SITE_STEP + 18 + Math.floor(hash2(gx, gz, this.seed + 1201) * span);
     const z = gz * SITE_STEP + 18 + Math.floor(hash2(gx, gz, this.seed + 1202) * span);
@@ -645,15 +682,19 @@ export class World {
     const roll = hash2(gx, gz, this.seed + 1203);
     const steep = max - min > 5;
     let kind: SiteKind;
-    if (shore && roll < 0.55) kind = "wreck";
+    if (biome === "Ocean") {
+      if (gate > 0.86 || max - min > 7) return null;
+      kind = roll < 0.6 ? "reef" : "wreck";
+    } else if (gate > 0.58) return null;
+    else if (shore && roll < 0.55) kind = "wreck";
     else if (h <= SEA + 1) return null;
     else if (biome === "Snow cap" && max - min <= 12) kind = roll < 0.72 ? "cairn" : "mine";
     else if (steep) return null;
     else if (biome === "Grove") kind = roll < 0.34 ? "shrine" : roll < 0.62 ? "patch" : "camp";
     else if (biome === "Ash ridge") kind = roll < 0.55 ? "ruin" : "outpost";
     else if (biome === "Fen") kind = roll < 0.5 ? "camp" : "shrine";
-    else if (biome === "Sand flats" || biome === "Desert") kind = roll < 0.48 ? "ruin" : roll < 0.75 ? "outpost" : "mine";
-    else if (biome === "Ocean") kind = "wreck";
+    else if (biome === "Desert") kind = roll < 0.5 ? "tomb" : roll < 0.78 ? "ruin" : "outpost";
+    else if (biome === "Sand flats") kind = roll < 0.48 ? "ruin" : roll < 0.75 ? "outpost" : "mine";
     else {
       const bag: SiteKind[] = ["ruin", "camp", "mine", "outpost", "patch", "shrine"];
       kind = bag[Math.floor(roll * bag.length) % bag.length];

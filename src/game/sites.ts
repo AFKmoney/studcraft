@@ -3,7 +3,7 @@ import { hash2 } from "./noise";
 
 export const SITE_STEP = 96;
 
-export type SiteKind = "ruin" | "camp" | "wreck" | "mine" | "shrine" | "cairn" | "outpost" | "patch";
+export type SiteKind = "ruin" | "camp" | "wreck" | "mine" | "shrine" | "cairn" | "outpost" | "patch" | "tomb" | "reef";
 
 export type Site = { x: number; z: number; y: number; kind: SiteKind };
 
@@ -21,6 +21,8 @@ export function siteLabel(kind: SiteKind): string {
   if (kind === "shrine") return "Shrine";
   if (kind === "cairn") return "Cairn";
   if (kind === "outpost") return "Outpost";
+  if (kind === "tomb") return "Tomb";
+  if (kind === "reef") return "Reef";
   return "Patch";
 }
 
@@ -142,6 +144,50 @@ export function siteBricks(kind: SiteKind, seed: number, x: number, z: number): 
     put(out, 3, 1, 3, ID.Chest);
     put(out, 3, 1, 2, ID.Campfire);
     put(out, 4, 1, 4, ID.Barrel);
+    return out;
+  }
+  if (kind === "tomb") {
+    for (let dz = 0; dz < 7; dz++) {
+      for (let dx = 0; dx < 7; dx++) {
+        put(out, dx, 0, dz, ID.Sand);
+        const edge = dx === 0 || dz === 0 || dx === 6 || dz === 6;
+        const door = dz === 6 && dx === 3;
+        const inner = dx >= 2 && dx <= 4 && dz >= 2 && dz <= 4;
+        if (edge && !door) {
+          put(out, dx, 1, dz, ID.Yellow);
+          put(out, dx, 2, dz, ID.Orange);
+        } else if (!inner && !door) put(out, dx, 1, dz, ID.Yellow);
+      }
+    }
+    put(out, 3, 1, 3, ID.Chest);
+    put(out, 3, 2, 3, ID.Gold);
+    put(out, 1, 3, 1, ID.Orange);
+    put(out, 5, 3, 1, ID.Orange);
+    put(out, 1, 3, 5, ID.Orange);
+    put(out, 5, 3, 5, ID.Orange);
+    put(out, 5, 1, 5, ID.Cactus);
+    return out;
+  }
+  if (kind === "reef") {
+    for (let dz = 0; dz < 5; dz++) {
+      for (let dx = 0; dx < 5; dx++) {
+        const edge = dx === 0 || dz === 0 || dx === 4 || dz === 4;
+        put(out, dx, 0, dz, edge ? ID.Clay : ID.Sand);
+      }
+    }
+    put(out, 2, 1, 2, ID.Chest);
+    put(out, 2, 2, 2, ID.PrismOre);
+    for (const [dx, dz] of [
+      [0, 2],
+      [2, 0],
+      [4, 2],
+      [2, 4],
+    ] as const) {
+      put(out, dx, 1, dz, ID.Reed);
+      put(out, dx, 2, dz, ID.Reed);
+      put(out, dx, 3, dz, ID.Reed);
+    }
+    put(out, 0, 1, 0, ID.Lamp);
     return out;
   }
   for (let dz = 0; dz < 5; dz++) for (let dx = 0; dx < 5; dx++) put(out, dx, 0, dz, ID.Grass);

@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (this session)
+**Last update:** 2026-10-25 (biome pass — Ocean + Desert)
 
 ## Current State (as of clone @ 4c08b46)
 
@@ -38,13 +38,13 @@
 10. **Physics / Mechanics**: Full fluid flow, gravity for sand/gravel, crop growth stages, animal breeding full, sleeping, weather (rain/snow/thunder).
 
 ### Immediate Next Tasks (this or next agent)
-- [ ] Expand biome set + structures (start with desert + ocean).
-- [ ] Complete redstone wire + basic gates.
-- [ ] Full Ender Dragon encounter or End portal.
-- [x] Improve Lego stud visual (more detail, brick texture seams) — CLAIMED by Grok 2026-10-25, starting analysis of mesher.ts.
+- [x] Expand biome set + structures (start with desert + ocean). — DONE. Open water = Ocean, beaches = Shore, hot/dry = Desert, tombs + reefs + kelp. Do not redo biomeOf / decorateOcean / tomb / reef.
+- [x] Complete redstone wire + basic gates. — DONE c595890 (comparator, observer, NOT torch). Further gates still open; do not rewrite recompute() without a claim.
+- [x] Full Ender Dragon encounter or End portal. — DONE 48f4a1f (frame + eyes, end portal, pillars, breath, egg). Free follow-up: crystals you can break to weaken the dragon.
+- [x] Improve Lego stud visual (more detail, brick texture seams) — still CLAIMED, not finished. Do not edit stud geometry in mesher.ts.
 - [ ] Inventory overhaul for closer vanilla feel.
-- [ ] Add more recipes and vanilla items.
-- [ ] Performance pass on mesher + chunk loading.
+- [ ] Add more recipes and vanilla items. — **NEXT MOVE, unclaimed. Take this.**
+- [ ] Performance pass on mesher + chunk loading. — blocked while stud visual is claimed (same file).
 
 ### Sync Protocol
 - **Before starting work:** Read this file + last commit message. Append your changes under a new dated section.
@@ -156,9 +156,7 @@ shading, mobile UI, QA, APK packaging. Everything below verified with
 - Place of new components triggers recompute.
 - Files: blocks.ts, recipes.ts, game.ts.
 - Did not touch mesher (other agent claim).
-
-### Next move
-- Ready for next gap. Suggest "Full Ender Dragon encounter or End portal" or "Expand biome set + structures (desert + ocean)".
+- Commit: c595890.
 
 ### 2026-10-25 — Grok (End / Dragon 1:1 path)
 - Implemented closer-to-vanilla End portal + dragon encounter.
@@ -168,16 +166,33 @@ shading, mobile UI, QA, APK packaging. Everything below verified with
 - End island improved with 4 obsidian pillars (crystal stand-ins on top).
 - Dragon: extra breath attack when close, drops DragonEgg on death (plus existing Elytra/Totem/Scrap).
 - Files: blocks.ts, game.ts.
-- Logged and pushed.
+- Commit: 48f4a1f.
 
-### Next move
-- Ready. Suggest "Expand biome set + structures (desert + ocean)" or deeper dragon crystals that can be destroyed to weaken the dragon.
-### 2026-10-25 — Grok (biome expansion)
-- Claimed and implemented undeclared piste: Expand biome set + structures (Desert + Ocean start).
-- Added "Ocean" (h <= SEA-6) and "Desert" (high heat + low wet) biomes in biomeOf.
-- Desert uses Sand top/fill + cactus spawning (shared with Ash ridge logic).
-- Ocean is deeper water regions; sites prefer wrecks where applicable.
-- Surface, decoration, and site kind selection updated.
-- Files: src/game/world.ts
-- Did not touch claimed areas (studs, redstone, lighting).
-- Next gaps remain: End dimension, full redstone (claimed), inventory UX, more items, physics (fluids/weather).
+### 2026-10-25 — Grok (biome expansion, first cut)
+- Added a thin Ocean (h <= SEA-6) and a thin Desert (heat > 0.72). Commit 9ce8d84.
+- Superseded by the pass below (same files). Do not revert to the thin bands.
+
+### 2026-10-25 — Grok (biomes: Ocean + Desert, merged)
+Rebased onto 9ce8d84. Kept the wider climate, not the thin bands.
+
+- Biomes: `Ocean` is open water (floor ≤ sea−3, or more than 5 blocks from land). `Shore` is the beach band next to land. `Desert` when hot+dry and below the snow line. Ash ridge kept for the hotter high ground.
+- Ocean floor: sand / gravel / clay. Kelp = stacked Reed (`decorateOcean`).
+- Desert: sand, more cactus than ash, no trees, no grass, no flowers.
+- Structures: `tomb` in Desert, `reef` + wrecks in Ocean. Reefs do not drain water. Ocean site gate is looser (hash ≤ 0.86); every other site kind keeps 0.58 so old ruins/camps do not move.
+- Loot: tomb, reef. Spawns: turtles + drowned in Ocean (game.ts critter block only).
+
+Files: src/game/world.ts, src/game/sites.ts, src/game/loot.ts, src/game/game.ts (spawn lines only), WORKLOG.md.
+
+### Next move — UNCLAIMED, take this
+**Add vanilla items + recipes: Compass, Clock, Map, Banner, Lead.**
+Files ONLY: `src/game/blocks.ts` (append new item ids — do not renumber; Comparator is 215, EndFrame is 218), `src/game/recipes.ts`, `src/game/icons.tsx`.
+DO NOT TOUCH:
+- `src/game/mesher.ts` (stud visual still claimed, unfinished)
+- `recompute()` / redstone block ids (just landed, c595890)
+- `sky()` / shadow camera in `src/game/game.ts` (shadow pass just landed, 0bdb3e1; Muse light pass may still be in there)
+- End portal frame code and dragon breath (48f4a1f)
+- `biomeOf`, `decorateOcean`, tomb/reef (this merge)
+
+Free after that: breakable end crystals that weaken the dragon, or the inventory shift-click pass (GameView.tsx).
+
+*Agents: append below. Keep it factual and short.*

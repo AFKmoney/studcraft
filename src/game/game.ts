@@ -2958,9 +2958,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           const [x, z] = spot();
           spawnKind("bee", x, z);
         }
-        if ((biome === "Shore" || biome === "Sand flats") && alive("turtle") < 2) {
+        if ((biome === "Shore" || biome === "Sand flats" || biome === "Ocean") && alive("turtle") < 2) {
           const [x, z] = spot();
           spawnKind("turtle", x, z);
+        }
+        if (!settings.mods.peaceful && biome === "Ocean" && alive("drowned") < 2) {
+          const [x, z] = spot();
+          spawnKind("drowned", x, z);
         }
         if (night && alive("bat") < 3) {
           const [x, z] = spot();
