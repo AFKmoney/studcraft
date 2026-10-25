@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import { BLOCKS, CREATIVE_BAR, ID, def } from "./blocks";
+import { BLOCKS, CREATIVE_BAR, ID, def, stairsVariant } from "./blocks";
 import { createAudio } from "./audio";
 import { STUD_H, STUD_R, buildChunk, type Surface } from "./mesher";
 import { NEIGHBORS, RECIPES, SMELT, fuelTime, matchGrid } from "./recipes";
@@ -54,6 +54,7 @@ export type Hud = {
   timeLabel: string;
   mine: number;
   targetName: string;
+  signEdit: { x: number; y: number; z: number; text: string } | null;
   seed: number;
   seedText: string;
   flash: number;
@@ -124,6 +125,8 @@ export type GameApi = {
   furnaceTap: (part: number) => void;
   chestTap: (i: number) => void;
   enchant: () => void;
+  setSignText: (t: string) => void;
+  cancelSignEdit: () => void;
   mend: () => void;
   temper: () => void;
   brew: (kind: string) => void;
@@ -230,6 +233,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     timeLabel: "Day",
     mine: 0,
     targetName: "",
+    signEdit: null as { x: number; y: number; z: number; text: string } | null,
     seed: 0,
     seedText: "",
     flash: 0,
@@ -316,6 +320,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   // delay for repeaters/comparators, and each repeater's latched output.
   const power = new Map<string, number>();
   const comps = new Map<string, { dir: number; delay: number }>();
+  const signs = new Map<string, string>();
   const repOut = new Map<string, boolean>();
   const repTimer = new Map<string, number>();
   let rsAcc = 0;
@@ -1059,6 +1064,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     furnaces.clear();
     chests.clear();
     comps.clear();
+    signs.clear();
     power.clear();
     repOut.clear();
     repTimer.clear();
@@ -1184,6 +1190,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     for (const f of data.furnaces ?? []) furnaces.set(f.x + "," + f.y + "," + f.z, { ...f });
     for (const c of data.chests ?? []) chests.set(c.x + "," + c.y + "," + c.z, { ids: c.ids.slice(), ns: c.ns.slice() });
     for (const c of data.comps ?? []) comps.set(c.x + "," + c.y + "," + c.z, { dir: c.dir, delay: c.delay });
+    signs.clear();
+    for (const s of data.signs ?? []) signs.set(s.x + "," + s.y + "," + s.z, s.t);
     hotbar = data.hotbar?.length === 9 ? [...data.hotbar] : [...CREATIVE_BAR];
     for (const k of Object.keys(inv)) delete inv[Number(k)];
     for (const [id, n] of data.inv ?? []) inv[id] = n;
@@ -1309,6 +1317,22 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     return def(world.get(x, y, z)).solid;
   }
 
+  // Collision top (world Y) of the block in cell (x,y,z) for an actor whose
+  // centre is at (px,pz): slabs are half height; stairs are half on the low
+  // side and full on the high side (def.dir). 0 = no collision.
+  function colTopAt(x: number, y: number, z: number, px: number, pz: number) {
+    const d = def(world.get(x, y, z));
+    if (!d.solid) return 0;
+    if (d.slab) return y + 0.5;
+    if (d.stairs) {
+      const lx = px - x;
+      const lz = pz - z;
+      const high = d.dir === 0 ? lz < 0.5 : d.dir === 1 ? lx >= 0.5 : d.dir === 2 ? lz >= 0.5 : lx < 0.5;
+      return y + (high ? 1 : 0.5);
+    }
+    return y + 1;
+  }
+
   function overlapAt(px: number, py: number, pz: number) {
     const minX = Math.floor(px - HW);
     const maxX = Math.floor(px + HW - 1e-4);
@@ -1318,7 +1342,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const maxZ = Math.floor(pz + HW - 1e-4);
     for (let y = minY; y <= maxY; y++) {
       for (let z = minZ; z <= maxZ; z++) {
-        for (let x = minX; x <= maxX; x++) if (solidAt(x, y, z)) return true;
+        for (let x = minX; x <= maxX; x++) {
+          const top = colTopAt(x, y, z, px, pz);
+          if (top > 0 && py < top && py + BODY > y) return true;
+        }
       }
     }
     return false;
@@ -1340,9 +1367,17 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     player[axis] += delta;
     if (!overlapAt(player.x, player.y, player.z)) return;
     if (allowStep && axis !== "y") {
-      player.y += 1.02;
-      if (!overlapAt(player.x, player.y, player.z)) return;
-      player.y -= 1.02;
+      // Try a half step first (slabs, stair treads), then a full block step.
+      let stepped = false;
+      for (const lift of [0.52, 1.02]) {
+        player.y += lift;
+        if (!overlapAt(player.x, player.y, player.z)) {
+          stepped = true;
+          break;
+        }
+        player.y -= lift;
+      }
+      if (stepped) return;
     }
     if (axis === "y") {
       if (delta < 0 && player.vy < -13 && !creative && !inWaterNow()) {
@@ -1353,7 +1388,22 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       }
       if (delta > 0) player.y = Math.floor(player.y + BODY) - BODY - 1e-3;
       else {
-        player.y = Math.floor(player.y) + 1 + 1e-3;
+        // Land on the highest collision top crossed this step (slab = +0.5).
+        const prevY = player.y - delta;
+        let land = -Infinity;
+        const minX = Math.floor(player.x - HW);
+        const maxX = Math.floor(player.x + HW - 1e-4);
+        const minZ = Math.floor(player.z - HW);
+        const maxZ = Math.floor(player.z + HW - 1e-4);
+        for (let cy = Math.floor(player.y) - 1; cy <= Math.floor(prevY) + 1; cy++) {
+          for (let cz = minZ; cz <= maxZ; cz++) {
+            for (let cx = minX; cx <= maxX; cx++) {
+              const t = colTopAt(cx, cy, cz, player.x, player.z);
+              if (t > 0 && t <= prevY + 1e-3 && t > land) land = t;
+            }
+          }
+        }
+        player.y = (land > -Infinity ? land : Math.floor(player.y) + 1) + 1e-3;
         player.grounded = true;
       }
       player.vy = 0;
@@ -1507,6 +1557,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (id === ID.Air || id === ID.Bedrock || block.hard === Infinity) return;
     world.set(x, y, z, ID.Air);
     markDirtyAt(x, z);
+    if (block.sign) signs.delete(x + "," + y + "," + z);
     if (isComponent(id)) {
       const k = rsKey(x, y, z);
       comps.delete(k);
@@ -2000,6 +2051,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       return true;
     }
     const block = def(hit.id);
+    if (block.sign) {
+      hud.signEdit = { x: hit.x, y: hit.y, z: hit.z, text: signs.get(hit.x + "," + hit.y + "," + hit.z) ?? "" };
+      emit();
+      return true;
+    }
     if (block.door || block.gate) {
       const next = hit.id === ID.Door || hit.id === ID.Gate ? (hit.id === ID.Door ? ID.DoorOpen : ID.GateOpen) : hit.id === ID.DoorOpen ? ID.Door : ID.Gate;
       if (world.set(hit.x, hit.y, hit.z, next)) markDirtyAt(hit.x, hit.z);
@@ -2183,9 +2239,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       say("Can't snap a brick into yourself");
       return;
     }
-    const placeId = held === ID.RedTorch ? ID.RedTorchOn : held;
+    const placeId = held === ID.RedTorch ? ID.RedTorchOn : heldDef.stairs ? stairsVariant(held, facingDir()) : held;
     if (!world.set(px, py, pz, placeId)) return;
     markDirtyAt(px, pz);
+    if (heldDef.sign) {
+      hud.signEdit = { x: px, y: py, z: pz, text: "" };
+      emit();
+    }
     if (!creative) spend(held, 1);
     if (placeId === ID.Repeater || placeId === ID.Comparator || placeId === ID.Piston) comps.set(rsKey(px, py, pz), { dir: facingDir(), delay: 1 });
     if (isComponent(placeId) || isComponent(world.get(px, py + 1, pz))) recompute(px, py, pz);
@@ -2975,7 +3035,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const ix = Math.floor(x);
     const iz = Math.floor(z);
     let y = Math.min(HEIGHT - 2, world.heightAt(ix, iz) + 8);
-    for (; y >= 1; y--) if (solidAt(ix, y, iz)) return y + 1;
+    for (; y >= 1; y--) {
+      const d = def(world.get(ix, y, iz));
+      if (d.solid) return y + (d.slab ? 0.5 : 1);
+    }
     return 5;
   }
 
@@ -3946,6 +4009,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         const [x, y, z] = key.split(",").map(Number);
         return { x, y, z, dir: c.dir, delay: c.delay };
       }),
+      signs: [...signs.entries()].map(([key, t]) => {
+        const [x, y, z] = key.split(",").map(Number);
+        return { x, y, z, t };
+      }),
       folk: folkSpots.map((f) => ({ x: f.x, z: f.z, role: f.role })),
       village: villageAt,
       quests: quests.map((q) => ({ id: q.id, n: q.n, done: q.done })),
@@ -4265,7 +4332,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       }
     } else if (hit) {
       const block = def(hit.id);
-      hud.targetName = block.name;
+      if (block.sign) {
+        const t = signs.get(hit.x + "," + hit.y + "," + hit.z);
+        hud.targetName = t ? "Sign — " + t : "Sign";
+      } else hud.targetName = block.name;
       highlight.visible = true;
       highlight.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
       studOutline.visible = settings.studs && !def(world.get(hit.x, hit.y + 1, hit.z)).solid;
@@ -5244,6 +5314,21 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         if (bin.ns[i] <= 0) bin.ids[i] = 0;
       }
       saveDirty = true;
+      emit();
+    },
+    setSignText(t: string) {
+      const at = hud.signEdit;
+      if (!at) return;
+      const key = at.x + "," + at.y + "," + at.z;
+      const clean = t.trim().slice(0, 60);
+      if (clean) signs.set(key, clean);
+      else signs.delete(key);
+      hud.signEdit = null;
+      saveDirty = true;
+      emit();
+    },
+    cancelSignEdit() {
+      hud.signEdit = null;
       emit();
     },
     enchant() {

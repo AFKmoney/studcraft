@@ -893,3 +893,25 @@ real gaps = multiplayer (zero network code), thin enchants (single flag action),
 no slabs/stairs/signs, one wood type, no procedural caves, Enderman absent, villager trades
 shallow. Proposed battle order in the doc (build blocks → enchants → mobs → caves → brewing →
 biomes → professions → multiplayer as its own product decision). NEXT: Philippe picks the order.
+
+## 2026-10-25 — v2.3 battle order item 1: slabs + stairs + signs (Muse)
+
+Philippe ordered the full AUDIT-1A1 battle order, in order, everything logged here.
+- **18 new defs (ids 250-267, appended only)**: slabs (Planks/Stone/Cobble/Ash/White),
+  stairs (3 materials x 4 dir variants; dir = high side, placed from the player's facing via
+  stairsVariant + facingDir; rotated variants drop the canonical id), Sign.
+- Mesher: addBoxT (per-face tiles), slab/stairs/sign geometry in the special-shape branch,
+  stud on slab tops; slabs/stairs/signs no longer occlude neighbours' faces or cast full AO.
+- Physics: per-cell collision tops (colTopAt) - slabs 0.5, stairs 0.5 low / 1.0 high side;
+  overlapAt does a real box test; moveAxis tries a 0.52 half-step before the 1.02 full step
+  and lands on the highest crossed collision top; groundY knows slab tops.
+- Signs: text stored in a signs map (saved as SaveV1.signs), editor opens on place and on
+  use (SignEditor overlay, 60 chars), target label reads "Sign - <text>", cleared on break.
+- Recipes: 5 slabs (3 -> 6), 3 stairs (6 -> 4), sign (6 planks + stick -> 3). Icons: 9 new
+  lab renders (86 total).
+- **Atlas overflow caught by the icon lab**: drawn tiles hit 583 > 512 (atlas was at 511/512
+  before this change). ATLAS_ROWS 32 -> 48 (768 tiles). Any future def spree must recheck.
+- QA (Playwright, seed 23): slab placed, stood on at y = cell + 0.501 exactly; stairs placed
+  as rotated variant; sign round-trip: editor opens, text carved, target reads the text back,
+  editor reopens prefilled. 0 errors. tsc 0.
+- NEXT (Muse): item 2 - real enchantments (per-item, levels, anvil combine).

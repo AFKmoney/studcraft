@@ -38,6 +38,7 @@ export type SaveV1 = {
     burn: number;
   }[];
   comps?: { x: number; y: number; z: number; dir: number; delay: number }[];
+  signs?: { x: number; y: number; z: number; t: string }[];
   runes?: [number, string[]][];
   folk?: { x: number; z: number; role: string }[];
   village?: { x: number; z: number } | null;

@@ -56,6 +56,43 @@ export function GameView() {
   );
 }
 
+function SignEditor({ game }: { game: GameApi }) {
+  const at = game.hud.signEdit;
+  const [text, setText] = useState(at?.text ?? "");
+  if (!at) return null;
+  return (
+    <div className="menu-wrap">
+      <section className="card sheet">
+        <p className="eyebrow">Sign</p>
+        <h2>Write on the sign</h2>
+        <label className="seed-row">
+          <input
+            type="text"
+            value={text}
+            maxLength={60}
+            spellCheck={false}
+            aria-label="Sign text"
+            autoFocus
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") game.setSignText(text);
+              if (e.key === "Escape") game.cancelSignEdit();
+            }}
+          />
+        </label>
+        <div className="stack">
+          <button className="btn btn-primary" type="button" onClick={() => game.setSignText(text)}>
+            Carve it
+          </button>
+          <button className="btn" type="button" onClick={() => game.cancelSignEdit()}>
+            Cancel
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function Overlay({ game }: { game: GameApi }) {
   const [, poke] = useState(0);
   useEffect(() => game.subscribe(() => poke((n) => n + 1)), [game]);
@@ -72,6 +109,7 @@ function Overlay({ game }: { game: GameApi }) {
         <TitleScreen game={game} onEnter={(kind, seed, id) => { game.setSeed(seed); game.enter(kind, id); }} booting={false} error={null} />
       )}
       {phase === "play" && !hud.hidden && <Hud game={game} />}
+      {phase === "play" && hud.signEdit && <SignEditor game={game} />}
       {phase === "play" && <TouchControls game={game} />}
       {phase === "pause" && <PauseMenu game={game} />}
       {phase === "inventory" && <Inventory game={game} />}

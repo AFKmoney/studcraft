@@ -249,6 +249,24 @@ export const ID = {
   DustOn: 247,
   RepeaterOn: 248,
   ComparatorOn: 249,
+  SlabPlanks: 250,
+  SlabStone: 251,
+  SlabCobble: 252,
+  SlabAsh: 253,
+  SlabWhite: 254,
+  StairsPlanks0: 255,
+  StairsPlanks1: 256,
+  StairsPlanks2: 257,
+  StairsPlanks3: 258,
+  StairsStone0: 259,
+  StairsStone1: 260,
+  StairsStone2: 261,
+  StairsStone3: 262,
+  StairsCobble0: 263,
+  StairsCobble1: 264,
+  StairsCobble2: 265,
+  StairsCobble3: 266,
+  Sign: 267,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -296,6 +314,10 @@ export type BlockDef = {
   cane: boolean;
   note: boolean;
   slow: boolean;
+  slab: boolean;
+  stairs: boolean;
+  sign: boolean;
+  dir: number;
 };
 
 function b(
@@ -349,6 +371,10 @@ function b(
     cane: false,
     note: false,
     slow: false,
+    slab: false,
+    stairs: false,
+    sign: false,
+    dir: 0,
     ...extra,
   };
 }
@@ -941,12 +967,32 @@ put(b(ID.BeetRipe, "Beetroots", "#b02620", "#e23b2f", "#8d1c18", "#5a1010", { so
 put(b(ID.PumpkinStem, "Pumpkin stem", "#3aaa4c", "#6ecf4a", "#e07a20", "#8d3e08", { solid: false, plant: true, crop: true, hard: 0.05, drop: ID.Pumpkin }));
 put(b(ID.MelonStem, "Melon stem", "#2f7d3a", "#6ecf4a", "#3aaa4c", "#8d3e18", { solid: false, plant: true, crop: true, hard: 0.05, drop: ID.Melon }));
 
+// --- v2.3 build shapes: slabs, stairs (dir = which side is HIGH:
+// 0=-z, 1=+x, 2=+z, 3=-x; the dir-0 id is the inventory/canonical one),
+// and the sign. Appended ids only - existing saves and atlas slots untouched.
+put(b(ID.SlabPlanks, "Plank slab", "#e0b15a", "#f0c36e", "#d7a44e", "#c09040", { hard: 0.55, slab: true }));
+put(b(ID.SlabStone, "Stone slab", "#9aa1a8", "#a7aeb4", "#8e959c", "#7a8188", { hard: 1.45, tough: true, slab: true }));
+put(b(ID.SlabCobble, "Cobble slab", "#8e959c", "#9aa1a8", "#7e868e", "#6e767e", { hard: 1.3, tough: true, need: 1, slab: true }));
+put(b(ID.SlabAsh, "Ash slab", "#c45a32", "#e07a48", "#a84828", "#7a3018", { hard: 0.7, tough: true, slab: true }));
+put(b(ID.SlabWhite, "White slab", "#f4f1ea", "#ffffff", "#e7e2d8", "#d4cec3", { hard: 0.5, slab: true }));
+for (let d = 0; d < 4; d++) {
+  put(b(ID.StairsPlanks0 + d, "Plank stairs", "#e0b15a", "#f0c36e", "#d7a44e", "#c09040", { hard: 0.55, stairs: true, dir: d, drop: ID.StairsPlanks0 }));
+  put(b(ID.StairsStone0 + d, "Stone stairs", "#9aa1a8", "#a7aeb4", "#8e959c", "#7a8188", { hard: 1.45, tough: true, stairs: true, dir: d, drop: ID.StairsStone0 }));
+  put(b(ID.StairsCobble0 + d, "Cobble stairs", "#8e959c", "#9aa1a8", "#7e868e", "#6e767e", { hard: 1.3, tough: true, need: 1, stairs: true, dir: d, drop: ID.StairsCobble0 }));
+}
+put(b(ID.Sign, "Sign", "#c4924a", "#e0b15a", "#a67c3a", "#8a6428", { hard: 0.4, solid: false, sign: true }));
+
+/** Canonical (dir-0) stairs id + a facing -> the placed variant id. */
+export function stairsVariant(canonical: number, dir: number): number {
+  return def(canonical).stairs ? canonical + ((dir % 4) + 4) % 4 : canonical;
+}
+
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];
 }
 
 export const ATLAS_COLS = 16;
-export const ATLAS_ROWS = 32;
+export const ATLAS_ROWS = 48;
 export const TILE = 128;
 
 const TILE_OF = new Uint16Array(512);
@@ -1148,6 +1194,15 @@ export const CATALOG = [
   ID.Lead,
   ID.BakedPotato,
   ID.CookedFish,
+  ID.SlabPlanks,
+  ID.SlabStone,
+  ID.SlabCobble,
+  ID.SlabAsh,
+  ID.SlabWhite,
+  ID.StairsPlanks0,
+  ID.StairsStone0,
+  ID.StairsCobble0,
+  ID.Sign,
 ];
 
 export const COLORS = [ID.Red, ID.Orange, ID.Yellow, ID.Green, ID.Blue, ID.Azure, ID.Pink, ID.White, ID.Black];

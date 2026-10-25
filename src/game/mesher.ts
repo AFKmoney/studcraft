@@ -101,6 +101,17 @@ function addBox(s: Surface, x0: number, y0: number, z0: number, x1: number, y1: 
   pushQuad(s, [[x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0]], [0, 0, -1], tile);
 }
 
+// Box with per-face tiles (side / top / bottom), for slabs and stairs whose
+// top must carry the material's top tile, not its side tile.
+function addBoxT(s: Surface, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, side: number, top: number, bottom: number) {
+  pushQuad(s, [[x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1]], [1, 0, 0], side);
+  pushQuad(s, [[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]], [-1, 0, 0], side);
+  pushQuad(s, [[x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0]], [0, 1, 0], top);
+  pushQuad(s, [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], [0, -1, 0], bottom);
+  pushQuad(s, [[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], [0, 0, 1], side);
+  pushQuad(s, [[x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0]], [0, 0, -1], side);
+}
+
 function addStud(s: Surface, x: number, y: number, z: number, tile: number) {
   const cx = x + 0.5;
   const cz = z + 0.5;
@@ -152,7 +163,8 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
   function occludes(id: number) {
     if (!id) return 0;
     const block = def(id);
-    return block.solid && !block.glass && !block.fluid ? 1 : 0;
+    // Slabs/stairs/signs never fully hide a neighbour's face or cast full AO.
+    return block.solid && !block.glass && !block.fluid && !block.slab && !block.stairs && !block.sign ? 1 : 0;
   }
 
   function shadeAt(x: number, y: number, z: number, nx: number, ny: number, nz: number, vx: number, vy: number, vz: number) {
@@ -178,10 +190,23 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
         const id = world.get(x, y, z);
         if (id === 0) continue;
         const self = def(id);
-        if (self.torch || self.door || self.ladder || self.dust || self.lever || self.gate || self.plate || self.rail || self.cactus) {
+        if (self.torch || self.door || self.ladder || self.dust || self.lever || self.gate || self.plate || self.rail || self.cactus || self.slab || self.stairs || self.sign) {
           const tile = faceTile(id, 1);
           const top = faceTile(id, 0);
-          if (self.torch) {
+          if (self.slab) {
+            addBoxT(opaque, x, y, z, x + 1, y + 0.5, z + 1, tile, top, faceTile(id, 2));
+            if (fancy) addStud(opaque, x, y - 0.5, z, top);
+          } else if (self.stairs) {
+            addBoxT(opaque, x, y, z, x + 1, y + 0.5, z + 1, tile, top, faceTile(id, 2));
+            // High half on the def's dir side (0=-z, 1=+x, 2=+z, 3=-x).
+            if (self.dir === 0) addBoxT(opaque, x, y + 0.5, z, x + 1, y + 1, z + 0.5, tile, top, tile);
+            else if (self.dir === 1) addBoxT(opaque, x + 0.5, y + 0.5, z, x + 1, y + 1, z + 1, tile, top, tile);
+            else if (self.dir === 2) addBoxT(opaque, x, y + 0.5, z + 0.5, x + 1, y + 1, z + 1, tile, top, tile);
+            else addBoxT(opaque, x, y + 0.5, z, x + 0.5, y + 1, z + 1, tile, top, tile);
+          } else if (self.sign) {
+            addBox(opaque, x + 0.44, y, z + 0.44, x + 0.56, y + 0.55, z + 0.56, tile);
+            addBox(opaque, x + 0.06, y + 0.5, z + 0.4, x + 0.94, y + 0.98, z + 0.54, tile);
+          } else if (self.torch) {
             addBox(opaque, x + 0.42, y, z + 0.42, x + 0.58, y + 0.55, z + 0.58, tile);
             addBox(opaque, x + 0.32, y + 0.52, z + 0.32, x + 0.68, y + 0.78, z + 0.68, top);
           } else if (self.door || self.gate) {
@@ -246,7 +271,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
             if (n.solid && !n.glass) continue;
           } else if (self.glass) {
             if (nid === id) continue;
-          } else if (n.solid && !n.glass) {
+          } else if (n.solid && !n.glass && !n.slab && !n.stairs && !n.sign) {
             continue;
           }
 
