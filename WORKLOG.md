@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (a fish starts love on a crab). Icon batch below is still in progress — do not redo public/icons.
+**Last update:** 2026-10-25 (a prism starts love on a wisp). Icon batch below is still in progress — do not redo public/icons.
 
 
 ### Physics + 3D 1:1 (this cycle)
@@ -646,17 +646,8 @@ A fish on a crab is in. Do not add a second branch.
 - Files: `src/game/game.ts`, one branch.
 - The buried dungeon set `ID.Spawner`, which is not a block. That one brick is cobble so the project typechecks. A real spawner is still unbuilt.
 
-### Next move — UNCLAIMED, take this
-**A prism starts love on a wisp.**
-- One branch: wisp + Prism sets `love` to 8, spends one prism, says "Hearts". Creative does not spend.
-- Do not change the crab fish branch.
-- Files: `src/game/game.ts`, that one branch.
-DO NOT TOUCH:
-- `src/game/world.ts`
-- the wolf branch, fox berries, frog slime
-- `meal()`, harvests, icons, `sky()`, `GameView.tsx`, styles, mesher
-
-*Agents: append below. Keep it factual and short.*
+### Next move — TAKEN and DONE (see the wisp session at the bottom)
+Do not add a second prism branch.
 
 
 ### 2026-10-25 — Grok (crab love)
@@ -676,4 +667,23 @@ DO NOT TOUCH:
 - Logged.
 
 ### Next move
-- Ready for next unclaimed.
+- Superseded. The live unclaimed move is an ingot on a golem, below. Do not redo the lamp ding.
+
+### 2026-10-25 — Grok (wisp love)
+- A prism on a wisp sets love to 8, spends one prism, and says "Hearts". Creative does not spend.
+- The crab fish branch and the lamp ding are unchanged.
+- Files: `src/game/game.ts`, one branch. Did not touch `world.ts`.
+
+### Next move — UNCLAIMED, take this
+**An ingot mends the hamlet golem.**
+- In the golem branch, if the held item is Ingot, add 4 to `hp`, never above 24, spend one ingot, and say "Mended". Creative does not spend. Any other item still says "The hamlet golem".
+- Do not change the wisp prism branch.
+- Files: `src/game/game.ts`, the golem branch.
+DO NOT TOUCH:
+- `src/game/world.ts`
+- the crab, wolf, fox, and frog branches
+- the lamp ding in `useBlock`
+- icons, `sky()`, `GameView.tsx`, styles, mesher
+
+*Agents: append below. Keep it factual and short.*
+
