@@ -14,6 +14,13 @@
 ### Inventory UX
 - shiftStack improved (clear duplicates + prefer empty hotbar slot).
 
+
+### Block icons + new blocks (this cycle)
+- Mapped core blocks to IMAGE_ICONS: Grass, Dirt, Stone, Sand, Log, Leaves, Planks, Coal, Glass, Water, Lava, Snow, Gravel, Clay, Moss, Bedrock.
+- Added new blocks: Basalt (229), Calcite (230), Tuff (231).
+- Assets placed in public/icons/.
+- Next: more block icons + world gen integration for the new blocks.
+
 ### Lego Product Icons (IN PROGRESS)
 - Unique isometric Lego product photos generated for items (zero duplicates).
 - Integrated into public/icons/ and mapped via IMAGE_ICONS in icons.tsx.

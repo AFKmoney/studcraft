@@ -225,6 +225,9 @@ export const ID = {
   Banner: 223,
   Lead: 224,
   EndCrystal: 225,
+  Basalt: 229,
+  Calcite: 230,
+  Tuff: 231,
   Carrot: 226,
   Potato: 227,
   Beetroot: 228,
@@ -697,6 +700,9 @@ put(b(ID.ChromeOre, "Chrome ore", "#9aa8b2", "#e8eef2", "#7a8188", "#5c646c", { 
 put(b(ID.SapphireOre, "Sapphire ore", "#1a3a8a", "#2456d6", "#8e959c", "#6e767e", { hard: 2, tough: true, need: 3 }));
 put(b(ID.ResinOre, "Resin ore", "#5a1848", "#c43a8a", "#3a1028", "#2a0c1c", { hard: 1.8, tough: true, need: 3 }));
 put(b(ID.PrismOre, "Prism ore", "#b48cff", "#f4e8ff", "#6e5a9a", "#3a2858", { hard: 2.4, tough: true, need: 4 }));
+put(b(ID.Basalt, "Basalt", "#3a3a3a", "#4a4a4a", "#2a2a2a", "#1a1a1a", { hard: 1.2, tough: true }));
+put(b(ID.Calcite, "Calcite", "#e8e4dc", "#f4f0e8", "#d0ccc4", "#b8b4ac", { hard: 0.6 }));
+put(b(ID.Tuff, "Tuff", "#6a6a5a", "#7a7a6a", "#5a5a4a", "#4a4a3a", { hard: 1.0, tough: true }));
 put(b(ID.MasterBrick, "Master brick", "#f5c518", "#ffe14a", "#e23b2f", "#b02620", { hard: 5, tough: true, need: 4 }));
 put(b(ID.ChromeBrick, "Chrome brick", "#d5dee6", "#f4f7fa", "#b7c4ce", "#8e9aa6", { hard: 2.4, tough: true, need: 3 }));
 item(ID.Tin, "Tin", "#d5ddd0");
