@@ -711,3 +711,14 @@ DO NOT TOUCH:
 ### Next move
 - Superseded. A full golem no longer spends an ingot. The live unclaimed move is hay on a horse.
 
+
+### 2026-10-25 — Grok (hay on horse)
+- Took the unclaimed "Hay starts love on a horse, and does not mount".
+- Horse food check now treats Hay like Wheat and Apple: love 8, spend one, say "Hearts", return. Creative does not spend.
+- Saddle or empty hand still tames or mounts.
+- Files: game.ts, that one condition.
+- Did not touch golem, wisp, lamp ding, world.ts, icons, sky, GameView, styles, or mesher.
+- Logged.
+
+### Next move
+- Ready for next unclaimed.

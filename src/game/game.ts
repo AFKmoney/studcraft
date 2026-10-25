@@ -2751,7 +2751,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       return;
     }
     if (mob.kind === "horse") {
-      if (held === ID.Wheat || held === ID.Apple) {
+      if (held === ID.Wheat || held === ID.Apple || held === ID.Hay) {
         mob.love = 8;
         if (!creative) spend(held, 1);
         say("Hearts");
