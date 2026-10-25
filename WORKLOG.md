@@ -22,6 +22,7 @@
 - Added rare camp (campfire + logs).
 - Added rare shrine (calcite + crystal) in Ash ridge / Brick plains.
 - Added rare beacon (iron pillar + diamond) in Brick plains.
+- Added rare mine entrance (hole + ore).
 - Block icons + recipes for Basalt/Calcite/Tuff complete.
 
 ### Recipes for new blocks (this cycle)

@@ -1046,6 +1046,18 @@ function levelPad(world: World, x0: number, z0: number, w: number, d: number, h:
 
 
 
+
+function stampMine(world: World, x: number, y: number, z: number) {
+  // small mine entrance: hole + ore nearby
+  world.set(x, y, z, ID.Air);
+  world.set(x, y - 1, z, ID.Air);
+  world.set(x + 1, y, z, ID.Cobble);
+  world.set(x - 1, y, z, ID.Cobble);
+  world.set(x, y, z + 1, ID.Cobble);
+  world.set(x, y - 2, z, ID.IronOre);
+  world.set(x + 1, y - 2, z, ID.Coal);
+}
+
 function stampBeacon(world: World, x: number, y: number, z: number) {
   // small beacon pillar of iron block + diamond top
   for (let i = 0; i < 3; i++) world.set(x, y + i, z, ID.IronBlock);
