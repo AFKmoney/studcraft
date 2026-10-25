@@ -865,3 +865,21 @@ Philippe's verdict on v2.0 (his A54): several bugs, it LAGS, animals are buggy, 
 - Verified: tsc 0; Playwright mobile (844x390 touch): title, in-game, hub tabs, craft detail (Stone pick: 9 shape cells, needs Cobble 0/3 + Stick 0/2, Craft disabled), pause with Quality control - 0 errors. FPS/perf can only be judged on the real A54 - Philippe's retest is the verdict.
 
 ### Claim: v2.1 shipped as the verdict-response build. Standing by for Philippe's A54 retest; next moves follow his report.
+
+## 2026-10-24 (late) — v2.2 icon redo (Muse, per Philippe: photos inaccurate + white backgrounds)
+
+Philippe rejected the photo icons outright ("pas accurate avec les items... pas de fond blanc"). The
+photos are GONE from every build. New rule: **an icon IS the item.**
+- Blocks: rendered by a new icon lab (`icons.html`, `vite.icons.config.ts`, `src/lab/icons.ts`) that
+  builds each placeable block with the game's REAL mesher + atlas + materials on a spacing lattice,
+  screenshots it isometrically with a transparent background, and slices it to
+  `public/icons-160/icons/cube-<id>.png` (77 blocks). What you see in the Bin is literally the block.
+- 9 ids fall back to the drawn glyphs because the real render is a few pixels wide (blooms 23/24,
+  sprig 25, lever 43, sapling 79, mushrooms 198/199, web 203, berry bush 204).
+- Items/tools/food keep the SVG glyphs (drawn from def colors). `IMAGE_ICONS` deleted; `ItemIcon`
+  checks the generated `src/game/cubeIcons.ts` first.
+- Faithfulness note: kiln/bench render as plain cubes because the mesher itself has no front-face
+  special tile for them — the icon matches the in-game block exactly.
+- QA: contact sheet judged icon-by-icon; in-game mobile QA — Bin 77/77 imgs loaded 0 hidden
+  (cube-1/2/3 = Grass/Dirt/Stone), Craft detail shows cube + need chips, 0 errors.
+- APK v2.2 (versionCode 13). NEXT (Muse): Philippe's A54 verdict on v2.2 (icons + v2.1 round).
