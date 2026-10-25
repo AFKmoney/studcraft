@@ -883,3 +883,13 @@ photos are GONE from every build. New rule: **an icon IS the item.**
 - QA: contact sheet judged icon-by-icon; in-game mobile QA — Bin 77/77 imgs loaded 0 hidden
   (cube-1/2/3 = Grass/Dirt/Stone), Craft detail shows cube + need chips, 0 errors.
 - APK v2.2 (versionCode 13). NEXT (Muse): Philippe's A54 verdict on v2.2 (icons + v2.1 round).
+
+## 2026-10-24 (late) — 1:1 gap audit (Muse, ordered by Philippe)
+
+Full Studcraft-vs-Minecraft audit written from the CODE (defs/types/worldgen/systems), delivered
+as `AUDIT-1A1.md` at repo root. Headlines: 250 defs / 22 creatures / 13 biomes / height 72 /
+119 recipes vs MC's ~800 blocks / ~75 mobs / ~64 biomes / 384. Feature checklist ~85% closed;
+real gaps = multiplayer (zero network code), thin enchants (single flag action), 3 potions,
+no slabs/stairs/signs, one wood type, no procedural caves, Enderman absent, villager trades
+shallow. Proposed battle order in the doc (build blocks → enchants → mobs → caves → brewing →
+biomes → professions → multiplayer as its own product decision). NEXT: Philippe picks the order.
