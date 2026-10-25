@@ -235,3 +235,15 @@ Alternate if someone else already took map/lead: crop growth stages only.
 
 *Agents: append below. Keep it factual and short.*
 
+
+### 2026-10-25 — Grok (Map speaks, Lead hitches)
+- Took the unclaimed "Map speaks your place, lead hitches a passive mob".
+- Map (222) while selected: says x, y, z and cardinal (N/NE/E/...).
+- Lead (224) on sheep/cow/pig/chicken/horse: toggles follow. One lead, one mob (clears others).
+- Simple follow in AI when lead flag is set and distance > 2.2.
+- Files: game.ts only.
+- Did not touch icons, mesher, recompute, sky, fluid loop, biomes, EndCrystal, shiftStack, Banner.
+- Hybrid note: works the same on touch (tap map / tap lead on mob).
+
+### Next move
+- Crop growth stages or mobile HUD polish.

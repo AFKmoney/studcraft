@@ -639,6 +639,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     baby?: number;
     sheared?: number;
     tame?: boolean;
+    lead?: boolean;
     role?: string;
     homeX?: number;
     homeZ?: number;
@@ -1742,6 +1743,14 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const heldDef = def(held);
     if (held === ID.Bow) return shootHeld();
     if (held === ID.Clock) return say(timeWord());
+    if (held === ID.Map) {
+      const x = Math.floor(player.x);
+      const z = Math.floor(player.z);
+      const yaw = ((player.yaw % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+      const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+      const dir = dirs[Math.round(yaw / (Math.PI / 4)) % 8];
+      return say(`${x}, ${Math.floor(player.y)}, ${z} · ${dir}`);
+    }
     if (held === ID.Tome) return castSpell();
     if (held === ID.Flint && hit.id === ID.TNT) {
       fuses.push({ x: hit.x, y: hit.y, z: hit.z, t: 2.1 });
@@ -2571,6 +2580,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       say("Shorn");
       return;
     }
+    if (held === ID.Lead && (mob.kind === "sheep" || mob.kind === "cow" || mob.kind === "pig" || mob.kind === "chicken" || mob.kind === "horse")) {
+      // one lead, one mob: clear others
+      for (const m of mobs) if (m !== mob) m.lead = false;
+      mob.lead = !mob.lead;
+      say(mob.lead ? "Hitched" : "Unhitched");
+      return;
+    }
     if ((mob.kind === "cow" || mob.kind === "sheep" || mob.kind === "pig") && held === ID.Wheat) {
       mob.love = 8;
       if (!creative) spend(ID.Wheat, 1);
@@ -2977,6 +2993,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         if (m.kind === "wolf" && m.tame && !foe && d > 28) {
           m.x = player.x + Math.sin(player.yaw) * 1.6;
           m.z = player.z + Math.cos(player.yaw) * 1.6;
+          m.y = groundY(m.x, m.z);
+        }
+        if (m.lead && d > 2.2) {
+          m.yaw = Math.atan2(-(player.x - m.x), -(player.z - m.z));
+          const sp = 2.1;
+          m.x += -Math.sin(m.yaw) * sp * dt;
+          m.z += -Math.cos(m.yaw) * sp * dt;
           m.y = groundY(m.x, m.z);
         }
         const speed = foe ? 2.7 : chase ? (m.kind === "spider" ? 3.1 : m.kind === "slime" ? 1.35 : m.kind === "walker" ? 2.15 : 2.4) : m.kind === "wolf" && m.tame && d > 4 ? 2.35 : 1.05;
