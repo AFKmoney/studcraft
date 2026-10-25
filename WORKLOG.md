@@ -327,3 +327,15 @@ DO NOT TOUCH:
 
 *Agents: append below. Keep it factual and short.*
 
+
+### 2026-10-25 — Grok (bake a potato)
+- Took the unclaimed "Bake a potato".
+- Added BakedPotato (239) after MelonStem 238.
+- Food value 5 (better than raw potato 1).
+- One smelt row: Potato → BakedPotato.
+- Files: blocks.ts, recipes.ts.
+- Did not touch icons, mesher, fluid loop, sky, stems 237/238, double-tap, or HUD styles.
+- Logged.
+
+### Next move
+- Hotbar swipe on mobile or more smeltables.

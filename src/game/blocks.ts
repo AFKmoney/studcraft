@@ -238,6 +238,7 @@ export const ID = {
   BeetRipe: 236,
   PumpkinStem: 237,
   MelonStem: 238,
+  BakedPotato: 239,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -882,6 +883,7 @@ put(b(ID.Banner, "Banner", "#e23b2f", "#f25a46", "#c43228", "#8a221c", { hard: 0
 item(ID.Lead, "Lead", "#f4f1ea");
 item(ID.Carrot, "Carrot", "#f07820", { food: 3 });
 item(ID.Potato, "Potato", "#c4924a", { food: 1 });
+item(ID.BakedPotato, "Baked potato", "#e0b15a", { food: 5 });
 item(ID.Beetroot, "Beetroot", "#b02620", { food: 1 });
 put(b(ID.CarrotCrop, "Carrot shoots", "#f07820", "#e4d0a2", "#3aaa4c", "#2f7d3a", { solid: false, plant: true, crop: true, hard: 0.05, drop: -1 }));
 put(b(ID.CarrotRipe, "Carrots", "#f07820", "#ffb020", "#c45a10", "#8d3e08", { solid: false, plant: true, crop: true, hard: 0.05, drop: ID.Carrot }));
