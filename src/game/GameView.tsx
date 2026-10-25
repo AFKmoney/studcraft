@@ -324,6 +324,7 @@ function Hud({ game }: { game: GameApi }) {
           <button
             key={i}
             className={i === hud.slot ? "slot on" : "slot"}
+            title={item.id > 0 ? def(item.id).name : ""}
             onClick={(e) => (e.shiftKey && item.id > 0 ? game.shiftStack(item.id) : game.setSlot(i))}
             onContextMenu={(e) => {
               if (item.id <= 0) return;

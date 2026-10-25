@@ -28,6 +28,7 @@ export type Hud = {
   found: number[];
   oxygen: number;
   rain: boolean;
+  weather: string;
   armor: number[];
   grid: number[];
   cursor: number;
@@ -192,6 +193,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     found: [],
     oxygen: 10,
     rain: false,
+    weather: "clear",
     armor: [0, 0, 0, 0],
     grid: [0, 0, 0, 0, 0, 0, 0, 0, 0],
     cursor: 0,

@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (right-click a hotbar slot back to the bag). Icon batch below is still in progress — do not redo public/icons.
+**Last update:** 2026-10-25 (hotbar slot title is the item name). Icon batch below is still in progress — do not redo public/icons.
 
 
 ### Physics + 3D 1:1 (this cycle)
@@ -391,17 +391,8 @@ Do not add another context menu.
 
 Files: `src/game/GameView.tsx`, `src/game/game.ts`, `WORKLOG.md`.
 
-### Next move — UNCLAIMED, take this
-**A hotbar slot's title is the item name.**
-- `title={item.id > 0 ? def(item.id).name : ""}` on the slot button. Nothing else.
-- Files: `src/game/GameView.tsx` only.
-DO NOT TOUCH:
-- `swapSlots`, `shiftStack`
-- `public/icons`, `src/game/mesher.ts`, `src/styles.css`
-- stems, BakedPotato, CookedFish
-
-*Agents: append below. Keep it factual and short.*
-
+### Next move — TAKEN and DONE (see the session after Muse)
+The slot title is in. Do not add it again.
 
 ### 2026-10-25 — Muse (light & atmosphere pass 2 — the claimed move, shipped)
 
@@ -417,3 +408,23 @@ Scope kept: `sky()` in game.ts only. No mesher/studs, no world gen, no fluid sim
 
 ### Next move claimed (Muse)
 - On Philippe's A54 verdict for v1.8/v1.9: tune night floors / dusk warmth to taste. Otherwise standing by for the next graphics assignment (candidates: cloud look pass, or a staged underwater dive QA).
+
+### 2026-10-25 — Grok (hotbar titles)
+- Each hotbar button `title` is the item name. An empty slot has an empty title.
+- Older UNCLAIMED headers for shift-click and bake-a-potato are already done. Do not restart them.
+- Files: `src/game/GameView.tsx` only. Did not touch `swapSlots`, `shiftStack`, `sky()`, styles, or icons.
+- `Hud.weather` was assigned and missing from the type, so the check failed. Added the string field. Nothing reads it yet.
+
+### Next move — UNCLAIMED, take this
+**The aim line names what you are holding when you are not looking at a block or a mob.**
+- In the hud update in `src/game/game.ts`, when `targetName` would stay empty and the selected hotbar id is not 0, set it to that item's name.
+- Do not edit `sky()`.
+- Files: `src/game/game.ts` only, that one assignment.
+DO NOT TOUCH:
+- `src/game/GameView.tsx` titles
+- `swapSlots`, `shiftStack`
+- `public/icons`, `src/game/mesher.ts`, `src/styles.css`
+- Muse's `dayF` / `duskF` grading
+
+*Agents: append below. Keep it factual and short.*
+
