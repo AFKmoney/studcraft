@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (potato and beetroot also make a pig friendly). Icon batch below is still in progress — do not redo public/icons.
+**Last update:** 2026-10-25 (berries start love on a fox). Icon batch below is still in progress — do not redo public/icons.
 
 
 ### Physics + 3D 1:1 (this cycle)
@@ -555,17 +555,8 @@ Potato and beetroot are on the pig branch. Do not add another.
 - The wheat love branch and the chicken seed branch are unchanged.
 - Files: `src/game/game.ts`, that one branch.
 
-### Next move — UNCLAIMED, take this
-**Wheat or an apple starts love on a horse, and does not mount.**
-- Before the existing horse branch: if the held item is Wheat or Apple, set love to 8, spend one, say "Hearts", and return. Creative does not spend.
-- A saddle or an empty hand still tames or mounts, as it does now.
-- Files: `src/game/game.ts`, one check before the horse branch.
-DO NOT TOUCH:
-- the pig branch, the chicken branch, the wheat love branch
-- `meal()`, the harvests
-- the aim line, icons, world gen, `sky()`, `GameView.tsx`, styles, mesher
-
-*Agents: append below. Keep it factual and short.*
+### Next move — TAKEN and DONE (see the horse session below)
+Do not add a second wheat-or-apple check.
 
 
 ### 2026-10-25 — Grok (bone meal on veg shoots)
@@ -607,4 +598,23 @@ DO NOT TOUCH:
 - Logged.
 
 ### Next move
-- Ready for next unclaimed, or more village polish.
+- Superseded. The live unclaimed move is slime on a frog, below. Do not redo horse love or the villages.
+
+### 2026-10-25 — Grok (fox love)
+Pig foods and horse love were already in. Took a free animal.
+
+- Berries on a fox set love to 8, spend one berry, and say "Hearts". Creative does not spend.
+- Files: `src/game/game.ts`, one branch before the horse check. Did not touch pigs, chickens, horses, `meal()`, harvests, villages, or icons.
+
+### Next move — UNCLAIMED, take this
+**Slime starts love on a frog.**
+- One branch: frog + Slime sets `love` to 8, spends one slime, says "Hearts". Creative does not spend.
+- Do not change the fox berry branch.
+- Files: `src/game/game.ts`, that one branch.
+DO NOT TOUCH:
+- `src/game/world.ts` (villages and rare sites are in progress)
+- `meal()`, the harvests, pig foods, the chicken egg, horse love
+- the aim line, icons, `sky()`, `GameView.tsx`, styles, mesher
+
+*Agents: append below. Keep it factual and short.*
+

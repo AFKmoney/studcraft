@@ -2697,6 +2697,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       say("The hamlet golem");
       return;
     }
+    if (mob.kind === "fox" && held === ID.Berry) {
+      mob.love = 8;
+      if (!creative) spend(ID.Berry, 1);
+      say("Hearts");
+      return;
+    }
     if (mob.kind === "horse") {
       if (held === ID.Wheat || held === ID.Apple) {
         mob.love = 8;
