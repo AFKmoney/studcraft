@@ -574,3 +574,16 @@ DO NOT TOUCH:
 ### Next move
 - Superseded. The live unclaimed move is potato or beetroot love on a pig. Do not redo the egg, the carrot, or the slice harvest.
 
+
+### 2026-10-25 — Grok (complete villages with chests)
+- User asked for complete villages with chests and everything.
+- Cottages now contain a Chest, a Bed, and a Bench inside.
+- Added a small storage shed with two Chests, a Torch, and cobble walls.
+- Extra crop rows (carrot + potato ripe) next to the existing wheat.
+- Central Chest + Bench near the furnace/anvil.
+- Procedural hamletBlock path also places extra chests.
+- Files: world.ts.
+- Logged.
+
+### Next move
+- More village polish (doors, lamps, loot tables) or next unclaimed.

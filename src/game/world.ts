@@ -853,8 +853,9 @@ function cottageBlock(lx: number, ry: number, lz: number, ox: number, oz: number
   if (x < 0 || z < 0 || x >= W || z >= D || ry < 1 || ry > wallH) return -1;
   const edge = x === 0 || z === 0 || x === W - 1 || z === D - 1;
   if (!edge) {
-    if (ry === 1 && x === 2 && z === 2) return ID.Orange;
-    if (ry === 1 && x === 4 && z === 3) return ID.Yellow;
+    if (ry === 1 && x === 2 && z === 2) return ID.Chest;
+    if (ry === 1 && x === 4 && z === 3) return ID.Bed;
+    if (ry === 1 && x === 1 && z === 1) return ID.Bench;
     return -1;
   }
   if (z === 0 && x === 3 && ry <= 2) return ID.Air;
@@ -887,6 +888,9 @@ function hamletBlock(lx: number, ry: number, lz: number): number {
     if (edge && !(pz === 0 && px === 3)) return ID.Fence;
   }
   if (lx === 12 && lz === 19 && ry === 1) return ID.Chest;
+  if (lx === 11 && lz === 19 && ry === 1) return ID.Bench;
+  if (lx === 14 && lz === 20 && ry === 1) return ID.Chest;
+  if (lx === 16 && lz === 20 && ry === 1) return ID.Chest;
   if (lx === 9 && lz === 19 && ry === 1) return ID.Furnace;
   if (lx === 10 && lz === 19 && ry === 1) return ID.Anvil;
   if (lx === 13 && lz === 8 && (ry === 1 || ry === 2)) return ID.Cobble;
@@ -1107,6 +1111,28 @@ function stampVillage(world: World, x0: number, ground: number, z0: number) {
   }
   world.set(x0 + 9, ground + 1, z0 + 19, ID.Furnace);
   world.set(x0 + 10, ground + 1, z0 + 19, ID.Anvil);
+  world.set(x0 + 12, ground + 1, z0 + 19, ID.Chest);
+  world.set(x0 + 11, ground + 1, z0 + 19, ID.Bench);
+  // extra crop rows
+  for (let x = 8; x <= 13; x++) {
+    world.set(x0 + x, ground, z0 + 15, ID.Farmland);
+    world.set(x0 + x, ground + 1, z0 + 15, ID.CarrotRipe);
+    world.set(x0 + x, ground, z0 + 16, ID.Farmland);
+    world.set(x0 + x, ground + 1, z0 + 16, ID.PotatoRipe);
+  }
+  // small storage shed
+  const sx = x0 + 14;
+  const sz = z0 + 20;
+  for (let x = 0; x < 5; x++) for (let z = 0; z < 4; z++) {
+    world.set(sx + x, ground, sz + z, ID.Planks);
+    for (let y = 1; y <= 3; y++) {
+      const edge = x === 0 || z === 0 || x === 4 || z === 3;
+      if (edge && !(z === 0 && x === 2 && y <= 2)) world.set(sx + x, ground + y, sz + z, ID.Cobble);
+    }
+  }
+  world.set(sx + 1, ground + 1, sz + 1, ID.Chest);
+  world.set(sx + 3, ground + 1, sz + 1, ID.Chest);
+  world.set(sx + 2, ground + 2, sz + 2, ID.Torch);
   world.set(x0 + 13, ground + 1, z0 + 8, ID.Cobble);
   world.set(x0 + 13, ground + 2, z0 + 8, ID.Cobble);
   world.set(x0 + 16, ground + 1, z0 + 8, ID.Cobble);
