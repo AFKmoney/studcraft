@@ -704,6 +704,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let portalCd = 0;
   let realmsReady = false;
   let fishT = -1;
+  let bobber: THREE.Mesh | null = null;
   let dragonUp = false;
   let mount: Mob | null = null;
   let returnSpot = { x: 0, y: 80, z: 0 };
@@ -1972,6 +1973,24 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (held === ID.Rod && (hit.id === ID.Water || def(world.get(hit.x + hit.nx, hit.y + hit.ny, hit.z + hit.nz)).fluid)) {
       fishT = 0;
       say("Line out");
+      if (bobber) scene.remove(bobber);
+      const geo = new THREE.SphereGeometry(0.12, 6, 6);
+      const mat = new THREE.MeshStandardMaterial({ color: 0xcc2222, roughness: 0.4, metalness: 0.1 });
+      bobber = new THREE.Mesh(geo, mat);
+      const dx = -Math.sin(player.yaw);
+      const dz = -Math.cos(player.yaw);
+      const dist = 3.5;
+      const bx = player.x + dx * dist;
+      const bz = player.z + dz * dist;
+      let by = player.y;
+      for (let yy = Math.floor(player.y) + 2; yy >= Math.floor(player.y) - 4; yy--) {
+        if (world.get(Math.floor(bx), yy, Math.floor(bz)) === ID.Water) {
+          by = yy + 0.6;
+          break;
+        }
+      }
+      bobber.position.set(bx, by, bz);
+      scene.add(bobber);
       return;
     }
     if (held === ID.Eye) {
@@ -2317,13 +2336,29 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
     if (fishT >= 0) {
       fishT += dt;
-      if (fishT > 3.2) {
+      if (bobber) {
+        bobber.position.y += Math.sin(elapsed * 5) * 0.002;
+        bobber.rotation.y += dt * 1.2;
+      }
+      const wait = 2.8 + (skills.has("angler") ? 0.4 : 1.2) * Math.random();
+      if (fishT > wait) {
         fishT = -1;
-        addInv(Math.random() < 0.7 ? ID.Fish : ID.Emerald, 1);
-        if (Math.random() < 0.15) addInv(ID.String, 1);
+        if (bobber) {
+          scene.remove(bobber);
+          bobber = null;
+        }
+        const biome = world.biomeAt(Math.floor(player.x), Math.floor(player.z));
+        let catchId: number = ID.Fish;
+        const roll = Math.random();
+        if (roll < 0.08) catchId = ID.Emerald;
+        else if (roll < 0.18 && biome === "Shore") catchId = ID.Shell;
+        else if (roll < 0.25) catchId = ID.String;
+        if (skills.has("angler") && Math.random() < 0.35) addInv(catchId, 1); // bonus
+        addInv(catchId, 1);
+        if (Math.random() < 0.12) addInv(ID.String, 1);
         wearHeld();
-        say("Bite");
-        gainXp(2);
+        say("Bite!");
+        gainXp(skills.has("angler") ? 4 : 2);
       }
     }
     for (let i = fuses.length - 1; i >= 0; i--) {
