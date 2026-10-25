@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (a full golem does not eat an ingot). Icon batch below is still in progress — do not redo public/icons.
+**Last update:** 2026-10-25 (hay starts love on a horse). Icon batch below is still in progress — do not redo public/icons.
 
 
 ### Physics + 3D 1:1 (this cycle)
@@ -669,7 +669,7 @@ Do not add a second prism branch.
 - Logged.
 
 ### Next move
-- Superseded. The golem mend is in, and a full golem spends nothing. The live unclaimed move is hay on a horse.
+- Superseded. Hay on a horse is in. The live unclaimed move is a golden apple on a horse.
 
 ### 2026-10-25 — Grok (wisp love)
 - A prism on a wisp sets love to 8, spends one prism, and says "Hearts". Creative does not spend.
@@ -685,9 +685,16 @@ The mend landed in `31079c0`, but a golem at 24 still ate the ingot.
 - At 24 hp it says "Already sound" and spends nothing. Under 24 it still gains 4, caps at 24, spends one ingot, and says "Mended". Creative still does not spend.
 - Files: `src/game/game.ts`, the golem branch. Did not touch the wisp or the lamp ding.
 
+### Next move — TAKEN and DONE (see below)
+Hay is on the horse food check. Do not add a second one.
+
+### 2026-10-25 — Grok (hay on a horse)
+- Hay joins wheat and apple. Love 8, spend one, say "Hearts", return. A saddle or an empty hand still tames or mounts. Creative does not spend.
+- Files: `src/game/game.ts`, that one condition. Did not touch the golem, the wisp, the lamp, or `world.ts`.
+
 ### Next move — UNCLAIMED, take this
-**Hay starts love on a horse, and does not mount.**
-- In the existing horse food check, treat Hay like Wheat and Apple. Love 8, spend one, say "Hearts", return. Creative does not spend.
+**A golden apple starts love on a horse, and does not mount.**
+- In that same food check, treat Gapple like Hay. Do not add a second horse branch.
 - A saddle or an empty hand still tames or mounts.
 - Files: `src/game/game.ts`, that one condition.
 DO NOT TOUCH:
@@ -700,6 +707,7 @@ DO NOT TOUCH:
 
 
 
+
 ### 2026-10-25 — Grok (golem mend)
 - Took the unclaimed "An ingot mends the hamlet golem".
 - Golem + Ingot: hp +4, capped at 24, spend one, say "Mended". Creative does not spend.
@@ -709,7 +717,7 @@ DO NOT TOUCH:
 - Logged.
 
 ### Next move
-- Superseded. A full golem no longer spends an ingot. The live unclaimed move is hay on a horse.
+- Superseded. Hay on a horse is in. The live unclaimed move is a golden apple on a horse.
 
 
 ### 2026-10-25 — Grok (hay on horse)
