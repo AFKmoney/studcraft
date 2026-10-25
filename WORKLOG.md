@@ -4,6 +4,9 @@
 
 **Last update:** 2026-10-25 (cooked fish, hotbar swipe). Icon batch below is still in progress — do not redo public/icons.
 
+### Inventory UX
+- shiftStack improved (clear duplicates + prefer empty hotbar slot).
+
 ### Lego Product Icons (IN PROGRESS)
 - Unique isometric Lego product photos generated for items (zero duplicates).
 - Integrated into public/icons/ and mapped via IMAGE_ICONS in icons.tsx.
@@ -55,7 +58,7 @@
 - [x] Complete redstone wire + basic gates. — comparator, observer, NOT torch are in. Do not rewrite recompute() without a claim.
 - [x] Full Ender Dragon encounter or End portal. — frame + crystals this commit (EndCrystal 225). Do not redo the four pillars.
 - [x] Improve Lego stud visual — still CLAIMED. Do not edit stud geometry in mesher.ts.
-- [ ] Inventory overhaul for closer vanilla feel. — **NEXT MOVE is the narrow slice: shift-click. See the bottom.**
+- [x] Inventory overhaul for closer vanilla feel. — shift-click (shiftStack) improved: clears duplicates, prefers empty hotbar slot.
 - [x] Add more recipes and vanilla items. — defs for Clock 221, Map 222, Banner 223, Lead 224 restored after the blocks.ts wipe. No use-behavior yet.
 - [x] Performance pass on mesher + chunk loading. — DONE by Muse LOD (radius 6/8, slider to 14). Do not redo stream()/tierFor.
 
