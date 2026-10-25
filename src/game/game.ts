@@ -7,6 +7,7 @@ import { NEIGHBORS, RECIPES, SMELT, fuelTime, matchGrid } from "./recipes";
 import { DISCOVER, MOB_XP, ORE_HEAR, ORE_XP, nextPerk, rankTitle, xpNeed } from "./ranks";
 import { manaMaxFor, skillById, spellsFor } from "./skills";
 import { QUESTS, traderOf, tradeLevelFor, TIER_NAMES, TIER_XP, type TraderRole } from "./quests";
+import { MpClient } from "./mp";
 import { clearSave, deleteWorld, hasSave, listWorlds, loadLatest, loadSettings, loadWorld, writeSettings, writeWorld, type SaveV1, type WorldSlot } from "./save";
 import { buildAtlas } from "./textures";
 import { CS, HEIGHT, World, decorate, folkLayout, penSheep, paintEndCrystals, END_PILLARS, type Decor, type FolkSpot } from "./world";
@@ -71,6 +72,7 @@ export type Hud = {
   offers: { pay: number; pn: number; out: number; on: number; payName: string; outName: string; tier: number; locked: boolean }[];
   traderLevel: string;
   traderNext: string;
+  netStatus: string;
   quests: { id: string; name: string; detail: string; n: number; need: number; done: boolean; ready: boolean; reward: string }[];
   questAlert: string;
   questTrack: string;
@@ -135,6 +137,9 @@ export type GameApi = {
   temper: () => void;
   brew: (kind: string) => void;
   trade: (i: number) => void;
+  hostOnline: () => void;
+  joinOnline: () => void;
+  leaveOnline: () => void;
   claim: (id: string) => void;
   unlock: (id: string) => void;
   setMod: (key: "hard" | "generous" | "peaceful" | "spells", on: boolean) => void;
@@ -167,6 +172,8 @@ declare global {
       getBlock?: (x: number, y: number, z: number) => number;
       getTarget?: () => string;
       spawnMob?: (kind: string, dx?: number, dz?: number) => boolean;
+      getPeers?: () => { name: string; x: number; y: number; z: number }[];
+      mpConnect?: (url: string, room: string, name: string) => boolean;
       getMobs?: () => string[];
       getHamlet?: () => { x: number; y: number; z: number } | null;
       getChunks?: () => number;
@@ -256,6 +263,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     offers: [],
     traderLevel: "",
     traderNext: "",
+    netStatus: "",
     quests: [],
     questAlert: "",
     questTrack: "",
@@ -992,6 +1000,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const tXp = tradeXp[traderRole] ?? 0;
     const tLv = tradeLevelFor(tXp);
     hud.traderLevel = TIER_NAMES[tLv];
+    hud.netStatus = mp.connected ? "🌐 Room " + mp.room + " · " + (mp.peers.size + 1) + " online" : "";
     hud.traderNext = tLv >= 3 ? tXp + " trades · Master" : tXp + " trades · " + (TIER_XP[tLv] - tXp) + " to " + TIER_NAMES[tLv + 1];
     hud.offers = trader.offers.map((o) => ({
       pay: o.pay,
@@ -1644,6 +1653,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (id === ID.Air || id === ID.Bedrock || block.hard === Infinity) return;
     world.set(x, y, z, ID.Air);
     markDirtyAt(x, z);
+    netSendEdit(x, y, z, ID.Air);
     if (block.sign) signs.delete(x + "," + y + "," + z);
     if (isComponent(id)) {
       const k = rsKey(x, y, z);
@@ -2342,6 +2352,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const placeId = held === ID.RedTorch ? ID.RedTorchOn : heldDef.stairs ? stairsVariant(held, facingDir()) : held;
     if (!world.set(px, py, pz, placeId)) return;
     markDirtyAt(px, pz);
+    netSendEdit(px, py, pz, placeId);
     if (heldDef.sign) {
       hud.signEdit = { x: px, y: py, z: pz, text: "" };
       emit();
@@ -2430,6 +2441,106 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       else slowT = Math.max(slowT, 8);
     }
     audio.hit();
+  }
+
+  // ── Multiplayer prototype (see MULTIPLAYER.md) ──────────────────────
+  const mp = new MpClient();
+  mp.onSay = (text) => say(text);
+  mp.onEdit = (x, y, z, block) => {
+    if (world.set(x, y, z, block)) {
+      markDirtyAt(x, z);
+      saveDirty = true;
+    }
+  };
+  type RemoteFig = { body: LegoBody; tx: number; ty: number; tz: number };
+  const remotes = new Map<string, RemoteFig>();
+  let posAcc = 0;
+  let mpName = "";
+
+  function nameSprite(name: string): THREE.Sprite {
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 64;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.font = "bold 34px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.lineWidth = 7;
+      ctx.strokeStyle = "rgba(10, 10, 16, 0.85)";
+      const label = name.slice(0, 16);
+      ctx.strokeText(label, 128, 42);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(label, 128, 42);
+    }
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true }));
+    spr.scale.set(1.7, 0.42, 1);
+    spr.position.set(0, 2.2, 0);
+    return spr;
+  }
+
+  function tickNet(dt: number) {
+    if (mp.connected) {
+      posAcc += dt;
+      if (posAcc >= 0.1) {
+        posAcc = 0;
+        mp.sendPos(player.x, player.y, player.z, player.yaw, player.pitch);
+      }
+    }
+    for (const [id, p] of mp.peers) {
+      if (p.y < -100) continue; // no transform received yet
+      let r = remotes.get(id);
+      if (!r) {
+        const body = buildLego("villager", 1);
+        body.group.add(nameSprite(p.name));
+        scene.add(body.group);
+        body.group.position.set(p.x, p.y, p.z);
+        r = { body, tx: p.x, ty: p.y, tz: p.z };
+        remotes.set(id, r);
+      }
+      r.tx = p.x;
+      r.ty = p.y;
+      r.tz = p.z;
+      const g = r.body.group;
+      const k = 1 - Math.exp(-12 * dt);
+      g.position.x += (r.tx - g.position.x) * k;
+      g.position.y += (r.ty - g.position.y) * k;
+      g.position.z += (r.tz - g.position.z) * k;
+      g.rotation.y = p.yaw + Math.PI;
+    }
+    for (const [id, r] of remotes) {
+      if (!mp.peers.has(id)) {
+        scene.remove(r.body.group);
+        remotes.delete(id);
+      }
+    }
+  }
+
+  function netSendEdit(x: number, y: number, z: number, block: number) {
+    if (mp.connected) mp.sendEdit(x, y, z, block);
+  }
+
+  function clearRemotes() {
+    for (const r of remotes.values()) scene.remove(r.body.group);
+    remotes.clear();
+  }
+
+  function startOnline(hosting: boolean) {
+    if (mp.connected) return say("Already online — leave first");
+    if (!mpName) {
+      mpName = (window.prompt("Your brick name", "Brick") ?? "").trim();
+      if (!mpName) return;
+    }
+    let room = "";
+    if (hosting) {
+      room = Math.random().toString(36).slice(2, 8).toUpperCase();
+    } else {
+      room = (window.prompt("Room code", "") ?? "").trim().toUpperCase();
+      if (!room) return;
+    }
+    const url = (window.prompt("Relay address", "ws://127.0.0.1:8799") ?? "").trim();
+    if (!url) return;
+    mp.connect(url, room, mpName);
+    say(hosting ? "Hosting room " + room + " — share the code" : "Joining room " + room);
   }
 
   function shootHeld() {
@@ -5343,6 +5454,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       }
     }
     if (phase !== "pause" && phase !== "inventory" && phase !== "dead") updateMobs(dt);
+    tickNet(dt);
     let acc = dt;
     let first = true;
     let guard = 0;
@@ -5595,6 +5707,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       return true;
     },
     getMobs: () => mobs.filter((m) => !m.dead).map((m) => m.kind),
+    getPeers: () => [...mp.peers.values()].map((p) => ({ name: p.name, x: p.x, y: p.y, z: p.z })),
+    mpConnect: (url: string, room: string, name: string) => {
+      mp.connect(url, room, name);
+      return true;
+    },
   };
 
   const api: GameApi = {
@@ -5971,6 +6088,20 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (after > before) say(traderOf(traderRole).name + " is now a " + TIER_NAMES[after] + "! New offers unlocked.");
       else say("Traded");
       saveDirty = true;
+      emit();
+    },
+    hostOnline() {
+      startOnline(true);
+      emit();
+    },
+    joinOnline() {
+      startOnline(false);
+      emit();
+    },
+    leaveOnline() {
+      mp.close();
+      clearRemotes();
+      say("Left the room");
       emit();
     },
     unlock(id) {

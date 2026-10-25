@@ -551,6 +551,25 @@ function PauseMenu({ game }: { game: GameApi }) {
         <button className="btn" onClick={() => game.copySeed()}>
           Copy seed
         </button>
+        <div className="stack pause-actions">
+          {game.hud.netStatus ? (
+            <>
+              <p className="fine">{game.hud.netStatus}</p>
+              <button className="btn" onClick={() => game.leaveOnline()}>
+                🌐 Leave the room
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="btn" onClick={() => game.hostOnline()}>
+                🌐 Host an online room (prototype)
+              </button>
+              <button className="btn" onClick={() => game.joinOnline()}>
+                🌐 Join a room by code
+              </button>
+            </>
+          )}
+        </div>
       </section>
     </div>
   );

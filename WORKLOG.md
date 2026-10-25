@@ -1053,3 +1053,39 @@ flat offer lists. Now they have a career ladder:
   tier-2 16-grain offer enabled; 12 trades -> Master header and the gold
   apple offer enabled. 0 errors, tsc 0.
 - NEXT (Muse): item 8 - multiplayer architecture + prototype.
+
+## 2026-10-25 — v3.0 battle order item 8: multiplayer architecture + prototype (Muse)
+
+The audit's last item, and the only one that changes what the game IS.
+Shipped as an opt-in prototype; solo play is untouched and still fully
+offline. Full design: MULTIPLAYER.md at the repo root.
+
+- **Architecture**: host-authoritative co-op over a dumb relay. Worlds are
+  deterministic from the seed, so only the seed + sparse edits ever cross
+  the wire — the relay holds no state, no accounts, no database.
+- **mp/relay.mjs**: zero-dependency WebSocket relay (RFC 6455 by hand),
+  rooms by 6-char code, max 8 peers, forwards join/pos/edit/chat.
+- **src/game/mp.ts + game.ts wiring**: pause menu hosts/joins a room
+  (name + code + relay address prompts); transforms stream at 10 Hz and
+  remote players render as LEGO figures with nameplates, interpolated;
+  digging and placing stream as edit events and apply on arrival
+  (markDirty + saved into the local world, host's save is canonical);
+  join/leave notices in the say feed. Mobs are NOT synced yet (each client
+  simulates its own) — P1/P2 in the doc cover seed handshake, edit
+  catch-up, host-owned mobs, public relay.
+- The APK manifest gains the INTERNET permission, used only in a room.
+- QA (two real clients + the relay, same seed): both sides saw each other
+  (relay log: Alpha and Bravo joined room QAMP54), Alpha's streamed
+  position tracked on Bravo's client, and a cobble Alpha placed appeared
+  in Bravo's world at the exact cell (-1, 46, -1). Avatar portrait shot
+  was inconclusive (both spawn on the same block; slow-motion QA) — the
+  figure-creation path runs on the same transform data the asserts read.
+  0 errors, tsc 0.
+
+## Battle order — COMPLETE (2026-10-25)
+
+All 8 audit items shipped, one version each, in Philippe's order:
+v2.3 slabs/stairs/signs · v2.4 real enchantments · v2.5 Enderman & pillar
+mobs · v2.6 caves & veins · v2.7 full brewing · v2.8 biome variants &
+zoned Nether · v2.9 profession tiers · v3.0 multiplayer prototype.
+The A54 verdict on Philippe's phone remains the final word on feel/perf.
