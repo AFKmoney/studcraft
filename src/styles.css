@@ -138,6 +138,59 @@ h1 {
   gap: 8px;
 }
 
+.seed-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 10px;
+}
+
+.seed-row span {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+}
+
+.seed-row input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  border-radius: 12px;
+  border: 2px solid var(--color-line);
+  background: var(--color-ink-2);
+  color: var(--color-foam);
+  padding: 0 10px;
+  font: inherit;
+  user-select: text;
+}
+
+.seed-row .btn {
+  flex: 0 0 auto;
+  min-width: 72px;
+}
+
+.world-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.world-list li {
+  display: flex;
+  gap: 8px;
+}
+
+.world-list li .btn:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.world-list li .btn:last-child {
+  flex: 0 0 auto;
+}
+
 .btn {
   min-height: 48px;
   border-radius: 12px;
@@ -619,6 +672,10 @@ h1 {
   bottom: calc(206px + env(safe-area-inset-bottom));
 }
 
+.show-touch .mana-track {
+  bottom: calc(224px + env(safe-area-inset-bottom));
+}
+
 @media (pointer: coarse), (max-width: 900px) {
   .touch-layer {
     display: block;
@@ -639,6 +696,10 @@ h1 {
 
   .xp-track {
     bottom: calc(206px + env(safe-area-inset-bottom));
+  }
+
+  .mana-track {
+    bottom: calc(224px + env(safe-area-inset-bottom));
   }
 
   .title-wrap {
@@ -728,6 +789,44 @@ h1 {
 
 .quest-list button:disabled {
   opacity: 0.45;
+}
+
+.skill-list button {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.mana-track {
+  position: absolute;
+  left: 50%;
+  bottom: calc(92px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(540px, calc(100vw - 16px));
+  height: 14px;
+  border-radius: 99px;
+  background: rgb(0 0 0 / 0.45);
+  overflow: hidden;
+}
+
+.mana-track span {
+  display: block;
+  height: 100%;
+  background: #7a4ad4;
+}
+
+.mana-track em {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-size: 0.68rem;
+  color: white;
+}
+
+.book-tabs {
+  flex-wrap: wrap;
+  margin-bottom: 8px;
 }
 
 .perk-list strong,

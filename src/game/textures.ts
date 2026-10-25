@@ -119,12 +119,77 @@ function paintPlant(ctx: CanvasRenderingContext2D, ox: number, oy: number, bloom
 }
 
 function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number, oy: number, face: number) {
+  const S = TILE;
   if (block.id === ID.Glass) {
     paintGlass(ctx, ox, oy);
     return;
   }
   if (block.plant) {
-    paintPlant(ctx, ox, oy, block.top, block.id === ID.TallGrass ? "grass" : "flower");
+    paintPlant(ctx, ox, oy, block.top, block.id === ID.TallGrass || block.id === ID.Reed ? "grass" : "flower");
+    return;
+  }
+  if (block.id === ID.Moss && face === 0) {
+    paintTop(ctx, ox, oy, block.top, false);
+    ctx.fillStyle = "#1d5526";
+    for (const [px, py] of [
+      [0.2, 0.3],
+      [0.55, 0.22],
+      [0.72, 0.58],
+      [0.35, 0.7],
+    ]) {
+      ctx.beginPath();
+      ctx.arc(ox + S * px, oy + S * py, S * 0.06, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return;
+  }
+  if (block.id === ID.Ash && face !== 2) {
+    paintSide(ctx, ox, oy, block.side);
+    ctx.fillStyle = "rgba(90, 30, 16, 0.45)";
+    ctx.fillRect(ox + 4, oy + S * 0.28, S - 8, 6);
+    ctx.fillRect(ox + 4, oy + S * 0.62, S - 8, 6);
+    return;
+  }
+  if (block.id === ID.Snow && face === 0) {
+    paintTop(ctx, ox, oy, block.top, false);
+    ctx.fillStyle = "rgba(180, 210, 230, 0.85)";
+    ctx.fillRect(ox + S * 0.18, oy + S * 0.2, 8, 8);
+    ctx.fillRect(ox + S * 0.6, oy + S * 0.55, 10, 6);
+    return;
+  }
+  if (block.id === ID.Mud) {
+    paintSide(ctx, ox, oy, face === 0 ? block.top : block.side);
+    ctx.fillStyle = "rgba(20, 10, 6, 0.35)";
+    ctx.beginPath();
+    ctx.ellipse(ox + S * 0.4, oy + S * 0.55, S * 0.16, S * 0.08, 0, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+  if (block.id === ID.CrystalOre && face !== 2) {
+    paintSide(ctx, ox, oy, block.side, face === 0 ? block.top : undefined);
+    ctx.fillStyle = "#f4e8ff";
+    ctx.beginPath();
+    ctx.moveTo(ox + S * 0.5, oy + S * 0.22);
+    ctx.lineTo(ox + S * 0.68, oy + S * 0.55);
+    ctx.lineTo(ox + S * 0.32, oy + S * 0.55);
+    ctx.fill();
+    return;
+  }
+  if (block.id === ID.AshSoil && face !== 2) {
+    paintSide(ctx, ox, oy, face === 0 ? block.top : block.side);
+    ctx.fillStyle = "rgba(40, 16, 8, 0.4)";
+    ctx.fillRect(ox + S * 0.15, oy + S * 0.4, S * 0.2, 4);
+    ctx.fillRect(ox + S * 0.55, oy + S * 0.62, S * 0.22, 4);
+    return;
+  }
+  if (block.id === ID.Clay && face === 0) {
+    paintTop(ctx, ox, oy, block.top, false);
+    ctx.strokeStyle = "rgba(90, 70, 58, 0.45)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(ox + 8, oy + S * 0.35);
+    ctx.lineTo(ox + S - 8, oy + S * 0.48);
+    ctx.stroke();
     return;
   }
   if (face === 0) paintTop(ctx, ox, oy, block.top, block.id === ID.Log);

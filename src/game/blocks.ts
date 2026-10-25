@@ -72,6 +72,15 @@ export const ID = {
   Soul: 98,
   Dispenser: 99,
   Hopper: 100,
+  Mud: 101,
+  Moss: 102,
+  Clay: 103,
+  Snow: 104,
+  Ash: 105,
+  AshSoil: 106,
+  CrystalOre: 107,
+  Bloom: 108,
+  Reed: 109,
   RawIron: 110,
   Ingot: 111,
   Stick: 112,
@@ -160,6 +169,29 @@ export const ID = {
   ChromeBrick: 73,
   Core: 74,
   Focus: 169,
+  Slime: 170,
+  Fur: 171,
+  Scale: 172,
+  Fang: 173,
+  Wisp: 174,
+  Tome: 175,
+  FangBlade: 176,
+  FurCap: 177,
+  ScaleLegs: 178,
+  Crystal: 179,
+  Pelt: 180,
+  Shell: 181,
+  Wax: 182,
+  Frost: 183,
+  Cinder: 184,
+  Antler: 185,
+  ScaleMail: 186,
+  FrostCap: 187,
+  CinderBlade: 188,
+  AntlerBow: 189,
+  WaxSeal: 190,
+  IceSheet: 191,
+  GravelBar: 192,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -621,6 +653,56 @@ BLOCKS[ID.HelmChrome].armor = 0.16;
 BLOCKS[ID.PlatePrism].armor = 0.26;
 BLOCKS[ID.ResinBoots].armor = 0.12;
 
+put(b(ID.Mud, "Mud", "#4a3424", "#5c4030", "#3a2818", "#2a1c12", { hard: 0.4 }));
+put(b(ID.Moss, "Moss", "#2f6a32", "#3f8a44", "#4a3428", "#3a281c", { hard: 0.4 }));
+put(b(ID.Clay, "Clay", "#b7a090", "#d2c2b0", "#a09080", "#8a7868", { hard: 0.45 }));
+put(b(ID.Snow, "Snow", "#f4f7fb", "#ffffff", "#e4eaf2", "#d0d8e4", { hard: 0.25 }));
+put(b(ID.Ash, "Ash brick", "#c45a32", "#e07a48", "#a84828", "#7a3018", { hard: 0.7, tough: true }));
+put(b(ID.AshSoil, "Ash soil", "#a84828", "#c45a32", "#6a3018", "#4a2010", { hard: 0.4 }));
+put(b(ID.CrystalOre, "Crystal ore", "#d8c8ff", "#f4e8ff", "#8e959c", "#6e767e", { hard: 1.8, tough: true, need: 2, drop: ID.Crystal }));
+put(
+  b(ID.Bloom, "Bloom", "#f2a2c0", "#ffc0d6", "#3aaa4c", "#2f7d3a", {
+    solid: false,
+    plant: true,
+    hard: 0.05,
+    drop: -1,
+  }),
+);
+put(
+  b(ID.Reed, "Reed", "#6a8a3a", "#c6e86a", "#3a5a22", "#2a4018", {
+    solid: false,
+    plant: true,
+    hard: 0.05,
+  }),
+);
+item(ID.Slime, "Slime", "#3aaa4c");
+item(ID.Fur, "Fur", "#c47a2a");
+item(ID.Scale, "Scale", "#3b96e4");
+item(ID.Fang, "Fang", "#f4f1ea");
+item(ID.Wisp, "Wisp dust", "#b48cff");
+item(ID.Tome, "Spell tome", "#7a4ad4");
+item(ID.Crystal, "Crystal", "#f4e8ff");
+item(ID.Pelt, "Pelt", "#8d5a34");
+item(ID.Shell, "Shell chip", "#f4e0c0");
+item(ID.Wax, "Wax", "#f0c040");
+item(ID.Frost, "Frost shard", "#c8e8ff");
+item(ID.Cinder, "Cinder", "#e23b2f");
+item(ID.Antler, "Antler", "#e8d0a8");
+item(ID.IceSheet, "Packed ice", "#d6e8f4");
+item(ID.GravelBar, "Pebble", "#9a9084");
+gear(ID.FangBlade, "Fang blade", "#f4f1ea", "sword", 4, 280);
+gear(ID.CinderBlade, "Cinder blade", "#e23b2f", "sword", 4, 260);
+gear(ID.AntlerBow, "Antler bow", "#e8d0a8", "bow", 2, 240);
+wear(ID.FurCap, "Fur cap", "#c47a2a", 1);
+wear(ID.ScaleLegs, "Scale legs", "#3b96e4", 3);
+wear(ID.ScaleMail, "Scale mail", "#3b96e4", 2);
+wear(ID.FrostCap, "Frost cap", "#c8e8ff", 1);
+item(ID.WaxSeal, "Wax seal", "#f0c040");
+BLOCKS[ID.FurCap].armor = 0.14;
+BLOCKS[ID.ScaleLegs].armor = 0.16;
+BLOCKS[ID.ScaleMail].armor = 0.22;
+BLOCKS[ID.FrostCap].armor = 0.18;
+
 BLOCKS[ID.Stone].drop = ID.Cobble;
 BLOCKS[ID.Stone].need = 1;
 BLOCKS[ID.Grass].drop = ID.Dirt;
@@ -649,6 +731,13 @@ export const CATALOG = [
   ID.Stone,
   ID.Cobble,
   ID.Sand,
+  ID.Mud,
+  ID.Moss,
+  ID.Clay,
+  ID.Snow,
+  ID.Ash,
+  ID.AshSoil,
+  ID.CrystalOre,
   ID.Log,
   ID.Leaves,
   ID.Planks,
@@ -687,6 +776,29 @@ export const CATALOG = [
   ID.PlatePrism,
   ID.ResinBoots,
   ID.Focus,
+  ID.Slime,
+  ID.Fur,
+  ID.Scale,
+  ID.Fang,
+  ID.Wisp,
+  ID.Crystal,
+  ID.Tome,
+  ID.FangBlade,
+  ID.FurCap,
+  ID.ScaleLegs,
+  ID.Pelt,
+  ID.Shell,
+  ID.Wax,
+  ID.Frost,
+  ID.Cinder,
+  ID.Antler,
+  ID.ScaleMail,
+  ID.FrostCap,
+  ID.CinderBlade,
+  ID.AntlerBow,
+  ID.WaxSeal,
+  ID.IceSheet,
+  ID.GravelBar,
   ID.IronBlock,
   ID.Bench,
   ID.Furnace,

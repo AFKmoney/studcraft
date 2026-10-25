@@ -4,6 +4,18 @@ import { hash2, hash3, makeNoise, type Noise } from "./noise";
 export const CS = 16;
 export const HEIGHT = 48;
 export const SEA = 16;
+export const REGION = 192;
+
+export type HamletSite = { x: number; z: number; y: number };
+
+export function hamletOrigin(seed: number, rx: number, rz: number): { x: number; z: number } | null {
+  const forced = rx === 0 && rz === 0;
+  if (!forced && hash2(rx, rz, seed + 404) > 0.36) return null;
+  const span = REGION - 96;
+  const x = rx * REGION + 40 + Math.floor(hash2(rx, rz, seed + 405) * span);
+  const z = rz * REGION + 40 + Math.floor(hash2(rx, rz, seed + 406) * span);
+  return { x, z };
+}
 
 export class World {
   readonly seed: number;
@@ -33,12 +45,18 @@ export class World {
 
   biomeAt(x: number, z: number): string {
     if (this.flat) return "Baseplate";
-    const h = this.heightAt(x, z);
+    return this.biomeOf(x, z, this.heightAt(x, z));
+  }
+
+  private biomeOf(x: number, z: number, h: number): string {
     if (h <= SEA) return "Shore";
-    if (h >= 28) return "High studs";
-    const m = this.noise.fbm(x * 0.01 + 90, z * 0.01);
-    if (m > 0.62) return "Grove";
-    if (m < 0.36) return "Sand flats";
+    const wet = this.noise.fbm(x * 0.008 + 200, z * 0.008);
+    const heat = this.noise.fbm(x * 0.007 + 20, z * 0.009 + 400);
+    if (h >= 28 || (h >= 24 && heat < 0.46)) return "Snow cap";
+    if (h <= SEA + 3 && wet > 0.57) return "Fen";
+    if (heat > 0.64 && wet < 0.46) return "Ash ridge";
+    if (wet > 0.62) return "Grove";
+    if (wet < 0.38) return "Sand flats";
     return "Brick plains";
   }
 
@@ -59,14 +77,30 @@ export class World {
           continue;
         }
         const h = this.heightAt(x, z);
-        const beach = h <= SEA + 1;
+        const biome = this.biomeOf(x, z, h);
+        let top: number = ID.Grass;
+        let fill: number = ID.Dirt;
+        if (biome === "Shore" || biome === "Sand flats") {
+          top = ID.Sand;
+          fill = ID.Sand;
+        } else if (biome === "Fen") {
+          top = hash2(x, z, this.seed + 9) < 0.05 ? ID.Water : ID.Moss;
+          fill = ID.Mud;
+        } else if (biome === "Ash ridge") {
+          top = ID.Ash;
+          fill = ID.AshSoil;
+        } else if (biome === "Snow cap") {
+          top = ID.Snow;
+          fill = ID.Dirt;
+        }
+        if (biome === "Shore" && hash2(x, z, this.seed + 4) > 0.78) top = ID.Clay;
         for (let y = 0; y < HEIGHT; y++) {
           let id: number = ID.Air;
           if (y === 0) id = ID.Bedrock;
           else if (y > h) {
             if (y <= SEA) id = ID.Water;
-          } else if (y === h) id = beach ? ID.Sand : ID.Grass;
-          else if (y >= h - 3) id = beach ? ID.Sand : ID.Dirt;
+          } else if (y === h) id = top;
+          else if (y >= h - 3) id = fill;
           else {
             id = ID.Stone;
             if (y > 2 && y < h - 2) {
@@ -88,6 +122,11 @@ export class World {
               else if (id === ID.Stone && y >= 2 && y <= 11 && hash3(x, y, z, this.seed + 75) > 0.999) id = ID.SapphireOre;
               else if (id === ID.Stone && y >= 2 && y <= 7 && hash3(x, y, z, this.seed + 76) > 0.99935) id = ID.PrismOre;
               else if (id === ID.Stone && y >= 3 && y <= 8 && hash3(x, y, z, this.seed + 78) > 0.9992) id = ID.ResinOre;
+              else if (id === ID.Stone && y >= 4 && y <= 18 && hash3(x, y, z, this.seed + 81) > 0.9988) id = ID.CrystalOre;
+            }
+            if (id === ID.Stone && y > 4 && y < h - 4) {
+              const c2 = this.noise.noise3(x * 0.045 + 9, y * 0.06, z * 0.045);
+              if (c2 > 0.84) id = ID.Air;
             }
           }
           data[idx(lx, y, lz)] = id;
@@ -127,8 +166,27 @@ export class World {
           const slope =
             Math.abs(this.heightAt(x + 1, z) - h) > 1 || Math.abs(this.heightAt(x, z + 1) - h) > 1;
           const t = hash2(x, z, this.seed);
-          if (!slope && t < 0.012) this.writeTree(data, baseX, baseZ, x, h, z);
-          else if (t > 0.94 && t < 0.97 && x >= baseX && x < baseX + CS && z >= baseZ && z < baseZ + CS) {
+          const biome = this.biomeAt(x, z);
+          if (!slope && t < 0.012) {
+            if (biome === "Ash ridge") {
+              if (t < 0.004) {
+                const tall = 1 + (hash2(x, z, this.seed + 6) > 0.5 ? 1 : 0);
+                for (let i = 1; i <= tall; i++) this.paint(data, baseX, baseZ, x, h + i, z, ID.Cactus);
+              }
+            } else if (biome !== "Snow cap" && biome !== "Sand flats") this.writeTree(data, baseX, baseZ, x, h, z);
+          } else if (biome === "Grove" && t > 0.9 && t < 0.94 && x >= baseX && x < baseX + CS && z >= baseZ && z < baseZ + CS) {
+            const y = h + 1;
+            if (y < HEIGHT - 1) {
+              const i = idx(x - baseX, y, z - baseZ);
+              if (data[i] === ID.Air) data[i] = ID.Bloom;
+            }
+          } else if (biome === "Fen" && t > 0.93 && t < 0.97 && x >= baseX && x < baseX + CS && z >= baseZ && z < baseZ + CS) {
+            const y = h + 1;
+            if (y < HEIGHT - 1) {
+              const i = idx(x - baseX, y, z - baseZ);
+              if (data[i] === ID.Air) data[i] = ID.Reed;
+            }
+          } else if (t > 0.94 && t < 0.97 && x >= baseX && x < baseX + CS && z >= baseZ && z < baseZ + CS) {
             const y = h + 1;
             if (y < HEIGHT - 1) {
               const i = idx(x - baseX, y, z - baseZ);
@@ -145,6 +203,8 @@ export class World {
       }
     }
 
+    this.paintCellar(data, baseX, baseZ);
+    this.paintHamlet(data, baseX, baseZ);
     this.chunks.set(this.ck(cx, cz), data);
     return data;
   }
@@ -170,6 +230,109 @@ export class World {
           this.paint(data, baseX, baseZ, x + dx, top + dy, z + dz, ID.Leaves);
         }
       }
+    }
+  }
+
+  private force(data: Uint8Array, baseX: number, baseZ: number, x: number, y: number, z: number, id: number) {
+    if (y < 1 || y >= HEIGHT) return;
+    if (x < baseX || x >= baseX + CS || z < baseZ || z >= baseZ + CS) return;
+    data[x - baseX + (z - baseZ) * CS + y * CS * CS] = id;
+  }
+
+  hamletAt(rx: number, rz: number): HamletSite | null {
+    const origin = hamletOrigin(this.seed, rx, rz);
+    if (!origin || this.flat) return null;
+    let min = 999;
+    let max = 0;
+    const samples: [number, number][] = [
+      [0, 0],
+      [29, 0],
+      [0, 27],
+      [29, 27],
+      [15, 14],
+    ];
+    for (const [dx, dz] of samples) {
+      const h = this.heightAt(origin.x + dx, origin.z + dz);
+      min = Math.min(min, h);
+      max = Math.max(max, h);
+    }
+    const forced = rx === 0 && rz === 0;
+    if (!forced && (min <= SEA + 1 || max - min > 6)) return null;
+    const y = Math.max(SEA + 2, Math.min(HEIGHT - 14, max));
+    return { x: origin.x, z: origin.z, y };
+  }
+
+  nearestHamlet(x: number, z: number, rings = 3): HamletSite | null {
+    const rx = Math.floor(x / REGION);
+    const rz = Math.floor(z / REGION);
+    let best: HamletSite | null = null;
+    let bestD = Infinity;
+    for (let dz = -rings; dz <= rings; dz++) {
+      for (let dx = -rings; dx <= rings; dx++) {
+        const site = this.hamletAt(rx + dx, rz + dz);
+        if (!site) continue;
+        const ddx = site.x + 15 - x;
+        const ddz = site.z + 14 - z;
+        const d = ddx * ddx + ddz * ddz;
+        if (d < bestD) {
+          bestD = d;
+          best = site;
+        }
+      }
+    }
+    return best;
+  }
+
+  private paintCellar(data: Uint8Array, baseX: number, baseZ: number) {
+    if (this.flat || hash2(baseX, baseZ, this.seed + 88) < 0.988) return;
+    const site = this.hamletAt(Math.floor(baseX / REGION), Math.floor(baseZ / REGION));
+    if (site) {
+      const overlap = site.x - 1 < baseX + CS && site.x + 32 > baseX && site.z - 1 < baseZ + CS && site.z + 29 > baseZ;
+      if (overlap) return;
+    }
+    const cx = baseX + 8;
+    const cz = baseZ + 8;
+    if (this.heightAt(cx, cz) < 16) return;
+    const y0 = 6;
+    for (let dz = 0; dz < 7; dz++) {
+      for (let dx = 0; dx < 7; dx++) {
+        for (let dy = 0; dy < 4; dy++) {
+          const edge = dx === 0 || dz === 0 || dx === 6 || dz === 6 || dy === 0 || dy === 3;
+          this.force(data, baseX, baseZ, baseX + 4 + dx, y0 + dy, baseZ + 4 + dz, edge ? ID.Cobble : ID.Air);
+        }
+      }
+    }
+    this.force(data, baseX, baseZ, baseX + 7, y0 + 1, baseZ + 7, ID.Chest);
+    this.force(data, baseX, baseZ, baseX + 5, y0 + 2, baseZ + 5, ID.Torch);
+  }
+
+  private paintHamlet(data: Uint8Array, baseX: number, baseZ: number) {
+    if (this.flat) return;
+    const site = this.hamletAt(Math.floor(baseX / REGION), Math.floor(baseZ / REGION));
+    if (!site) return;
+    const x0 = Math.max(baseX, site.x - 1);
+    const x1 = Math.min(baseX + CS, site.x + 32);
+    const z0 = Math.max(baseZ, site.z - 1);
+    const z1 = Math.min(baseZ + CS, site.z + 29);
+    const yTop = Math.min(HEIGHT - 2, site.y + 8);
+    for (let z = z0; z < z1; z++) {
+      for (let x = x0; x < x1; x++) {
+        for (let y = Math.max(1, site.y - 8); y <= yTop; y++) {
+          const id = hamletBlock(x - site.x, y - site.y, z - site.z);
+          if (id < 0) continue;
+          this.force(data, baseX, baseZ, x, y, z, id);
+        }
+      }
+    }
+  }
+
+  releaseFar(cx: number, cz: number, radius: number) {
+    const lim = (radius + 3) * (radius + 3);
+    for (const key of this.chunks.keys()) {
+      const [x, z] = key.split(",").map(Number);
+      const dx = x - cx;
+      const dz = z - cz;
+      if (dx * dx + dz * dz > lim) this.chunks.delete(key);
     }
   }
 
@@ -250,21 +413,128 @@ export type Decor = {
   village: { x: number; z: number } | null;
 };
 
-export function decorate(world: World, sx: number, sz: number): Decor {
+const COTTAGES: [number, number, number, number][] = [
+  [1, 4, ID.Red, ID.Yellow],
+  [22, 4, ID.Blue, ID.White],
+  [1, 18, ID.Orange, ID.Yellow],
+  [22, 18, ID.Green, ID.White],
+];
+
+function cottageBlock(lx: number, ry: number, lz: number, ox: number, oz: number, wall: number, roof: number): number {
+  const x = lx - ox;
+  const z = lz - oz;
+  const W = 7;
+  const D = 6;
+  const wallH = 4;
+  if (ry === 0 && x === 3 && z === -1) return ID.Planks;
+  if (ry === 0 && x >= 0 && x < W && z >= 0 && z < D) return ID.Planks;
+  if (ry === wallH + 1 && x >= -1 && x <= W && z >= -1 && z <= D) {
+    if (Math.abs(x - 3) <= 1 && z === -1) return -1;
+    return roof;
+  }
+  if (x < 0 || z < 0 || x >= W || z >= D || ry < 1 || ry > wallH) return -1;
+  const edge = x === 0 || z === 0 || x === W - 1 || z === D - 1;
+  if (!edge) {
+    if (ry === 1 && x === 2 && z === 2) return ID.Orange;
+    if (ry === 1 && x === 4 && z === 3) return ID.Yellow;
+    return -1;
+  }
+  if (z === 0 && x === 3 && ry <= 2) return ID.Air;
+  if (ry === 2 && (x === 0 || x === W - 1) && (z === 2 || z === 3)) return ID.Glass;
+  return wall;
+}
+
+function hamletBlock(lx: number, ry: number, lz: number): number {
+  for (const [ox, oz, wall, roof] of COTTAGES) {
+    const id = cottageBlock(lx, ry, lz, ox, oz, wall, roof);
+    if (id >= 0) return id;
+  }
+  const wx = lx - 1;
+  const wz = lz - 11;
+  if (wx >= 0 && wz >= 0 && wx <= 2 && wz <= 2) {
+    const edge = wx === 0 || wz === 0 || wx === 2 || wz === 2;
+    if (edge && (ry === 1 || ry === 2)) return ID.Stone;
+    if (!edge && ry === 1) return ID.Water;
+    if (wx === 0 && wz === 0 && ry === 3) return ID.Lamp;
+  }
+  if (lx >= 8 && lx <= 13) {
+    if (lz === 13 && ry === 0) return ID.Water;
+    if ((lz === 12 || lz === 14) && ry === 0) return ID.Farmland;
+    if ((lz === 12 || lz === 14) && ry === 1) return ID.CropRipe;
+  }
+  const px = lx - 22;
+  const pz = lz - 11;
+  if (px >= 0 && pz >= 0 && px < 7 && pz < 5 && ry === 1) {
+    const edge = px === 0 || pz === 0 || px === 6 || pz === 4;
+    if (edge && !(pz === 0 && px === 3)) return ID.Fence;
+  }
+  if (lx === 9 && lz === 19 && ry === 1) return ID.Furnace;
+  if (lx === 10 && lz === 19 && ry === 1) return ID.Anvil;
+  if (lx === 13 && lz === 8 && (ry === 1 || ry === 2)) return ID.Cobble;
+  if (lx === 16 && lz === 8 && ry === 1) return ID.Cobble;
+  if (lx === 16 && lz === 8 && ry === 2) return ID.Planks;
+  if (lx === 16 && lz === 8 && ry === 3) return ID.Lamp;
+  if ((lx === 0 || lx === 29) && (lz === 2 || lz === 16)) {
+    if (ry === 1) return ID.Cobble;
+    if (ry === 2) return ID.Torch;
+  }
+  const inPad = lx >= 0 && lx < 30 && lz >= 0 && lz < 28;
+  if (!inPad) return -1;
+  if (ry > 0 && ry <= 8) return ID.Air;
+  if (ry === 0) return lz === 2 || lz === 16 || lx === 14 ? ID.Cobble : ID.Grass;
+  if (ry < 0 && ry >= -8) return ID.Dirt;
+  return -1;
+}
+
+export function folkLayout(x0: number, z0: number): FolkSpot[] {
+  return [
+    { x: x0 + 4.5, z: z0 + 2.5, role: "grocer" },
+    { x: x0 + 25.5, z: z0 + 2.5, role: "mason" },
+    { x: x0 + 4.5, z: z0 + 16.5, role: "smith" },
+    { x: x0 + 25.5, z: z0 + 16.5, role: "herder" },
+    { x: x0 + 14.5, z: z0 + 10.5, role: "clerk" },
+    { x: x0 + 8.5, z: z0 + 8.5, role: "mage" },
+    { x: x0 + 19.5, z: z0 + 8.5, role: "ranger" },
+  ];
+}
+
+export function penSheep(x0: number, z0: number) {
+  return [
+    { x: x0 + 24.5, z: z0 + 13.5 },
+    { x: x0 + 26.5, z: z0 + 13.5 },
+  ];
+}
+
+export function decorate(world: World, sx: number, sz: number, town = true): Decor {
   stampStarterMetals(world, sx, sz);
+  const sheep = world.flat
+    ? [
+        { x: sx + 3, z: sz + 4 },
+        { x: sx + 5, z: sz + 4 },
+        { x: sx + 7, z: sz + 4 },
+      ]
+    : [
+        { x: sx + 4, z: sz + 3 },
+        { x: sx - 3, z: sz + 5 },
+        { x: sx + 2, z: sz - 4 },
+      ];
+  if (!town) {
+    if (!world.flat) {
+      const row = findPad(world, sx, sz, 5, 12);
+      if (row) stampPalette(world, row.x, world.heightAt(row.x, row.z), row.z);
+    }
+    return { sheep, folk: [], village: null };
+  }
   const site = findVillageSite(world, sx, sz);
   const built = stampVillage(world, site.x, site.y, site.z);
-  const sheep = [...built.sheep];
   if (world.flat) {
     stampPyramid(world, sx - 16, 4, sz + 8);
     stampPalette(world, sx + 2, 4, sz - 8);
-    for (let i = 0; i < 3; i++) sheep.push({ x: sx + 3 + i * 2, z: sz + 4 });
   } else {
     const row = findPad(world, sx, sz, 5, 12);
     if (row) stampPalette(world, row.x, world.heightAt(row.x, row.z), row.z);
-    sheep.push({ x: sx + 4, z: sz + 3 }, { x: sx - 3, z: sz + 5 }, { x: sx + 2, z: sz - 4 });
   }
-  return { sheep, folk: built.folk, village: { x: site.x, z: site.z } };
+  return { sheep: [...sheep, ...built.sheep], folk: built.folk, village: { x: site.x, z: site.z } };
 }
 
 function stampStarterMetals(world: World, sx: number, sz: number) {
@@ -284,6 +554,8 @@ function stampStarterMetals(world: World, sx: number, sz: number) {
   if (!world.flat) return;
   const row = [ID.AmberOre, ID.ChromeOre, ID.SapphireOre, ID.ResinOre, ID.PrismOre];
   for (let i = 0; i < row.length; i++) world.set(x + i, 2, z + 10, row[i]);
+  const show = [ID.Moss, ID.Mud, ID.Clay, ID.Snow, ID.Ash, ID.AshSoil, ID.CrystalOre, ID.Bloom, ID.Reed];
+  for (let i = 0; i < show.length; i++) world.set(x + i, 5, z + 12, show[i]);
 }
 
 function findVillageSite(world: World, sx: number, sz: number) {
@@ -400,17 +672,8 @@ function stampVillage(world: World, x0: number, ground: number, z0: number) {
     if (world.get(x0 + 14, ground, z0 + z) === ID.Grass) world.set(x0 + 14, ground, z0 + z, ID.Cobble);
   }
   return {
-    sheep: [
-      { x: penX + 2.5, z: penZ + 2.5 },
-      { x: penX + 4.5, z: penZ + 2.5 },
-    ],
-    folk: [
-      { x: x0 + 4.5, z: z0 + 2.5, role: "grocer" },
-      { x: x0 + 25.5, z: z0 + 2.5, role: "mason" },
-      { x: x0 + 4.5, z: z0 + 16.5, role: "smith" },
-      { x: x0 + 25.5, z: z0 + 16.5, role: "herder" },
-      { x: x0 + 14.5, z: z0 + 10.5, role: "clerk" },
-    ],
+    sheep: penSheep(x0, z0),
+    folk: folkLayout(x0, z0),
   };
 }
 

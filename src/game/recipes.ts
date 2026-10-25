@@ -12,6 +12,8 @@ export type Recipe = {
   w?: number;
   h?: number;
   lvl?: number;
+  skill?: string;
+  cat?: "build" | "tools" | "magic" | "gear" | "food";
 };
 
 const P = ID.Planks;
@@ -32,11 +34,11 @@ function r(
 }
 
 export const RECIPES: Recipe[] = [
-  r("planks", "Planks", "1 wood → 4", [[ID.Log, 1]], P, 4, { shape: [ID.Log], w: 1, h: 1 }),
-  r("sticks", "Sticks", "2 planks → 4", [[P, 2]], S, 4, { shape: [P, P], w: 1, h: 2 }),
-  r("bench", "Bench", "4 planks", [[P, 4]], ID.Bench, 1, { shape: [P, P, P, P], w: 2, h: 2 }),
-  r("hammer", "Brick hammer", "3 stone + 2 planks", [[ID.Stone, 3], [P, 2]], 0, 1, { special: "hammer" }),
-  r("glass", "Windows", "2 sand → 2", [[ID.Sand, 2]], ID.Glass, 2),
+  r("planks", "Planks", "1 wood → 4", [[ID.Log, 1]], P, 4, { shape: [ID.Log], w: 1, h: 1, cat: "build" }),
+  r("sticks", "Sticks", "2 planks → 4", [[P, 2]], S, 4, { shape: [P, P], w: 1, h: 2, cat: "build" }),
+  r("bench", "Bench", "4 planks", [[P, 4]], ID.Bench, 1, { shape: [P, P, P, P], w: 2, h: 2, cat: "build" }),
+  r("hammer", "Brick hammer", "3 stone + 2 planks", [[ID.Stone, 3], [P, 2]], 0, 1, { special: "hammer", cat: "tools" }),
+  r("glass", "Windows", "2 sand → 2", [[ID.Sand, 2]], ID.Glass, 2, { cat: "build" }),
   r("pick-w", "Wood pick", "3 planks + 2 sticks", [[P, 3], [S, 2]], ID.PickW, 1, {
     shape: [P, P, P, 0, S, 0, 0, S, 0],
     w: 3,
@@ -161,6 +163,44 @@ export const RECIPES: Recipe[] = [
   r("pick-master", "Master pick", "3 master bricks + 1 prism pick · level 22", [[ID.MasterBrick, 3], [ID.PickPrism, 1]], ID.MasterPick, 1, {
     lvl: 22,
   }),
+  r("fang-blade", "Fang blade", "2 fangs + 1 bone + 1 stick · Trophy", [[ID.Fang, 2], [ID.Bone, 1], [S, 1]], ID.FangBlade, 1, {
+    skill: "trophy",
+    cat: "tools",
+  }),
+  r("fur-cap", "Fur cap", "4 fur + 1 white · Trophy", [[ID.Fur, 4], [ID.White, 1]], ID.FurCap, 1, { skill: "trophy", cat: "gear" }),
+  r("scale-legs", "Scale legs", "5 scales + 2 string · Trophy", [[ID.Scale, 5], [ID.String, 2]], ID.ScaleLegs, 1, {
+    skill: "trophy",
+    cat: "gear",
+  }),
+  r("tome", "Spell tome", "1 eye + 1 wisp dust + 1 amber · Spark", [[ID.Eye, 1], [ID.Wisp, 1], [ID.Amber, 1]], ID.Tome, 1, {
+    skill: "spark",
+    cat: "magic",
+  }),
+  r("lens", "Crystal lens", "2 crystals + 1 window", [[ID.Crystal, 2], [ID.Glass, 1]], ID.Eye, 1, { cat: "magic" }),
+  r("glue", "Slime cord", "1 slime + 1 string → 4 string", [[ID.Slime, 1], [ID.String, 1]], ID.String, 4, { cat: "build" }),
+  r("scale-mail", "Scale mail", "6 scales + 1 slime · Trophy", [[ID.Scale, 6], [ID.Slime, 1]], ID.ScaleMail, 1, {
+    skill: "trophy",
+    cat: "gear",
+  }),
+  r("frost-cap", "Frost cap", "4 frost + 1 fur · Trophy", [[ID.Frost, 4], [ID.Fur, 1]], ID.FrostCap, 1, {
+    skill: "trophy",
+    cat: "gear",
+  }),
+  r("cinder-blade", "Cinder blade", "2 cinders + 1 fang + 1 stick · Trophy", [[ID.Cinder, 2], [ID.Fang, 1], [S, 1]], ID.CinderBlade, 1, {
+    skill: "trophy",
+    cat: "tools",
+  }),
+  r("antler-bow", "Antler bow", "2 antlers + 2 string · Trophy", [[ID.Antler, 2], [ID.String, 2]], ID.AntlerBow, 1, {
+    skill: "trophy",
+    cat: "tools",
+  }),
+  r("wax-seal", "Wax seal", "2 wax + 1 crystal · Spark", [[ID.Wax, 2], [ID.Crystal, 1]], ID.WaxSeal, 1, {
+    skill: "spark",
+    cat: "magic",
+  }),
+  r("packed-ice", "Packed ice", "4 frost shards", [[ID.Frost, 4]], ID.IceSheet, 1, { cat: "build" }),
+  r("loaf", "Camp loaf", "3 grain", [[ID.Wheat, 3]], ID.Bread, 1, { cat: "food" }),
+  r("cookie", "Ash cookie", "2 grain + 1 cinder", [[ID.Wheat, 2], [ID.Cinder, 1]], ID.Cookie, 4, { cat: "food" }),
 ];
 
 export const SMELT: Record<number, number> = {

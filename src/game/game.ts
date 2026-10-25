@@ -4,10 +4,12 @@ import { createAudio } from "./audio";
 import { STUD_H, STUD_R, buildChunk, type Surface } from "./mesher";
 import { NEIGHBORS, RECIPES, SMELT, fuelTime, matchGrid } from "./recipes";
 import { DISCOVER, MOB_XP, ORE_HEAR, ORE_XP, nextPerk, rankTitle, xpNeed } from "./ranks";
+import { manaMaxFor, skillById, spellsFor } from "./skills";
 import { QUESTS, traderOf, type TraderRole } from "./quests";
-import { clearSave, hasSave, loadSave, loadSettings, writeSave, writeSettings, type SaveV1 } from "./save";
+import { clearSave, deleteWorld, hasSave, listWorlds, loadLatest, loadSettings, loadWorld, writeSettings, writeWorld, type SaveV1, type WorldSlot } from "./save";
 import { buildAtlas } from "./textures";
-import { CS, HEIGHT, World, decorate, type Decor, type FolkSpot } from "./world";
+import { CS, HEIGHT, World, decorate, folkLayout, penSheep, type Decor, type FolkSpot } from "./world";
+import { parseSeed } from "./noise";
 
 export type Phase = "title" | "play" | "pause" | "inventory" | "dead";
 export type EnterKind = "play" | "survival" | "flat" | "continue";
@@ -46,6 +48,7 @@ export type Hud = {
   mine: number;
   targetName: string;
   seed: number;
+  seedText: string;
   flash: number;
   eyeWater: boolean;
   message: string;
@@ -59,6 +62,13 @@ export type Hud = {
   offers: { pay: number; pn: number; out: number; on: number; payName: string; outName: string }[];
   quests: { id: string; name: string; detail: string; n: number; need: number; done: boolean; ready: boolean; reward: string }[];
   questAlert: string;
+  questTrack: string;
+  skills: string[];
+  skillPoints: number;
+  mana: number;
+  manaMax: number;
+  spell: string;
+  spellsOn: boolean;
 };
 
 export type TouchState = {
@@ -73,10 +83,17 @@ export type GameApi = {
   canvas: HTMLCanvasElement;
   hud: Hud;
   touch: TouchState;
-  settings: { sens: number; radius: number; sound: boolean; studs: boolean; third: boolean };
+  settings: {
+    sens: number;
+    radius: number;
+    sound: boolean;
+    studs: boolean;
+    third: boolean;
+    mods: { hard: boolean; generous: boolean; peaceful: boolean; spells: boolean };
+  };
   phase: Phase;
   hasSave: boolean;
-  enter: (kind: EnterKind) => void;
+  enter: (kind: EnterKind, worldId?: string) => void;
   resume: () => void;
   quit: () => void;
   respawn: () => void;
@@ -96,6 +113,12 @@ export type GameApi = {
   brew: (kind: string) => void;
   trade: (i: number) => void;
   claim: (id: string) => void;
+  unlock: (id: string) => void;
+  setMod: (key: "hard" | "generous" | "peaceful" | "spells", on: boolean) => void;
+  setSeed: (text: string) => void;
+  deleteSlot: (id: string) => void;
+  copySeed: () => void;
+  readonly slots: WorldSlot[];
   press: (id: number) => void;
   setSens: (n: number) => void;
   setRadius: (n: number) => void;
@@ -119,6 +142,8 @@ declare global {
       setDig?: (mine: boolean, place: boolean) => void;
       getBlock?: (x: number, y: number, z: number) => number;
       getTarget?: () => string;
+      getHamlet?: () => { x: number; y: number; z: number } | null;
+      getChunks?: () => number;
     };
   }
 }
@@ -134,10 +159,16 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   const savedSettings = loadSettings();
   const settings = {
     sens: savedSettings?.sens ?? 1,
-    radius: savedSettings?.radius ?? (narrow ? 2 : 3),
+    radius: savedSettings?.radius ?? (narrow ? 2 : 4),
     sound: savedSettings?.sound ?? true,
     studs: savedSettings?.studs ?? true,
     third: false,
+    mods: {
+      hard: savedSettings?.mods?.hard ?? false,
+      generous: savedSettings?.mods?.generous ?? false,
+      peaceful: savedSettings?.mods?.peaceful ?? false,
+      spells: savedSettings?.mods?.spells ?? true,
+    },
   };
   audio.setEnabled(settings.sound);
 
@@ -175,6 +206,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     mine: 0,
     targetName: "",
     seed: 0,
+    seedText: "",
     flash: 0,
     eyeWater: false,
     message: "",
@@ -188,6 +220,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     offers: [],
     quests: [],
     questAlert: "",
+    questTrack: "",
+    skills: [],
+    skillPoints: 0,
+    mana: 8,
+    manaMax: 8,
+    spell: "",
+    spellsOn: true,
   };
   const touch: TouchState = { moveX: 0, moveY: 0, jump: false, mine: false, place: false };
   const listeners = new Set<() => void>();
@@ -208,6 +247,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let hungerEx = 0;
   let xp = 0;
   let rankLv = 0;
+  const skills = new Set<string>();
+  let mana = 8;
+  let spellIx = 0;
+  let critterAcc = 0;
+  let folkAcc = 0;
   const found = new Set<number>();
   let messageFor = 2200;
   let oxygen = 10;
@@ -243,10 +287,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let message = "";
   let messageAt = 0;
   let seed = (Math.random() * 1e9) | 0;
+  let seedText = String(seed);
+  let worldId = "";
+  let pendingSeed = seedText;
   let world = new World(seed, false);
   let spawnPoint = world.findSpawn();
   spawnPoint.y = world.clearFeet(spawnPoint.x, spawnPoint.z);
-  const opening: Decor = decorate(world, Math.floor(spawnPoint.x), Math.floor(spawnPoint.z));
+  const opening: Decor = settleTown(false);
   let sheepSpots = opening.sheep;
   let folkSpots: FolkSpot[] = opening.folk;
   let villageAt = opening.village;
@@ -404,7 +451,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   scene.add(fig.group);
 
   type Mob = {
-    kind: "sheep" | "creeper" | "cow" | "walker" | "pig" | "chicken" | "spider" | "skelly" | "villager" | "ghast" | "dragon" | "horse" | "phantom" | "piglin" | "boat" | "cart";
+    kind: "sheep" | "creeper" | "cow" | "walker" | "pig" | "chicken" | "spider" | "skelly" | "villager" | "ghast" | "dragon" | "horse" | "phantom" | "piglin" | "boat" | "cart" | "frog" | "fox" | "crab" | "wisp";
     x: number;
     y: number;
     z: number;
@@ -424,6 +471,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     role?: string;
     homeX?: number;
     homeZ?: number;
+    roam?: boolean;
   };
   const mobs: Mob[] = [];
 
@@ -498,11 +546,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
 
   function persistSettings() {
     writeSettings({
-      v: 2,
+      v: 3,
       sens: settings.sens,
       radius: settings.radius,
       sound: settings.sound,
       studs: settings.studs,
+      mods: { ...settings.mods },
     });
   }
 
@@ -549,6 +598,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     hud.z = player.z;
     hud.biome = world.biomeAt(player.x, player.z);
     hud.seed = seed;
+    hud.seedText = seedText;
     hud.flash = flash;
     hud.message = performance.now() - messageAt > messageFor ? "" : message;
     hud.locked = document.pointerLockElement === canvas;
@@ -582,6 +632,17 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       return { id: q.id, name: q.name, detail: q.detail, n, need: q.need, done: prog.done, ready, reward };
     });
     hud.questAlert = alert;
+    const readyQ = hud.quests.find((q) => q.ready);
+    const openQ = hud.quests.find((q) => !q.done);
+    hud.questTrack = readyQ ? readyQ.name + " · ready" : openQ ? openQ.name + " " + openQ.n + "/" + openQ.need : "Board clear";
+    hud.skills = [...skills];
+    hud.skillPoints = creative ? 99 : Math.max(0, rankLv - skills.size);
+    const maxMana = manaMaxFor(skills);
+    hud.manaMax = maxMana;
+    hud.mana = mana;
+    const knownSpells = spellsFor(skills);
+    hud.spell = knownSpells.length ? knownSpells[spellIx % knownSpells.length].name : "";
+    hud.spellsOn = settings.mods.spells;
     pub.phase = phase;
     pub.hasSave = hasSaveFlag;
   }
@@ -625,6 +686,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const id = hotbar[slot];
     const d = def(id);
     if (!d.maxUse || creative) return;
+    if (skills.has("joint") && Math.random() < 0.4) return;
     inv[id] = (inv[id] ?? 0) - 1;
     if (inv[id] <= 0) {
       inv[id] = 0;
@@ -664,6 +726,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     xp = 0;
     rankLv = 0;
     found.clear();
+    skills.clear();
+    mana = 8;
+    spellIx = 0;
     oxygen = 10;
     flying = false;
     flash = 0;
@@ -698,17 +763,33 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     fuses.length = 0;
   }
 
-  function bootNew(nextSeed: number, nextFlat: boolean, nextCreative: boolean) {
+  function settleTown(flatTown: boolean): Decor {
+    const built = decorate(world, Math.floor(spawnPoint.x), Math.floor(spawnPoint.z), flatTown);
+    if (flatTown) return built;
+    const site = world.nearestHamlet(spawnPoint.x, spawnPoint.z, 4);
+    if (!site) return built;
+    const dist = Math.hypot(site.x + 15 - spawnPoint.x, site.z + 14 - spawnPoint.z);
+    return {
+      sheep: dist < 90 ? [...built.sheep, ...penSheep(site.x, site.z)] : built.sheep,
+      folk: dist < 180 ? folkLayout(site.x, site.z) : [],
+      village: { x: site.x, z: site.z },
+    };
+  }
+
+  function bootNew(nextFlat: boolean, nextCreative: boolean) {
     for (const key of [...meshes.keys()]) dropChunk(key);
     dirty.clear();
-    seed = nextSeed;
+    const parsed = parseSeed(pendingSeed);
+    seed = parsed.seed;
+    seedText = parsed.text;
+    worldId = "w" + Date.now().toString(36) + ((Math.random() * 36) | 0).toString(36);
     flat = nextFlat;
     creative = nextCreative;
     world = new World(seed, flat);
     const s = world.findSpawn();
     s.y = world.clearFeet(s.x, s.z);
     spawnPoint = s;
-    const built = decorate(world, Math.floor(s.x), Math.floor(s.z));
+    const built = settleTown(nextFlat);
     sheepSpots = built.sheep;
     folkSpots = built.folk;
     villageAt = built.village;
@@ -729,10 +810,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     saveDirty = true;
   }
 
-  function bootSave(data: SaveV1) {
+  function bootSave(data: SaveV1, id: string) {
     for (const key of [...meshes.keys()]) dropChunk(key);
     dirty.clear();
     seed = data.seed;
+    seedText = data.seedText || String(data.seed);
+    worldId = id;
     flat = data.flat;
     creative = data.creative;
     world = new World(seed, flat);
@@ -756,6 +839,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       xp = Math.round(((old % 8) / 8) * xpNeed(rankLv));
     }
     for (const id of data.found ?? []) found.add(id);
+    skills.clear();
+    for (const id of data.skills ?? []) skills.add(id);
+    mana = data.mana ?? manaMaxFor(skills);
+    spellIx = data.spell ?? 0;
     oxygen = 10;
     flying = false;
     hammer = !!data.hammer;
@@ -774,6 +861,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (data.folk && data.folk.length) {
       folkSpots = data.folk.map((f) => ({ x: f.x, z: f.z, role: f.role }));
       villageAt = data.village ?? null;
+      if (villageAt) {
+        const have = new Set(folkSpots.map((f) => f.role));
+        if (!have.has("mage")) folkSpots.push({ x: villageAt.x + 8.5, z: villageAt.z + 8.5, role: "mage" });
+        if (!have.has("ranger")) folkSpots.push({ x: villageAt.x + 19.5, z: villageAt.z + 8.5, role: "ranger" });
+      }
       sheepSpots = [
         { x: player.x + 4, z: player.z + 2 },
         { x: player.x - 3, z: player.z + 4 },
@@ -847,6 +939,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     need.sort((a, b) => a.d - b.d);
     const keep = new Set(need.map((n) => n.key));
     for (const key of meshes.keys()) if (!keep.has(key)) dropChunk(key);
+    world.releaseFar(cx, cz, r);
     let left = budget;
     for (const item of need) {
       if (left <= 0) break;
@@ -912,6 +1005,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (delta < 0 && player.vy < -13 && !creative && !inWaterNow()) {
         let dmg = Math.round((-player.vy - 13) * 1.5);
         if (rankLv >= 15) dmg = Math.round(dmg * 0.55);
+        if (skills.has("raise")) dmg = Math.round(dmg * 0.75);
         if (dmg > 0) hurt(dmg);
       }
       if (delta > 0) player.y = Math.floor(player.y + BODY) - BODY - 1e-3;
@@ -950,6 +1044,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     shake = Math.max(shake, 0.18);
     audio.hurt();
     if (health <= 0) die();
+  }
+
+  function bite(n: number) {
+    hurt(settings.mods.hard ? Math.ceil(n * 1.5) : n);
   }
 
   function die() {
@@ -1088,9 +1186,17 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         (held.tool === "shovel" && SHOVEL_OK(id));
       if (right) wearHeld();
       if (canDrop) gainXp(ORE_XP[id] ?? 0);
+      if (canDrop && skills.has("yield") && ORE_XP[id] && Math.random() < 0.3) addInv(block.drop || id, 1);
       if (id === ID.Stone || id === ID.Cobble) oreEar(x, y, z);
     }
     if (id === ID.Log) bumpQuest("break", "log");
+    if (id === ID.Moss) bumpQuest("break", "moss");
+    if (id === ID.Snow) bumpQuest("break", "snow");
+    if (id === ID.Ash) bumpQuest("break", "ash");
+    if (id === ID.Clay) bumpQuest("break", "clay");
+    if (id === ID.Cactus) bumpQuest("break", "cactus");
+    if (id === ID.Reed) bumpQuest("break", "reed");
+    if (id === ID.Bloom) bumpQuest("break", "bloom");
     burst(x + 0.5, y + 0.5, z + 0.5, block.color, 14);
     audio.break();
     swing = 1;
@@ -1111,12 +1217,79 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   }
 
   function hamletLine() {
-    if (!villageAt) return "";
-    const dx = villageAt.x + 15 - player.x;
-    const dz = villageAt.z + 14 - player.z;
-    if (Math.hypot(dx, dz) < 18) return " The hamlet is around you.";
+    const site = world.nearestHamlet(player.x, player.z, 4) ?? (villageAt ? { x: villageAt.x, y: 0, z: villageAt.z } : null);
+    if (!site) return "";
+    const dx = site.x + 15 - player.x;
+    const dz = site.z + 14 - player.z;
+    if (Math.hypot(dx, dz) < 22) return " A hamlet sits around you.";
     const dir = Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? "east" : "west") : dz > 0 ? "south" : "north";
     return " A hamlet sits " + dir + ".";
+  }
+
+  function castSpell() {
+    if (!settings.mods.spells) return say("Spellcraft is off. Pause and tick the mod.");
+    const list = spellsFor(skills);
+    if (!list.length) return say("Learn Spark in the skill tree");
+    const spell = list[spellIx % list.length];
+    if (!creative && mana < spell.cost) return say("Need " + spell.cost + " mana");
+    if (!creative) mana -= spell.cost;
+    if (spell.id === "mend") {
+      health = Math.min(20, health + 5);
+      say("Mended");
+    } else if (spell.id === "blink") {
+      const dist = 5;
+      const nx = player.x - Math.sin(player.yaw) * dist;
+      const nz = player.z - Math.cos(player.yaw) * dist;
+      const ny = player.y;
+      const prev = { x: player.x, y: player.y, z: player.z };
+      player.x = nx;
+      player.z = nz;
+      if (overlapAt(player.x, player.y, player.z)) {
+        player.x = prev.x;
+        player.y = prev.y;
+        player.z = prev.z;
+        if (!creative) mana += spell.cost;
+        return say("The blink hits a brick");
+      }
+      player.y = ny;
+      burst(player.x, player.y + 1, player.z, "#b48cff", 12);
+      say("Blink");
+    } else {
+      let best: Mob | null = null;
+      let bestD = 7;
+      const lx = -Math.sin(player.yaw);
+      const lz = -Math.cos(player.yaw);
+      for (const m of mobs) {
+        if (m.dead) continue;
+        const host =
+          m.kind === "walker" ||
+          m.kind === "creeper" ||
+          m.kind === "skelly" ||
+          m.kind === "spider" ||
+          m.kind === "phantom" ||
+          m.kind === "ghast" ||
+          m.kind === "piglin" ||
+          m.kind === "wisp" ||
+          m.kind === "dragon";
+        if (!host) continue;
+        const dx = m.x - player.x;
+        const dz = m.z - player.z;
+        const d = Math.hypot(dx, dz);
+        if (d > bestD || d < 0.2) continue;
+        if ((dx / d) * lx + (dz / d) * lz < 0.35) continue;
+        best = m;
+        bestD = d;
+      }
+      if (!best) return say("The spark fizzles");
+      best.hp -= 5;
+      burst(best.x, best.y + 0.6, best.z, "#f5c518", 10);
+      audio.hit();
+      if (best.hp <= 0) killMob(best);
+      else say("Spark");
+    }
+    swing = 1;
+    saveDirty = true;
+    emit();
   }
 
   function eat() {
@@ -1293,6 +1466,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const held = hotbar[slot];
     const heldDef = def(held);
     if (held === ID.Bow) return shootHeld();
+    if (held === ID.Tome) return castSpell();
     if (held === ID.Flint && hit.id === ID.TNT) {
       fuses.push({ x: hit.x, y: hit.y, z: hit.z, t: 2.1 });
       wearHeld();
@@ -1740,7 +1914,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           }
         }
       } else if (!dead && !s.friendly && Math.hypot(player.x - s.x, player.z - s.z) < 0.6 && Math.abs(player.y + 1 - s.y) < 1.2) {
-        hurt(3);
+        bite(3);
         dead = true;
       }
       if (dead) scene.remove(s.mesh);
@@ -1862,12 +2036,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   }
 
   function oreEar(x: number, y: number, z: number) {
-    if (rankLv < 6 || creative) return;
+    if ((rankLv < 6 && !skills.has("vein")) || creative) return;
     const now = performance.now();
     if (now - heardAt < 7000) return;
-    for (let dy = -4; dy <= 4; dy++) {
-      for (let dz = -4; dz <= 4; dz++) {
-        for (let dx = -4; dx <= 4; dx++) {
+    const rad = skills.has("vein") ? 7 : 4;
+    for (let dy = -rad; dy <= rad; dy++) {
+      for (let dz = -rad; dz <= rad; dz++) {
+        for (let dx = -rad; dx <= rad; dx++) {
           const name = ORE_HEAR[world.get(x + dx, y + dy, z + dz)];
           if (!name) continue;
           heardAt = now;
@@ -1963,6 +2138,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     spawnKind("chicken", player.x - 2, player.z + 6);
     spawnKind("chicken", player.x + 2, player.z + 7);
     spawnKind("horse", player.x - 8, player.z + 3);
+    spawnKind("frog", player.x + 6, player.z + 8);
+    spawnKind("fox", player.x - 6, player.z - 7);
+    spawnKind("crab", player.x + 11, player.z - 3);
     spawnFolk();
   }
 
@@ -1973,6 +2151,33 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       mob.homeX = spot.x;
       mob.homeZ = spot.z;
       mob.bodyMat?.color.setHex(traderOf(spot.role).tint);
+    }
+  }
+
+  function ensureRoamingFolk() {
+    if (flat) return;
+    for (let i = mobs.length - 1; i >= 0; i--) {
+      const mob = mobs[i];
+      if (!mob.roam || mob.kind !== "villager" || mob.homeX === undefined || mob.homeZ === undefined) continue;
+      if (mob.dead || Math.hypot(mob.homeX - player.x, mob.homeZ - player.z) > 150) {
+        scene.remove(mob.mesh);
+        mobs.splice(i, 1);
+      }
+    }
+    const site = world.nearestHamlet(player.x, player.z, 2);
+    if (!site) return;
+    if (Math.hypot(site.x + 15 - player.x, site.z + 14 - player.z) > 72) return;
+    const live = mobs.filter((m) => m.kind === "villager" && !m.dead);
+    if (live.length >= 21) return;
+    for (const spot of folkLayout(site.x, site.z)) {
+      if (live.some((m) => m.homeX !== undefined && m.homeZ !== undefined && Math.hypot(m.homeX - spot.x, m.homeZ - spot.z) < 3)) continue;
+      const mob = spawnKind("villager", spot.x, spot.z);
+      mob.role = spot.role;
+      mob.homeX = spot.x;
+      mob.homeZ = spot.z;
+      mob.roam = true;
+      mob.bodyMat?.color.setHex(traderOf(spot.role).tint);
+      live.push(mob);
     }
   }
 
@@ -2012,6 +2217,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       horse: [0x6b3e22, 0xf4f1ea, 1.25],
       phantom: [0x3d7ad4, 0x8ec8f5, 1.1],
       piglin: [0xf2a2c0, 0xf0c43a, 1.05],
+      frog: [0x3aaa4c, 0xf0c43a, 0.55],
+      fox: [0xf07820, 0xf4f1ea, 0.7],
+      crab: [0xe23b2f, 0xf4f1ea, 0.5],
+      wisp: [0xb48cff, 0xf5c518, 0.65],
       walker: [0x3d5c38, 0x1a120c, 1],
       creeper: [0x3aaa4c, 0x16381c, 1.15],
       boat: [0xc4924a, 0xf4f1ea, 1.1],
@@ -2025,7 +2234,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       y,
       z,
       yaw: Math.random() * Math.PI * 2,
-      hp: kind === "dragon" ? 40 : kind === "ghast" ? 10 : kind === "walker" ? 8 : 4,
+      hp: kind === "dragon" ? 40 : kind === "ghast" ? 10 : kind === "walker" ? 8 : kind === "wisp" ? 6 : kind === "frog" || kind === "crab" ? 3 : 4,
       wander: 1,
       fuse: 0,
       cool: 0,
@@ -2151,15 +2360,47 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
                             ? [ID.Feather]
                             : mob.kind === "dragon"
                               ? [ID.Elytra, ID.Totem, ID.Scrap]
-                              : mob.kind === "villager"
+                              : mob.kind === "frog"
+                                ? [ID.Slime]
+                                : mob.kind === "fox"
+                                  ? [ID.Fur, ID.RawMeat]
+                                  : mob.kind === "crab"
+                                    ? [ID.Scale]
+                                    : mob.kind === "wisp"
+                                      ? [ID.Wisp]
+                                      : mob.kind === "villager"
                                 ? [ID.Emerald]
                                 : [ID.Green];
-    if (!creative) for (const drop of drops) dropItem(drop, mob.kind === "dragon" ? 1 : 1, mob.x, mob.y + 0.4, mob.z);
+    if (!creative) {
+      for (const drop of drops) dropItem(drop, 1, mob.x, mob.y + 0.4, mob.z);
+      const trophy = skills.has("trophy");
+      const luck = trophy || settings.mods.generous ? 0.62 : 0.28;
+      const extra: number[] = [];
+      if (mob.kind === "walker" && Math.random() < luck) extra.push(ID.Fang);
+      if ((mob.kind === "skelly" || mob.kind === "phantom") && Math.random() < luck) extra.push(ID.Wisp);
+      if (mob.kind === "creeper" && Math.random() < luck) extra.push(ID.Slime);
+      if (mob.kind === "fox" && Math.random() < luck) extra.push(ID.Pelt);
+      if (mob.kind === "crab" && Math.random() < luck) extra.push(ID.Shell);
+      if (mob.kind === "frog" && Math.random() < luck * 0.6) extra.push(ID.Wax);
+      if (mob.kind === "wisp" && Math.random() < luck) extra.push(ID.Frost);
+      if ((mob.kind === "creeper" || mob.kind === "ghast") && Math.random() < luck * 0.7) extra.push(ID.Cinder);
+      if ((mob.kind === "skelly" || mob.kind === "walker") && Math.random() < luck * 0.45) extra.push(ID.Antler);
+      if ((skills.has("butcher") || settings.mods.generous) && (mob.kind === "sheep" || mob.kind === "cow" || mob.kind === "pig" || mob.kind === "fox" || mob.kind === "frog")) {
+        extra.push(ID.RawMeat);
+      }
+      if (settings.mods.generous && (mob.kind === "frog" || mob.kind === "fox" || mob.kind === "crab" || mob.kind === "wisp")) extra.push(drops[0]);
+      for (const drop of extra) dropItem(drop, 1, mob.x, mob.y + 0.7, mob.z);
+    }
     if (mob.kind === "dragon") dragonUp = false;
     burst(mob.x, mob.y + 0.5, mob.z, def(drops[0]).color, 12);
     audio.break();
     gainXp(MOB_XP[mob.kind] ?? 2);
     if (mob.kind === "walker" || mob.kind === "creeper" || mob.kind === "skelly") bumpQuest("kill", "host");
+    if (mob.kind === "spider") bumpQuest("kill", "spider");
+    if (mob.kind === "frog") bumpQuest("kill", "frog");
+    if (mob.kind === "fox") bumpQuest("kill", "fox");
+    if (mob.kind === "crab") bumpQuest("kill", "crab");
+    if (mob.kind === "wisp") bumpQuest("kill", "wisp");
     saveDirty = true;
   }
 
@@ -2197,10 +2438,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   function updateMobs(dt: number) {
     const ang = worldTime * Math.PI * 2;
     const night = Math.sin(ang) < -0.12;
-    if (phase === "play" && !creative && night) {
+    if (phase === "play" && !creative && night && !settings.mods.peaceful) {
       creeperAcc += dt;
       const alive = mobs.filter((m) => m.kind === "creeper" && !m.dead).length;
-      if (creeperAcc > 10 && alive < 2) {
+      if (creeperAcc > (settings.mods.hard ? 6 : 10) && alive < (settings.mods.hard ? 3 : 2)) {
         creeperAcc = 0;
         const a = Math.random() * Math.PI * 2;
         const dist = 14 + Math.random() * 8;
@@ -2208,7 +2449,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       }
       const walkers = mobs.filter((m) => m.kind === "walker" && !m.dead).length;
       walkerAcc += dt;
-      if (walkerAcc > 8 && walkers < 3) {
+      if (walkerAcc > (settings.mods.hard ? 5 : 8) && walkers < (settings.mods.hard ? 4 : 3)) {
         walkerAcc = 0;
         const a = Math.random() * Math.PI * 2;
         const dist = 12 + Math.random() * 8;
@@ -2221,6 +2462,40 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       }
       if (sinceSleep > 420 && mobs.filter((m) => m.kind === "phantom" && !m.dead).length < 1) {
         spawnKind("phantom", player.x + 8, player.z - 6);
+      }
+    }
+    if (phase === "play") {
+      folkAcc += dt;
+      if (folkAcc > 2.5) {
+        folkAcc = 0;
+        ensureRoamingFolk();
+      }
+      critterAcc += dt;
+      if (critterAcc > 9) {
+        critterAcc = 0;
+        const biome = world.biomeAt(player.x, player.z);
+        const alive = (kind: Mob["kind"]) => mobs.filter((m) => m.kind === kind && !m.dead).length;
+        const spot = () => {
+          const a = Math.random() * Math.PI * 2;
+          const dist = 8 + Math.random() * 10;
+          return [player.x + Math.cos(a) * dist, player.z + Math.sin(a) * dist] as const;
+        };
+        if ((biome === "Fen" || biome === "Brick plains") && alive("frog") < 2) {
+          const [x, z] = spot();
+          spawnKind("frog", x, z);
+        }
+        if ((biome === "Grove" || biome === "Brick plains") && alive("fox") < 2) {
+          const [x, z] = spot();
+          spawnKind("fox", x, z);
+        }
+        if ((biome === "Shore" || biome === "Sand flats" || biome === "Ash ridge") && alive("crab") < 2) {
+          const [x, z] = spot();
+          spawnKind("crab", x, z);
+        }
+        if (!settings.mods.peaceful && night && (biome === "Fen" || biome === "Grove" || biome === "Snow cap") && alive("wisp") < 2) {
+          const [x, z] = spot();
+          spawnKind("wisp", x, z);
+        }
       }
     }
     for (const m of mobs) {
@@ -2246,13 +2521,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       }
       if ((m.sheared ?? 0) > 0) m.sheared = (m.sheared ?? 0) - dt;
       const farHost =
-        m.kind === "creeper" || m.kind === "walker" || m.kind === "skelly" || m.kind === "spider" || m.kind === "phantom";
+        m.kind === "creeper" || m.kind === "walker" || m.kind === "skelly" || m.kind === "spider" || m.kind === "phantom" || m.kind === "wisp";
       if (farHost && (d > 42 || phase !== "play")) {
         m.dead = true;
         scene.remove(m.mesh);
         continue;
       }
-      if ((m.kind === "creeper" || m.kind === "phantom") && !night) {
+      if ((m.kind === "creeper" || m.kind === "phantom" || m.kind === "wisp") && !night) {
         m.dead = true;
         scene.remove(m.mesh);
         continue;
@@ -2269,7 +2544,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       const chase =
         flyer ||
         piglinMad ||
-        ((m.kind === "creeper" || m.kind === "walker" || m.kind === "skelly" || m.kind === "spider") && d < (m.kind === "skelly" ? 18 : 16));
+        ((m.kind === "creeper" || m.kind === "walker" || m.kind === "skelly" || m.kind === "spider" || m.kind === "wisp") && d < (m.kind === "skelly" ? 18 : 16));
       if (chase) m.yaw = Math.atan2(-dx, -dz);
       else if (mount !== m) {
         m.wander -= dt;
@@ -2302,7 +2577,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           m.cool = m.kind === "ghast" ? 2.5 : 1.5;
         }
         if (m.kind === "dragon" && d < 2.8 && phase === "play" && m.cool <= 0) {
-          hurt(5);
+          bite(5);
           m.cool = 1.1;
           audio.hit();
         }
@@ -2323,8 +2598,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           m.y = gy;
         }
       }
-      if ((m.kind === "walker" || m.kind === "spider" || piglinMad) && d < 1.35 && phase === "play" && m.cool <= 0) {
-        hurt(m.kind === "spider" ? 2 : 3);
+      if ((m.kind === "walker" || m.kind === "spider" || m.kind === "wisp" || piglinMad) && d < 1.35 && phase === "play" && m.cool <= 0) {
+        bite(m.kind === "wisp" ? 2 : m.kind === "spider" ? 2 : 3);
         m.cool = 0.75;
         audio.hit();
       }
@@ -2366,6 +2641,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     return {
       v: 1,
       seed,
+      seedText,
       flat,
       creative,
       edits,
@@ -2392,12 +2668,18 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       folk: folkSpots.map((f) => ({ x: f.x, z: f.z, role: f.role })),
       village: villageAt,
       quests: quests.map((q) => ({ id: q.id, n: q.n, done: q.done })),
+      skills: [...skills],
+      mana,
+      spell: spellIx,
     };
   }
 
   function saveWorld() {
     if (!sessionStarted) return;
-    hasSaveFlag = writeSave(packSave());
+    hasSaveFlag = writeWorld(
+      { id: worldId || "main", seed, seedText, flat, creative, updated: Date.now() },
+      packSave(),
+    );
     saveDirty = false;
   }
 
@@ -2411,7 +2693,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     sessionStarted = true;
     if (!touchMode) void canvas.requestPointerLock().catch(() => {});
     say(
-      (creative ? "Drag to look. Double-tap Space to fly." : "Survival. Tin and copper sit under your feet. Ranks live in the brick bin.") +
+      (creative
+        ? "Creative. The land does not end. Same seed, same bricks."
+        : "Survival. The land does not end. Skills and mods live in the bin and the pause menu.") +
+        " Seed " +
+        seedText +
+        "." +
         hamletLine(),
     );
     emit();
@@ -2624,7 +2911,15 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
                       ? "Crawler"
                       : mob.kind === "skelly"
                         ? "Bone stud"
-                        : mob.kind === "villager"
+                        : mob.kind === "frog"
+                          ? "Hop stud"
+                          : mob.kind === "fox"
+                            ? "Brush stud"
+                            : mob.kind === "crab"
+                              ? "Pinch stud"
+                              : mob.kind === "wisp"
+                                ? "Wisp"
+                                : mob.kind === "villager"
                           ? traderOf(mob.role).name
                           : mob.kind === "horse"
                             ? "Steed"
@@ -2646,6 +2941,17 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         if (strengthT > 0) dmg += 2;
         if (sharp && blade.tool === "sword") dmg += 2;
         if (rankLv >= 18 && blade.tool === "sword") dmg += 1;
+        const hostile =
+          mob.kind === "walker" ||
+          mob.kind === "creeper" ||
+          mob.kind === "skelly" ||
+          mob.kind === "spider" ||
+          mob.kind === "phantom" ||
+          mob.kind === "ghast" ||
+          mob.kind === "piglin" ||
+          mob.kind === "wisp" ||
+          mob.kind === "dragon";
+        if (skills.has("mark") && blade.tool === "sword" && hostile) dmg += 1;
         if (player.vy < -0.2 && !player.grounded) dmg = Math.ceil(dmg * 1.5);
         mob.hp -= dmg;
         if (blade.tool === "sword" || blade.tool === "bow") wearHeld();
@@ -2714,7 +3020,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       mineKey = "";
       if (sample.first && sample.place && !prevPlace) {
         const heldId = hotbar[slot];
-        if (heldId === ID.Bow) shootHeld();
+        if (heldId === ID.Tome) castSpell();
+        else if (heldId === ID.Bow) shootHeld();
         else if (heldId === ID.Eye) hopRealm(2);
         else if (heldId === ID.PotionHeal || heldId === ID.PotionSpeed || heldId === ID.PotionStr || heldId === ID.Focus || heldId === ID.Milk || heldId === ID.Gapple) drink(heldId);
         else if (def(heldId).food) eat();
@@ -2731,6 +3038,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (hungerEx > 4) {
         hungerEx = 0;
         if (hunger > 0) hunger -= 1;
+      }
+      if (settings.mods.spells) {
+        const maxMana = manaMaxFor(skills);
+        mana = Math.min(maxMana, mana + dt * (skills.has("scribe") ? 1.35 : skills.has("blink") ? 1.15 : 0.65));
       }
       regenAcc += dt;
       if (hunger >= 18 && health < 20 && regenAcc > 1.4) {
@@ -2969,7 +3280,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         const product = SMELT[f.in];
         const can = !!product && f.inN > 0 && (f.out === 0 || f.out === product) && f.outN < 64 && product !== f.in;
         if (f.burn <= 0 && can && f.fuelN > 0 && fuelTime(f.fuel) > 0) {
-          f.burn = fuelTime(f.fuel);
+          f.burn = fuelTime(f.fuel) * (skills.has("kiln") ? 1.6 : 1);
           f.fuelN -= 1;
           if (f.fuelN <= 0) f.fuel = 0;
           saveDirty = true;
@@ -3052,6 +3363,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   window.addEventListener(
     "keydown",
     (e) => {
+      const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+      if (typing) return;
       if (e.code === "Space" || e.code.startsWith("Arrow")) e.preventDefault();
       const fresh = !keys.has(e.code) && !e.repeat;
       keys.add(e.code);
@@ -3072,6 +3385,15 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         return;
       }
       if (!fresh || phase === "dead") return;
+      if (e.code === "KeyQ" && phase === "play") {
+        const list = spellsFor(skills);
+        if (!list.length) say("Learn Spark to cast");
+        else {
+          spellIx = (spellIx + 1) % list.length;
+          say(list[spellIx].name);
+        }
+        emit();
+      }
       if (e.code === "KeyE" && (phase === "play" || phase === "inventory")) {
         if (phase === "inventory") phase = "play";
         else {
@@ -3238,6 +3560,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     },
     getBlock: (x: number, y: number, z: number) => world.get(Math.floor(x), Math.floor(y), Math.floor(z)),
     getTarget: () => hud.targetName,
+    getHamlet: () => {
+      const site = world.nearestHamlet(player.x, player.z, 4);
+      return site ? { x: site.x, y: site.y, z: site.z } : null;
+    },
+    getChunks: () => world.chunks.size,
   };
 
   const api: GameApi = {
@@ -3251,34 +3578,34 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     get hasSave() {
       return pub.hasSave;
     },
-    enter(kind) {
+    get slots() {
+      return listWorlds();
+    },
+    enter(kind, id) {
       audio.unlock();
       if (kind === "continue") {
-        const data = loadSave();
-        if (!data) {
+        const save = id ? loadWorld(id) : loadLatest()?.save;
+        const slotId = id || loadLatest()?.id || "";
+        if (!save || !slotId) {
           say("No world in the bin yet");
           return;
         }
-        bootSave(data);
+        bootSave(save, slotId);
         beginPlay();
         return;
       }
       if (kind === "survival") {
-        bootNew((Math.random() * 1e9) | 0, false, false);
+        bootNew(false, false);
         beginPlay();
         return;
       }
       if (kind === "flat") {
-        bootNew((Math.random() * 1e9) | 0, true, true);
+        bootNew(true, true);
         beginPlay();
         return;
       }
-      if (!sessionStarted) beginPlay();
-      else {
-        phase = "play";
-        if (!touchMode) void canvas.requestPointerLock().catch(() => {});
-        emit();
-      }
+      bootNew(false, true);
+      beginPlay();
     },
     resume() {
       if (phase !== "pause") return;
@@ -3362,8 +3689,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         say("That pattern isn't a recipe");
         return;
       }
-      const gated = RECIPES.find((rec) => rec.lvl && rec.out === matched.out);
+      const gated = RECIPES.find((rec) => rec.out === matched.out && (rec.lvl || rec.skill));
       if (gated && !gate(gated.lvl)) return;
+      if (gated?.skill && !creative && !skills.has(gated.skill)) {
+        return say("Need the " + (skillById(gated.skill)?.name ?? "skill") + " skill");
+      }
       if (matched.out === 0) {
         for (let i = 0; i < 9; i++) if (matched.used[i]) grid[i] = 0;
         give(0, 1, "hammer");
@@ -3379,6 +3709,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       const recipe = RECIPES.find((entry) => entry.id === id);
       if (!recipe) return;
       if (!gate(recipe.lvl)) return;
+      if (recipe.skill && !creative && !skills.has(recipe.skill)) {
+        return say("Need the " + (skillById(recipe.skill)?.name ?? "skill") + " skill");
+      }
+      if (recipe.skill && !creative && !skills.has(recipe.skill)) {
+        return say("Need the " + (skillById(recipe.skill)?.name ?? "skill") + " skill");
+      }
       if (recipe.special === "hammer" && hammer) return say("Hammer's already on your belt");
       if (!creative) {
         for (const [needId, n] of recipe.need) {
@@ -3505,6 +3841,25 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       say("Traded");
       emit();
     },
+    unlock(id) {
+      const node = skillById(id);
+      if (!node || skills.has(id)) return;
+      if (node.need && !skills.has(node.need)) return say("Learn " + (skillById(node.need)?.name ?? "the earlier node") + " first");
+      if (!creative && rankLv < node.rank) return say("Need builder level " + node.rank);
+      if (!creative && skills.size >= rankLv) return say("No skill points. Rank up.");
+      skills.add(id);
+      mana = Math.max(mana, 0);
+      say(node.name);
+      saveDirty = true;
+      emit();
+    },
+    setMod(key, on) {
+      settings.mods[key] = on;
+      persistSettings();
+      const label = key === "hard" ? "Hard nights" : key === "generous" ? "Generous parts" : key === "peaceful" ? "Peaceful bricks" : "Spellcraft";
+      say(on ? label + " on" : label + " off");
+      emit();
+    },
     claim(id) {
       const q = QUESTS.find((entry) => entry.id === id);
       const prog = quests.find((entry) => entry.id === id);
@@ -3517,7 +3872,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           if (use && !creative) spend(use, 1);
         } else if (!creative && (inv[q.what] ?? 0) < q.need) {
           return say("Need " + q.need + " " + def(q.what).name.toLowerCase());
-        } else if (!creative) spend(q.what, q.need);
+        } else if (!creative && !q.keep) spend(q.what, q.need);
       } else if (prog.n < q.need) return say(q.detail);
       prog.done = true;
       prog.n = q.need;
@@ -3575,9 +3930,25 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       emit();
     },
     deleteSave() {
-      clearSave();
-      hasSaveFlag = false;
+      if (worldId) deleteWorld(worldId);
+      else clearSave();
+      hasSaveFlag = listWorlds().length > 0;
       emit();
+    },
+    setSeed(text) {
+      pendingSeed = text;
+    },
+    deleteSlot(id) {
+      deleteWorld(id);
+      hasSaveFlag = listWorlds().length > 0;
+      emit();
+    },
+    copySeed() {
+      const text = seedText || String(seed);
+      const done = () => say("Seed copied");
+      const fail = () => say("Seed " + text);
+      if (navigator.clipboard?.writeText) void navigator.clipboard.writeText(text).then(done, fail);
+      else fail();
     },
     subscribe(fn) {
       listeners.add(fn);

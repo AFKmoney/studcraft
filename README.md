@@ -1,6 +1,6 @@
 # Studcraft
 
-A brick survival world. Blocks wear real cylindrical studs. Mine, craft, rank up, then walk to the hamlet.
+A brick survival world. Blocks wear real cylindrical studs. The land is infinite and seeded: the same seed rebuilds the same hills, ores, cellars, and hamlets.
 
 ## Play
 
@@ -9,11 +9,11 @@ npm install
 npm run dev
 ```
 
-Open the local dev server. **Survival** starts a seeded world. The opening line says which way the hamlet is.
+Open the local dev server. Type a seed, or roll one, then **Survival**. Words and numbers both work. Saved seeds stay in this browser.
 
-- **E** opens the bin. **Quests** is the board. **Ranks** is the builder ladder.
-- Five traders stay in town: Grocer, Smith, Mason, Herder, Clerk.
-- Have-quests spend the items when you claim. Chop, place, and hunt quests count as you do them.
-- Worlds save in the browser.
+- The horizon slider is draw distance. Walk and the world keeps generating. Far chunks unload.
+- Hamlets are stamped from the seed. Traders appear when you get close.
+- **E** opens the bin. **Skills**, **Quests**, and **Ranks** are tabs. **Q** cycles spells while you hold a tome.
+- Worlds save in the browser. Copy the seed from the pause menu.
 
-Baseplate is the same hamlet on a flat pad, just east of spawn.
+Baseplate is a flat creative pad, not the infinite terrain.

@@ -73,6 +73,23 @@ export const CODEX: CodexEntry[] = [
   { id: ID.MasterBrick, where: "Craft prism, sapphire, chrome, and resin", use: "Level 22. Feeds the master pick.", lvl: 22 },
   { id: ID.ChromeBrick, where: "Nine chrome", use: "A mirror brick you can build with.", lvl: 8 },
   { id: ID.Focus, where: "Bottle plus amber, level 6", use: "Drink for studs and a short dash.", lvl: 6 },
+  { id: ID.CrystalOre, where: "Mid stone, every biome", use: "Drops a crystal. Lens and light crafts.", lvl: 0 },
+  { id: ID.Crystal, where: "Crystal ore", use: "Two crystals and a window make a seeker eye.", lvl: 0 },
+  { id: ID.Moss, where: "Fen surface", use: "Low wet ground. A quest counts the bricks you break.", lvl: 0 },
+  { id: ID.Snow, where: "Snow caps", use: "High cold ridges.", lvl: 0 },
+  { id: ID.Ash, where: "Ash ridges", use: "Hot dry ground. Cactus grows here.", lvl: 0 },
+  { id: ID.Slime, where: "Hop studs, and sometimes fuse bricks", use: "Cord with string. A fen quest pays in slime.", lvl: 0 },
+  { id: ID.Fur, where: "Brush studs in groves", use: "Fur cap, once Trophy is learned.", lvl: 0 },
+  { id: ID.Scale, where: "Pinch studs on sand", use: "Scale legs, once Trophy is learned.", lvl: 0 },
+  { id: ID.Fang, where: "Night studs, more often with Trophy", use: "Fang blade.", lvl: 0 },
+  { id: ID.Wisp, where: "Wisp studs at night", use: "Half of a spell tome. Spark skill required.", lvl: 0 },
+  { id: ID.Tome, where: "Mage, or craft eye + dust + amber", use: "Hold it and place to cast. Q cycles spells.", lvl: 0 },
+  { id: ID.Pelt, where: "Brush studs, more often with Trophy", use: "Winter pile quest. Mixes into a frost cap.", lvl: 0 },
+  { id: ID.Shell, where: "Pinch studs", use: "A shore chip. Counts toward later crafts.", lvl: 0 },
+  { id: ID.Wax, where: "Hop studs", use: "Two wax and a crystal make a wax seal, once Spark is learned.", lvl: 0 },
+  { id: ID.Frost, where: "Wisp studs", use: "Frost cap and packed ice.", lvl: 0 },
+  { id: ID.Cinder, where: "Fuse bricks and ember studs", use: "Cinder blade and ash cookies.", lvl: 0 },
+  { id: ID.Antler, where: "Night studs and bone studs", use: "Antler bow, once Trophy is learned.", lvl: 0 },
 ];
 
 export const DISCOVER = new Set(CODEX.map((entry) => entry.id));
@@ -90,6 +107,7 @@ export const ORE_XP: Record<number, number> = {
   [ID.SapphireOre]: 8,
   [ID.ResinOre]: 7,
   [ID.PrismOre]: 12,
+  [ID.CrystalOre]: 5,
 };
 
 export const ORE_HEAR: Record<number, string> = {
@@ -100,6 +118,7 @@ export const ORE_HEAR: Record<number, string> = {
   [ID.SapphireOre]: "sapphire",
   [ID.ResinOre]: "resin",
   [ID.PrismOre]: "prism",
+  [ID.CrystalOre]: "crystal",
   [ID.Diamond]: "aqua gem",
   [ID.EmeraldOre]: "trade gem",
   [ID.Gold]: "gold",
@@ -119,4 +138,8 @@ export const MOB_XP: Record<string, number> = {
   phantom: 6,
   dragon: 40,
   villager: 2,
+  frog: 2,
+  fox: 3,
+  crab: 3,
+  wisp: 6,
 };

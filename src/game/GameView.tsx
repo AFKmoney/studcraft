@@ -4,10 +4,12 @@ import { BLOCKS, CATALOG, COLORS, ID, def } from "./blocks";
 import type { EnterKind, GameApi, Phase } from "./game";
 import { RECIPES } from "./recipes";
 import { CODEX, PERKS } from "./ranks";
+import { SKILLS } from "./skills";
+import type { WorldSlot } from "./save";
 
 export function GameView() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const pending = useRef<EnterKind | null>(null);
+  const pending = useRef<{ kind: EnterKind; seed: string; id?: string } | null>(null);
   const [api, setApi] = useState<GameApi | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,7 +21,8 @@ export function GameView() {
         if (dead || !canvasRef.current) return;
         mounted = mount(canvasRef.current);
         if (pending.current) {
-          mounted.enter(pending.current);
+          mounted.setSeed(pending.current.seed);
+          mounted.enter(pending.current.kind, pending.current.id);
           pending.current = null;
         }
         setApi(mounted);
@@ -33,9 +36,11 @@ export function GameView() {
     };
   }, []);
 
-  function start(kind: EnterKind) {
-    if (api) api.enter(kind);
-    else pending.current = kind;
+  function start(kind: EnterKind, seed = "", id?: string) {
+    if (api) {
+      api.setSeed(seed);
+      api.enter(kind, id);
+    } else pending.current = { kind, seed, id };
   }
 
   return (
@@ -44,7 +49,7 @@ export function GameView() {
       {api ? (
         <Overlay game={api} />
       ) : (
-        <TitleScreen onEnter={start} hasSave={false} booting error={error} />
+        <TitleScreen game={null} onEnter={start} booting error={error} />
       )}
     </div>
   );
@@ -63,7 +68,7 @@ function Overlay({ game }: { game: GameApi }) {
   return (
     <>
       {phase === "title" && (
-        <TitleScreen onEnter={game.enter} hasSave={game.hasSave} booting={false} error={null} />
+        <TitleScreen game={game} onEnter={(kind, seed, id) => { game.setSeed(seed); game.enter(kind, id); }} booting={false} error={null} />
       )}
       {phase === "play" && !hud.hidden && <Hud game={game} />}
       {phase === "play" && <TouchControls game={game} />}
@@ -96,16 +101,34 @@ function Overlay({ game }: { game: GameApi }) {
 }
 
 function TitleScreen({
+  game,
   onEnter,
-  hasSave,
   booting,
   error,
 }: {
-  onEnter: (kind: EnterKind) => void;
-  hasSave: boolean;
+  game: GameApi | null;
+  onEnter: (kind: EnterKind, seed: string, id?: string) => void;
   booting: boolean;
   error: string | null;
 }) {
+  const [seedText, setSeedText] = useState(() => {
+    try {
+      return sessionStorage.getItem("studcraft-pending-seed") || String((Math.random() * 1e9) | 0);
+    } catch {
+      return String((Math.random() * 1e9) | 0);
+    }
+  });
+  const slots = game?.slots ?? [];
+  useEffect(() => {
+    try {
+      sessionStorage.setItem("studcraft-pending-seed", seedText);
+    } catch {
+      /* ignore */
+    }
+  }, [seedText]);
+  function roll() {
+    setSeedText(String((Math.random() * 1e9) | 0));
+  }
   return (
     <div className="title-wrap">
       <section className="card">
@@ -119,31 +142,57 @@ function TitleScreen({
           Stud<span className="craft">craft</span>
         </h1>
         <p className="lede">
-          Mine a world made of snap-together bricks. Break what you need, press new colors, and build on the studs.
+          An infinite brick land. Type a seed, or roll one. The same seed builds the same hills, ores, and hamlets.
         </p>
         {error && <p className="lede">{error}</p>}
-        <div className="stack">
-          <button className="btn btn-primary" onClick={() => onEnter("play")}>
-            Play
+        <label className="seed-row">
+          <span>Seed</span>
+          <input
+            type="text"
+            value={seedText}
+            maxLength={48}
+            spellCheck={false}
+            aria-label="World seed"
+            onChange={(e) => setSeedText(e.target.value)}
+          />
+          <button className="btn" type="button" onClick={roll}>
+            Roll
           </button>
-          <button className="btn" onClick={() => onEnter("survival")}>
+        </label>
+        <div className="stack">
+          <button className="btn btn-primary" onClick={() => onEnter("survival", seedText)}>
             Survival
           </button>
-          <button className="btn" onClick={() => onEnter("flat")}>
+          <button className="btn" onClick={() => onEnter("play", seedText)}>
+            Creative
+          </button>
+          <button className="btn" onClick={() => onEnter("flat", seedText)}>
             Baseplate
           </button>
-          {hasSave && (
-            <button className="btn" onClick={() => onEnter("continue")}>
-              Continue
-            </button>
-          )}
         </div>
+        {slots.length > 0 && (
+          <>
+            <p className="eyebrow">Saved seeds</p>
+            <ul className="world-list">
+              {slots.map((slot) => (
+                <li key={slot.id}>
+                  <button className="btn" onClick={() => onEnter("continue", slot.seedText, slot.id)}>
+                    {slotLabel(slot)}
+                  </button>
+                  <button className="btn" onClick={() => game?.deleteSlot(slot.id)} aria-label={"Drop " + slot.seedText}>
+                    Drop
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
         <ul className="hints">
           <li>WASD move · Space jump · double-tap Space flies in creative</li>
-          <li>Survival ranks up: rare studs, alloys, and an anvil that tempers tools</li>
-          <li>Hamlets have traders. Quests live in the bin, and the clerk posts the same board</li>
+          <li>The world keeps going. Horizon in the pause menu is only how far bricks draw</li>
+          <li>Hamlets repeat across the map. Traders show up when you walk into town</li>
+          <li>Skills spend rank levels. Pause holds four mods. Q cycles spells when you hold a tome</li>
           <li>Hold to mine · place with the other click · E opens the bin</li>
-          <li>Shift sneaks · Ctrl sprints · F5 steps outside your minifig</li>
         </ul>
         <p className="fine">
           {booting ? "Stacking the first bricks…" : "An original brick sandbox. Not a toy brand, not a block game."}
@@ -151,6 +200,11 @@ function TitleScreen({
       </section>
     </div>
   );
+}
+
+function slotLabel(slot: WorldSlot) {
+  const mode = slot.flat ? "Baseplate" : slot.creative ? "Creative" : "Survival";
+  return mode + " · " + slot.seedText;
 }
 
 function Hud({ game }: { game: GameApi }) {
@@ -169,9 +223,10 @@ function Hud({ game }: { game: GameApi }) {
           {hud.realm}
           {hud.effect ? " · " + hud.effect : ""}
           {hud.questAlert ? " · " + hud.questAlert : ""}
+          {hud.questTrack ? " · " + hud.questTrack : ""}
         </span>
         <span>
-          {Math.floor(hud.x)} {Math.floor(hud.y)} {Math.floor(hud.z)} · seed {hud.seed}
+          {Math.floor(hud.x)} {Math.floor(hud.y)} {Math.floor(hud.z)} · seed {hud.seedText || hud.seed}
         </span>
       </div>
       {!hud.locked && !hud.message && <p className="look-hint">Drag to look · click to capture the mouse</p>}
@@ -213,6 +268,12 @@ function Hud({ game }: { game: GameApi }) {
         <span style={{ width: `${Math.min(100, (hud.xp / Math.max(1, hud.xpNeed)) * 100)}%` }} />
         <em>{hud.creative ? "Creative" : `Lv ${hud.level} · ${hud.rank}`}</em>
       </div>
+      {hud.spellsOn && (
+        <div className="mana-track" aria-label={`${hud.spell || "no spell"}, ${Math.floor(hud.mana)} mana`}>
+          <span style={{ width: `${Math.min(100, (hud.mana / Math.max(1, hud.manaMax)) * 100)}%` }} />
+          <em>{hud.spell ? `${hud.spell} · ${Math.floor(hud.mana)}/${hud.manaMax}` : "No spell"}</em>
+        </div>
+      )}
       <div className="hotbar">
         {hud.hotbar.map((item, i) => (
           <button key={i} className={i === hud.slot ? "slot on" : "slot"} onClick={() => game.setSlot(i)}>
@@ -259,11 +320,11 @@ function PauseMenu({ game }: { game: GameApi }) {
             />
           </label>
           <label>
-            Horizon
+            Horizon {s.radius}
             <input
               type="range"
               min={2}
-              max={5}
+              max={8}
               step={1}
               value={s.radius}
               onChange={(e) => game.setRadius(Number(e.target.value))}
@@ -281,6 +342,22 @@ function PauseMenu({ game }: { game: GameApi }) {
             Outside view
             <input type="checkbox" checked={s.third} onChange={(e) => game.setThird(e.target.checked)} />
           </label>
+          <label>
+            Hard nights
+            <input type="checkbox" checked={s.mods.hard} onChange={(e) => game.setMod("hard", e.target.checked)} />
+          </label>
+          <label>
+            Generous parts
+            <input type="checkbox" checked={s.mods.generous} onChange={(e) => game.setMod("generous", e.target.checked)} />
+          </label>
+          <label>
+            Peaceful bricks
+            <input type="checkbox" checked={s.mods.peaceful} onChange={(e) => game.setMod("peaceful", e.target.checked)} />
+          </label>
+          <label>
+            Spellcraft
+            <input type="checkbox" checked={s.mods.spells} onChange={(e) => game.setMod("spells", e.target.checked)} />
+          </label>
         </div>
         <div className="stack">
           <button className="btn btn-primary" onClick={() => game.resume()}>
@@ -293,7 +370,12 @@ function PauseMenu({ game }: { game: GameApi }) {
             Save and quit
           </button>
         </div>
-        <p className="fine">Seed {game.hud.seed}. Worlds stay in this browser.</p>
+        <p className="fine">
+          Seed {game.hud.seedText || game.hud.seed}. The land does not end. Horizon is only the draw distance. Far bricks unload, and the same seed rebuilds them.
+        </p>
+        <button className="btn" onClick={() => game.copySeed()}>
+          Copy seed
+        </button>
       </section>
     </div>
   );
@@ -302,16 +384,17 @@ function PauseMenu({ game }: { game: GameApi }) {
 function Inventory({ game }: { game: GameApi }) {
   const hud = game.hud;
   const bench = hud.panel === "bench";
-  const [page, setPage] = useState<"bin" | "ranks" | "quests">("bin");
+  const [page, setPage] = useState<"bin" | "ranks" | "quests" | "skills">("bin");
+  const [book, setBook] = useState<"all" | "build" | "tools" | "magic" | "gear" | "food">("all");
   const known = new Set(hud.found);
   return (
     <div className="sheet-wrap">
       <section className="card sheet">
         <p className="eyebrow">
-          {page === "quests" ? "Hamlet board" : page === "ranks" ? "Builder rank" : hud.panel === "bag" ? "Brick bin" : hud.panel}
+          {page === "quests" ? "Hamlet board" : page === "ranks" ? "Builder rank" : page === "skills" ? "Skill tree" : hud.panel === "bag" ? "Brick bin" : hud.panel}
         </p>
         <h1>
-          {page === "ranks" ? hud.rank : page === "quests" ? "Quest board" : hud.panel === "trade" ? hud.trader || "Trader" : hud.panel === "furnace" ? "Kiln" : "Press & place"}
+          {page === "ranks" ? hud.rank : page === "quests" ? "Quest board" : page === "skills" ? `${hud.skillPoints} points` : hud.panel === "trade" ? hud.trader || "Trader" : hud.panel === "furnace" ? "Kiln" : "Press & place"}
         </h1>
         <div className="rank-tabs">
           <button className={page === "bin" ? "btn on" : "btn"} onClick={() => setPage("bin")}>
@@ -323,11 +406,16 @@ function Inventory({ game }: { game: GameApi }) {
           <button className={page === "quests" ? "btn on" : "btn"} onClick={() => setPage("quests")}>
             Quests
           </button>
+          <button className={page === "skills" ? "btn on" : "btn"} onClick={() => setPage("skills")}>
+            Skills
+          </button>
         </div>
         {page === "ranks" ? (
           <Ranks hud={hud} known={known} />
         ) : page === "quests" ? (
           <QuestList hud={hud} onClaim={(id) => game.claim(id)} />
+        ) : page === "skills" ? (
+          <SkillTree hud={hud} onUnlock={(id) => game.unlock(id)} />
         ) : (
           <>
         {hud.panel !== "trade" && (
@@ -445,7 +533,14 @@ function Inventory({ game }: { game: GameApi }) {
         </div>
         {(hud.panel === "bag" || hud.panel === "bench") && (
           <div className="recipes">
-            {RECIPES.map((recipe) => (
+            <div className="rank-tabs book-tabs">
+              {(["all", "build", "tools", "magic", "gear", "food"] as const).map((cat) => (
+                <button key={cat} className={book === cat ? "btn on" : "btn"} onClick={() => setBook(cat)}>
+                  {cat === "all" ? "All" : cat[0].toUpperCase() + cat.slice(1)}
+                </button>
+              ))}
+            </div>
+            {RECIPES.filter((recipe) => book === "all" || recipe.cat === book).map((recipe) => (
               <button key={recipe.id} className="btn" onClick={() => game.craft(recipe.id)}>
                 {recipe.name} — {recipe.detail}
               </button>
@@ -475,6 +570,11 @@ function Inventory({ game }: { game: GameApi }) {
             Close
           </button>
         )}
+        {page === "skills" && (
+          <button className="btn btn-primary" onClick={() => game.toggleInventory()}>
+            Close
+          </button>
+        )}
       </section>
     </div>
   );
@@ -498,6 +598,43 @@ function QuestList({ hud, onClaim }: { hud: GameApi["hud"]; onClaim: (id: string
         </li>
       ))}
     </ul>
+  );
+}
+
+function SkillTree({ hud, onUnlock }: { hud: GameApi["hud"]; onUnlock: (id: string) => void }) {
+  const known = new Set(hud.skills);
+  const branches = ["Miner", "Hunter", "Mason", "Mage"] as const;
+  return (
+    <div className="ranks">
+      <p className="lede">
+        {hud.skillPoints} point{hud.skillPoints === 1 ? "" : "s"} left. Each builder level is one point. Learn a node and it stays, even if a rune table spends the level.
+      </p>
+      {branches.map((branch) => (
+        <div key={branch}>
+          <p className="eyebrow">{branch}</p>
+          <ul className="perk-list skill-list">
+            {SKILLS.filter((node) => node.branch === branch).map((node) => {
+              const on = known.has(node.id);
+              const locked = !!node.need && !known.has(node.need);
+              return (
+                <li key={node.id} data-on={on}>
+                  <div>
+                    <strong>
+                      {node.name}
+                      {node.rank ? ` · lv ${node.rank}` : ""}
+                    </strong>
+                    <span>{node.detail}</span>
+                  </div>
+                  <button className="btn" disabled={on || locked} onClick={() => onUnlock(node.id)}>
+                    {on ? "Learned" : locked ? "Locked" : "Learn"}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
+    </div>
   );
 }
 

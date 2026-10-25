@@ -4,6 +4,28 @@ function mix(n: number): number {
   return (n >>> 0) / 4294967296;
 }
 
+export function hashSeed(text: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h | 0;
+}
+
+export function parseSeed(text: string): { seed: number; text: string } {
+  const t = text.trim();
+  if (!t) {
+    const n = (Math.random() * 1e9) | 0;
+    return { seed: n, text: String(n) };
+  }
+  if (/^-?\d+$/.test(t)) {
+    const n = Number(t);
+    if (Number.isSafeInteger(n)) return { seed: n | 0, text: String(n | 0) };
+  }
+  return { seed: hashSeed(t), text: t.slice(0, 48) };
+}
+
 export function hash2(x: number, z: number, seed: number): number {
   const n = Math.imul(x | 0, 374761393) ^ Math.imul(z | 0, 668265263) ^ (seed | 0);
   return mix(n);
