@@ -64,10 +64,6 @@ export const ID = {
   EndFrame: 218,
   EndFrameEye: 219,
   DragonEgg: 220,
-  Clock: 221,
-  Map: 222,
-  Banner: 223,
-  Lead: 224,
   EmeraldOre: 90,
   Enchanter: 91,
   Anvil: 92,
@@ -224,6 +220,11 @@ export const ID = {
   Book: 212,
   Compass: 213,
   Horn: 214,
+  Clock: 221,
+  Map: 222,
+  Banner: 223,
+  Lead: 224,
+  EndCrystal: 225,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -575,6 +576,7 @@ put(b(ID.EndStone, "Pale brick", "#efe6b8", "#f7f1cc", "#ddd4a4", "#c8be8e", { h
 put(b(ID.EndFrame, "End frame", "#2a1848", "#3d2868", "#1a1030", "#100818", { hard: 6, tough: true, need: 4 }));
 put(b(ID.EndFrameEye, "End frame (eye)", "#7a4ad4", "#c084fc", "#2a1848", "#1a1030", { hard: 6, tough: true, need: 4, drop: ID.EndFrame }));
 item(ID.DragonEgg, "Dragon egg", "#1a1030");
+put(b(ID.EndCrystal, "End crystal", "#b48cff", "#f4e8ff", "#7a4ad4", "#5b32a8", { hard: 0.6, light: 8 }));
 put(b(ID.EmeraldOre, "Trade ore", "#3aaa4c", "#7dcca0", "#8e959c", "#6e767e", { hard: 1.8, tough: true, need: 3, drop: ID.Emerald }));
 put(b(ID.Enchanter, "Rune table", "#2a1848", "#7a4ad4", "#6b3e22", "#c4924a", { hard: 1.2, work: "enchant" }));
 put(b(ID.Anvil, "Anvil", "#6e767e", "#c5ccd3", "#4a4038", "#2a2a2a", { hard: 2, tough: true, need: 1, work: "anvil" }));
@@ -842,11 +844,11 @@ item(ID.Pie, "Pie", "#e0b15a", { food: 8 });
 item(ID.Paper, "Paper", "#f4f1ea");
 item(ID.Book, "Book", "#8d3e18");
 item(ID.Compass, "Compass", "#e23b2f");
-item(ID.Clock, "Clock brick", "#f5c518");
-item(ID.Map, "Map tile", "#2f7d3a");
-item(ID.Banner, "Flag banner", "#e23b2f");
-item(ID.Lead, "Lead element", "#8e959c");
 item(ID.Horn, "Horn", "#e8d0a8");
+item(ID.Clock, "Clock", "#f0c43a");
+item(ID.Map, "Map", "#c4924a");
+item(ID.Banner, "Banner", "#e23b2f");
+item(ID.Lead, "Lead", "#f4f1ea");
 
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];
@@ -1023,6 +1025,7 @@ export const CATALOG = [
   ID.Portal,
   ID.EndFrame,
   ID.DragonEgg,
+  ID.EndCrystal,
   ID.Enchanter,
   ID.Anvil,
   ID.Brew,
@@ -1048,6 +1051,10 @@ export const CATALOG = [
   ID.Book,
   ID.Compass,
   ID.Horn,
+  ID.Clock,
+  ID.Map,
+  ID.Banner,
+  ID.Lead,
 ];
 
 export const COLORS = [ID.Red, ID.Orange, ID.Yellow, ID.Green, ID.Blue, ID.Azure, ID.Pink, ID.White, ID.Black];

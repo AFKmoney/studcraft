@@ -143,7 +143,7 @@ function TitleScreen({
           Stud<span className="craft">craft</span>
         </h1>
         <p className="lede">
-          An infinite brick land. Type a seed, or roll one. The same seed builds the same hills, ores, hamlets, ruins, mines, and camps.
+          An infinite brick land. Type a seed, or roll one. The same seed builds the same hills, ores, and hamlets.
         </p>
         {error && <p className="lede">{error}</p>}
         <label className="seed-row">
@@ -193,7 +193,7 @@ function TitleScreen({
           <li>The world keeps going. Horizon in the pause menu is only how far bricks draw</li>
           <li>Hamlets repeat across the map. Traders show up when you walk into town</li>
           <li>Skills spend rank levels. Pause holds four mods. Q cycles spells when you hold a tome</li>
-          <li>Caves run under the hills. Ruins, mines, camps, wrecks, shrines, and bandit outposts carry crates. A ruined gate by the first hamlet opens the Nether</li>
+          <li>Caves run under the hills. Water spills. A repeater delays a signal. A ruined gate by the first hamlet opens the Nether</li>
           <li>Water and magma spread from a source. Look where a piston or repeater should point</li>
           <li>Hold to mine · place with the other click · E opens the bin</li>
         </ul>
@@ -230,7 +230,6 @@ function Hud({ game }: { game: GameApi }) {
         </span>
         <span>
           {Math.floor(hud.x)} {Math.floor(hud.y)} {Math.floor(hud.z)} · seed {hud.seedText || hud.seed}
-          {hud.bearing ? " · " + hud.bearing : ""}
         </span>
       </div>
       {!hud.locked && !hud.message && <p className="look-hint">Drag to look · click to capture the mouse</p>}
@@ -280,7 +279,11 @@ function Hud({ game }: { game: GameApi }) {
       )}
       <div className="hotbar">
         {hud.hotbar.map((item, i) => (
-          <button key={i} className={i === hud.slot ? "slot on" : "slot"} onClick={() => game.setSlot(i)}>
+          <button
+            key={i}
+            className={i === hud.slot ? "slot on" : "slot"}
+            onClick={(e) => (e.shiftKey && item.id > 0 ? game.shiftStack(item.id) : game.setSlot(i))}
+          >
             <small>{i + 1}</small>
             {item.id > 0 && <ItemIcon id={item.id} />}
             {item.id > 0 && item.count >= 0 && <em>{item.count}</em>}
@@ -317,7 +320,7 @@ function PauseMenu({ game }: { game: GameApi }) {
             <input
               type="range"
               min={2}
-              max={8}
+              max={14}
               step={1}
               value={s.radius}
               onChange={(e) => game.setRadius(Number(e.target.value))}
@@ -437,7 +440,7 @@ function Inventory({ game }: { game: GameApi }) {
                 {hud.craftOut && hud.craftOut.n > 1 ? <em>{hud.craftOut.n}</em> : null}
               </button>
             </div>
-            <p className="fine">Tap a brick below, then a grid cell. The 2×2 works in the bag. Bench uses all nine.</p>
+        <p className="fine">Shift-click (PC) or long-press (mobile) moves a stack between the bar and the bin.</p>
           </>
         )}
         {hud.panel === "furnace" && (
@@ -516,9 +519,21 @@ function Inventory({ game }: { game: GameApi }) {
               <button
                 key={id}
                 data-empty={empty}
-                onClick={() => {
-                  game.hold(id);
-                  game.assign(id);
+                onClick={(e) => {
+                  if (e.shiftKey) {
+                    game.shiftStack(id);
+                  } else {
+                    game.hold(id);
+                    game.assign(id);
+                  }
+                }}
+                onPointerDown={() => {
+                  const start = Date.now();
+                  const up = () => {
+                    if (Date.now() - start > 420) game.shiftStack(id);
+                    window.removeEventListener("pointerup", up);
+                  };
+                  window.addEventListener("pointerup", up);
                 }}
               >
                 <ItemIcon id={id} />
@@ -560,11 +575,16 @@ function Inventory({ game }: { game: GameApi }) {
           </div>
         )}
         <p className="lede" style={{ marginTop: 12 }}>
-          Color press spends one spare brick. Cursor: {hud.cursor ? def(hud.cursor).name : "empty"}.
+          Shift-click a brick to move it between the bar and the bag. Color press spends one spare brick. Cursor: {hud.cursor ? def(hud.cursor).name : "empty"}.
         </p>
         <div className="colors">
           {COLORS.map((id) => (
-            <button key={id} style={{ background: def(id).color }} aria-label={def(id).name} onClick={() => game.press(id)} />
+            <button
+              key={id}
+              style={{ background: def(id).color }}
+              aria-label={def(id).name}
+              onClick={(e) => (e.shiftKey ? game.shiftStack(id) : game.press(id))}
+            />
           ))}
         </div>
         <button className="btn btn-primary" onClick={() => game.toggleInventory()}>

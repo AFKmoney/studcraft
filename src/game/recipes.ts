@@ -252,6 +252,30 @@ export const RECIPES: Recipe[] = [
     h: 3,
     cat: "tools",
   }),
+  r("clock", "Clock", "4 gold + 1 red dust", [[ID.Gold, 4], [ID.Dust, 1]], ID.Clock, 1, {
+    shape: [0, ID.Gold, 0, ID.Gold, ID.Dust, ID.Gold, 0, ID.Gold, 0],
+    w: 3,
+    h: 3,
+    cat: "tools",
+  }),
+  r("map", "Map", "8 paper around a compass", [[ID.Paper, 8], [ID.Compass, 1]], ID.Map, 1, {
+    shape: [ID.Paper, ID.Paper, ID.Paper, ID.Paper, ID.Compass, ID.Paper, ID.Paper, ID.Paper, ID.Paper],
+    w: 3,
+    h: 3,
+    cat: "tools",
+  }),
+  r("banner", "Banner", "6 white + 1 stick", [[ID.White, 6], [S, 1]], ID.Banner, 1, {
+    shape: [ID.White, ID.White, ID.White, ID.White, ID.White, ID.White, 0, S, 0],
+    w: 3,
+    h: 3,
+    cat: "build",
+  }),
+  r("lead", "Lead", "4 string + 1 slime", [[ID.String, 4], [ID.Slime, 1]], ID.Lead, 2, {
+    shape: [ID.String, ID.String, 0, ID.String, ID.Slime, 0, 0, 0, ID.String],
+    w: 3,
+    h: 3,
+    cat: "tools",
+  }),
   r("web", "Web", "4 string", [[ID.String, 4]], ID.Web, 1, {
     shape: [ID.String, ID.String, ID.String, ID.String],
     w: 2,

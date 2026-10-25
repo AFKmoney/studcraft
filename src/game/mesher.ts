@@ -55,6 +55,14 @@ function pushQuad(s: Surface, v: number[][], n: number[], tile: number, shade?: 
   }
 }
 
+// Deterministic per-block tint hash (world coords): the same brick gets the
+// same subtle color variation on every mesh, from any chunk, forever.
+function hashBlock(x: number, y: number, z: number) {
+  let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(z, 1274126177)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+}
+
 function pushPoly(s: Surface, verts: number[][], normals: number[][], cu: number, cv: number) {
   const order = verts.length === 3 ? [0, 1, 2] : [0, 1, 2, 0, 2, 3];
   for (const i of order) {
@@ -126,7 +134,7 @@ function addStud(s: Surface, x: number, y: number, z: number, tile: number) {
   }
 }
 
-export function buildChunk(world: World, cx: number, cz: number, fancy: boolean) {
+export function buildChunk(world: World, cx: number, cz: number, fancy: boolean, detail = true) {
   const opaque = empty();
   const glass = empty();
   const water = empty();
@@ -142,6 +150,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean)
   }
 
   function shadeAt(x: number, y: number, z: number, nx: number, ny: number, nz: number, vx: number, vy: number, vz: number) {
+    if (!detail) return 1;
     const steps: number[][] = [];
     if (nx === 0) steps.push([vx === 0 ? -1 : 1, 0, 0]);
     if (ny === 0) steps.push([0, vy === 0 ? -1 : 1, 0]);
@@ -244,6 +253,10 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean)
             z + vz - nz * pull,
           ]);
           const shade = face.v.map(([vx, vy, vz]) => shadeAt(x, y, z, nx, ny, nz, vx, vy, vz));
+          // Per-brick color variation (like real molded bricks: no two pieces
+          // are exactly the same shade). Multiplies the AO/face shading.
+          const jit = 0.93 + hashBlock(x0 + x, y, z0 + z) * 0.13;
+          for (let i = 0; i < shade.length; i++) shade[i] *= jit;
           pushQuad(surf, verts, face.n, tile, shade);
           if (fancy && ny > 0 && !self.fluid && self.solid && !n.plant) addStud(surf, x, y, z, faceTile(id, 0));
         }

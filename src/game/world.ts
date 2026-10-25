@@ -15,6 +15,21 @@ export function inNether(x: number) {
   return x >= NETHER_X0 && x < NETHER_X1;
 }
 
+/** Four End pillars. The crystal sits on the obsidian column. */
+export const END_PILLARS: ReadonlyArray<readonly [number, number]> = [
+  [-510, -510],
+  [-498, -510],
+  [-510, -498],
+  [-498, -498],
+];
+
+export function paintEndCrystals(set: (x: number, y: number, z: number, id: number) => void) {
+  for (const [x, z] of END_PILLARS) {
+    for (let y = 49; y <= 62; y++) set(x, y, z, ID.Obsidian);
+    set(x, 63, z, ID.EndCrystal);
+  }
+}
+
 export type HamletSite = { x: number; z: number; y: number };
 
 export function hamletOrigin(seed: number, rx: number, rz: number): { x: number; z: number } | null {
