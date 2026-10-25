@@ -1041,6 +1041,13 @@ function levelPad(world: World, x0: number, z0: number, w: number, d: number, h:
 
 
 
+
+function stampBeacon(world: World, x: number, y: number, z: number) {
+  // small beacon pillar of iron block + diamond top
+  for (let i = 0; i < 3; i++) world.set(x, y + i, z, ID.IronBlock);
+  world.set(x, y + 3, z, ID.Diamond);
+}
+
 function stampShrine(world: World, x: number, y: number, z: number) {
   // small 3x3 shrine of calcite + center crystal
   for (let dx = -1; dx <= 1; dx++) {
