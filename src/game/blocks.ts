@@ -245,6 +245,7 @@ export const ID = {
   Tuff: 243,
   WitherSkull: 244,
   NetherStar: 245,
+  Spawner: 246,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -707,6 +708,7 @@ put(b(ID.PrismOre, "Prism ore", "#b48cff", "#f4e8ff", "#6e5a9a", "#3a2858", { ha
 put(b(ID.Basalt, "Basalt", "#3a3a3a", "#4a4a4a", "#2a2a2a", "#1a1a1a", { hard: 1.2, tough: true }));
 put(b(ID.Calcite, "Calcite", "#e8e4dc", "#f4f0e8", "#d0ccc4", "#b8b4ac", { hard: 0.6 }));
 put(b(ID.Tuff, "Tuff", "#6a6a5a", "#7a7a6a", "#5a5a4a", "#4a4a3a", { hard: 1.0, tough: true }));
+put(b(ID.Spawner, "Spawner", "#2a2a32", "#3aaa4c", "#3a3a44", "#1a1a22", { hard: 2.2, tough: true, need: 1, light: 4 }));
 put(b(ID.MasterBrick, "Master brick", "#f5c518", "#ffe14a", "#e23b2f", "#b02620", { hard: 5, tough: true, need: 4 }));
 put(b(ID.ChromeBrick, "Chrome brick", "#d5dee6", "#f4f7fa", "#b7c4ce", "#8e9aa6", { hard: 2.4, tough: true, need: 3 }));
 item(ID.Tin, "Tin", "#d5ddd0");

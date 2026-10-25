@@ -67,6 +67,7 @@ export type Hud = {
   quests: { id: string; name: string; detail: string; n: number; need: number; done: boolean; ready: boolean; reward: string }[];
   questAlert: string;
   questTrack: string;
+  won: boolean;
   skills: string[];
   skillPoints: number;
   mana: number;
@@ -233,6 +234,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     quests: [],
     questAlert: "",
     questTrack: "",
+    won: false,
     skills: [],
     skillPoints: 0,
     mana: 8,
@@ -761,6 +763,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let portalCd = 0;
   let realmsReady = false;
   let fishT = -1;
+  let spawnerAcc = 0;
   let dragonUp = false;
   let mount: Mob | null = null;
   let returnSpot = { x: 0, y: 80, z: 0 };
@@ -892,6 +895,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const readyQ = hud.quests.find((q) => q.ready);
     const openQ = hud.quests.find((q) => !q.done);
     hud.questTrack = readyQ ? readyQ.name + " · ready" : openQ ? openQ.name + " " + openQ.n + "/" + openQ.need : "Board clear";
+    hud.won = false;
     hud.skills = [...skills];
     hud.skillPoints = creative ? 99 : Math.max(0, rankLv - skills.size);
     const maxMana = manaMaxFor(skills);
@@ -2200,13 +2204,6 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       player.z = -500.5;
       realm = 2;
       say("The End");
-    // End return: stand on EndPortal in End to go back
-    if (realm === 2 && (world.get(gx, gy, gz) === ID.EndPortal || world.get(gx, gy - 1, gz) === ID.EndPortal)) {
-      realm = 0;
-      player.x = 0; player.z = 0; player.y = 70;
-      say("Overworld");
-    }
-
       if (!dragonUp) {
         dragonUp = true;
         spawnKind("dragon", -504, -508);
@@ -2218,6 +2215,49 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     saveDirty = true;
   }
 
+  function tickSpawners(dt: number) {
+    if (phase !== "play" || settings.mods.peaceful) return;
+    spawnerAcc += dt;
+    if (spawnerAcc < 8) return;
+    const gx = Math.floor(player.x);
+    const gy = Math.floor(player.y);
+    const gz = Math.floor(player.z);
+    let sx = 0;
+    let sy = 0;
+    let sz = 0;
+    let found = false;
+    for (let dy = -8; dy <= 8 && !found; dy++) {
+      for (let dz = -16; dz <= 16 && !found; dz++) {
+        for (let dx = -16; dx <= 16; dx++) {
+          if (dx * dx + dy * dy + dz * dz > 256) continue;
+          if (world.get(gx + dx, gy + dy, gz + dz) !== ID.Spawner) continue;
+          sx = gx + dx;
+          sy = gy + dy;
+          sz = gz + dz;
+          found = true;
+          break;
+        }
+      }
+    }
+    if (!found) {
+      spawnerAcc = 0;
+      return;
+    }
+    let awake = 0;
+    for (const m of mobs) {
+      if (m.dead || m.kind !== "walker") continue;
+      if (Math.hypot(m.x - player.x, m.z - player.z) < 12) awake++;
+    }
+    if (awake >= 2) {
+      spawnerAcc = 8;
+      return;
+    }
+    spawnerAcc = 0;
+    const mob = spawnKind("walker", sx + 0.5, sz + 1.5);
+    mob.y = sy;
+    mob.mesh.position.set(mob.x, sy, mob.z);
+  }
+
   function tickExtras(dt: number) {
     sinceSleep += dt;
     speedT = Math.max(0, speedT - dt);
@@ -2227,6 +2267,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (Math.floor(fireT * 2) !== Math.floor((fireT + dt) * 2)) hurt(1);
     }
     portalCd = Math.max(0, portalCd - dt);
+    tickSpawners(dt);
     if (fishT >= 0) {
       fishT += dt;
       if (fishT > 3.2) {
@@ -3036,15 +3077,6 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       }
     }
     if (phase === "play") {
-    // End portal travel
-    if (world.get(gx, gy, gz) === ID.EndPortal || world.get(gx, gy - 1, gz) === ID.EndPortal) {
-      if (realm !== 2) {
-        realm = 2;
-        player.x = 0; player.z = 0; player.y = 80;
-        say("The End");
-      }
-    }
-
       folkAcc += dt;
       if (folkAcc > 2.5) {
         folkAcc = 0;
@@ -3988,56 +4020,6 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     noteClock();
     if (phase === "play") {
       tickExtras(dt);
-      // rare wither-like boss at night
-      if (night && Math.random() < 0.005) {
-        say("A dark presence stirs...");
-      }
-
-      // simple raid: night + village nearby spawns extra walkers
-      if (night && Math.random() < 0.02) {
-        const nearVillage = Math.abs(player.x % 200) < 40;
-        if (nearVillage) {
-          // spawn extra hostile
-          say("Raid!");
-        }
-      }
-
-      // simple repeater delay (budgeted)
-      if ((elapsed * 5) % 1 < dt * 5) {
-        for (let dz = -4; dz <= 4; dz++) {
-          for (let dx = -4; dx <= 4; dx++) {
-            const x = gx + dx, z = gz + dz;
-            for (let dy = -2; dy <= 2; dy++) {
-              const y = gy + dy;
-              if (world.get(x, y, z) === ID.Repeater) {
-                // pass power forward with delay
-                const front = world.get(x + 1, y, z);
-                if (front === ID.Dust || front === ID.Lamp) recompute(x + 1, y, z);
-              }
-            }
-          }
-        }
-      }
-
-      // crop growth (simple)
-      if ((elapsed * 2) % 1 < dt * 2) {
-        const cgx = Math.floor(player.x);
-        const cgy = Math.floor(player.y);
-        const cgz = Math.floor(player.z);
-        for (let dz = -3; dz <= 3; dz++) {
-          for (let dx = -3; dx <= 3; dx++) {
-            const x = cgx + dx, z = cgz + dz;
-            const y = cgy;
-            const id = world.get(x, y, z);
-            if (id === ID.CarrotCrop && Math.random() < 0.15) world.set(x, y, z, ID.CarrotRipe);
-            if (id === ID.PotatoCrop && Math.random() < 0.15) world.set(x, y, z, ID.PotatoRipe);
-            if (id === ID.BeetCrop && Math.random() < 0.15) world.set(x, y, z, ID.BeetRipe);
-            if (id === ID.PumpkinStem && Math.random() < 0.1) world.set(x, y, z, ID.Pumpkin);
-            if (id === ID.MelonStem && Math.random() < 0.1) world.set(x, y, z, ID.Melon);
-          }
-        }
-      }
-
       weatherIn -= dt;
       if (weatherIn <= 0) {
         raining = !raining && Math.random() < 0.45;

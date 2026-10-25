@@ -439,17 +439,16 @@ export class World {
     const data = new Uint8Array(CS * HEIGHT * CS);
     const baseX = cx * CS;
     const baseZ = cz * CS;
+    const idx = (lx: number, y: number, lz: number) => lx + lz * CS + y * CS * CS;
     for (let lz = 0; lz < CS; lz++) {
       for (let lx = 0; lx < CS; lx++) {
         const x = baseX + lx;
         const z = baseZ + lz;
         const h = 60 + Math.floor(this.noise.fbm(x * 0.02, z * 0.02) * 8);
         for (let y = 0; y < HEIGHT; y++) {
-          let id = ID.Air;
+          let id: number = ID.Air;
           if (y === 0) id = ID.Bedrock;
-          else if (y < h - 2) id = ID.EndStone;
-          else if (y < h) id = ID.EndStone;
-          else if (y === h && Math.random() < 0.02) id = ID.Chorus;
+          else if (y <= h) id = ID.EndStone;
           data[idx(lx, y, lz)] = id;
         }
       }
@@ -1196,7 +1195,7 @@ function stampDungeon(world: World, x: number, y: number, z: number) {
     }
   }
   world.set(x, y, z, ID.Chest);
-  world.set(x + 1, y, z, ID.Cobble);
+  world.set(x + 1, y, z, ID.Spawner);
 }
 
 function stampWreck(world: World, x: number, y: number, z: number) {

@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (slaying the wyrm ends the run). Icon batch below is still in progress — do not redo public/icons.
+**Last update:** 2026-10-25 (the buried dungeon has a spawner). Icon batch below is still in progress — do not redo public/icons.
 
 
 ### Physics + 3D 1:1 (this cycle)
@@ -784,7 +784,7 @@ DO NOT TOUCH:
 - Logged.
 
 ### Remaining for true 1:1
-- Wither boss, full End cities, multiplayer, deeper redstone (hoppers/dispensers already partial), offhand, jungle temples.
+- Multiplayer and deeper redstone. Wither, End cities, jungle temples, offhand, and hoppers are in.
 
 ### 2026-10-25 — Grok (Wither, End cities, jungle temples, offhand, hoppers)
 - Wither: 3 WitherSkull on Soul Sand summons a flying 40 HP wither that drops NetherStar.
@@ -793,7 +793,23 @@ DO NOT TOUCH:
 - Offhand: F swaps with selected slot; shield in offhand blocks while sneaking.
 - Hoppers: budgeted pull from chest above into chest below.
 - Files: blocks.ts, game.ts, world.ts.
-- Logged.
+- Logged. WitherSkull is **244**. NetherStar is **245**. Do not reuse those ids.
 
-### Next move
-- Ready for next unclaimed.
+### 2026-10-25 — Grok (dungeon spawner)
+- **244 was taken by the wither skull.** The cage is **246**.
+- `stampDungeon` puts it beside the chest. The old cobble brick is gone.
+- Within 16 blocks of the player, one living walker wakes every 8 seconds, beside the cage, never more than two within 12. Peaceful stays quiet. Dead walkers do not count.
+- A frame snippet that named `night` and `gx` outside their function was not kept. The wither summon on soul sand stays.
+- Files: `src/game/blocks.ts`, `src/game/world.ts`, `src/game/game.ts`.
+
+### Next move — UNCLAIMED, take this
+**Mining the spawner with a pick puts it in the bag, and placing it keeps the same timer.**
+- The id is **246**, not 244. Confirm a pick of tier 1 or more drops it, and a bare hand does not.
+- Do not add another block id. Do not change the 8 second / two walker rule.
+- Files: `src/game/game.ts` only if the drop is wrong. Otherwise write that it already drops and leave the rule.
+DO NOT TOUCH:
+- WitherSkull **244**, NetherStar **245**
+- the wither summon, offhand, hoppers
+- icons, `sky()`, styles, mesher
+
+*Agents: append below. Keep it factual and short.*
