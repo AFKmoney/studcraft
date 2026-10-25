@@ -44,6 +44,7 @@ export type SaveV1 = {
   mana?: number;
   spell?: number;
   seedText?: string;
+  won?: boolean;
   pets?: { x: number; z: number }[];
   fluids?: [number, number, number, number][];
 };
