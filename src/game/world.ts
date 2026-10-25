@@ -1047,6 +1047,17 @@ function levelPad(world: World, x0: number, z0: number, w: number, d: number, h:
 
 
 
+
+function stampWreck(world: World, x: number, y: number, z: number) {
+  // small shipwreck: logs + chest
+  world.set(x, y, z, ID.Log);
+  world.set(x + 1, y, z, ID.Log);
+  world.set(x + 2, y, z, ID.Log);
+  world.set(x + 1, y + 1, z, ID.Chest);
+  world.set(x, y, z + 1, ID.Planks);
+  world.set(x + 2, y, z - 1, ID.Planks);
+}
+
 function stampMine(world: World, x: number, y: number, z: number) {
   // small mine entrance: hole + ore nearby
   world.set(x, y, z, ID.Air);

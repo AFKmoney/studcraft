@@ -23,6 +23,7 @@
 - Added rare shrine (calcite + crystal) in Ash ridge / Brick plains.
 - Added rare beacon (iron pillar + diamond) in Brick plains.
 - Added rare mine entrance (hole + ore).
+- Added rare shipwreck (logs + chest) on shore/ocean.
 - Block icons + recipes for Basalt/Calcite/Tuff complete.
 
 ### Recipes for new blocks (this cycle)
