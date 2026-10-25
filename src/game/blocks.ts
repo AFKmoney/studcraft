@@ -847,7 +847,7 @@ item(ID.Compass, "Compass", "#e23b2f");
 item(ID.Horn, "Horn", "#e8d0a8");
 item(ID.Clock, "Clock", "#f0c43a");
 item(ID.Map, "Map", "#c4924a");
-item(ID.Banner, "Banner", "#e23b2f");
+put(b(ID.Banner, "Banner", "#e23b2f", "#f25a46", "#c43228", "#8a221c", { hard: 0.4 }));
 item(ID.Lead, "Lead", "#f4f1ea");
 
 export function def(id: number): BlockDef {

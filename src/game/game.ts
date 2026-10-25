@@ -904,6 +904,18 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     return "Night";
   }
 
+  let clockHeard = "";
+  function noteClock() {
+    if (phase !== "play" || hotbar[slot] !== ID.Clock) {
+      clockHeard = "";
+      return;
+    }
+    const word = timeWord();
+    if (word === clockHeard) return;
+    clockHeard = word;
+    say(word);
+  }
+
   function addInv(id: number, n: number) {
     if (!id || n <= 0) return;
     inv[id] = (inv[id] ?? 0) + n;
@@ -1729,6 +1741,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const held = hotbar[slot];
     const heldDef = def(held);
     if (held === ID.Bow) return shootHeld();
+    if (held === ID.Clock) return say(timeWord());
     if (held === ID.Tome) return castSpell();
     if (held === ID.Flint && hit.id === ID.TNT) {
       fuses.push({ x: hit.x, y: hit.y, z: hit.z, t: 2.1 });
@@ -3689,6 +3702,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
 
     sky(dt);
+    noteClock();
     if (phase === "play") {
       tickExtras(dt);
       weatherIn -= dt;

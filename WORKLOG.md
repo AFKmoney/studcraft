@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-25 (Lego product icons: full unique set generated + first batch integrated into public/icons/ and IMAGE_ICONS)
+**Last update:** 2026-10-25 (clock speaks the day; banner places). Icon batch above is still in progress — do not redo public/icons.
 
 ### Lego Product Icons (IN PROGRESS → INTEGRATING)
 - Generated unique isometric Lego product photos (white background, studs) for all named items (tools, food, materials, potions, gems, etc.).
@@ -200,15 +200,37 @@ Files: src/game/world.ts, src/game/sites.ts, src/game/loot.ts, src/game/game.ts 
 - IDs appended only (no renumber). Files: blocks.ts, recipes.ts, icons.tsx.
 - Next free: breakable end crystals or inventory shift-click.
 
-*Agents: append below. Keep it factual and short.*
+### 2026-10-25 — Grok (clock speaks, banner places)
+The earlier log line said this was done. The code was not in the tree. It is now.
+
+- Clock **221**, while selected, says Day / Morning / Evening / Dawn / Dusk / Night when the word changes. Using it says the word again. `timeWord()` only. `sky()` was not edited.
+- Banner **223** is a placeable full brick (`put`, hard 0.4). It is no longer an item-only def.
+- Did not touch `public/icons`, `IMAGE_ICONS`, mesher, `recompute()`, crystals, or `shiftStack`.
+
+Files: `src/game/blocks.ts`, `src/game/game.ts`, `WORKLOG.md`.
 
 ### 2026-10-25 — Grok (fluid flow, hybrid-friendly)
-- Next gap from WORKLOG: Full fluid flow + gravity for sand/gravel.
-- Gravity for sand/gravel already existed (fall: true). Added budgeted water/lava flow near the player.
-- Water/Lava spreads down into air, and sideways when blocked below. Hard budget of 28 cells/tick so it stays smooth on mobile.
-- Files: game.ts (tickExtras).
+- Gravity for sand/gravel was already there. Added budgeted water/lava flow near the player.
+- Water and lava spread down into air, and sideways when blocked below. Hard budget of 28 cells per tick.
+- Files: game.ts (`tickExtras`).
 - Did not touch mesher, recompute, sky, biomes, End crystals, or inventory.
-- Logged.
 
-### Next move
-- Crop growth stages or more mobile HUD polish.
+### Next move — UNCLAIMED, take this
+**Map speaks your place, lead hitches a passive mob.**
+- Map **222**, while selected, says the coordinates and the cardinal (the same words the compass already uses, if that helper exists). Do not edit `sky()`.
+- Lead **224**, used on a sheep, cow, pig, chicken, or horse, makes that mob follow you until you use the lead again. One lead, one mob. Do not rewrite mob AI beyond that follow flag.
+- Files: `src/game/game.ts` only.
+DO NOT TOUCH:
+- `public/icons` and `IMAGE_ICONS` (icon batch still in progress)
+- `src/game/mesher.ts`
+- `recompute()` and redstone ids 215–217
+- `sky()` / shadow camera / emissiveMap
+- the new fluid loop in `tickExtras` (28-cell budget)
+- `biomeOf`, `decorateOcean`, tomb, reef
+- EndCrystal **225**, `paintEndCrystals`, `crystalsLeft`, `popCrystal`
+- `shiftStack`, `noteClock`, Banner **223**
+
+Alternate if someone else already took map/lead: crop growth stages only.
+
+*Agents: append below. Keep it factual and short.*
+
