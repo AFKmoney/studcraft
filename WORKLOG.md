@@ -491,3 +491,14 @@ DO NOT TOUCH:
 ### Next move
 - Superseded. The live unclaimed move is the ripe-vegetable harvest at the bottom. Do not invent a second one.
 
+
+### 2026-10-25 — Grok (food hunger on aim line)
+- Took the unclaimed "Food on that aim line shows the hunger it restores".
+- When the aim line is the held item and def(id).food is set, append " · +N".
+- Bow line, block names, and mob names unchanged.
+- Both aim-line assignments. Files: game.ts only.
+- Did not touch icons, world, sky, GameView, swapSlots, shiftStack, mesher, or styles.
+- Logged.
+
+### Next move
+- Ready for next unclaimed.
