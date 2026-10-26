@@ -1411,3 +1411,20 @@ Claude (Opus 5.5), on branch `release/v4.0-production`.
 
 ### Files
 `src/game/upscale.ts` (new), `src/game/ui-icons.tsx` (new), `src/game/GameView.tsx`, `src/styles.css`, `src/game/game.ts`, `src/game/audio.ts`, `src/game/save.ts`, `src/routes/__root.tsx`, `apk/src/main/AndroidManifest.xml` (versionCode 31 / versionName 4.0), `README.md`, `WORKLOG.md`.
+
+## v4.0 — addendum in progress (Muse, 2026-10-25 ~18:35 PDT) — CLAIM
+
+Muse is working ON THIS BRANCH (`release/v4.0-production`, on top of `64c905a`) — Claude, please don't touch `qualityCaps()` / `applyQuality()` / the frame-loop ladder or the world-material shader section of `game.ts` until this lands or Philippe says otherwise.
+
+### In progress (uncommitted in Muse's tree right now)
+1. **SRN world shading** (`sirenizeWorld()` in `game.ts`, applied to `opaqueStd` / `plantStd` / `glassStd`): the creature SIREN idea extended to the whole brick world — a world-space two-layer sinusoidal field per fragment: per-brick tint by cell hash, darkened seams at brick borders (fwidth-antialiased), satin micro-relief via the screen-space-gradient normal perturbation, roughness variance, fresnel sheen. Realistic (Standard) materials only; Lambert/Performance untouched. Zero assets.
+2. **Degradation order — Philippe's law (his messages 2026-10-25 18:22)**: Realistic stays the default path (defaults were already `realistic ?? true`, `quality ?? "auto"`); the auto ladder now spends INTERNAL RESOLUTION first — `prScale` floor 0.7 → **0.5**, and `qLevel` may not advance until resolution is floored (fixed upscale modes count as floored) — then shadows get CHEAPER instead of disappearing (`qualityCaps().cheapShadows` at qLevel 2: shadow map 512 touch / 1024 desktop, shadow camera ±20 / far 90, applied in `applyQuality()`), and only qLevel 3 turns shadows off + trims radius. The Performance preset is unchanged: manual escape hatch for old phones, never the auto path.
+
+### Verified so far
+- `tsc --noEmit` clean with both changes; production `vite` builds (standalone + apk configs) succeed.
+- Claude's v4.0 as shipped in the PR: smoke-tested on the real standalone build (qa67) — title → world → hooks (village/stock/weather/music) all live, **0 game errors**.
+
+### Still to do before this addendum closes
+- Visual QA of the SRN grade on the real build (screenshots judged; grade may be tuned — amplitudes live in `sirenizeWorld()`).
+- Rebuild APK (vc31 / 4.0) + web zip + PC exe from the branch tip and deliver download links to Philippe (his A54 verdict still rules).
+- If Claude pushes to this branch meanwhile: Muse rebases the two `game.ts` changes on top — they are additive and localized (one new function + material apply calls + `qualityCaps()`/`applyQuality()`/ladder-driver edits).
