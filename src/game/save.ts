@@ -67,6 +67,14 @@ export type SettingsSave = {
   studs: boolean;
   realistic?: boolean;
   quality?: string;
+  third?: boolean;
+  upscale?: string;
+  sharpness?: number;
+  fov?: number;
+  showFps?: boolean;
+  music?: number;
+  sfx?: number;
+  haptics?: boolean;
   mods?: { hard: boolean; generous: boolean; peaceful: boolean; spells: boolean };
 };
 
@@ -209,7 +217,9 @@ export function writeWorld(slot: WorldSlot, save: SaveV1): boolean {
     }
     localStorage.setItem(slotKey(slot.id), JSON.stringify(save));
     writeIndex(slots);
-    localStorage.setItem(WORLD_KEY, JSON.stringify(save));
+    // The legacy single-slot key is migration input only; drop the old mirror copy so
+    // a big world doesn't take twice its size in the ~5 MB browser quota.
+    localStorage.removeItem(WORLD_KEY);
     return true;
   } catch {
     return false;

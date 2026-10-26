@@ -12,6 +12,7 @@ import { clearSave, deleteWorld, hasSave, listWorlds, loadLatest, loadSettings, 
 import { buildAtlas } from "./textures";
 import { CS, HEIGHT, World, decorate, folkLayout, penSheep, paintEndCrystals, END_PILLARS, type Decor, type FolkSpot } from "./world";
 import { stockChest } from "./loot";
+import { Upscaler, upscaleScale } from "./upscale";
 import { parseSeed } from "./noise";
 
 export type Phase = "title" | "play" | "pause" | "inventory" | "dead";
@@ -87,6 +88,15 @@ export type Hud = {
   manaMax: number;
   spell: string;
   spellsOn: boolean;
+  /** In-game text prompt (naming a mob, joining a room). */
+  ask: { title: string; hint: string; value: string } | null;
+  /** 0..1 seconds-since-hit flash for damage direction vignette. */
+  hurtDir: number;
+  /** Upscaler status line for the settings screen, e.g. "1280×720 → 2560×1440". */
+  renderRes: string;
+  /** World is generating around the spawn — show the loading veil. */
+  loading: number;
+  version: string;
 };
 
 export type TouchState = {
@@ -98,6 +108,7 @@ export type TouchState = {
 };
 
 export type Quality = "auto" | "high" | "balanced" | "performance";
+export type Upscale = "auto" | "native" | "quality" | "balanced" | "performance";
 
 export type GameApi = {
   canvas: HTMLCanvasElement;
@@ -111,6 +122,13 @@ export type GameApi = {
     realistic: boolean;
     quality: Quality;
     third: boolean;
+    upscale: Upscale;
+    sharpness: number;
+    fov: number;
+    showFps: boolean;
+    music: number;
+    sfx: number;
+    haptics: boolean;
     mods: { hard: boolean; generous: boolean; peaceful: boolean; spells: boolean };
   };
   phase: Phase;
@@ -160,6 +178,17 @@ export type GameApi = {
   setStuds: (on: boolean) => void;
   setRealistic: (on: boolean) => void;
   setThird: (on: boolean) => void;
+  setUpscale: (u: Upscale) => void;
+  setSharpness: (n: number) => void;
+  setFov: (n: number) => void;
+  setShowFps: (on: boolean) => void;
+  setMusic: (n: number) => void;
+  setSfx: (n: number) => void;
+  setHaptics: (on: boolean) => void;
+  /** Resolve the in-game text prompt (replaces window.prompt). null = cancelled. */
+  answer: (text: string | null) => void;
+  /** Short UI feedback sound for menus. */
+  uiSound: (kind: "hover" | "click" | "open" | "close") => void;
   deleteSave: () => void;
   subscribe: (fn: () => void) => () => void;
   destroy: () => void;
@@ -208,8 +237,22 @@ declare global {
       getMobs?: () => string[];
       getHamlet?: () => { x: number; y: number; z: number } | null;
       getChunks?: () => number;
+      /** QA: stop/restart the frame loop so a capture sees a still frame. */
+      hold?: (on: boolean) => void;
+      getRes?: () => string;
+      getMobFx?: () => { kind: string; hp: number; hurt: number; bar: boolean; amp: number; x: number; y: number; z: number; cd?: number; cool?: number }[];
+      getCorpses?: () => number;
+      getMobCount?: () => number;
     };
   }
+}
+
+export const GAME_VERSION = "4.0";
+
+/** Primary input is a finger: no fine pointer at all, or a coarse primary pointer. */
+export function isTouchDevice() {
+  if (typeof window === "undefined" || !window.matchMedia) return false;
+  return window.matchMedia("(pointer: coarse)").matches || !window.matchMedia("(any-pointer: fine)").matches;
 }
 
 const HW = 0.28;
@@ -228,7 +271,14 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     studs: savedSettings?.studs ?? true,
     realistic: savedSettings?.realistic ?? true,
     quality: (savedSettings?.quality as Quality | undefined) ?? "auto",
-    third: false,
+    third: savedSettings?.third ?? false,
+    upscale: (savedSettings?.upscale as Upscale | undefined) ?? "auto",
+    sharpness: savedSettings?.sharpness ?? 0.5,
+    fov: savedSettings?.fov ?? 72,
+    showFps: savedSettings?.showFps ?? false,
+    music: savedSettings?.music ?? 0.7,
+    sfx: savedSettings?.sfx ?? 0.9,
+    haptics: savedSettings?.haptics ?? true,
     mods: {
       hard: savedSettings?.mods?.hard ?? false,
       generous: savedSettings?.mods?.generous ?? false,
@@ -237,6 +287,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     },
   };
   audio.setEnabled(settings.sound);
+  audio.setVolume(settings.sfx);
   plasticOn = settings.realistic;
 
   const hud: Hud = {
@@ -309,6 +360,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     manaMax: 8,
     spell: "",
     spellsOn: true,
+    ask: null,
+    hurtDir: 0,
+    renderRes: "",
+    loading: 0,
+    version: GAME_VERSION,
   };
   const touch: TouchState = { moveX: 0, moveY: 0, jump: false, mine: false, place: false };
   const listeners = new Set<() => void>();
@@ -318,7 +374,15 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let hasSaveFlag = hasSave();
   let suppressUnlock = false;
   let wasLocked = false;
-  let touchMode = window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 900;
+  function lockPointer() {
+    try {
+      const req = canvas.requestPointerLock() as unknown as Promise<void> | undefined;
+      if (req && typeof req.catch === "function") req.catch(() => {});
+    } catch {
+      /* pointer lock refused (iframe, user gesture missing) — drag-to-look still works */
+    }
+  }
+  let touchMode = isTouchDevice();
   let sessionStarted = false;
   let creative = true;
   let flat = false;
@@ -564,7 +628,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   renderer.toneMapping = settings.realistic ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
   renderer.toneMappingExposure = settings.realistic ? 1.08 : 1;
   renderer.shadowMap.enabled = settings.realistic;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0x8ec8f5, 28, 72);
@@ -1019,8 +1083,251 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     summoned?: boolean;
     fangX?: number;
     fangZ?: number;
+    hitCd?: number;
+    // v4.0 presentation state (never saved)
+    vis?: MobVis;
+  };
+  type MobVis = {
+    lastHp: number;
+    hpMax: number;
+    hurtT: number;
+    barT: number;
+    kx: number;
+    kz: number;
+    gait: number;
+    amp: number;
+    lx: number;
+    lz: number;
+    h: number;
+    mats: { mat: THREE.MeshStandardMaterial | THREE.MeshLambertMaterial; base: number }[];
+    matsFor: THREE.Object3D | null;
+    blob: THREE.Mesh | null;
+    bar: { bg: THREE.Sprite; fill: THREE.Sprite } | null;
   };
   const mobs: Mob[] = [];
+  const corpses: { mesh: THREE.Object3D; t: number; x: number; y: number; z: number; mats: THREE.Material[] }[] = [];
+  // Flying and swimming kinds animate on a clock; walkers animate by distance covered.
+  const FLYERS = new Set(["ghast", "phantom", "bat", "bee", "vex", "blaze", "dragon", "wither", "parrot", "wisp", "squid", "guardian"]);
+  const BOSSES = new Set(["dragon", "wither"]);
+  const blobGeo = new THREE.CircleGeometry(0.5, 20);
+  const blobMat = (() => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const g = c.getContext("2d");
+    if (g) {
+      const grad = g.createRadialGradient(32, 32, 2, 32, 32, 32);
+      grad.addColorStop(0, "rgba(0,0,0,0.55)");
+      grad.addColorStop(0.55, "rgba(0,0,0,0.28)");
+      grad.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 64, 64);
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  })();
+  const barBgMat = new THREE.SpriteMaterial({ color: 0x120c08, transparent: true, opacity: 0.78, depthWrite: false });
+  const barMats = {
+    hi: new THREE.SpriteMaterial({ color: 0x5bd16a, depthWrite: false }),
+    mid: new THREE.SpriteMaterial({ color: 0xf5c518, depthWrite: false }),
+    lo: new THREE.SpriteMaterial({ color: 0xe23b2f, depthWrite: false }),
+  };
+  const tmpBox = new THREE.Box3();
+
+  function collectMats(m: Mob, v: MobVis) {
+    v.mats = [];
+    const seen = new Set<THREE.Material>();
+    m.mesh.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh || mesh === v.blob) return;
+      const list = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const mat of list) {
+        if (seen.has(mat)) continue;
+        seen.add(mat);
+        const std = mat as THREE.MeshStandardMaterial;
+        if (std.emissive) v.mats.push({ mat: std, base: std.emissive.getHex() });
+      }
+    });
+    v.matsFor = m.mesh;
+  }
+
+  function visOf(m: Mob): MobVis {
+    if (m.vis) return m.vis;
+    tmpBox.setFromObject(m.mesh);
+    const h = Number.isFinite(tmpBox.max.y) ? Math.max(0.4, tmpBox.max.y - m.mesh.position.y) : 1.2;
+    const w = Number.isFinite(tmpBox.max.x) ? Math.max(tmpBox.max.x - tmpBox.min.x, tmpBox.max.z - tmpBox.min.z) : 0.8;
+    const v: MobVis = { lastHp: m.hp, hpMax: Math.max(1, m.maxHp ?? m.hp), hurtT: 0, barT: 0, kx: 0, kz: 0, gait: m.phase ?? 0, amp: 0, lx: m.x, lz: m.z, h, mats: [], matsFor: null, blob: null, bar: null };
+    if (!FLYERS.has(m.kind) && m.kind !== "boat" && m.kind !== "cart") {
+      const blob = new THREE.Mesh(blobGeo, blobMat);
+      blob.rotation.x = -Math.PI / 2;
+      const sc = Math.min(2.6, Math.max(0.55, w * 0.95)) / (m.mesh.scale.x || 1);
+      blob.scale.set(sc, sc, 1);
+      blob.position.y = 0.012;
+      blob.renderOrder = 1;
+      blob.castShadow = blob.receiveShadow = false;
+      blob.userData.noShadow = true;
+      m.mesh.add(blob);
+      v.blob = blob;
+    }
+    m.vis = v;
+    return v;
+  }
+
+  /** Knockback as a short, collision-checked slide instead of a teleport. */
+  function shove(m: Mob, dirX: number, dirZ: number, power: number) {
+    const v = visOf(m);
+    const l = Math.hypot(dirX, dirZ) || 1;
+    v.kx += (dirX / l) * power * 7;
+    v.kz += (dirZ / l) * power * 7;
+  }
+
+  function dropBar(v: MobVis) {
+    if (!v.bar) return;
+    scene.remove(v.bar.bg, v.bar.fill);
+    v.bar = null;
+  }
+
+  function mobVisuals(m: Mob, dt: number, bounce: number) {
+    const v = visOf(m);
+    if (v.matsFor !== m.mesh) collectMats(m, v);
+    // Damage taken since last frame → flash, show the health bar.
+    if (m.hp < v.lastHp - 0.45) {
+      v.hurtT = 0.3;
+      if (!BOSSES.has(m.kind)) v.barT = 4;
+    }
+    if (m.hp > v.hpMax) v.hpMax = m.hp;
+    v.lastHp = m.hp;
+    // Knockback slide with wall checks.
+    if (Math.abs(v.kx) + Math.abs(v.kz) > 0.01) {
+      const nx = m.x + v.kx * dt;
+      const nz = m.z + v.kz * dt;
+      const fy = Math.floor(m.y + 0.5);
+      if (!solidAt(Math.floor(nx), fy, Math.floor(m.z)) && !solidAt(Math.floor(nx), fy + 1, Math.floor(m.z))) m.x = nx;
+      else v.kx = 0;
+      if (!solidAt(Math.floor(m.x), fy, Math.floor(nz)) && !solidAt(Math.floor(m.x), fy + 1, Math.floor(nz))) m.z = nz;
+      else v.kz = 0;
+      const k = Math.exp(-9 * dt);
+      v.kx *= k;
+      v.kz *= k;
+    }
+    // Gait: legs swing with distance travelled, so idle mobs stand still.
+    const moved = Math.hypot(m.x - v.lx, m.z - v.lz);
+    v.lx = m.x;
+    v.lz = m.z;
+    const flyer = FLYERS.has(m.kind);
+    if (flyer || m.kind === "slime" || m.kind === "frog") {
+      v.gait = elapsed * (m.kind === "slime" ? 6 : 8) + (m.phase ?? 0);
+      v.amp = 1;
+    } else if (moved < 1.5) {
+      v.gait += moved * 3.3;
+      const speed = dt > 0 ? moved / dt : 0;
+      v.amp += (Math.min(1, speed / 2.6) - v.amp) * Math.min(1, dt * 10);
+    }
+    const stride = Math.sin(v.gait);
+    const idle = Math.sin(elapsed * 1.7 + (m.phase ?? 0)) * 0.05 * (1 - v.amp);
+    for (let i = 0; i < m.legs.length; i++) {
+      const part = m.legs[i];
+      if (!part) continue;
+      const arm = i >= 2;
+      part.rotation.x = stride * (i % 2 === 0 ? 0.62 : -0.62) * v.amp + (arm ? idle : 0);
+    }
+    // Hurt flash: hot red on every plastic part, fading out.
+    if (v.hurtT > 0) {
+      v.hurtT = Math.max(0, v.hurtT - dt);
+      const k = v.hurtT / 0.3;
+      const r = Math.round(0xb0 * k);
+      const g = Math.round(0x14 * k);
+      for (const e of v.mats) e.mat.emissive.setRGB(r / 255, g / 255, g / 255);
+      if (v.hurtT === 0) {
+        for (const e of v.mats) {
+          const keepCharge = m.kind === "creeper" && m.charged && e.mat === m.bodyMat;
+          e.mat.emissive.setHex(keepCharge ? 0x7ee0ff : e.base);
+        }
+      }
+      // Recoil squash on the first frames of a hit.
+      const sq = 1 - 0.08 * Math.sin(Math.min(1, (0.3 - v.hurtT) / 0.15) * Math.PI);
+      const base = m.size && m.kind === "slime" ? m.size : m.baby && m.baby > 0 ? 0.45 : 1;
+      m.mesh.scale.set(base * (2 - sq), base * sq, base * (2 - sq));
+    } else if (m.mesh.scale.y !== m.mesh.scale.x) {
+      m.mesh.scale.y = m.mesh.scale.x;
+    }
+    // Keep the contact shadow on the ground while the body bounces.
+    if (v.blob) v.blob.position.y = 0.012 - bounce / (m.mesh.scale.y || 1);
+    // Floating health bar after a hit.
+    if (v.barT > 0) {
+      v.barT -= dt;
+      if (!v.bar) {
+        const bg = new THREE.Sprite(barBgMat);
+        const fill = new THREE.Sprite(barMats.hi);
+        bg.center.set(0.5, 0.5);
+        fill.center.set(0, 0.5);
+        bg.renderOrder = 5;
+        fill.renderOrder = 6;
+        scene.add(bg, fill);
+        v.bar = { bg, fill };
+      }
+      const frac = Math.max(0, Math.min(1, m.hp / v.hpMax));
+      // Shrink when close so a point-blank bar never covers the crosshair.
+      const camD = Math.hypot(camera.position.x - m.x, camera.position.z - m.z);
+      const W = 0.82 * Math.max(0.42, Math.min(1, camD / 4));
+      const top = m.y + (settings.studs ? STUD_H : 0) + v.h * (m.mesh.scale.y || 1) + 0.32;
+      v.bar.bg.position.set(m.x, top, m.z);
+      v.bar.bg.scale.set(W + 0.06, 0.13 * (W / 0.82), 1);
+      // Left-anchor the fill along the camera's right vector.
+      const rx = Math.cos(camera.rotation.y);
+      const rz = -Math.sin(camera.rotation.y);
+      v.bar.fill.position.set(m.x - rx * (W / 2), top, m.z - rz * (W / 2));
+      v.bar.fill.scale.set(Math.max(0.001, W * frac), 0.075 * (W / 0.82), 1);
+      v.bar.fill.material = frac > 0.6 ? barMats.hi : frac > 0.3 ? barMats.mid : barMats.lo;
+      const fade = Math.min(1, v.barT / 0.5);
+      v.bar.bg.material.opacity = 0.78 * fade;
+      v.bar.fill.visible = fade > 0.05;
+      if (v.barT <= 0) dropBar(v);
+    }
+  }
+
+  /** Death: the figure topples, flashes, then pops into a puff of studs. */
+  function topple(m: Mob) {
+    const v = m.vis;
+    if (v) {
+      dropBar(v);
+      if (v.blob) v.blob.visible = false;
+    }
+    if (m.mesh.parent !== scene || reduceMotion) {
+      scene.remove(m.mesh);
+      return;
+    }
+    const mats: THREE.Material[] = [];
+    m.mesh.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const list = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const mat of list) {
+        const std = mat as THREE.MeshStandardMaterial;
+        if (std.emissive) std.emissive.setHex(0x8a1010);
+        mats.push(mat);
+      }
+    });
+    corpses.push({ mesh: m.mesh, t: 0, x: m.x, y: m.y, z: m.z, mats });
+    if (corpses.length > 24) scene.remove(corpses.shift()!.mesh);
+  }
+
+  function tickCorpses(dt: number) {
+    for (let i = corpses.length - 1; i >= 0; i--) {
+      const c = corpses[i];
+      c.t += dt;
+      const fall = Math.min(1, c.t / 0.38);
+      c.mesh.rotation.z = (1 - (1 - fall) * (1 - fall)) * (Math.PI / 2) * 0.92;
+      const base = (c.mesh.userData.baseScale ??= c.mesh.scale.x) as number;
+      if (c.t > 0.55) c.mesh.scale.setScalar(base * Math.max(0.001, 1 - (c.t - 0.55) / 0.3));
+      if (c.t > 0.85) {
+        burst(c.x, c.y + 0.5, c.z, "#f4f1ea", 10);
+        burst(c.x, c.y + 0.5, c.z, "#d8d2c4", 6);
+        scene.remove(c.mesh);
+        corpses.splice(i, 1);
+      }
+    }
+  }
 
   function wantsShadow(obj: THREE.Object3D) {
     let cur: THREE.Object3D | null = obj;
@@ -1093,6 +1400,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           mob.bodyMat = mesh.material as THREE.MeshLambertMaterial;
         }
       });
+      // Materials were swapped: the hurt-flash list must be rebuilt.
+      if (mob.vis) {
+        mob.vis.hurtT = 0;
+        mob.vis.matsFor = null;
+      }
     }
   }
 
@@ -1114,6 +1426,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let flash = 0;
   let invuln = 0;
   let hurtAgo = 10;
+  let saveWarned = 0;
+  let beganAt = 0;
   let drownTick = 0;
   let saveDirty = false;
   let saveAcc = 0;
@@ -1197,6 +1511,14 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       studs: settings.studs,
       realistic: settings.realistic,
       quality: settings.quality,
+      third: settings.third,
+      upscale: settings.upscale,
+      sharpness: settings.sharpness,
+      fov: settings.fov,
+      showFps: settings.showFps,
+      music: settings.music,
+      sfx: settings.sfx,
+      haptics: settings.haptics,
       mods: { ...settings.mods },
     });
   }
@@ -1327,6 +1649,14 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const knownSpells = spellsFor(skills);
     hud.spell = knownSpells.length ? knownSpells[spellIx % knownSpells.length].name : "";
     hud.spellsOn = settings.mods.spells;
+    hud.hurtDir = creative ? 0 : Math.max(0, 1 - hurtAgo / 0.55);
+    if (phase === "play" && performance.now() - beganAt < 15000) {
+      const pcx = Math.floor(player.x / CS);
+      const pcz = Math.floor(player.z / CS);
+      let ready = 0;
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (meshes.has(pcx + dx + "," + (pcz + dz))) ready++;
+      hud.loading = ready >= 9 ? 0 : 1 - ready / 9;
+    } else hud.loading = 0;
     pub.phase = phase;
     pub.hasSave = hasSaveFlag;
   }
@@ -1462,7 +1792,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   }
 
   function clearMobs() {
-    for (const m of mobs) scene.remove(m.mesh);
+    for (const m of mobs) {
+      scene.remove(m.mesh);
+      if (m.vis) dropBar(m.vis);
+    }
+    for (const c of corpses) scene.remove(c.mesh);
+    corpses.length = 0;
     mobs.length = 0;
     for (const s of shots) scene.remove(s.mesh);
     shots.length = 0;
@@ -2891,20 +3226,38 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     remotes.clear();
   }
 
-  function startOnline(hosting: boolean) {
+  // In-game text prompt. window.prompt broke pointer lock, froze the frame loop and
+  // looked like a browser error on phones.
+  let askResolve: ((v: string | null) => void) | null = null;
+  function askText(title: string, hint: string, value = ""): Promise<string | null> {
+    if (askResolve) askResolve(null);
+    hud.ask = { title, hint, value };
+    if (document.pointerLockElement === canvas) {
+      suppressUnlock = true;
+      document.exitPointerLock();
+    }
+    keys.clear();
+    mouseMine = mousePlace = false;
+    emit();
+    return new Promise((res) => {
+      askResolve = res;
+    });
+  }
+
+  async function startOnline(hosting: boolean) {
     if (mp.connected) return say("Already online — leave first");
     if (!mpName) {
-      mpName = (window.prompt("Your brick name", "Brick") ?? "").trim();
+      mpName = ((await askText("Your brick name", "Shown above your head to other players", "Brick")) ?? "").trim().slice(0, 16);
       if (!mpName) return;
     }
     let room = "";
     if (hosting) {
       room = Math.random().toString(36).slice(2, 8).toUpperCase();
     } else {
-      room = (window.prompt("Room code", "") ?? "").trim().toUpperCase();
+      room = ((await askText("Room code", "Six letters, from the host's pause menu")) ?? "").trim().toUpperCase();
       if (!room) return;
     }
-    const url = (window.prompt("Relay address", "ws://127.0.0.1:8799") ?? "").trim();
+    const url = ((await askText("Relay address", "The relay server everyone connects through", "ws://127.0.0.1:8799")) ?? "").trim();
     if (!url) return;
     mp.connect(url, room, mpName);
     say(hosting ? "Hosting room " + room + " — share the code" : "Joining room " + room);
@@ -3709,11 +4062,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
               m.byPlayerT = 6;
               addRep(repKeyFor(m.homeX ?? m.x, m.homeZ ?? m.z), m.kind === "villager" ? -3 : -2);
             }
-            if (s.punch) {
-              const l = Math.hypot(s.vx, s.vz) || 1;
-              m.x += (s.vx / l) * (0.4 + 0.5 * s.punch);
-              m.z += (s.vz / l) * (0.4 + 0.5 * s.punch);
-            }
+            if (s.punch && m.kind !== "shulker" && m.kind !== "dragon") shove(m, s.vx, s.vz, 0.4 + 0.5 * s.punch);
             if (m.kind === "enderman" || m.kind === "bee") m.mad = true;
             if (s.flame) m.burn = Math.max(m.burn ?? 0, 4);
             if (m.hp <= 0) killMob(m);
@@ -4330,15 +4679,17 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   function interactMob(mob: Mob) {
     const held = hotbar[slot];
     if (held === ID.NameTag && mob.kind !== "boat" && mob.kind !== "cart") {
-      const name = (window.prompt("Name this brick friend", mob.name ?? "") ?? "").trim().slice(0, 20);
-      if (name) {
+      void askText("Name this brick friend", "A named mob never despawns", mob.name ?? "").then((answer) => {
+        const name = (answer ?? "").trim().slice(0, 20);
+        if (!name || mob.dead) return;
+        if (!creative && (inv[ID.NameTag] ?? 0) <= 0) return say("Need a name tag");
         mob.name = name;
         const plate = nameSprite(name);
         plate.position.set(0, 2.25, 0);
         mob.mesh.add(plate);
         if (!creative) spend(ID.NameTag, 1);
         say("Named " + name + " — it will stay");
-      }
+      });
       return;
     }
     if (mob.kind === "sheep" && held === ID.Shears && !(mob.sheared && mob.sheared > 0)) {
@@ -4492,8 +4843,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   }
 
   function killMob(mob: Mob) {
+    if (mob.dead) return;
     mob.dead = true;
-    scene.remove(mob.mesh);
+    topple(mob);
     if ((mob.byPlayerT ?? 0) > 0) {
       if (mob.kind === "villager") addRep(repKeyFor(mob.homeX ?? mob.x, mob.homeZ ?? mob.z), -20);
       else if (mob.kind === "golem") addRep(repKeyFor(mob.homeX ?? mob.x, mob.homeZ ?? mob.z), -10);
@@ -4844,6 +5196,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
 
   function updateMobs(dt: number) {
     const baseDt = dt;
+    tickCorpses(dt);
     const ang = worldTime * Math.PI * 2;
     const night = Math.sin(ang) < -0.12;
     if (phase === "play" && !creative && night && !settings.mods.peaceful) {
@@ -4980,6 +5333,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     for (const m of mobs) {
       if (m.dead) continue;
       m.cool = Math.max(0, m.cool - dt);
+      if (m.hitCd) m.hitCd = Math.max(0, m.hitCd - dt);
       const dx = player.x - m.x;
       const dz = player.z - m.z;
       const d = Math.hypot(dx, dz);
@@ -5039,7 +5393,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         if ((m.mesh.userData.shadowOn ?? true) !== wantShadow) {
           m.mesh.userData.shadowOn = wantShadow;
           m.mesh.traverse((o) => {
-            if ((o as THREE.Mesh).isMesh) o.castShadow = wantShadow;
+            if ((o as THREE.Mesh).isMesh && !o.userData.noShadow) o.castShadow = wantShadow;
           });
         }
       }
@@ -5497,13 +5851,17 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         m.fuse = Math.max(0, m.fuse - dt * 2);
         if (m.bodyMat) m.bodyMat.emissive.setHex(m.charged ? 0x7ee0ff : 0x000000);
       }
-      const stride = Math.sin(elapsed * (m.kind === "slime" ? 6 : 8) + (m.phase ?? 0));
-      for (let i = 0; i < m.legs.length; i++) {
-        const part = m.legs[i];
-        if (!part) continue;
-        part.rotation.x = stride * (i % 2 === 0 ? 0.55 : -0.55);
-      }
-      const bounce = m.kind === "slime" ? Math.abs(stride) * (0.18 + (m.size ?? 1) * 0.22) : m.kind === "frog" ? Math.abs(stride) * 0.2 : Math.abs(stride) * 0.04;
+      const vis = visOf(m);
+      const stride = Math.sin(vis.gait);
+      const bounce =
+        m.kind === "slime"
+          ? Math.abs(stride) * (0.18 + (m.size ?? 1) * 0.22)
+          : m.kind === "frog"
+            ? Math.abs(stride) * 0.2
+            : FLYERS.has(m.kind)
+              ? Math.abs(stride) * 0.04
+              : Math.abs(Math.sin(vis.gait)) * 0.05 * vis.amp;
+      mobVisuals(m, dt, bounce);
       m.mesh.rotation.y = m.yaw;
       m.mesh.position.set(m.x, m.y + (settings.studs ? STUD_H : 0) + bounce, m.z);
     }
@@ -5531,6 +5889,37 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         }
       }
     }
+    // Nothing walks into the player's body (it hid the mob from the crosshair).
+    for (const a of mobs) {
+      if (a.dead || a === mount || a.kind === "boat" || a.kind === "cart" || a.kind === "shulker" || a.kind === "dragon") continue;
+      if (Math.abs(a.y - player.y) > 1.6) continue;
+      const px = a.x - player.x;
+      const pz = a.z - player.z;
+      const d2 = px * px + pz * pz;
+      if (d2 >= 0.42 || d2 < 1e-6) continue;
+      const dist = Math.sqrt(d2);
+      const k = (0.65 - dist) / dist;
+      const nx = a.x + px * k;
+      const nz = a.z + pz * k;
+      const fy = Math.floor(a.y + 0.5);
+      if (!solidAt(Math.floor(nx), fy, Math.floor(nz))) {
+        a.x = nx;
+        a.z = nz;
+      }
+    }
+    // Compact: dead mobs used to stay in the list forever, so every despawned
+    // night mob was iterated (and filtered) each frame for the rest of the session.
+    let w = 0;
+    for (let i = 0; i < mobs.length; i++) {
+      const m = mobs[i];
+      if (m.dead) {
+        if (m.vis) dropBar(m.vis);
+        if (mount === m) mount = null;
+        continue;
+      }
+      mobs[w++] = m;
+    }
+    mobs.length = w;
   }
 
   function packSave(): SaveV1 {
@@ -5604,14 +5993,21 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
 
   function saveWorld() {
     if (!sessionStarted) return;
-    hasSaveFlag = writeWorld(
+    const ok = writeWorld(
       { id: worldId || "main", seed, seedText, flat, creative, updated: Date.now() },
       packSave(),
     );
+    if (ok) hasSaveFlag = true;
+    else if (performance.now() - saveWarned > 60000) {
+      // Used to fail silently when browser storage filled up — progress just vanished.
+      saveWarned = performance.now();
+      say("Couldn't save — browser storage is full. Drop an old world from the title screen.", 6000);
+    }
     saveDirty = false;
   }
 
   function beginPlay() {
+    beganAt = performance.now();
     phase = "play";
     player.vx = player.vy = player.vz = 0;
     if (!sessionStarted) {
@@ -5619,7 +6015,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       player.pitch = -0.28;
     }
     sessionStarted = true;
-    if (!touchMode) void canvas.requestPointerLock().catch(() => {});
+    if (!touchMode) lockPointer();
     say(
       (creative
         ? "Creative. The land does not end. Same seed, same bricks."
@@ -5895,7 +6291,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
                                       ? "Boat"
                                       : "Cart";
       if (sample.first && sample.place && !prevPlace) interactMob(mob);
-      if (sample.mine && mob.cool <= 0 && mob.kind !== "boat" && mob.kind !== "cart") {
+      // Player hits are gated by the mob's own hurt cooldown (hitCd), not by its
+      // attack cooldown: sharing one timer meant a mob biting you every second
+      // reset it just before your swing was checked — it could never be hit back.
+      if (sample.mine && (mob.hitCd ?? 0) <= 0 && mob.kind !== "boat" && mob.kind !== "cart") {
         const blade = def(hotbar[slot]);
         let dmg = blade.tool === "sword" ? 1 + blade.tier * 2 : 1;
         if (strengthT > 0) dmg += 2;
@@ -5928,12 +6327,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         if (mob.kind === "enderman" || mob.kind === "bee") mob.mad = true;
         if (blade.tool === "sword" && enchLvl(hotbar[slot], "fire") > 0) mob.burn = Math.max(mob.burn ?? 0, 2 + enchLvl(hotbar[slot], "fire"));
         if (blade.tool === "sword" || blade.tool === "bow") wearHeld();
-        mob.cool = 0.42;
+        mob.hitCd = 0.42;
+        mob.cool = Math.max(mob.cool, 0.42); // a hit still staggers its next bite
         mob.fuse = Math.max(0, mob.fuse - 0.25);
-        const len = Math.hypot(player.x - mob.x, player.z - mob.z) || 1;
         const kb = 0.4 + (blade.tool === "sword" ? enchLvl(hotbar[slot], "knockback") * 0.3 : 0);
-        mob.x += ((mob.x - player.x) / len) * kb;
-        mob.z += ((mob.z - player.z) / len) * kb;
+        if (mob.kind !== "shulker" && mob.kind !== "dragon") shove(mob, mob.x - player.x, mob.z - player.z, kb);
         audio.hit();
         swing = 1;
         if (mob.hp <= 0) killMob(mob);
@@ -6095,7 +6493,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     boss: ["./music/music-boss-1.mp3", "./music/music-boss-2.mp3", "./music/music-boss-3.mp3", "./music/music-boss-4.mp3"],
   };
   const musicEl = new Audio();
-  musicEl.volume = 0.45;
+  const musicBase = () => 0.45 * settings.music;
+  musicEl.volume = musicBase();
   musicEl.preload = "auto";
   let musicArmed = false; // browsers refuse audio before the first gesture
   let musicGap = 4; // first track starts soon after the first tap
@@ -6133,7 +6532,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     return best;
   }
   function musicTick(dt: number) {
-    if (!settings.sound) {
+    if (!musicEl.loop && Math.abs(musicEl.volume - musicBase()) > 0.01) musicEl.volume = musicBase();
+    if (!settings.sound || settings.music <= 0) {
       if (!musicEl.paused) musicEl.pause();
       return;
     }
@@ -6141,14 +6541,14 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (jb) {
       const src = DISC_TRACKS[jb.disc];
       musicEl.loop = true;
-      musicEl.volume = 0.45 * Math.max(0.12, 1 - jb.dist / 46);
+      musicEl.volume = musicBase() * Math.max(0.12, 1 - jb.dist / 46);
       if (!musicEl.src.endsWith(src.slice(1))) musicEl.src = src;
       if (musicEl.paused && musicArmed) musicEl.play().catch(() => {});
       return;
     }
     if (musicEl.loop) {
       musicEl.loop = false;
-      musicEl.volume = 0.45;
+      musicEl.volume = musicBase();
       if (!musicEl.paused) musicEl.pause();
       musicGap = 2;
     }
@@ -6321,7 +6721,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       camera.rotation.y = player.yaw;
       camera.rotation.x = player.pitch;
     }
-    camera.fov = THREE.MathUtils.lerp(camera.fov, keys.has("ControlLeft") && phase === "play" && !flying ? 80 : 72, 0.1);
+    const baseFov = settings.fov;
+    camera.fov = THREE.MathUtils.lerp(camera.fov, keys.has("ControlLeft") && phase === "play" && !flying ? baseFov + 8 : baseFov, 0.1);
     camera.updateProjectionMatrix();
     if (phase === "title") {
       if (!reduceMotion) orbit += dt * 0.15;
@@ -6405,7 +6806,26 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let viewW = 0;
   let viewH = 0;
   let viewPR = 0;
+  /** Dynamic resolution: trims the internal render scale when frames run long (auto upscale only). */
   let prScale = 1;
+  let idleTick = 0;
+  const upscaler = new Upscaler(renderer);
+  function renderScale() {
+    const base = upscaleScale(settings.upscale, touchMode, window.devicePixelRatio || 1);
+    return settings.upscale === "auto" ? base * prScale : base;
+  }
+  function msaaSamples() {
+    if (settings.quality === "performance") return 0;
+    if (settings.quality === "high") return 4;
+    return touchMode ? 2 : 4;
+  }
+  function present() {
+    upscaler.aces = renderer.toneMapping === THREE.ACESFilmicToneMapping;
+    upscaler.exposure = renderer.toneMappingExposure;
+    upscaler.sharpness = settings.sharpness;
+    upscaler.path = touchMode && settings.quality === "performance" ? "fast" : "easu";
+    upscaler.render(scene, camera);
+  }
   // Quality ladder (Philippe's law: no lag on the A54). Manual modes
   // fix the caps; "auto" starts at the balanced profile on touch and
   // steps down under sustained load - pixel ratio, then the shadow
@@ -6416,10 +6836,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let fpsShown = 0;
   function qualityCaps(): { pr: number; shadows: boolean; radius: number } {
     const q = settings.quality;
+    // pr is the OUTPUT (display) density. The 3D scene itself renders at
+    // pr × renderScale() and the upscaler reconstructs it to this density.
     if (q === "performance") return { pr: touchMode ? 1.25 : 1.5, shadows: false, radius: 5 };
-    if (q === "balanced") return { pr: touchMode ? 1.5 : 1.75, shadows: qLevel < 2, radius: 6 };
-    if (q === "high") return { pr: touchMode ? 1.75 : 2, shadows: true, radius: 99 };
-    if (touchMode) return { pr: 1.5, shadows: qLevel < 2, radius: qLevel >= 3 ? 5 : 6 };
+    if (q === "balanced") return { pr: touchMode ? 1.75 : 1.75, shadows: qLevel < 2, radius: 6 };
+    if (q === "high") return { pr: touchMode ? 2 : 2, shadows: true, radius: 99 };
+    if (touchMode) return { pr: 1.75, shadows: qLevel < 2, radius: qLevel >= 3 ? 5 : 6 };
     return { pr: 2, shadows: qLevel < 2, radius: 99 };
   }
   function applyQuality() {
@@ -6451,15 +6873,15 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         if (qBad >= 2 && qLevel < 3) { qLevel++; qBad = 0; applyQuality(); }
         else if (qGood >= 4 && qLevel > 0) { qLevel--; qGood = 0; applyQuality(); }
       }
-      if (avg > 0.024 && prScale > 0.6) prScale = Math.max(0.6, prScale - 0.15);
-      else if (avg < 0.0125 && prScale < 1) prScale = Math.min(1, prScale + 0.1);
+      if (avg > 0.024 && prScale > 0.7) prScale = Math.max(0.7, prScale - 0.1);
+      else if (avg < 0.0125 && prScale < 1) prScale = Math.min(1, prScale + 0.05);
       fpsAcc = 0;
       fpsFrames = 0;
       fpsWindow = 0;
     }
     const w = canvas.clientWidth || 1;
     const h = canvas.clientHeight || 1;
-    const pr = Math.min(window.devicePixelRatio || 1, qualityCaps().pr) * prScale;
+    const pr = Math.min(window.devicePixelRatio || 1, qualityCaps().pr);
     if (w !== viewW || h !== viewH || pr !== viewPR) {
       viewW = w;
       viewH = h;
@@ -6468,6 +6890,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       renderer.setSize(w, h, false);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
+    }
+    {
+      const ow = renderer.domElement.width;
+      const oh = renderer.domElement.height;
+      upscaler.setSize(ow, oh, renderScale(), msaaSamples());
+      const res = upscaler.native ? ow + "×" + oh + " native" : upscaler.inW + "×" + upscaler.inH + " → " + ow + "×" + oh;
+      if (hud.renderRes !== res) hud.renderRes = res;
     }
 
     player.yaw -= lookDx * 0.0022 * settings.sens;
@@ -6604,7 +7033,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     updateParticles(dt);
     renderCamera(dt);
     stream(phase === "title" ? 3 : 2);
-    renderer.render(scene, camera);
+    // Behind a pause/inventory panel the world barely moves: redraw at a quarter
+    // rate (the canvas keeps its last image), saving battery and GPU for the UI.
+    const idle = phase === "pause" || phase === "inventory" || phase === "dead";
+    if (!idle || idleTick++ % 4 === 0) present();
 
     if (sessionStarted && phase === "play") {
       saveAcc += dt;
@@ -6640,13 +7072,16 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       keys.add(e.code);
       if (e.code === "Escape") {
         e.preventDefault();
+        if (hud.ask) {
+          api.answer(null);
+          return;
+        }
         if (phase === "inventory") {
-          phase = "play";
-          emit();
+          api.toggleInventory();
         } else if (phase === "pause") {
           phase = "play";
           player.vx = player.vz = 0;
-          if (!touchMode) void canvas.requestPointerLock().catch(() => {});
+          if (!touchMode) lockPointer();
           emit();
         } else if (phase === "play" && document.pointerLockElement !== canvas) {
           phase = "pause";
@@ -6664,16 +7099,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         }
         emit();
       }
-      if (e.code === "KeyE" && (phase === "play" || phase === "inventory")) {
-        if (phase === "inventory") phase = "play";
-        else {
-          const locked = document.pointerLockElement === canvas;
-          if (locked) suppressUnlock = true;
-          phase = "inventory";
-          player.vx = player.vz = 0;
-          if (locked) document.exitPointerLock();
-        }
-        emit();
+      if (e.code === "KeyE" && (phase === "play" || phase === "inventory") && !hud.ask && !hud.signEdit) {
+        api.toggleInventory();
       }
       if (e.code === "F5" && phase === "play") {
         settings.third = !settings.third;
@@ -6702,15 +7129,33 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         keys.clear();
         mouseMine = false;
         mousePlace = false;
+        touch.mine = touch.place = touch.jump = false;
+        touch.moveX = touch.moveY = 0;
         if (sessionStarted) saveWorld();
+        // Phones keep <audio> playing in the background; and a hidden tab should
+        // come back to a pause menu, not to a mob mid-swing.
+        if (!musicEl.paused) musicEl.pause();
+        audio.suspend();
+        if (phase === "play") {
+          phase = "pause";
+          emit();
+        }
       }
+    },
+    opt,
+  );
+  // Closing the tab or swiping the app away: write the world one last time.
+  window.addEventListener(
+    "pagehide",
+    () => {
+      if (sessionStarted) saveWorld();
     },
     opt,
   );
   window.addEventListener(
     "resize",
     () => {
-      touchMode = window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 900;
+      touchMode = isTouchDevice();
     },
     opt,
   );
@@ -6720,7 +7165,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     (e) => {
       if (phase !== "play" || touchMode) return;
       if (document.pointerLockElement !== canvas) {
-        void canvas.requestPointerLock().catch(() => {});
+        lockPointer();
         return;
       }
       if (e.button === 0) mouseMine = true;
@@ -6835,6 +7280,14 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       return site ? { x: site.x, y: site.y, z: site.z } : null;
     },
     getChunks: () => world.chunks.size,
+    hold: (on: boolean) => renderer.setAnimationLoop(on ? null : frame),
+    getRes: () => hud.renderRes,
+    getMobFx: () =>
+      mobs
+        .filter((m) => !m.dead && Math.hypot(m.x - player.x, m.z - player.z) < 8)
+        .map((m) => ({ kind: m.kind, hp: m.hp, hurt: m.vis?.hurtT ?? 0, bar: !!m.vis?.bar, amp: m.vis?.amp ?? 0, x: m.x, y: m.y, z: m.z, cd: m.hitCd ?? 0, cool: m.cool })),
+    getCorpses: () => corpses.length,
+    getMobCount: () => mobs.length,
     spawnMob: (kind: string, dx = 6, dz = 0) => {
       const kinds = ["sheep", "creeper", "cow", "walker", "pig", "chicken", "spider", "skelly", "villager", "ghast", "dragon", "horse", "phantom", "piglin", "frog", "fox", "crab", "wisp", "slime", "wolf", "golem", "wither", "enderman", "blaze", "witch", "bee", "cat", "squid", "bat", "drowned", "husk", "stray", "goat", "axolotl", "parrot", "guardian", "shulker", "pillager", "vindicator", "evoker", "vex", "ravager"];
       if (!kinds.includes(kind)) return false;
@@ -7030,7 +7483,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     resume() {
       if (phase !== "pause") return;
       phase = "play";
-      if (!touchMode) void canvas.requestPointerLock().catch(() => {});
+      if (!touchMode) lockPointer();
       emit();
     },
     quit() {
@@ -7047,12 +7500,19 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       hunger = 20;
       oxygen = 10;
       flying = false;
+      fireT = 0;
+      poisonT = 0;
+      slowT = 0;
+      mount = null;
+      invuln = 2;
+      flash = 0;
+      shake = 0;
       player.x = spawnPoint.x;
       player.y = spawnPoint.y + 0.2;
       player.z = spawnPoint.z;
       player.vx = player.vy = player.vz = 0;
       phase = "play";
-      if (!touchMode) void canvas.requestPointerLock().catch(() => {});
+      if (!touchMode) lockPointer();
       emit();
     },
     toggleInventory() {
@@ -7063,6 +7523,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         }
         panel = "bag";
         phase = "play";
+        audio.uiClose();
+        if (!touchMode) lockPointer();
         emit();
         return;
       }
@@ -7073,6 +7535,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       phase = "inventory";
       player.vx = player.vz = 0;
       if (locked) document.exitPointerLock();
+      audio.uiOpen();
       emit();
     },
     setSlot(i) {
@@ -7458,11 +7921,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       emit();
     },
     hostOnline() {
-      startOnline(true);
+      void startOnline(true);
       emit();
     },
     joinOnline() {
-      startOnline(false);
+      void startOnline(false);
       emit();
     },
     leaveOnline() {
@@ -7590,7 +8053,61 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     },
     setThird(on) {
       settings.third = on;
+      persistSettings();
       emit();
+    },
+    setUpscale(u) {
+      settings.upscale = u;
+      prScale = 1;
+      persistSettings();
+      emit();
+    },
+    setSharpness(n) {
+      settings.sharpness = Math.max(0, Math.min(1, n));
+      persistSettings();
+      emit();
+    },
+    setFov(n) {
+      settings.fov = Math.max(55, Math.min(100, Math.round(n)));
+      persistSettings();
+      emit();
+    },
+    setShowFps(on) {
+      settings.showFps = on;
+      persistSettings();
+      emit();
+    },
+    setMusic(n) {
+      settings.music = Math.max(0, Math.min(1, n));
+      persistSettings();
+      emit();
+    },
+    setSfx(n) {
+      settings.sfx = Math.max(0, Math.min(1, n));
+      audio.setVolume(settings.sfx);
+      persistSettings();
+      emit();
+    },
+    setHaptics(on) {
+      settings.haptics = on;
+      persistSettings();
+      emit();
+    },
+    answer(text) {
+      const resolve = askResolve;
+      askResolve = null;
+      hud.ask = null;
+      if (phase === "play" && !touchMode) lockPointer();
+      emit();
+      resolve?.(text);
+    },
+    uiSound(kind) {
+      if (!settings.sound) return;
+      audio.unlock();
+      if (kind === "hover") audio.uiHover();
+      else if (kind === "click") audio.uiClick();
+      else if (kind === "open") audio.uiOpen();
+      else audio.uiClose();
     },
     deleteSave() {
       if (worldId) deleteWorld(worldId);
@@ -7621,6 +8138,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       running = false;
       renderer.setAnimationLoop(null);
       ac.abort();
+      // Music kept playing after the game unmounted (route change, hot reload).
+      musicEl.pause();
+      musicEl.removeAttribute("src");
+      audio.suspend();
+      upscaler.dispose();
       timer.dispose();
       for (const key of [...meshes.keys()]) dropChunk(key);
       atlas.dispose();

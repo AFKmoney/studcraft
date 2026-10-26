@@ -1,57 +1,941 @@
-import { useEffect, useRef, useState } from "react";
-import { Drumstick, Droplets, Heart } from "lucide-react";
+import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import { BLOCKS, CATALOG, COLORS, ID, def } from "./blocks";
-import type { EnterKind, GameApi, Phase } from "./game";
+import type { EnterKind, GameApi, Phase, Quality, Upscale } from "./game";
 import { RECIPES, type Recipe } from "./recipes";
 import { CODEX, PERKS } from "./ranks";
 import { ItemIcon } from "./icons";
 import { SKILLS } from "./skills";
 import type { WorldSlot } from "./save";
+import {
+  BackIcon,
+  BagIcon,
+  BookIcon,
+  BoltIcon,
+  BubbleIcon,
+  CheckIcon,
+  CloseIcon,
+  CloudIcon,
+  ControllerIcon,
+  CopyIcon,
+  DiceIcon,
+  ExitIcon,
+  EyeIcon,
+  FoodIcon,
+  GearIcon,
+  GlobeIcon,
+  HammerIcon,
+  HandIcon,
+  HeartIcon,
+  JumpIcon,
+  LockIcon,
+  MedalIcon,
+  MoonIcon,
+  PauseIcon,
+  PickIcon,
+  PlayIcon,
+  PlusIcon,
+  RainIcon,
+  ScrollIcon,
+  ShieldIcon,
+  SoundIcon,
+  StarIcon,
+  SunIcon,
+  TrashIcon,
+} from "./ui-icons";
+
+const VERSION = "4.0";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Root: boots the engine, catches crashes, watches for a lost GPU context.
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function GameView() {
+  return (
+    <CrashGuard>
+      <GameHost />
+    </CrashGuard>
+  );
+}
+
+class CrashGuard extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("Studcraft crashed", error, info.componentStack);
+  }
+  render() {
+    if (this.state.error) {
+      return <FatalScreen title="Something cracked" detail={this.state.error.message} />;
+    }
+    return this.props.children;
+  }
+}
+
+function FatalScreen({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="sc-root sc-fatal" role="alert">
+      <div className="sc-panel sc-fatal-card">
+        <Logo small />
+        <h2 className="sc-h2">{title}</h2>
+        <p className="sc-muted">Your world is saved every few seconds, so reloading picks up where you left off.</p>
+        <code className="sc-code">{detail}</code>
+        <button className="sc-btn sc-btn-primary" onClick={() => window.location.reload()}>
+          Reload
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GameHost() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const pending = useRef<{ kind: EnterKind; seed: string; id?: string } | null>(null);
   const [api, setApi] = useState<GameApi | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [gpuLost, setGpuLost] = useState(false);
 
   useEffect(() => {
     let dead = false;
     let mounted: GameApi | null = null;
-    void import("./game")
-      .then(({ mount }) => {
-        if (dead || !canvasRef.current) return;
-        mounted = mount(canvasRef.current);
-        if (pending.current) {
-          mounted.setSeed(pending.current.seed);
-          mounted.enter(pending.current.kind, pending.current.id);
-          pending.current = null;
-        }
-        setApi(mounted);
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "The brick world failed to start");
-      });
+    const canvas = canvasRef.current;
+    const lost = (e: Event) => {
+      e.preventDefault();
+      setGpuLost(true);
+    };
+    const restored = () => setGpuLost(false);
+    canvas?.addEventListener("webglcontextlost", lost);
+    canvas?.addEventListener("webglcontextrestored", restored);
+    if (!supportsWebGL2()) {
+      setError("This browser can't run WebGL 2, which the brick world needs. Try an up-to-date Chrome, Edge, Firefox or Safari.");
+    } else {
+      void import("./game")
+        .then(({ mount }) => {
+          if (dead || !canvasRef.current) return;
+          mounted = mount(canvasRef.current);
+          setApi(mounted);
+        })
+        .catch((err: unknown) => {
+          setError(err instanceof Error ? err.message : "The brick world failed to start");
+        });
+    }
     return () => {
       dead = true;
+      canvas?.removeEventListener("webglcontextlost", lost);
+      canvas?.removeEventListener("webglcontextrestored", restored);
       mounted?.destroy();
     };
   }, []);
 
-  function start(kind: EnterKind, seed = "", id?: string) {
-    if (api) {
-      api.setSeed(seed);
-      api.enter(kind, id);
-    } else pending.current = { kind, seed, id };
-  }
-
   return (
-    <div className="game-root" role="application" aria-label="Studcraft">
-      <canvas ref={canvasRef} className="world" />
-      {api ? (
+    <div className="sc-root game-root" role="application" aria-label="Studcraft">
+      <canvas ref={canvasRef} className="sc-world" />
+      <svg className="sc-defs" width="0" height="0" aria-hidden="true">
+        <defs>
+          <clipPath id="half-l">
+            <rect x="0" y="0" width="12" height="24" />
+          </clipPath>
+          <clipPath id="half-r">
+            <rect x="12" y="0" width="12" height="24" />
+          </clipPath>
+        </defs>
+      </svg>
+      {error ? (
+        <FatalScreen title="The world couldn't start" detail={error} />
+      ) : api ? (
         <Overlay game={api} />
       ) : (
-        <TitleScreen game={null} onEnter={start} booting error={error} />
+        <BootScreen />
       )}
+      {gpuLost && <FatalScreen title="Graphics paused" detail="The graphics driver reset (low memory or a backgrounded tab)." />}
+    </div>
+  );
+}
+
+function supportsWebGL2() {
+  try {
+    const c = document.createElement("canvas");
+    return !!c.getContext("webgl2");
+  } catch {
+    return false;
+  }
+}
+
+function BootScreen() {
+  return (
+    <div className="sc-boot">
+      <Logo />
+      <div className="sc-boot-bar">
+        <span />
+      </div>
+      <p className="sc-muted">Stacking the first bricks…</p>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared bits
+// ─────────────────────────────────────────────────────────────────────────────
+
+function Logo({ small = false }: { small?: boolean }) {
+  return (
+    <div className={small ? "sc-logo sc-logo-sm" : "sc-logo"} aria-label="Studcraft">
+      <div className="sc-logo-studs" aria-hidden="true">
+        {["#e8402f", "#f5c518", "#2f7fe0", "#36a852"].map((c) => (
+          <i key={c} style={{ background: c }} />
+        ))}
+      </div>
+      <h1 className="sc-logo-word">
+        <span>STUD</span>
+        <span className="sc-logo-craft">CRAFT</span>
+      </h1>
+    </div>
+  );
+}
+
+function useTouchUI() {
+  const [touch, setTouch] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia?.("(pointer: coarse)");
+    const fine = window.matchMedia?.("(any-pointer: fine)");
+    setTouch(!!mq?.matches || !fine?.matches);
+    const seen = (e: PointerEvent) => {
+      if (e.pointerType === "touch") setTouch(true);
+    };
+    window.addEventListener("pointerdown", seen, { passive: true });
+    return () => window.removeEventListener("pointerdown", seen);
+  }, []);
+  return touch;
+}
+
+/** Menu sounds by delegation: hover ticks and click clacks on every enabled button. */
+function useMenuSounds(game: GameApi) {
+  useEffect(() => {
+    let lastHover = 0;
+    let lastEl: Element | null = null;
+    const over = (e: PointerEvent) => {
+      if (e.pointerType !== "mouse") return;
+      const el = (e.target as Element | null)?.closest?.("button:not(:disabled), [role=tab], [role=switch]");
+      if (!el || el === lastEl || el.closest("[data-silent]")) return;
+      lastEl = el;
+      const now = performance.now();
+      if (now - lastHover < 45) return;
+      lastHover = now;
+      game.uiSound("hover");
+    };
+    const click = (e: MouseEvent) => {
+      const el = (e.target as Element | null)?.closest?.("button:not(:disabled), [role=tab], [role=switch]");
+      if (!el || el.closest("[data-silent]")) return;
+      game.uiSound("click");
+    };
+    document.addEventListener("pointerover", over, true);
+    document.addEventListener("click", click, true);
+    return () => {
+      document.removeEventListener("pointerover", over, true);
+      document.removeEventListener("click", click, true);
+    };
+  }, [game]);
+}
+
+function Screen({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <div className={"sc-screen " + className}>{children}</div>;
+}
+
+function MenuButton({
+  children,
+  onClick,
+  icon,
+  variant = "",
+  hint,
+  disabled,
+  autoFocus,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  icon?: ReactNode;
+  variant?: "" | "primary" | "danger" | "ghost" | "gold";
+  hint?: string;
+  disabled?: boolean;
+  autoFocus?: boolean;
+}) {
+  return (
+    <button className={"sc-btn sc-menu-btn" + (variant ? " sc-btn-" + variant : "")} onClick={onClick} disabled={disabled} autoFocus={autoFocus}>
+      {icon && <span className="sc-btn-ic">{icon}</span>}
+      <span className="sc-btn-label">
+        {children}
+        {hint && <small>{hint}</small>}
+      </span>
+    </button>
+  );
+}
+
+function PanelHead({ eyebrow, title, onBack, backLabel = "Back", right }: { eyebrow?: string; title: string; onBack?: () => void; backLabel?: string; right?: ReactNode }) {
+  return (
+    <header className="sc-panel-head">
+      {onBack && (
+        <button className="sc-icon-btn" onClick={onBack} aria-label={backLabel}>
+          <BackIcon size={22} />
+        </button>
+      )}
+      <div className="sc-panel-titles">
+        {eyebrow && <p className="sc-eyebrow">{eyebrow}</p>}
+        <h2 className="sc-h2">{title}</h2>
+      </div>
+      {right}
+    </header>
+  );
+}
+
+function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <button role="switch" aria-checked={on} aria-label={label} className={on ? "sc-switch on" : "sc-switch"} onClick={() => onChange(!on)}>
+      <i />
+    </button>
+  );
+}
+
+function Segmented<T extends string>({ value, options, onChange, label }: { value: T; options: { id: T; label: string }[]; onChange: (v: T) => void; label: string }) {
+  return (
+    <div className="sc-seg" role="radiogroup" aria-label={label}>
+      {options.map((o) => (
+        <button key={o.id} role="radio" aria-checked={value === o.id} className={value === o.id ? "on" : ""} onClick={() => onChange(o.id)}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Slider({ value, min, max, step, onChange, format, label }: { value: number; min: number; max: number; step: number; onChange: (v: number) => void; format: (v: number) => string; label: string }) {
+  const pct = ((value - min) / (max - min)) * 100;
+  return (
+    <div className="sc-slider">
+      <input type="range" min={min} max={max} step={step} value={value} aria-label={label} onChange={(e) => onChange(Number(e.target.value))} style={{ ["--pct" as string]: pct + "%" }} />
+      <output>{format(value)}</output>
+    </div>
+  );
+}
+
+function Row({ title, detail, children }: { title: string; detail?: string; children: ReactNode }) {
+  return (
+    <div className="sc-row">
+      <div className="sc-row-text">
+        <strong>{title}</strong>
+        {detail && <span>{detail}</span>}
+      </div>
+      <div className="sc-row-ctl">{children}</div>
+    </div>
+  );
+}
+
+function timeAgo(ms: number) {
+  const s = Math.max(0, (Date.now() - ms) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return Math.floor(s / 60) + " min ago";
+  if (s < 86400) return Math.floor(s / 3600) + " h ago";
+  const d = Math.floor(s / 86400);
+  return d === 1 ? "yesterday" : d + " days ago";
+}
+
+function modeOf(slot: WorldSlot) {
+  return slot.flat ? "Baseplate" : slot.creative ? "Creative" : "Survival";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Overlay router
+// ─────────────────────────────────────────────────────────────────────────────
+
+function Overlay({ game }: { game: GameApi }) {
+  const [, poke] = useState(0);
+  useEffect(() => game.subscribe(() => poke((n) => n + 1)), [game]);
+  useMenuSounds(game);
+  const touchUI = useTouchUI();
+  const phase: Phase = game.phase;
+  const hud = game.hud;
+
+  return (
+    <>
+      {phase === "title" && <MainMenu game={game} />}
+      {phase === "play" && !hud.hidden && <Hud game={game} touchUI={touchUI} />}
+      {phase === "play" && touchUI && <TouchControls game={game} />}
+      {phase === "play" && hud.signEdit && <SignEditor game={game} />}
+      {phase === "pause" && <PauseMenu game={game} />}
+      {phase === "inventory" && <Inventory game={game} />}
+      {phase === "dead" && <DeathScreen game={game} />}
+      {hud.ask && <AskDialog game={game} />}
+      {phase === "play" && hud.loading > 0 && (
+        <div className="sc-loading" role="status">
+          <Logo small />
+          <div className="sc-boot-bar">
+            <span style={{ width: Math.round((1 - hud.loading) * 100) + "%" }} />
+          </div>
+          <p className="sc-muted">Building the land around you…</p>
+        </div>
+      )}
+      <div className="sc-veil sc-veil-flash" style={{ opacity: hud.flash * 0.4 }} />
+      <div className="sc-veil sc-veil-water" style={{ opacity: hud.eyeWater ? 1 : 0 }} />
+      <div className="sc-veil sc-veil-hurt" style={{ opacity: phase === "play" ? Math.max(hud.hurtDir, !hud.creative && hud.health > 0 && hud.health <= 6 ? 0.35 : 0) : 0 }} />
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main menu
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TIPS = [
+  "Hold a torch near ore: rare studs hum when they're close.",
+  "A bed resets your spawn — and skips the night.",
+  "Shift + click moves a whole stack into the hotbar.",
+  "Hamlets restock twice a day. Keep your name clean there.",
+  "A beacon on a full iron pyramid keeps you fast.",
+  "Creepers hate cats. Cats don't care.",
+  "Third-person view: F5. Hide the HUD: F1.",
+];
+
+type MenuScreen = "home" | "worlds" | "create" | "settings" | "help";
+
+function MainMenu({ game }: { game: GameApi }) {
+  const [screen, setScreen] = useState<MenuScreen>("home");
+  const slots = game.slots;
+  const last = slots[0];
+  const [tip] = useState(() => TIPS[Math.floor(Math.random() * TIPS.length)]);
+  const go = (s: MenuScreen) => {
+    game.uiSound("open");
+    setScreen(s);
+  };
+  return (
+    <div className="sc-menu-layer sc-title">
+      <div className="sc-title-shade" />
+      {screen === "home" && (
+        <Screen className="sc-home">
+          <Logo />
+          <p className="sc-tagline">An infinite world of studs, seeds and stubborn creepers.</p>
+          <nav className="sc-menu-col" aria-label="Main menu">
+            {last && (
+              <MenuButton variant="primary" icon={<PlayIcon size={22} />} onClick={() => game.enter("continue", last.id)} hint={modeOf(last) + " · seed " + last.seedText + " · " + timeAgo(last.updated)} autoFocus>
+                Continue
+              </MenuButton>
+            )}
+            <MenuButton variant={last ? "" : "primary"} icon={last ? <BookIcon size={22} /> : <PlayIcon size={22} />} onClick={() => go(slots.length ? "worlds" : "create")} autoFocus={!last}>
+              {slots.length ? "Worlds" : "Play"}
+            </MenuButton>
+            {slots.length > 0 && (
+              <MenuButton icon={<PlusIcon size={22} />} onClick={() => go("create")}>
+                New world
+              </MenuButton>
+            )}
+            <MenuButton icon={<GearIcon size={22} />} onClick={() => go("settings")}>
+              Settings
+            </MenuButton>
+            <MenuButton icon={<ControllerIcon size={22} />} onClick={() => go("help")}>
+              How to play
+            </MenuButton>
+          </nav>
+          <footer className="sc-home-foot">
+            <span className="sc-chip">v{VERSION}</span>
+            <span className="sc-tip">
+              <StarIcon size={14} /> {tip}
+            </span>
+          </footer>
+        </Screen>
+      )}
+      {screen === "worlds" && <WorldList game={game} onBack={() => setScreen("home")} onCreate={() => go("create")} />}
+      {screen === "create" && <CreateWorld game={game} onBack={() => setScreen(slots.length ? "worlds" : "home")} />}
+      {screen === "settings" && (
+        <Screen className="sc-wide">
+          <SettingsPanel game={game} onBack={() => setScreen("home")} />
+        </Screen>
+      )}
+      {screen === "help" && (
+        <Screen className="sc-wide">
+          <HelpPanel onBack={() => setScreen("home")} />
+        </Screen>
+      )}
+    </div>
+  );
+}
+
+function WorldList({ game, onBack, onCreate }: { game: GameApi; onBack: () => void; onCreate: () => void }) {
+  const [confirm, setConfirm] = useState("");
+  const slots = game.slots;
+  return (
+    <Screen className="sc-wide">
+      <section className="sc-panel sc-panel-tall">
+        <PanelHead
+          eyebrow="Singleplayer"
+          title="Your worlds"
+          onBack={onBack}
+          right={
+            <button className="sc-btn sc-btn-primary sc-btn-sm" onClick={onCreate}>
+              <PlusIcon size={18} /> New
+            </button>
+          }
+        />
+        <ul className="sc-world-list">
+          {slots.map((slot) => (
+            <li key={slot.id} className="sc-world-card">
+              <button className="sc-world-main" onClick={() => game.enter("continue", slot.id)}>
+                <span className={"sc-world-badge sc-mode-" + modeOf(slot).toLowerCase()}>{modeOf(slot)[0]}</span>
+                <span className="sc-world-text">
+                  <strong>Seed {slot.seedText}</strong>
+                  <small>
+                    {modeOf(slot)} · played {timeAgo(slot.updated)}
+                  </small>
+                </span>
+                <span className="sc-world-play">
+                  <PlayIcon size={18} />
+                </span>
+              </button>
+              {confirm === slot.id ? (
+                <div className="sc-world-confirm">
+                  <button className="sc-btn sc-btn-danger sc-btn-sm" onClick={() => { game.deleteSlot(slot.id); setConfirm(""); }}>
+                    Delete
+                  </button>
+                  <button className="sc-btn sc-btn-sm" onClick={() => setConfirm("")}>
+                    Keep
+                  </button>
+                </div>
+              ) : (
+                <button className="sc-icon-btn sc-world-del" aria-label={"Delete world " + slot.seedText} onClick={() => setConfirm(slot.id)}>
+                  <TrashIcon size={18} />
+                </button>
+              )}
+            </li>
+          ))}
+          {slots.length === 0 && <li className="sc-empty">No worlds yet. Make one.</li>}
+        </ul>
+      </section>
+    </Screen>
+  );
+}
+
+function CreateWorld({ game, onBack }: { game: GameApi; onBack: () => void }) {
+  const [seed, setSeed] = useState(() => {
+    try {
+      return sessionStorage.getItem("studcraft-pending-seed") || String((Math.random() * 1e9) | 0);
+    } catch {
+      return String((Math.random() * 1e9) | 0);
+    }
+  });
+  const [mode, setMode] = useState<EnterKind>("survival");
+  useEffect(() => {
+    try {
+      sessionStorage.setItem("studcraft-pending-seed", seed);
+    } catch {
+      /* private mode */
+    }
+  }, [seed]);
+  const mods = game.settings.mods;
+  const modes: { id: EnterKind; name: string; text: string; tone: string }[] = [
+    { id: "survival", name: "Survival", text: "Mine, craft, eat, rank up. Nights bite back.", tone: "red" },
+    { id: "play", name: "Creative", text: "Every brick, no limits. Double-tap jump to fly.", tone: "blue" },
+    { id: "flat", name: "Baseplate", text: "A flat creative pad to build on.", tone: "green" },
+  ];
+  return (
+    <Screen className="sc-wide">
+      <section className="sc-panel sc-panel-tall">
+        <PanelHead eyebrow="New world" title="Shape your land" onBack={onBack} />
+        <div className="sc-scroll">
+          <label className="sc-field">
+            <span className="sc-label">Seed</span>
+            <div className="sc-seed">
+              <input type="text" value={seed} maxLength={48} spellCheck={false} aria-label="World seed" onChange={(e) => setSeed(e.target.value)} />
+              <button className="sc-btn sc-btn-gold sc-btn-sm" onClick={() => setSeed(String((Math.random() * 1e9) | 0))} aria-label="Random seed">
+                <DiceIcon size={18} /> Roll
+              </button>
+            </div>
+            <small className="sc-muted">Words or numbers. The same seed always builds the same hills, ores and hamlets.</small>
+          </label>
+          <p className="sc-label">Mode</p>
+          <div className="sc-mode-grid" role="radiogroup" aria-label="Game mode">
+            {modes.map((m) => (
+              <button key={m.id} role="radio" aria-checked={mode === m.id} className={"sc-mode-card tone-" + m.tone + (mode === m.id ? " on" : "")} onClick={() => setMode(m.id)}>
+                <strong>{m.name}</strong>
+                <span>{m.text}</span>
+                {mode === m.id && (
+                  <i className="sc-mode-check">
+                    <CheckIcon size={16} />
+                  </i>
+                )}
+              </button>
+            ))}
+          </div>
+          <p className="sc-label">World rules</p>
+          <div className="sc-rows">
+            <Row title="Hard nights" detail="Hostiles hit harder and come in bigger packs.">
+              <Toggle label="Hard nights" on={mods.hard} onChange={(v) => game.setMod("hard", v)} />
+            </Row>
+            <Row title="Generous parts" detail="More drops from blocks and mobs.">
+              <Toggle label="Generous parts" on={mods.generous} onChange={(v) => game.setMod("generous", v)} />
+            </Row>
+            <Row title="Peaceful" detail="No hostile mobs spawn.">
+              <Toggle label="Peaceful" on={mods.peaceful} onChange={(v) => game.setMod("peaceful", v)} />
+            </Row>
+            <Row title="Spellcraft" detail="Mana, tomes and the Mage skill branch.">
+              <Toggle label="Spellcraft" on={mods.spells} onChange={(v) => game.setMod("spells", v)} />
+            </Row>
+          </div>
+        </div>
+        <footer className="sc-panel-foot">
+          <button
+            className="sc-btn sc-btn-primary sc-btn-wide"
+            onClick={() => {
+              game.setSeed(seed.trim() || String((Math.random() * 1e9) | 0));
+              game.enter(mode);
+            }}
+          >
+            <PlayIcon size={20} /> Create world
+          </button>
+        </footer>
+      </section>
+    </Screen>
+  );
+}
+
+function HelpPanel({ onBack }: { onBack: () => void }) {
+  const keysList: [string, string][] = [
+    ["W A S D", "Move"],
+    ["Mouse", "Look"],
+    ["Left click (hold)", "Mine / attack"],
+    ["Right click", "Place / use"],
+    ["Space", "Jump · double-tap to fly in Creative"],
+    ["Shift", "Sneak · block with a shield"],
+    ["Ctrl", "Sprint"],
+    ["1–9 · wheel", "Pick hotbar slot"],
+    ["E", "Inventory & crafting"],
+    ["Q", "Cycle spells (with a tome)"],
+    ["F", "Swap off-hand"],
+    ["Middle click", "Pick block"],
+    ["F5 · F1", "Third person · hide HUD"],
+    ["Esc", "Pause"],
+  ];
+  return (
+    <section className="sc-panel sc-panel-tall">
+      <PanelHead eyebrow="Guide" title="How to play" onBack={onBack} />
+      <div className="sc-scroll sc-help">
+        <div className="sc-help-grid">
+          <div>
+            <p className="sc-label">Keyboard & mouse</p>
+            <dl className="sc-keys">
+              {keysList.map(([k, v]) => (
+                <div key={k}>
+                  <dt>
+                    <kbd>{k}</kbd>
+                  </dt>
+                  <dd>{v}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+          <div>
+            <p className="sc-label">Touch</p>
+            <ul className="sc-bullets">
+              <li>Left thumb: drag anywhere on the left to walk.</li>
+              <li>Right side: drag the screen to look.</li>
+              <li>Hold the pick to mine or attack, the hand to place or use.</li>
+              <li>Swipe along the hotbar to pick, drag between slots to swap.</li>
+            </ul>
+            <p className="sc-label">First night</p>
+            <ul className="sc-bullets">
+              <li>Punch a tree for logs, turn them into planks, then a workbench.</li>
+              <li>Build a pick, dig into a hill, find coal for torches.</li>
+              <li>Hamlets trade and hand out quests. A ruined gate near the first one opens the Nether.</li>
+              <li>Ranks come from mining rare studs, smelting and fighting. Each level is a skill point.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Settings (title + pause)
+// ─────────────────────────────────────────────────────────────────────────────
+
+type SettingsTab = "graphics" | "controls" | "audio" | "world";
+
+function SettingsPanel({ game, onBack }: { game: GameApi; onBack: () => void }) {
+  const [tab, setTab] = useState<SettingsTab>("graphics");
+  const s = game.settings;
+  const tabs: { id: SettingsTab; label: string; icon: ReactNode }[] = [
+    { id: "graphics", label: "Graphics", icon: <EyeIcon size={18} /> },
+    { id: "controls", label: "Controls", icon: <ControllerIcon size={18} /> },
+    { id: "audio", label: "Audio", icon: <SoundIcon size={18} /> },
+    { id: "world", label: "World", icon: <GlobeIcon size={18} /> },
+  ];
+  return (
+    <section className="sc-panel sc-panel-tall sc-settings">
+      <PanelHead eyebrow="Options" title="Settings" onBack={onBack} backLabel="Done" />
+      <div className="sc-tabs" role="tablist">
+        {tabs.map((t) => (
+          <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? "on" : ""} onClick={() => setTab(t.id)}>
+            {t.icon}
+            <span>{t.label}</span>
+          </button>
+        ))}
+      </div>
+      <div className="sc-scroll sc-rows" role="tabpanel">
+        {tab === "graphics" && (
+          <>
+            <Row title="Quality" detail="Shadows, draw distance cap and anti-aliasing. Auto adapts to your device.">
+              <Segmented<Quality>
+                label="Quality"
+                value={s.quality}
+                onChange={(q) => game.setQuality(q)}
+                options={[
+                  { id: "auto", label: "Auto" },
+                  { id: "high", label: "High" },
+                  { id: "balanced", label: "Balanced" },
+                  { id: "performance", label: "Fast" },
+                ]}
+              />
+            </Row>
+            <Row title="Upscaling" detail={"Renders the 3D world at a lower resolution and rebuilds sharp edges (EASU + RCAS). " + (game.hud.renderRes ? "Now: " + game.hud.renderRes : "")}>
+              <Segmented<Upscale>
+                label="Upscaling"
+                value={s.upscale}
+                onChange={(u) => game.setUpscale(u)}
+                options={[
+                  { id: "auto", label: "Auto" },
+                  { id: "native", label: "Native" },
+                  { id: "quality", label: "Quality" },
+                  { id: "balanced", label: "Balanced" },
+                  { id: "performance", label: "Perf." },
+                ]}
+              />
+            </Row>
+            <Row title="Sharpness" detail="Contrast-adaptive sharpening after the upscale.">
+              <Slider label="Sharpness" value={s.sharpness} min={0} max={1} step={0.05} onChange={(v) => game.setSharpness(v)} format={(v) => Math.round(v * 100) + "%"} />
+            </Row>
+            <Row title="Render distance" detail="How far chunks draw. The world itself never ends.">
+              <Slider label="Render distance" value={s.radius} min={2} max={14} step={1} onChange={(v) => game.setRadius(v)} format={(v) => v + " chunks"} />
+            </Row>
+            <Row title="Field of view">
+              <Slider label="Field of view" value={s.fov} min={55} max={100} step={1} onChange={(v) => game.setFov(v)} format={(v) => v + "°"} />
+            </Row>
+            <Row title="Realistic lighting" detail="Soft sun shadows, plastic sheen, volumetric clouds.">
+              <Toggle label="Realistic lighting" on={s.realistic} onChange={(v) => game.setRealistic(v)} />
+            </Row>
+            <Row title="Studs on blocks" detail="Real cylindrical studs on every top face.">
+              <Toggle label="Studs" on={s.studs} onChange={(v) => game.setStuds(v)} />
+            </Row>
+            <Row title="FPS counter">
+              <Toggle label="FPS counter" on={s.showFps} onChange={(v) => game.setShowFps(v)} />
+            </Row>
+          </>
+        )}
+        {tab === "controls" && (
+          <>
+            <Row title="Look sensitivity">
+              <Slider label="Look sensitivity" value={s.sens} min={0.3} max={2.5} step={0.05} onChange={(v) => game.setSens(v)} format={(v) => v.toFixed(2) + "×"} />
+            </Row>
+            <Row title="Third-person view" detail="Also F5 on a keyboard.">
+              <Toggle label="Third-person view" on={s.third} onChange={(v) => game.setThird(v)} />
+            </Row>
+            <Row title="Vibration" detail="Short pulses on touch buttons (phones).">
+              <Toggle label="Vibration" on={s.haptics} onChange={(v) => game.setHaptics(v)} />
+            </Row>
+          </>
+        )}
+        {tab === "audio" && (
+          <>
+            <Row title="Sound">
+              <Toggle label="Sound" on={s.sound} onChange={(v) => game.setSound(v)} />
+            </Row>
+            <Row title="Music">
+              <Slider label="Music volume" value={s.music} min={0} max={1} step={0.05} onChange={(v) => game.setMusic(v)} format={(v) => Math.round(v * 100) + "%"} />
+            </Row>
+            <Row title="Effects">
+              <Slider label="Effects volume" value={s.sfx} min={0} max={1} step={0.05} onChange={(v) => game.setSfx(v)} format={(v) => Math.round(v * 100) + "%"} />
+            </Row>
+          </>
+        )}
+        {tab === "world" && (
+          <>
+            <Row title="Hard nights" detail="Hostiles hit harder and come in bigger packs.">
+              <Toggle label="Hard nights" on={s.mods.hard} onChange={(v) => game.setMod("hard", v)} />
+            </Row>
+            <Row title="Generous parts" detail="More drops from blocks and mobs.">
+              <Toggle label="Generous parts" on={s.mods.generous} onChange={(v) => game.setMod("generous", v)} />
+            </Row>
+            <Row title="Peaceful" detail="No hostile mobs spawn.">
+              <Toggle label="Peaceful" on={s.mods.peaceful} onChange={(v) => game.setMod("peaceful", v)} />
+            </Row>
+            <Row title="Spellcraft" detail="Mana, tomes and the Mage skill branch.">
+              <Toggle label="Spellcraft" on={s.mods.spells} onChange={(v) => game.setMod("spells", v)} />
+            </Row>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pause / death / dialogs
+// ─────────────────────────────────────────────────────────────────────────────
+
+function PauseMenu({ game }: { game: GameApi }) {
+  const [view, setView] = useState<"main" | "settings" | "online">("main");
+  const hud = game.hud;
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="sc-menu-layer sc-pause">
+      {view === "main" && (
+        <Screen className="sc-pause-screen">
+          <section className="sc-panel sc-pause-card">
+            <p className="sc-eyebrow">Game paused</p>
+            <Logo small />
+            <nav className="sc-menu-col">
+              <MenuButton variant="primary" icon={<PlayIcon size={22} />} onClick={() => game.resume()} autoFocus>
+                Resume
+              </MenuButton>
+              <MenuButton icon={<BagIcon size={22} />} onClick={() => game.toggleInventory()}>
+                Inventory
+              </MenuButton>
+              <MenuButton icon={<GearIcon size={22} />} onClick={() => setView("settings")}>
+                Settings
+              </MenuButton>
+              <MenuButton icon={<GlobeIcon size={22} />} onClick={() => setView("online")} hint={hud.netStatus || "Prototype"}>
+                Online room
+              </MenuButton>
+              <MenuButton variant="ghost" icon={<ExitIcon size={22} />} onClick={() => game.quit()}>
+                Save & quit to title
+              </MenuButton>
+            </nav>
+          </section>
+          <aside className="sc-panel sc-pause-info">
+            <p className="sc-label">This world</p>
+            <dl className="sc-facts">
+              <div>
+                <dt>Seed</dt>
+                <dd>
+                  {hud.seedText || hud.seed}
+                  <button
+                    className="sc-icon-btn sc-icon-sm"
+                    aria-label="Copy seed"
+                    onClick={() => {
+                      game.copySeed();
+                      setCopied(true);
+                    }}
+                  >
+                    {copied ? <CheckIcon size={16} /> : <CopyIcon size={16} />}
+                  </button>
+                </dd>
+              </div>
+              <div>
+                <dt>Mode</dt>
+                <dd>{hud.flat ? "Baseplate" : hud.creative ? "Creative" : "Survival"}</dd>
+              </div>
+              <div>
+                <dt>Realm</dt>
+                <dd>{hud.realm}</dd>
+              </div>
+              <div>
+                <dt>Position</dt>
+                <dd>
+                  {Math.floor(hud.x)}, {Math.floor(hud.y)}, {Math.floor(hud.z)}
+                </dd>
+              </div>
+              <div>
+                <dt>Rank</dt>
+                <dd>
+                  Lv {hud.level} · {hud.rank}
+                </dd>
+              </div>
+              {hud.questTrack && (
+                <div>
+                  <dt>Quest</dt>
+                  <dd>{hud.questTrack}</dd>
+                </div>
+              )}
+            </dl>
+          </aside>
+        </Screen>
+      )}
+      {view === "settings" && (
+        <Screen className="sc-wide">
+          <SettingsPanel game={game} onBack={() => setView("main")} />
+        </Screen>
+      )}
+      {view === "online" && (
+        <Screen>
+          <section className="sc-panel">
+            <PanelHead eyebrow="Prototype" title="Online room" onBack={() => setView("main")} />
+            <p className="sc-muted">Play in the same seed with friends through a relay server. Block edits and positions sync; mobs stay local.</p>
+            {hud.netStatus ? (
+              <>
+                <p className="sc-status">{hud.netStatus}</p>
+                <MenuButton variant="danger" icon={<ExitIcon size={22} />} onClick={() => game.leaveOnline()}>
+                  Leave the room
+                </MenuButton>
+              </>
+            ) : (
+              <nav className="sc-menu-col">
+                <MenuButton variant="primary" icon={<GlobeIcon size={22} />} onClick={() => game.hostOnline()}>
+                  Host a room
+                </MenuButton>
+                <MenuButton icon={<PlusIcon size={22} />} onClick={() => game.joinOnline()}>
+                  Join with a code
+                </MenuButton>
+              </nav>
+            )}
+          </section>
+        </Screen>
+      )}
+    </div>
+  );
+}
+
+function DeathScreen({ game }: { game: GameApi }) {
+  return (
+    <div className="sc-menu-layer sc-death">
+      <Screen>
+        <section className="sc-death-card">
+          <p className="sc-eyebrow">You crumbled</p>
+          <h1 className="sc-death-title">Scattered</h1>
+          <p className="sc-muted">Your bricks lie where you fell. Run back before they despawn.</p>
+          <nav className="sc-menu-col">
+            <MenuButton variant="primary" icon={<PlayIcon size={22} />} onClick={() => game.respawn()} autoFocus>
+              Respawn
+            </MenuButton>
+            <MenuButton variant="ghost" icon={<ExitIcon size={22} />} onClick={() => game.quit()}>
+              Save & quit to title
+            </MenuButton>
+          </nav>
+        </section>
+      </Screen>
+    </div>
+  );
+}
+
+function AskDialog({ game }: { game: GameApi }) {
+  const ask = game.hud.ask!;
+  const [text, setText] = useState(ask.value);
+  useEffect(() => setText(ask.value), [ask]);
+  return (
+    <div className="sc-modal" role="dialog" aria-modal="true" aria-label={ask.title}>
+      <form
+        className="sc-panel sc-dialog"
+        onSubmit={(e) => {
+          e.preventDefault();
+          game.answer(text);
+        }}
+      >
+        <h2 className="sc-h2">{ask.title}</h2>
+        {ask.hint && <p className="sc-muted">{ask.hint}</p>}
+        <input className="sc-input" type="text" value={text} autoFocus maxLength={64} spellCheck={false} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Escape" && game.answer(null)} />
+        <div className="sc-dialog-actions">
+          <button type="button" className="sc-btn" onClick={() => game.answer(null)}>
+            Cancel
+          </button>
+          <button type="submit" className="sc-btn sc-btn-primary">
+            OK
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -61,223 +945,178 @@ function SignEditor({ game }: { game: GameApi }) {
   const [text, setText] = useState(at?.text ?? "");
   if (!at) return null;
   return (
-    <div className="menu-wrap">
-      <section className="card sheet">
-        <p className="eyebrow">Sign</p>
-        <h2>Write on the sign</h2>
-        <label className="seed-row">
-          <input
-            type="text"
-            value={text}
-            maxLength={60}
-            spellCheck={false}
-            aria-label="Sign text"
-            autoFocus
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") game.setSignText(text);
-              if (e.key === "Escape") game.cancelSignEdit();
-            }}
-          />
-        </label>
-        <div className="stack">
-          <button className="btn btn-primary" type="button" onClick={() => game.setSignText(text)}>
-            Carve it
-          </button>
-          <button className="btn" type="button" onClick={() => game.cancelSignEdit()}>
+    <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Write on the sign">
+      <form
+        className="sc-panel sc-dialog sc-sign"
+        onSubmit={(e) => {
+          e.preventDefault();
+          game.setSignText(text);
+        }}
+      >
+        <h2 className="sc-h2">Write on the sign</h2>
+        <input className="sc-input sc-sign-input" type="text" value={text} maxLength={60} spellCheck={false} aria-label="Sign text" autoFocus onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Escape" && game.cancelSignEdit()} />
+        <div className="sc-dialog-actions">
+          <button type="button" className="sc-btn" onClick={() => game.cancelSignEdit()}>
             Cancel
           </button>
+          <button type="submit" className="sc-btn sc-btn-primary">
+            Carve it
+          </button>
         </div>
-      </section>
+      </form>
     </div>
   );
 }
 
-function Overlay({ game }: { game: GameApi }) {
-  const [, poke] = useState(0);
-  useEffect(() => game.subscribe(() => poke((n) => n + 1)), [game]);
-  const phase: Phase = game.phase;
-  const hud = game.hud;
-  useEffect(() => {
-    const root = document.querySelector(".game-root");
-    root?.classList.toggle("show-touch", phase === "play" && !hud.locked);
-  }, [phase, hud.locked]);
+// ─────────────────────────────────────────────────────────────────────────────
+// HUD
+// ─────────────────────────────────────────────────────────────────────────────
 
+function TimeGlyph({ label, weather }: { label: string; weather: string }) {
+  if (weather === "storm") return <BoltIcon size={16} />;
+  if (weather === "rain") return <RainIcon size={16} />;
+  if (weather === "cloudy") return <CloudIcon size={16} />;
+  return label === "Night" || label === "Dusk" || label === "Midnight" ? <MoonIcon size={16} /> : <SunIcon size={16} />;
+}
+
+function Hud({ game, touchUI }: { game: GameApi; touchUI: boolean }) {
+  const hud = game.hud;
+  const s = game.settings;
+  const armorPts = useMemo(() => {
+    let sum = 0;
+    for (const id of hud.armor) if (id > 0) sum += def(id).armor;
+    return Math.max(0, Math.min(20, Math.round(sum / 0.024)));
+  }, [hud.armor]);
+  const effects = hud.effect ? hud.effect.split(" ").filter(Boolean) : [];
   return (
-    <>
-      {phase === "title" && (
-        <TitleScreen game={game} onEnter={(kind, seed, id) => { game.setSeed(seed); game.enter(kind, id); }} booting={false} error={null} />
+    <div className={"sc-hud" + (touchUI ? " is-touch" : "")}>
+      <div className="sc-hud-tl">
+        <div className="sc-info">
+          <span className="sc-info-ic">
+            <TimeGlyph label={hud.timeLabel} weather={hud.weather} />
+          </span>
+          <span>
+            <strong>{hud.biome}</strong>
+            <small>
+              {hud.timeLabel}
+              {hud.realm !== "Overworld" ? " · " + hud.realm : ""}
+              {hud.flying ? " · flying" : ""}
+              {hud.hammer ? " · hammer" : ""}
+            </small>
+          </span>
+        </div>
+        <div className="sc-coords">
+          {Math.floor(hud.x)} / {Math.floor(hud.y)} / {Math.floor(hud.z)}
+        </div>
+      </div>
+      <div className="sc-hud-tr">
+        {s.showFps && <div className="sc-fps">{hud.fps} FPS</div>}
+        {hud.questTrack && !hud.creative && (
+          <div className={"sc-quest" + (hud.questAlert ? " ready" : "")}>
+            <ScrollIcon size={16} />
+            <span>{hud.questTrack}</span>
+          </div>
+        )}
+        {hud.netStatus && <div className="sc-quest">{hud.netStatus}</div>}
+        {effects.length > 0 && (
+          <div className="sc-effects">
+            {effects.map((e) => (
+              <span key={e} className={"sc-effect fx-" + e.toLowerCase()}>
+                {e}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      {hud.boss && (
+        <div className="sc-boss" role="status">
+          <strong>{hud.boss}</strong>
+          <div className="sc-boss-bar">
+            <span style={{ width: `${Math.round(hud.bossHp * 100)}%` }} className={hud.bossHp < 0.35 ? "low" : ""} />
+          </div>
+        </div>
       )}
-      {phase === "play" && !hud.hidden && <Hud game={game} />}
-      {phase === "play" && hud.signEdit && <SignEditor game={game} />}
-      {phase === "play" && <TouchControls game={game} />}
-      {phase === "pause" && <PauseMenu game={game} />}
-      {phase === "inventory" && <Inventory game={game} />}
-      {phase === "dead" && (
-        <div className="menu-wrap">
-          <section className="card">
-            <p className="eyebrow">Scattered</p>
-            <h1>
-              Crum<span className="craft">pled</span>
-            </h1>
-            <p className="lede">Your bricks are on the ground where you fell. The bed still knows the way back.</p>
-            <div className="stack">
-              <button className="btn btn-primary" onClick={() => game.respawn()}>
-                Respawn
-              </button>
-              <button className="btn" onClick={() => game.quit()}>
-                Save and quit
-              </button>
+      {hud.message && (
+        <p className="sc-toast" key={hud.message}>
+          {hud.message}
+        </p>
+      )}
+      {hud.won && <p className="sc-banner">The End is yours</p>}
+      <div className={"sc-cross" + (hud.targetName ? " on-target" : "")} aria-hidden="true">
+        {hud.mine > 0 && (
+          <svg className="sc-mine-ring" viewBox="0 0 40 40">
+            <circle cx="20" cy="20" r="16" pathLength={100} strokeDasharray={`${Math.round(hud.mine * 100)} 100`} />
+          </svg>
+        )}
+      </div>
+      {hud.targetName && <div className="sc-target">{hud.targetName}</div>}
+      {!touchUI && !hud.locked && (
+        <button
+          className="sc-capture"
+          onClick={() => {
+            try {
+              const p = game.canvas.requestPointerLock?.() as unknown as Promise<void> | undefined;
+              p?.catch?.(() => {});
+            } catch {
+              /* refused */
+            }
+          }}
+        >
+          Click to play
+        </button>
+      )}
+      <div className="sc-hud-bottom">
+        {hud.spellsOn && hud.spell && (
+          <div className="sc-mana" aria-label={`${hud.spell}, ${Math.floor(hud.mana)} mana`}>
+            <span style={{ width: `${Math.min(100, (hud.mana / Math.max(1, hud.manaMax)) * 100)}%` }} />
+            <em>
+              {hud.spell} · {Math.floor(hud.mana)}/{hud.manaMax}
+            </em>
+          </div>
+        )}
+        {!hud.creative && (
+          <div className="sc-vitals">
+            <div className="sc-vital-col">
+              {armorPts > 0 && <IconRow kind="armor" value={armorPts} />}
+              <IconRow kind="heart" value={hud.health} pulse={hud.health <= 6} />
             </div>
-          </section>
-        </div>
-      )}
-      <div className="flash" style={{ opacity: hud.flash * 0.45 }} />
-      <div className="water-veil" style={{ opacity: hud.eyeWater ? 0.28 : 0 }} />
-      <div className="rain-veil" style={{ opacity: hud.rain && phase === "play" ? 0.28 : 0 }} />
-    </>
-  );
-}
-
-function TitleScreen({
-  game,
-  onEnter,
-  booting,
-  error,
-}: {
-  game: GameApi | null;
-  onEnter: (kind: EnterKind, seed: string, id?: string) => void;
-  booting: boolean;
-  error: string | null;
-}) {
-  const [seedText, setSeedText] = useState(() => {
-    try {
-      return sessionStorage.getItem("studcraft-pending-seed") || String((Math.random() * 1e9) | 0);
-    } catch {
-      return String((Math.random() * 1e9) | 0);
-    }
-  });
-  const slots = game?.slots ?? [];
-  const [showOptions, setShowOptions] = useState(false);
-  const [showHelp, setShowHelp] = useState(false);
-  useEffect(() => {
-    try {
-      sessionStorage.setItem("studcraft-pending-seed", seedText);
-    } catch {
-      /* ignore */
-    }
-  }, [seedText]);
-  function roll() {
-    setSeedText(String((Math.random() * 1e9) | 0));
-  }
-  return (
-    <div className="title-wrap">
-      <section className="card">
-        <div className="swatch-row" aria-hidden="true">
-          {[ID.Red, ID.Yellow, ID.Blue, ID.Green].map((id) => (
-            <span key={id} style={{ background: BLOCKS[id].color }} />
-          ))}
-        </div>
-        <p className="eyebrow">Open world bricks</p>
-        <h1>
-          Stud<span className="craft">craft</span>
-        </h1>
-        <p className="lede">
-          An infinite brick land. Type a seed, or roll one. The same seed builds the same hills, ores, and hamlets.
-        </p>
-        {error && <p className="lede">{error}</p>}
-        <label className="seed-row">
-          <span>Seed</span>
-          <input
-            type="text"
-            value={seedText}
-            maxLength={48}
-            spellCheck={false}
-            aria-label="World seed"
-            onChange={(e) => setSeedText(e.target.value)}
-          />
-          <button className="btn btn-yellow" type="button" onClick={roll}>
-            Roll
-          </button>
-        </label>
-        <div className="stack">
-          <button className="btn btn-primary" onClick={() => onEnter("survival", seedText)}>
-            Survival
-          </button>
-          <button className="btn" onClick={() => onEnter("play", seedText)}>
-            Creative
-          </button>
-          <button className="btn btn-green" onClick={() => onEnter("flat", seedText)}>
-            Baseplate
-          </button>
-          {game && !showOptions && (
-            <button className="btn" onClick={() => setShowOptions(true)}>
-              Options
-            </button>
-          )}
-        </div>
-        {game && showOptions && (
-          <>
-            <SettingsPanel game={game} />
-            <button className="btn btn-primary" onClick={() => setShowOptions(false)}>
-              Done
-            </button>
-          </>
+            <div className="sc-vital-col right">
+              {hud.oxygen < 10 && (
+                <div className="sc-icon-row">
+                  {Array.from({ length: 10 }, (_, i) => (
+                    <BubbleIcon key={i} size={touchUI ? 13 : 16} on={i < Math.ceil(hud.oxygen)} />
+                  ))}
+                </div>
+              )}
+              <IconRow kind="food" value={hud.hunger} right />
+            </div>
+          </div>
         )}
-        {slots.length > 0 && (
-          <>
-            <p className="eyebrow">Saved seeds</p>
-            <ul className="world-list">
-              {slots.map((slot) => (
-                <li key={slot.id}>
-                  <button className="btn" onClick={() => onEnter("continue", slot.seedText, slot.id)}>
-                    {slotLabel(slot)}
-                  </button>
-                  <button className="btn" onClick={() => game?.deleteSlot(slot.id)} aria-label={"Drop " + slot.seedText}>
-                    Drop
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-        {!showHelp && (
-            <button className="btn" onClick={() => setShowHelp(true)}>
-              How to play
-            </button>
-          )}
-          {showHelp && (
-            <>
-              <ul className="hints">
-          <li>WASD move · Space jump · double-tap Space flies in creative</li>
-          <li>The world keeps going. Horizon in the pause menu is only how far bricks draw</li>
-          <li>Hamlets repeat across the map. Traders show up when you walk into town</li>
-          <li>Skills spend rank levels. Pause holds four mods. Q cycles spells when you hold a tome</li>
-          <li>Caves run under the hills. Water spills. A repeater delays a signal. A ruined gate by the first hamlet opens the Nether</li>
-          <li>Water and magma spread from a source. Look where a piston or repeater should point</li>
-          <li>Hold to mine · place with the other click · E opens the bin</li>
-        </ul>
-              <button className="btn" onClick={() => setShowHelp(false)}>
-                Hide help
-              </button>
-            </>
-          )}
-        <p className="fine">
-          {booting ? "Stacking the first bricks…" : "An original brick sandbox. Not a toy brand, not a block game."}
-        </p>
-      </section>
+        <div className="sc-xp" aria-label={`${hud.rank}, level ${hud.level}`}>
+          <span style={{ width: `${Math.min(100, (hud.xp / Math.max(1, hud.xpNeed)) * 100)}%` }} />
+          <b>{hud.creative ? "Creative" : hud.level}</b>
+        </div>
+        <Hotbar game={game} />
+      </div>
     </div>
   );
 }
 
-function slotLabel(slot: WorldSlot) {
-  const mode = slot.flat ? "Baseplate" : slot.creative ? "Creative" : "Survival";
-  return mode + " · " + slot.seedText;
+function IconRow({ kind, value, right = false, pulse = false }: { kind: "heart" | "food" | "armor"; value: number; right?: boolean; pulse?: boolean }) {
+  const icons = Array.from({ length: 10 }, (_, i) => {
+    const idx = right ? 9 - i : i;
+    const full = value >= (idx + 1) * 2;
+    const half = !full && value >= idx * 2 + 1;
+    const f = (full ? 1 : half ? 0.5 : 0) as 0 | 0.5 | 1;
+    if (kind === "heart") return <HeartIcon key={i} level={f} />;
+    if (kind === "food") return <FoodIcon key={i} level={f} />;
+    return <ShieldIcon key={i} level={f} />;
+  });
+  return <div className={"sc-icon-row" + (pulse ? " pulse" : "") + (right ? " right" : "")}>{icons}</div>;
 }
 
-function Hud({ game }: { game: GameApi }) {
+function Hotbar({ game }: { game: GameApi }) {
   const hud = game.hud;
-  const hearts = 10;
   const swipeAt = useRef(-1);
   const swipeFrom = useRef(-1);
   const pickSlot = (bar: HTMLDivElement, x: number) => {
@@ -289,114 +1128,23 @@ function Hud({ game }: { game: GameApi }) {
     game.setSlot(i);
     return i;
   };
+  const held = hud.hotbar[hud.slot];
   return (
-    <div className={hud.health > 0 && hud.health <= 6 && !hud.creative ? "hud hurt" : "hud"}>
-      <div className="top-readout">
-        <strong>{hud.biome}</strong>
-        <span>
-          {hud.timeLabel}
-          {hud.flying ? " · flying" : ""}
-          {hud.hammer ? " · hammer" : ""}
-          {hud.creative ? " · creative" : ""}
-          {" · "}
-          {hud.realm}
-          {hud.effect ? " · " + hud.effect : ""}
-          {hud.questAlert ? " · " + hud.questAlert : ""}
-          {hud.questTrack ? " · " + hud.questTrack : ""}
-          {hud.won ? " · The End is yours" : ""}
-        </span>
-        <span>
-          {Math.floor(hud.x)} {Math.floor(hud.y)} {Math.floor(hud.z)} · seed {hud.seedText || hud.seed}
-        </span>
-      </div>
-      {hud.boss && (
-        <div
-          style={{
-            position: "absolute",
-            top: 54,
-            left: "50%",
-            transform: "translateX(-50%)",
-            width: "min(460px, 72vw)",
-            textAlign: "center",
-            pointerEvents: "none",
-            zIndex: 5,
-          }}
-        >
-          <div style={{ color: "#e9d5ff", fontWeight: 700, letterSpacing: 2, fontSize: 13, textShadow: "0 1px 3px #000" }}>{hud.boss}</div>
-          <div style={{ height: 10, marginTop: 4, border: "1px solid #2a1848", background: "rgba(10,6,24,0.72)", borderRadius: 3, overflow: "hidden" }}>
-            <div
-              style={{
-                height: "100%",
-                width: `${Math.round(hud.bossHp * 100)}%`,
-                background: hud.bossHp < 0.35 ? "#e23b2f" : "#a855f7",
-                transition: "width 0.25s ease",
-              }}
-            />
-          </div>
-        </div>
-      )}
-      {!hud.locked && !hud.message && <p className="look-hint">Drag to look · click to capture the mouse</p>}
-      {hud.message && (
-        <p className="toast">
-          <i />
-          {hud.message}
-        </p>
-      )}
-      <div className="crosshair" />
-      {hud.mine > 0 && (
-        <div className="mine-track">
-          <span style={{ width: `${hud.mine * 100}%` }} />
-        </div>
-      )}
-      {hud.targetName && <div className="target-name">{hud.targetName}</div>}
-      {!hud.creative && (
-        <div className="hunger" aria-label={`${hud.hunger} hunger`}>
-          {Array.from({ length: 10 }, (_, i) => (
-            <Drumstick key={i} size={15} className={i < Math.ceil(hud.hunger / 2) ? "drum" : "drum off"} />
-          ))}
-        </div>
-      )}
-      {!hud.creative && (
-        <div className="hearts" aria-label={`${hud.health} health`}>
-          {Array.from({ length: hearts }, (_, i) => {
-            const full = i < Math.floor(hud.health / 2);
-            const half = !full && hud.health % 2 === 1 && i === Math.floor(hud.health / 2);
-            return (
-              <Heart
-                key={i}
-                size={16}
-                className={full ? "heart" : half ? "heart half" : "heart off"}
-                fill="currentColor"
-              />
-            );
-          })}
-        </div>
-      )}
-      {hud.oxygen < 10 && (
-        <div className="oxygen" aria-label="air">
-          {Array.from({ length: 10 }, (_, i) => (
-            <Droplets key={i} size={14} style={{ opacity: i < Math.ceil(hud.oxygen) ? 1 : 0.25 }} />
-          ))}
-        </div>
-      )}
-      <div className="xp-track" aria-label={`${hud.rank}, level ${hud.level}`}>
-        <span style={{ width: `${Math.min(100, (hud.xp / Math.max(1, hud.xpNeed)) * 100)}%` }} />
-        <em>{hud.creative ? "Creative" : `Lv ${hud.level} · ${hud.rank}`}</em>
-      </div>
-      {hud.spellsOn && (
-        <div className="mana-track" aria-label={`${hud.spell || "no spell"}, ${Math.floor(hud.mana)} mana`}>
-          <span style={{ width: `${Math.min(100, (hud.mana / Math.max(1, hud.manaMax)) * 100)}%` }} />
-          <em>{hud.spell ? `${hud.spell} · ${Math.floor(hud.mana)}/${hud.manaMax}` : "No spell"}</em>
+    <div className="sc-hotbar-wrap">
+      {held && held.id > 0 && (
+        <div className="sc-held-name" key={hud.slot + ":" + held.id}>
+          {def(held.id).name}
+          {hud.heldEnch ? <em> ✦ {hud.heldEnch}</em> : null}
         </div>
       )}
       <div
-        className="hotbar"
+        className="sc-hotbar"
+        data-silent
         onPointerDown={(e) => {
           if (e.shiftKey || e.button !== 0) return;
           swipeAt.current = -1;
           e.currentTarget.setPointerCapture(e.pointerId);
-          const i = pickSlot(e.currentTarget, e.clientX);
-          swipeFrom.current = i;
+          swipeFrom.current = pickSlot(e.currentTarget, e.clientX);
         }}
         onPointerMove={(e) => {
           if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
@@ -406,17 +1154,16 @@ function Hud({ game }: { game: GameApi }) {
           if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
           const from = swipeFrom.current;
           const to = swipeAt.current;
-          if (from >= 0 && to >= 0 && from !== to && hud.hotbar[from]?.id > 0) {
-            game.swapSlots(from, to);
-          }
+          if (from >= 0 && to >= 0 && from !== to && hud.hotbar[from]?.id > 0) game.swapSlots(from, to);
           swipeFrom.current = -1;
         }}
       >
         {hud.hotbar.map((item, i) => (
           <button
             key={i}
-            className={i === hud.slot ? "slot on" : "slot"}
+            className={i === hud.slot ? "sc-slot on" : "sc-slot"}
             title={item.id > 0 ? def(item.id).name : ""}
+            aria-label={item.id > 0 ? `Slot ${i + 1}: ${def(item.id).name}` : `Slot ${i + 1}: empty`}
             onClick={(e) => (e.shiftKey && item.id > 0 ? game.shiftStack(item.id) : game.setSlot(i))}
             onContextMenu={(e) => {
               if (item.id <= 0) return;
@@ -426,7 +1173,8 @@ function Hud({ game }: { game: GameApi }) {
           >
             <small>{i + 1}</small>
             {item.id > 0 && <ItemIcon id={item.id} />}
-            {item.id > 0 && item.count >= 0 && <em>{item.count}</em>}
+            {item.id > 0 && item.count > 1 && <em>{item.count}</em>}
+            {item.id > 0 && item.count === 0 && <em className="zero">0</em>}
           </button>
         ))}
       </div>
@@ -434,220 +1182,269 @@ function Hud({ game }: { game: GameApi }) {
   );
 }
 
-function GraphicsSettings({ game }: { game: GameApi }) {
-  const s = game.settings;
+// ─────────────────────────────────────────────────────────────────────────────
+// Touch controls
+// ─────────────────────────────────────────────────────────────────────────────
+
+function TouchControls({ game }: { game: GameApi }) {
+  const origin = useRef<{ id: number; x: number; y: number } | null>(null);
+  const [stick, setStick] = useState<{ bx: number; by: number; kx: number; ky: number } | null>(null);
+  const R = 52;
+  const buzz = (ms: number) => {
+    if (game.settings.haptics && navigator.vibrate) navigator.vibrate(ms);
+  };
+  const release = () => {
+    origin.current = null;
+    setStick(null);
+    game.touch.moveX = 0;
+    game.touch.moveY = 0;
+  };
+  const allUp = () => {
+    game.touch.mine = false;
+    game.touch.place = false;
+    game.touch.jump = false;
+  };
   return (
-    <div className="settings">
-      <label>
-        Quality
-        <span className="seg">
-          {(["auto", "high", "balanced", "performance"] as const).map((q) => (
-            <button key={q} type="button" className={s.quality === q ? "on" : ""} onClick={() => game.setQuality(q)}>
-              {q}
+    <div className="sc-touch" data-silent>
+      <div
+        className="sc-stick-zone"
+        onPointerDown={(e) => {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          const rect = e.currentTarget.getBoundingClientRect();
+          origin.current = { id: e.pointerId, x: e.clientX, y: e.clientY };
+          setStick({ bx: e.clientX - rect.left, by: e.clientY - rect.top, kx: 0, ky: 0 });
+        }}
+        onPointerMove={(e) => {
+          const o = origin.current;
+          if (!o || o.id !== e.pointerId) return;
+          const dx = e.clientX - o.x;
+          const dy = e.clientY - o.y;
+          const m = Math.hypot(dx, dy) || 1;
+          const k = Math.min(1, R / m);
+          const nx = (dx * k) / R;
+          const ny = (dy * k) / R;
+          // Small dead zone, then full range.
+          const mag = Math.hypot(nx, ny);
+          const live = mag < 0.12 ? 0 : (mag - 0.12) / 0.88 / (mag || 1);
+          game.touch.moveX = nx * live;
+          game.touch.moveY = -ny * live;
+          setStick((st) => (st ? { ...st, kx: dx * k, ky: dy * k } : st));
+        }}
+        onPointerUp={(e) => origin.current?.id === e.pointerId && release()}
+        onPointerCancel={release}
+      >
+        {stick ? (
+          <div className="sc-stick" style={{ left: stick.bx, top: stick.by }}>
+            <div className="sc-stick-knob" style={{ transform: `translate(${stick.kx}px, ${stick.ky}px)` }} />
+          </div>
+        ) : (
+          <div className="sc-stick idle">
+            <div className="sc-stick-knob" />
+          </div>
+        )}
+      </div>
+      <button
+        className="sc-touch-pause"
+        aria-label="Pause"
+        onClick={() => {
+          allUp();
+          game.pauseGame();
+        }}
+      >
+        <PauseIcon size={20} />
+      </button>
+      <button
+        className="sc-touch-bag"
+        aria-label="Inventory"
+        onClick={() => {
+          allUp();
+          game.toggleInventory();
+        }}
+      >
+        <BagIcon size={22} />
+      </button>
+      <div className="sc-touch-actions">
+        <HoldButton className="mine" label="Mine or attack" onHold={(v) => (game.touch.mine = v)} buzz={buzz}>
+          <PickIcon size={30} />
+        </HoldButton>
+        <HoldButton className="place" label="Place or use" onHold={(v) => (game.touch.place = v)} buzz={buzz}>
+          <HandIcon size={26} />
+        </HoldButton>
+        <HoldButton className="jump" label="Jump" onHold={(v) => (game.touch.jump = v)} buzz={buzz}>
+          <JumpIcon size={28} />
+        </HoldButton>
+      </div>
+    </div>
+  );
+}
+
+function HoldButton({ label, onHold, children, className, buzz }: { label: string; onHold: (down: boolean) => void; children: ReactNode; className: string; buzz: (ms: number) => void }) {
+  const [down, setDown] = useState(false);
+  const set = (v: boolean) => {
+    setDown(v);
+    onHold(v);
+  };
+  return (
+    <button
+      className={"sc-hold " + className + (down ? " down" : "")}
+      aria-label={label}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        set(true);
+        buzz(10);
+      }}
+      onPointerUp={() => set(false)}
+      onPointerCancel={() => set(false)}
+      onLostPointerCapture={() => set(false)}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Inventory hub (bag, crafting, ranks, quests, skills) and stations
+// ─────────────────────────────────────────────────────────────────────────────
+
+type Page = "bin" | "craft" | "ranks" | "quests" | "skills";
+
+function Inventory({ game }: { game: GameApi }) {
+  const hud = game.hud;
+  const station = hud.panel === "furnace" || hud.panel === "chest" || hud.panel === "enchant" || hud.panel === "anvil" || hud.panel === "brew" || hud.panel === "trade" || hud.panel === "beacon";
+  const [page, setPage] = useState<Page>(hud.panel === "bench" ? "craft" : "bin");
+  if (station) return <StationScreen game={game} />;
+  const tabs: { id: Page; icon: ReactNode; label: string }[] = [
+    { id: "bin", icon: <BagIcon size={20} />, label: "Bag" },
+    { id: "craft", icon: <HammerIcon size={20} />, label: "Craft" },
+    { id: "skills", icon: <StarIcon size={20} />, label: "Skills" },
+    { id: "quests", icon: <ScrollIcon size={20} />, label: "Quests" },
+    { id: "ranks", icon: <MedalIcon size={20} />, label: "Ranks" },
+  ];
+  const titles: Record<Page, string> = {
+    bin: hud.panel === "bench" ? "Workbench" : "Inventory",
+    craft: "Crafting",
+    ranks: hud.rank,
+    quests: "Quest board",
+    skills: "Skill tree",
+  };
+  return (
+    <div className="sc-menu-layer sc-inv-layer">
+      <section className="sc-panel sc-inv" aria-label={titles[page]}>
+        <nav className="sc-inv-tabs" role="tablist">
+          {tabs.map((t) => (
+            <button key={t.id} role="tab" aria-selected={page === t.id} className={page === t.id ? "on" : ""} onClick={() => setPage(t.id)}>
+              {t.icon}
+              <span>{t.label}</span>
+              {t.id === "skills" && hud.skillPoints > 0 && !hud.creative && <i className="sc-dot-badge">{hud.skillPoints}</i>}
+              {t.id === "quests" && hud.questAlert && <i className="sc-dot-badge">!</i>}
             </button>
           ))}
-        </span>
-      </label>
-      <label>
-        Speed
-        <span className="fps-read">{game.hud.fps} fps</span>
-      </label>
-      <label>
-        Horizon {s.radius}
-        <input type="range" min={2} max={14} step={1} value={s.radius} onChange={(e) => game.setRadius(Number(e.target.value))} />
-      </label>
-      <label>
-        Studs
-        <input type="checkbox" checked={s.studs} onChange={(e) => game.setStuds(e.target.checked)} />
-      </label>
-      <label>
-        Realistic
-        <input type="checkbox" checked={s.realistic} onChange={(e) => game.setRealistic(e.target.checked)} />
-      </label>
-    </div>
-  );
-}
-
-function GameplaySettings({ game }: { game: GameApi }) {
-  const s = game.settings;
-  return (
-    <div className="settings">
-      <label>
-        Look
-        <input type="range" min={0.4} max={2.2} step={0.1} value={s.sens} onChange={(e) => game.setSens(Number(e.target.value))} />
-      </label>
-      <label>
-        Sound
-        <input type="checkbox" checked={s.sound} onChange={(e) => game.setSound(e.target.checked)} />
-      </label>
-      <label>
-        Outside view
-        <input type="checkbox" checked={s.third} onChange={(e) => game.setThird(e.target.checked)} />
-      </label>
-    </div>
-  );
-}
-
-function ModSettings({ game }: { game: GameApi }) {
-  const s = game.settings;
-  return (
-    <div className="settings">
-      <label>
-        Hard nights
-        <input type="checkbox" checked={s.mods.hard} onChange={(e) => game.setMod("hard", e.target.checked)} />
-      </label>
-      <label>
-        Generous parts
-        <input type="checkbox" checked={s.mods.generous} onChange={(e) => game.setMod("generous", e.target.checked)} />
-      </label>
-      <label>
-        Peaceful bricks
-        <input type="checkbox" checked={s.mods.peaceful} onChange={(e) => game.setMod("peaceful", e.target.checked)} />
-      </label>
-      <label>
-        Spellcraft
-        <input type="checkbox" checked={s.mods.spells} onChange={(e) => game.setMod("spells", e.target.checked)} />
-      </label>
-    </div>
-  );
-}
-
-function SettingsPanel({ game }: { game: GameApi }) {
-  return (
-    <>
-      <h3 className="sect">Graphics</h3>
-      <GraphicsSettings game={game} />
-      <h3 className="sect">Gameplay</h3>
-      <GameplaySettings game={game} />
-      <h3 className="sect">World mods</h3>
-      <ModSettings game={game} />
-    </>
-  );
-}
-
-function PauseMenu({ game }: { game: GameApi }) {
-  return (
-    <div className="menu-wrap">
-      <section className="card pause-card">
-        <p className="eyebrow">Paused</p>
-        <h1>
-          Stud<span className="craft">craft</span>
-        </h1>
-        <div className="stack pause-actions">
-          <button className="btn btn-primary big" onClick={() => game.resume()}>
-            ▶ Resume
-          </button>
-          <button className="btn" onClick={() => game.toggleInventory()}>
-            🎒 Brick bin
-          </button>
-          <button className="btn" onClick={() => game.quit()}>
-            Save and quit
-          </button>
-        </div>
-        <SettingsPanel game={game} />
-        <p className="fine">
-          Seed {game.hud.seedText || game.hud.seed}. The land does not end. Horizon is only the draw distance.
-        </p>
-        <button className="btn" onClick={() => game.copySeed()}>
-          Copy seed
-        </button>
-        <div className="stack pause-actions">
-          {game.hud.netStatus ? (
-            <>
-              <p className="fine">{game.hud.netStatus}</p>
-              <button className="btn" onClick={() => game.leaveOnline()}>
-                🌐 Leave the room
+        </nav>
+        <div className="sc-inv-main">
+          <PanelHead
+            eyebrow={page === "skills" ? `${hud.skillPoints} point${hud.skillPoints === 1 ? "" : "s"} to spend` : page === "ranks" ? `Level ${hud.level}` : hud.creative ? "Creative" : "Survival"}
+            title={titles[page]}
+            right={
+              <button className="sc-icon-btn" aria-label="Close" onClick={() => game.toggleInventory()}>
+                <CloseIcon size={22} />
               </button>
-            </>
-          ) : (
-            <>
-              <button className="btn" onClick={() => game.hostOnline()}>
-                🌐 Host an online room (prototype)
-              </button>
-              <button className="btn" onClick={() => game.joinOnline()}>
-                🌐 Join a room by code
-              </button>
-            </>
-          )}
+            }
+          />
+          <div className="sc-scroll">
+            {page === "bin" && <BinPage game={game} />}
+            {page === "craft" && <CraftPage game={game} />}
+            {page === "ranks" && <Ranks hud={hud} />}
+            {page === "quests" && <QuestList hud={hud} onClaim={(id) => game.claim(id)} />}
+            {page === "skills" && <SkillTree hud={hud} onUnlock={(id) => game.unlock(id)} />}
+          </div>
         </div>
       </section>
     </div>
   );
 }
 
-function BinGrid({ game, hud }: { game: GameApi; hud: GameApi["hud"] }) {
+function BinGrid({ game, filter = "" }: { game: GameApi; filter?: string }) {
+  const hud = game.hud;
+  const q = filter.trim().toLowerCase();
+  const ids = CATALOG.filter((id) => (hud.creative || (hud.inv[id] ?? 0) > 0) && (!q || def(id).name.toLowerCase().includes(q)));
+  if (ids.length === 0) return <p className="sc-empty">{q ? "Nothing matches." : "Your bag is empty. Go punch a tree."}</p>;
   return (
-    <div className="grid-blocks">
-          {CATALOG.map((id) => {
-            const count = hud.creative ? -1 : (hud.inv[id] ?? 0);
-            const empty = !hud.creative && count <= 0;
-            return (
-              <button
-                key={id}
-                data-empty={empty}
-                onClick={(e) => {
-                  if (e.shiftKey) {
-                    game.shiftStack(id);
-                    return;
-                  }
-                  // double-tap (mobile hybrid) also moves the stack
-                  const now = Date.now();
-                  const last = (e.currentTarget as HTMLButtonElement).dataset.tap ?? "0";
-                  if (now - Number(last) < 320) {
-                    game.shiftStack(id);
-                    (e.currentTarget as HTMLButtonElement).dataset.tap = "0";
-                    return;
-                  }
-                  (e.currentTarget as HTMLButtonElement).dataset.tap = String(now);
-                  game.hold(id);
-                  game.assign(id);
-                }}
-                onPointerDown={() => {
-                  const start = Date.now();
-                  const up = () => {
-                    if (Date.now() - start > 420) game.shiftStack(id);
-                    window.removeEventListener("pointerup", up);
-                  };
-                  window.addEventListener("pointerup", up);
-                }}
-              >
-                <ItemIcon id={id} />
-                {def(id).name}
-                <span>{hud.creative ? "all" : count}</span>
-              </button>
-            );
-          })}
-        </div>
+    <div className="sc-grid">
+      {ids.map((id) => {
+        const count = hud.creative ? -1 : (hud.inv[id] ?? 0);
+        return (
+          <button
+            key={id}
+            className={"sc-cell" + (hud.cursor === id ? " held" : "")}
+            title={def(id).name}
+            aria-label={def(id).name + (count >= 0 ? `, ${count}` : "")}
+            onClick={(e) => {
+              if (e.shiftKey) {
+                game.shiftStack(id);
+                return;
+              }
+              const now = Date.now();
+              const btn = e.currentTarget as HTMLButtonElement;
+              if (now - Number(btn.dataset.tap ?? "0") < 320) {
+                game.shiftStack(id);
+                btn.dataset.tap = "0";
+                return;
+              }
+              btn.dataset.tap = String(now);
+              game.hold(id);
+              game.assign(id);
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              game.shiftStack(id);
+            }}
+          >
+            <ItemIcon id={id} />
+            {count > 1 && <em>{count > 999 ? "999+" : count}</em>}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
 function BinPage({ game }: { game: GameApi }) {
   const hud = game.hud;
+  const [filter, setFilter] = useState("");
   return (
-    <>
-      <p className="sect">Armor — tap a piece to swap with the held brick</p>
-      <div className="armor-row">
-            {hud.armor.map((id, i) => (
-              <button key={i} className="slot" onClick={() => game.armorTap(i)}>
-                {id > 0 ? <ItemIcon id={id} /> : <small>{["Cap", "Shell", "Legs", "Boots"][i]}</small>}
-              </button>
-            ))}
+    <div className="sc-bin">
+      <div className="sc-bin-side">
+        <p className="sc-label">Armor</p>
+        <div className="sc-armor">
+          {hud.armor.map((id, i) => (
+            <button key={i} className="sc-cell" onClick={() => game.armorTap(i)} aria-label={["Helmet", "Chestplate", "Leggings", "Boots"][i]}>
+              {id > 0 ? <ItemIcon id={id} /> : <small>{["Head", "Body", "Legs", "Feet"][i]}</small>}
+            </button>
+          ))}
+          <div className="sc-cell offhand" role="img" aria-label="Off hand" title="Off hand (F swaps)">
+            {hud.offhand > 0 ? <ItemIcon id={hud.offhand} /> : <small>Off</small>}
           </div>
-      <p className="sect">Bricks — tap to hold, long-press or double-tap moves a stack</p>
-      <BinGrid game={game} hud={hud} />
-      <p className="lede">Cursor: {hud.cursor ? def(hud.cursor).name : "empty"}.</p>
-      <p className="sect">Color press — spends one spare brick</p>
-      <div className="colors">
-        {COLORS.map((id) => (
-          <button
-            key={id}
-            style={{ background: def(id).color }}
-            aria-label={def(id).name}
-            onClick={(e) => (e.shiftKey ? game.shiftStack(id) : game.press(id))}
-          />
-        ))}
+        </div>
+        <p className="sc-hint">Hold a piece, then tap a slot to wear it. F swaps the off hand.</p>
+        <p className="sc-label">Color press</p>
+        <div className="sc-colors">
+          {COLORS.map((id) => (
+            <button key={id} style={{ background: def(id).color }} aria-label={"Press " + def(id).name} onClick={(e) => (e.shiftKey ? game.shiftStack(id) : game.press(id))} />
+          ))}
+        </div>
+        <p className="sc-hint">Spends one spare brick.</p>
       </div>
-    </>
+      <div className="sc-bin-main">
+        <div className="sc-search">
+          <input type="search" placeholder="Search items" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Search items" />
+          <span className="sc-held">Holding: {hud.cursor ? def(hud.cursor).name : "—"}</span>
+        </div>
+        <BinGrid game={game} filter={filter} />
+        <p className="sc-hint">Tap to put in the selected hotbar slot · double-tap, long-press or Shift-click moves a stack.</p>
+      </div>
+    </div>
   );
 }
 
@@ -656,75 +1453,85 @@ function CraftPage({ game }: { game: GameApi }) {
   const bench = hud.panel === "bench";
   const [book, setBook] = useState<"all" | "build" | "tools" | "magic" | "gear" | "food">("all");
   const [sel, setSel] = useState("");
+  const [onlyCan, setOnlyCan] = useState(false);
   const [showGrid, setShowGrid] = useState(false);
-  const list = RECIPES.filter((recipe) => book === "all" || recipe.cat === book);
-  const recipe = list.find((entry) => entry.id === sel) ?? list[0];
   const afford = (entry: Recipe, times = 1) => hud.creative || entry.need.every(([id, n]) => (hud.inv[id] ?? 0) >= n * times);
+  const list = RECIPES.filter((r) => (book === "all" || r.cat === book) && (!onlyCan || afford(r)));
+  const recipe = list.find((e) => e.id === sel) ?? list[0];
   return (
-    <>
-      <div className="chips">
-        {(["all", "build", "tools", "magic", "gear", "food"] as const).map((cat) => (
-          <button key={cat} className={book === cat ? "chip on" : "chip"} onClick={() => setBook(cat)}>
+    <div className="sc-craft">
+      <div className="sc-chips">
+        {(["all", "build", "tools", "gear", "food", "magic"] as const).map((cat) => (
+          <button key={cat} className={book === cat ? "sc-chip-btn on" : "sc-chip-btn"} onClick={() => setBook(cat)}>
             {cat === "all" ? "All" : cat[0].toUpperCase() + cat.slice(1)}
           </button>
         ))}
+        <button className={onlyCan ? "sc-chip-btn on" : "sc-chip-btn"} onClick={() => setOnlyCan(!onlyCan)}>
+          <CheckIcon size={14} /> Craftable
+        </button>
       </div>
-      <div className="craft-layout">
-        <div className="recipe-list">
+      <div className="sc-craft-body">
+        <div className="sc-recipes">
           {list.map((entry) => (
-            <button key={entry.id + "-" + entry.name} className={recipe && entry.id === recipe.id ? "recipe-row on" : "recipe-row"} onClick={() => setSel(entry.id)}>
-              <span className="recipe-ic">
+            <button key={entry.id + "-" + entry.name} className={"sc-recipe" + (recipe && entry.id === recipe.id ? " on" : "") + (afford(entry) ? "" : " dim")} onClick={() => setSel(entry.id)}>
+              <span className="sc-recipe-ic">
                 <ItemIcon id={entry.out > 0 ? entry.out : ID.AxeW} />
               </span>
-              <span className="recipe-tx">
+              <span className="sc-recipe-tx">
                 <strong>{entry.name}</strong>
                 <small>{entry.detail}</small>
               </span>
-              <span className={afford(entry) ? "dot ok" : "dot"} aria-hidden="true" />
+              {afford(entry) && <i className="sc-ok-dot" aria-label="Craftable" />}
             </button>
           ))}
+          {list.length === 0 && <p className="sc-empty">Nothing craftable yet.</p>}
         </div>
         {recipe && (
-          <div className="recipe-detail">
-            <div className="rd-head">
-              <span className="rd-ic">
+          <div className="sc-recipe-detail">
+            <div className="sc-rd-head">
+              <span className="sc-rd-ic">
                 <ItemIcon id={recipe.out > 0 ? recipe.out : ID.AxeW} />
               </span>
               <div>
                 <strong>{recipe.name}</strong>
                 <small>
-                  {recipe.detail} · makes {recipe.n}
-                  {recipe.lvl ? ` · level ${recipe.lvl}` : ""}
+                  Makes {recipe.n}
+                  {recipe.lvl ? ` · rank ${recipe.lvl}` : ""}
                   {recipe.skill ? ` · ${recipe.skill} skill` : ""}
                 </small>
               </div>
             </div>
+            <p className="sc-muted">{recipe.detail}</p>
             {recipe.shape && recipe.w && recipe.h ? (
-              <div className="shape-grid" style={{ gridTemplateColumns: `repeat(${recipe.w}, 34px)` }}>
+              <div className="sc-shape" style={{ gridTemplateColumns: `repeat(${recipe.w}, 40px)` }}>
                 {recipe.shape.map((id, i) => (
-                  <span key={i} className={id > 0 ? "shape-cell" : "shape-cell empty"}>
+                  <span key={i} className={id > 0 ? "sc-shape-cell" : "sc-shape-cell empty"}>
                     {id > 0 && <ItemIcon id={id} />}
                   </span>
                 ))}
               </div>
             ) : null}
-            <div className="need-chips">
+            <div className="sc-needs">
               {recipe.need.map(([id, n]) => {
                 const have = hud.creative ? n : (hud.inv[id] ?? 0);
                 return (
-                  <span key={id} className={have >= n ? "need ok" : "need miss"}>
-                    <ItemIcon id={id} /> {def(id).name} {have}/{n}
+                  <span key={id} className={have >= n ? "sc-need ok" : "sc-need miss"}>
+                    <ItemIcon id={id} />
+                    <span>{def(id).name}</span>
+                    <b>
+                      {have}/{n}
+                    </b>
                   </span>
                 );
               })}
             </div>
-            <div className="craft-actions">
-              <button className="btn btn-primary big" disabled={!afford(recipe)} onClick={() => game.craft(recipe.id)}>
-                ⚒️ Craft
+            <div className="sc-craft-actions">
+              <button className="sc-btn sc-btn-primary" disabled={!afford(recipe)} onClick={() => game.craft(recipe.id)}>
+                <HammerIcon size={18} /> Craft
               </button>
               {!recipe.special && (
                 <button
-                  className="btn big"
+                  className="sc-btn"
                   disabled={!afford(recipe, 5)}
                   onClick={() => {
                     for (let i = 0; i < 5; i++) game.craft(recipe.id);
@@ -737,26 +1544,27 @@ function CraftPage({ game }: { game: GameApi }) {
           </div>
         )}
       </div>
-      <button className="btn grid-toggle" onClick={() => setShowGrid(!showGrid)}>
-        {showGrid ? "Hide the manual grid" : "Manual grid — tap bricks into the pattern yourself"}
+      <button className="sc-link" onClick={() => setShowGrid(!showGrid)}>
+        {showGrid ? "Hide the manual grid" : "Manual grid — place bricks into the pattern yourself"}
       </button>
       {showGrid && (
-        <>
-          <div className="craft-grid">
+        <div className="sc-manual">
+          <div className="sc-craft-grid">
             {hud.grid.map((id, i) => (
-              <button key={i} className="slot" onClick={() => game.gridTap(i)} disabled={!bench && i % 3 === 2}>
+              <button key={i} className="sc-cell" onClick={() => game.gridTap(i)} disabled={!bench && i % 3 === 2}>
                 {id > 0 && <ItemIcon id={id} />}
               </button>
             ))}
-            <button className="slot out" onClick={() => game.craftTake()}>
-              {hud.craftOut ? <ItemIcon id={hud.craftOut.id} /> : <small>Out</small>}
-              {hud.craftOut && hud.craftOut.n > 1 ? <em>{hud.craftOut.n}</em> : null}
-            </button>
           </div>
-          <p className="fine">{bench ? "Workbench grid: all 9 cells." : "Pocket grid: 2×2. A workbench unlocks the full 3×3."} Tap the output to take it.</p>
-        </>
+          <span className="sc-arrow">→</span>
+          <button className="sc-cell out" onClick={() => game.craftTake()}>
+            {hud.craftOut ? <ItemIcon id={hud.craftOut.id} /> : <small>Out</small>}
+            {hud.craftOut && hud.craftOut.n > 1 ? <em>{hud.craftOut.n}</em> : null}
+          </button>
+          <p className="sc-hint">{bench ? "Workbench: all nine cells." : "Pocket grid: 2×2. A workbench unlocks 3×3."} Hold a brick in the Bag tab, tap cells, then take the output.</p>
+        </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -769,243 +1577,189 @@ function StationScreen({ game }: { game: GameApi }) {
     anvil: "Anvil",
     brew: "Brew stand",
     trade: hud.trader || "Trader",
+    beacon: "Beacon",
   };
+  const brews: { id: string; label: string; detail: string; primary?: boolean }[] = [
+    { id: "base", label: "Base brew", detail: "Bottle + wart — every chain brew starts here", primary: true },
+    { id: "heal", label: "Mend brew", detail: "Bottle + apple" },
+    { id: "speed", label: "Dash brew", detail: "Bottle + wart" },
+    { id: "might", label: "Might brew", detail: "Bottle + ember rod" },
+    { id: "focus", label: "Focus brew", detail: "Bottle + amber · rank 6" },
+    { id: "regen", label: "Regen brew", detail: "Base + fang · heal over time" },
+    { id: "fireward", label: "Ward brew", detail: "Base + cinder · fire can't touch you" },
+    { id: "leap", label: "Leap brew", detail: "Base + feather · jump higher" },
+    { id: "gill", label: "Gill brew", detail: "Base + fish · breathe underwater" },
+    { id: "veil", label: "Veil brew", detail: "Base + frost · mobs stop seeing you" },
+    { id: "venom", label: "Venom brew", detail: "Base + red mushroom" },
+    { id: "tar", label: "Tar brew", detail: "Base + slime · heavy feet" },
+    { id: "splashvenom", label: "Venom splash", detail: "Venom brew + powder · throw it" },
+    { id: "splashtar", label: "Tar splash", detail: "Tar brew + powder · throw it" },
+  ];
   return (
-    <div className="sheet-wrap">
-      <section className="card sheet hub">
-        <header className="sheet-head">
-          <div>
-            <p className="eyebrow">Station</p>
-            <h1>{titles[hud.panel] ?? hud.panel}</h1>
-          </div>
-          <button className="btn x" aria-label="Close" onClick={() => game.toggleInventory()}>
-            ✕
-          </button>
-        </header>
-        <div className="hub-body">
-          {hud.panel === "furnace" && (
-            <>
-              <div className="station-slots">
-                <figure>
-                  <button className="slot big" onClick={() => game.furnaceTap(0)}>
-                    {hud.furnace.in ? <ItemIcon id={hud.furnace.in} /> : <small>Ore</small>}
-                    {hud.furnace.inN > 0 && <em>{hud.furnace.inN}</em>}
-                  </button>
-                  <figcaption>Ore</figcaption>
-                </figure>
-                <span className="station-arrow">🔥</span>
-                <figure>
-                  <button className="slot big" onClick={() => game.furnaceTap(1)}>
-                    {hud.furnace.fuel ? <ItemIcon id={hud.furnace.fuel} /> : <small>Fuel</small>}
-                    {hud.furnace.fuelN > 0 && <em>{hud.furnace.fuelN}</em>}
-                  </button>
-                  <figcaption>Fuel</figcaption>
-                </figure>
-                <span className="station-arrow">→</span>
-                <figure>
-                  <button className="slot big out" onClick={() => game.furnaceTap(2)}>
-                    {hud.furnace.out ? <ItemIcon id={hud.furnace.out} /> : <small>Out</small>}
-                    {hud.furnace.outN > 0 && <em>{hud.furnace.outN}</em>}
-                  </button>
-                  <figcaption>Out</figcaption>
-                </figure>
+    <div className="sc-menu-layer sc-inv-layer">
+      <section className="sc-panel sc-inv sc-station" aria-label={titles[hud.panel] ?? hud.panel}>
+        <div className="sc-inv-main">
+          <PanelHead
+            eyebrow="Station"
+            title={titles[hud.panel] ?? hud.panel}
+            right={
+              <button className="sc-icon-btn" aria-label="Close" onClick={() => game.toggleInventory()}>
+                <CloseIcon size={22} />
+              </button>
+            }
+          />
+          <div className="sc-scroll">
+            {hud.panel === "furnace" && (
+              <>
+                <div className="sc-kiln">
+                  <figure>
+                    <button className="sc-cell big" onClick={() => game.furnaceTap(0)}>
+                      {hud.furnace.in ? <ItemIcon id={hud.furnace.in} /> : <small>Ore</small>}
+                      {hud.furnace.inN > 0 && <em>{hud.furnace.inN}</em>}
+                    </button>
+                    <figcaption>Input</figcaption>
+                  </figure>
+                  <figure>
+                    <button className="sc-cell big" onClick={() => game.furnaceTap(1)}>
+                      {hud.furnace.fuel ? <ItemIcon id={hud.furnace.fuel} /> : <small>Fuel</small>}
+                      {hud.furnace.fuelN > 0 && <em>{hud.furnace.fuelN}</em>}
+                    </button>
+                    <figcaption>Fuel</figcaption>
+                  </figure>
+                  <div className="sc-kiln-arrow">
+                    <span style={{ width: `${Math.round(hud.furnace.cook * 100)}%` }} />
+                  </div>
+                  <figure>
+                    <button className="sc-cell big out" onClick={() => game.furnaceTap(2)}>
+                      {hud.furnace.out ? <ItemIcon id={hud.furnace.out} /> : <small>Out</small>}
+                      {hud.furnace.outN > 0 && <em>{hud.furnace.outN}</em>}
+                    </button>
+                    <figcaption>Output</figcaption>
+                  </figure>
+                </div>
+                <p className="sc-hint">Hold an item below, then tap Input or Fuel to load it. Tap Output to collect.</p>
+                <BinGrid game={game} />
+              </>
+            )}
+            {hud.panel === "chest" && (
+              <>
+                <div className="sc-grid sc-chest">
+                  {hud.chest.map((cell, i) => (
+                    <button key={i} className="sc-cell" onClick={() => game.chestTap(i)} aria-label={cell.id > 0 ? def(cell.id).name : "Empty"}>
+                      {cell.id > 0 && <ItemIcon id={cell.id} />}
+                      {cell.n > 1 && <em>{cell.n}</em>}
+                    </button>
+                  ))}
+                </div>
+                <p className="sc-label">Your bag</p>
+                <BinGrid game={game} />
+                <p className="sc-hint">Tap a chest cell to take it. Hold a bag item, then tap an empty chest cell to store it.</p>
+              </>
+            )}
+            {hud.panel === "enchant" && (
+              <div className="sc-station-body">
+                <button className="sc-btn sc-btn-primary sc-btn-wide" onClick={() => game.enchant()}>
+                  <StarIcon size={18} /> Enchant the held item · 3 levels
+                </button>
+                {hud.heldEnch && <p className="sc-status">Held: ✦ {hud.heldEnch}</p>}
+                <p className="sc-muted">
+                  Blades take Sharpness, Smite, Bane, Fire Aspect, Knockback, Looting. Picks take Efficiency, Fortune or Silk Touch. Bows take Power, Flame, Punch, Infinity. Armor takes Protection and Thorns; boots can learn Feather
+                  Fall, Depth Strider or Frost Walker. Anything sturdy learns Unbreaking and Mending. Hold a plain book to bind runes into an enchanted book instead.
+                </p>
               </div>
-              <div className="cook-bar">
-                <span style={{ width: `${Math.round(hud.furnace.cook * 100)}%` }} />
+            )}
+            {hud.panel === "anvil" && (
+              <div className="sc-station-body">
+                <MenuButton variant="primary" icon={<HammerIcon size={20} />} onClick={() => game.mend()} hint="Spend 1 ingot">
+                  Mend held tool
+                </MenuButton>
+                <MenuButton icon={<HammerIcon size={20} />} onClick={() => game.temper()} hint="Spend 1 level">
+                  Temper held tool
+                </MenuButton>
+                <MenuButton icon={<StarIcon size={20} />} onClick={() => game.combine()} hint="Spend 2 levels · same rune and level as the off-hand → one level higher">
+                  Combine with off-hand
+                </MenuButton>
+                <MenuButton variant="ghost" icon={<TrashIcon size={20} />} onClick={() => game.disenchant()} hint="Strip every rune off the held item">
+                  Grindstone
+                </MenuButton>
+                {hud.heldEnch && <p className="sc-status">Held: ✦ {hud.heldEnch}</p>}
               </div>
-              <p className="fine">Hold a brick below, then tap a slot to load it. Tap Out to collect.</p>
-              <BinGrid game={game} hud={hud} />
-            </>
-          )}
-          {hud.panel === "chest" && (
-            <>
-              <div className="grid-blocks chest">
-                {hud.chest.map((cell, i) => (
-                  <button key={i} onClick={() => game.chestTap(i)}>
-                    {cell.id > 0 && <ItemIcon id={cell.id} />}
-                    {cell.n > 0 && <span>{cell.n}</span>}
+            )}
+            {hud.panel === "brew" && (
+              <div className="sc-brew-grid">
+                {brews.map((b) => (
+                  <button key={b.id} className={"sc-brew" + (b.primary ? " primary" : "")} onClick={() => game.brew(b.id)}>
+                    <strong>{b.label}</strong>
+                    <small>{b.detail}</small>
                   </button>
                 ))}
               </div>
-              <p className="fine">Tap a chest cell, then a brick below — or the other way round.</p>
-              <BinGrid game={game} hud={hud} />
-            </>
-          )}
-          {hud.panel === "enchant" && (
-            <div className="stack">
-              <button className="btn btn-primary big" onClick={() => game.enchant()}>
-                ✨ Spend 3 levels — enchant the held piece
-              </button>
-              <p className="fine">
-                Random runes for what you hold: blades take Sharpness, Smite, Bane of Spiders, Fire Aspect, Knockback and Looting; picks take
-                Efficiency, Fortune or Silk Touch; bows take Power, Flame, Punch and Infinity; armor takes Protection and Thorns; boots can
-                learn Feather Fall, Depth Strider or Frost Walker. Anything sturdy can learn Unbreaking and Mending. Hold a plain book and
-                the table binds the runes into an enchanted book instead — apply it later at the anvil from your off hand. Rivals never mix:
-                Silk Touch refuses Fortune, Infinity refuses Mending, Frost Walker refuses Depth Strider.
-              </p>
-              {hud.heldEnch && <p className="fine">Held now: ✦ {hud.heldEnch}</p>}
-            </div>
-          )}
-          {hud.panel === "anvil" && (
-            <div className="stack">
-              <button className="btn btn-primary big" onClick={() => game.mend()}>
-                🔨 Spend 1 ingot — mend the held tool
-              </button>
-              <button className="btn big" onClick={() => game.temper()}>
-                Spend 1 level — temper the held tool
-              </button>
-              <button className="btn big" onClick={() => game.combine()}>
-                Spend 2 levels — combine with the off-hand twin (same rune, same level → one level higher)
-              </button>
-              <button className="btn big" onClick={() => game.disenchant()}>
-                Grindstone — strip every rune off the held piece
-              </button>
-              {hud.heldEnch && <p className="fine">Held now: ✦ {hud.heldEnch}</p>}
-            </div>
-          )}
-          {hud.panel === "brew" && (
-            <div className="stack">
-              <button className="btn big" onClick={() => game.brew("heal")}>
-                🧪 Bottle + apple → mend brew
-              </button>
-              <button className="btn big" onClick={() => game.brew("speed")}>
-                🧪 Bottle + wart → dash brew
-              </button>
-              <button className="btn big" onClick={() => game.brew("might")}>
-                🧪 Bottle + ember rod → might brew
-              </button>
-              <button className="btn big" onClick={() => game.brew("focus")}>
-                🧪 Bottle + amber → focus brew · level 6
-              </button>
-              <button className="btn btn-primary big" onClick={() => game.brew("base")}>
-                ⚗️ Bottle + wart → base brew — every chain brew starts here
-              </button>
-              <button className="btn big" onClick={() => game.brew("regen")}>
-                Base + fang → regen brew (heal over time)
-              </button>
-              <button className="btn big" onClick={() => game.brew("fireward")}>
-                Base + cinder → ward brew (fire can't touch you)
-              </button>
-              <button className="btn big" onClick={() => game.brew("leap")}>
-                Base + feather → leap brew (jump higher)
-              </button>
-              <button className="btn big" onClick={() => game.brew("gill")}>
-                Base + fish → gill brew (swim like one)
-              </button>
-              <button className="btn big" onClick={() => game.brew("veil")}>
-                Base + frost → veil brew (mobs stop seeing you)
-              </button>
-              <button className="btn big" onClick={() => game.brew("venom")}>
-                Base + red mushroom → venom brew
-              </button>
-              <button className="btn big" onClick={() => game.brew("tar")}>
-                Base + slime → tar brew (heavy feet)
-              </button>
-              <button className="btn big" onClick={() => game.brew("splashvenom")}>
-                💥 Venom brew + powder → venom splash (throw it)
-              </button>
-              <button className="btn big" onClick={() => game.brew("splashtar")}>
-                💥 Tar brew + powder → tar splash (throw it)
-              </button>
-            </div>
-          )}
-          {hud.panel === "beacon" && (
-            <div className="stack">
-              <p className="lede">
-                {hud.beaconLevel > 0
-                  ? `Pyramid level ${hud.beaconLevel} · blessing: ${hud.beaconBuff || "none chosen"}`
-                  : "No pyramid yet — stack iron, gold or aqua-gem blocks under the beacon: 3×3, then 5×5 below it, 7×7, 9×9."}
-              </p>
-              <button className="btn big" disabled={hud.beaconLevel < 1} onClick={() => game.beacon("speed")}>
-                💨 Swiftness{hud.beaconBuff === "speed" ? " · active" : ""}{hud.beaconLevel < 1 ? " 🔒" : ""}
-              </button>
-              <button className="btn big" disabled={hud.beaconLevel < 1} onClick={() => game.beacon("jump")}>
-                🐇 Leap{hud.beaconBuff === "jump" ? " · active" : ""}{hud.beaconLevel < 1 ? " 🔒" : ""}
-              </button>
-              <button className="btn big" disabled={hud.beaconLevel < 2} onClick={() => game.beacon("regen")}>
-                💗 Renewal{hud.beaconBuff === "regen" ? " · active" : ""}{hud.beaconLevel < 2 ? " 🔒 level 2" : ""}
-              </button>
-              <button className="btn big" disabled={hud.beaconLevel < 3} onClick={() => game.beacon("strength")}>
-                💪 Might{hud.beaconBuff === "strength" ? " · active" : ""}{hud.beaconLevel < 3 ? " 🔒 level 3" : ""}
-              </button>
-            </div>
-          )}
-          {hud.panel === "trade" && (
-            <div className="stack">
-              <p className="lede">{hud.traderBlurb}</p>
-              <p className="lede">
-                {hud.traderLevel} · {hud.traderNext}
-              </p>
-              <p className="lede">
-                Reputation here: {hud.repWord} ({hud.reputation > 0 ? "+" : ""}
-                {hud.reputation}) · stock restocks morning and afternoon
-              </p>
-              {hud.offers.map((offer, i) => (
-                <button key={i} className="btn big" disabled={offer.locked || offer.stock <= 0} onClick={() => game.trade(i)}>
-                  {offer.pn} {offer.payName} → {offer.on} {offer.outName}
-                  {offer.tier === 2 ? " · Journeyman" : offer.tier === 3 ? " · Master" : ""}
-                  {offer.locked ? " 🔒" : offer.stock <= 0 ? " · out of stock" : ` · ${offer.stock} left`}
-                </button>
-              ))}
-              {hud.trader === "Clerk" && <QuestList hud={hud} onClaim={(id) => game.claim(id)} />}
-            </div>
-          )}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function Inventory({ game }: { game: GameApi }) {
-  const hud = game.hud;
-  const station =
-    hud.panel === "furnace" || hud.panel === "chest" || hud.panel === "enchant" || hud.panel === "anvil" || hud.panel === "brew" || hud.panel === "trade" || hud.panel === "beacon";
-  const [page, setPage] = useState<"bin" | "craft" | "ranks" | "quests" | "skills">("bin");
-  const known = new Set(hud.found);
-  if (station) return <StationScreen game={game} />;
-  const titles = {
-    bin: "Brick bin",
-    craft: "Crafting",
-    ranks: hud.rank,
-    quests: "Quest board",
-    skills: `${hud.skillPoints} skill points`,
-  };
-  const tabs = [
-    { id: "bin", icon: "🎒", label: "Bin" },
-    { id: "craft", icon: "⚒️", label: "Craft" },
-    { id: "ranks", icon: "🏅", label: "Ranks" },
-    { id: "quests", icon: "📜", label: "Quests" },
-    { id: "skills", icon: "🌟", label: "Skills" },
-  ] as const;
-  return (
-    <div className="sheet-wrap">
-      <section className="card sheet hub">
-        <header className="sheet-head">
-          <div>
-            <p className="eyebrow">
-              {page === "ranks" ? "Builder rank" : page === "quests" ? "Hamlet board" : page === "skills" ? "Skill tree" : hud.panel === "bench" ? "Workbench" : "Backpack"}
-            </p>
-            <h1>{titles[page]}</h1>
+            )}
+            {hud.panel === "beacon" && (
+              <div className="sc-station-body">
+                <p className="sc-status">
+                  {hud.beaconLevel > 0 ? `Pyramid level ${hud.beaconLevel} · blessing: ${hud.beaconBuff || "none chosen"}` : "No pyramid yet — stack iron, gold or aqua-gem blocks under the beacon: 3×3, then 5×5, 7×7, 9×9."}
+                </p>
+                {(
+                  [
+                    ["speed", "Swiftness", 1],
+                    ["jump", "Leap", 1],
+                    ["regen", "Renewal", 2],
+                    ["strength", "Might", 3],
+                  ] as const
+                ).map(([id, name, lvl]) => (
+                  <MenuButton key={id} variant={hud.beaconBuff === id ? "primary" : ""} icon={hud.beaconLevel < lvl ? <LockIcon size={20} /> : <StarIcon size={20} />} onClick={() => game.beacon(id)} disabled={hud.beaconLevel < lvl} hint={hud.beaconLevel < lvl ? `Needs pyramid level ${lvl}` : hud.beaconBuff === id ? "Active" : undefined}>
+                    {name}
+                  </MenuButton>
+                ))}
+              </div>
+            )}
+            {hud.panel === "trade" && (
+              <div className="sc-station-body">
+                <p className="sc-muted">{hud.traderBlurb}</p>
+                <div className="sc-trade-meta">
+                  <span className="sc-chip">{hud.traderLevel}</span>
+                  <span className="sc-chip">{hud.traderNext}</span>
+                  <span className={"sc-chip rep" + (hud.reputation < 0 ? " bad" : hud.reputation > 0 ? " good" : "")}>
+                    {hud.repWord} ({hud.reputation > 0 ? "+" : ""}
+                    {hud.reputation})
+                  </span>
+                </div>
+                <ul className="sc-offers">
+                  {hud.offers.map((offer, i) => (
+                    <li key={i}>
+                      <button className="sc-offer" disabled={offer.locked || offer.stock <= 0} onClick={() => game.trade(i)}>
+                        <span className="sc-offer-side">
+                          <span className="sc-offer-ic">
+                            <ItemIcon id={offer.pay} />
+                          </span>
+                          <b>×{offer.pn}</b>
+                        </span>
+                        <span className="sc-arrow">→</span>
+                        <span className="sc-offer-side">
+                          <span className="sc-offer-ic">
+                            <ItemIcon id={offer.out} />
+                          </span>
+                          <b>×{offer.on}</b>
+                        </span>
+                        <span className="sc-offer-text">
+                          <strong>{offer.outName}</strong>
+                          <small>
+                            {offer.tier === 2 ? "Journeyman · " : offer.tier === 3 ? "Master · " : ""}
+                            {offer.locked ? "Locked" : offer.stock <= 0 ? "Out of stock" : `${offer.stock} left`}
+                          </small>
+                        </span>
+                        {offer.locked && <LockIcon size={16} />}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <p className="sc-hint">Stock restocks every morning and afternoon. Trading builds your name here.</p>
+                {hud.trader === "Clerk" && <QuestList hud={hud} onClaim={(id) => game.claim(id)} />}
+              </div>
+            )}
           </div>
-          <button className="btn x" aria-label="Close" onClick={() => game.toggleInventory()}>
-            ✕
-          </button>
-        </header>
-        <div className="hub-body">
-          {page === "bin" && <BinPage game={game} />}
-          {page === "craft" && <CraftPage game={game} />}
-          {page === "ranks" && <Ranks hud={hud} known={known} />}
-          {page === "quests" && <QuestList hud={hud} onClaim={(id) => game.claim(id)} />}
-          {page === "skills" && <SkillTree hud={hud} onUnlock={(id) => game.unlock(id)} />}
         </div>
-        <nav className="hub-tabs">
-          {tabs.map((tab) => (
-            <button key={tab.id} className={page === tab.id ? "on" : ""} onClick={() => setPage(tab.id)}>
-              <span>{tab.icon}</span>
-              {tab.label}
-            </button>
-          ))}
-        </nav>
       </section>
     </div>
   );
@@ -1013,18 +1767,21 @@ function Inventory({ game }: { game: GameApi }) {
 
 function QuestList({ hud, onClaim }: { hud: GameApi["hud"]; onClaim: (id: string) => void }) {
   return (
-    <ul className="perk-list quest-list">
+    <ul className="sc-cards">
       {hud.quests.map((quest) => (
-        <li key={quest.id} data-on={quest.ready && !quest.done}>
-          <div>
+        <li key={quest.id} className={"sc-card" + (quest.ready && !quest.done ? " glow" : "") + (quest.done ? " done" : "")}>
+          <div className="sc-card-text">
             <strong>{quest.name}</strong>
             <span>{quest.detail}</span>
-            <span>
-              {quest.done ? "Claimed" : `${quest.n} / ${quest.need}`} · {quest.reward}
-            </span>
+            <div className="sc-progress">
+              <span style={{ width: `${Math.min(100, (quest.n / Math.max(1, quest.need)) * 100)}%` }} />
+            </div>
+            <small>
+              {quest.done ? "Claimed" : `${quest.n} / ${quest.need}`} · Reward: {quest.reward}
+            </small>
           </div>
-          <button className="btn" disabled={!quest.ready || quest.done} onClick={() => onClaim(quest.id)}>
-            {quest.done ? "Claimed" : "Claim"}
+          <button className={"sc-btn sc-btn-sm" + (quest.ready && !quest.done ? " sc-btn-primary" : "")} disabled={!quest.ready || quest.done} onClick={() => onClaim(quest.id)}>
+            {quest.done ? <CheckIcon size={16} /> : "Claim"}
           </button>
         </li>
       ))}
@@ -1036,28 +1793,25 @@ function SkillTree({ hud, onUnlock }: { hud: GameApi["hud"]; onUnlock: (id: stri
   const known = new Set(hud.skills);
   const branches = ["Miner", "Hunter", "Mason", "Mage"] as const;
   return (
-    <div className="ranks">
-      <p className="lede">
-        {hud.skillPoints} point{hud.skillPoints === 1 ? "" : "s"} left. Each builder level is one point. Learn a node and it stays, even if a rune table spends the level.
-      </p>
+    <div className="sc-skill-cols">
       {branches.map((branch) => (
-        <div key={branch}>
-          <p className="eyebrow">{branch}</p>
-          <ul className="perk-list skill-list">
+        <div key={branch} className="sc-skill-col">
+          <p className="sc-label">{branch}</p>
+          <ul className="sc-cards">
             {SKILLS.filter((node) => node.branch === branch).map((node) => {
               const on = known.has(node.id);
               const locked = !!node.need && !known.has(node.need);
               return (
-                <li key={node.id} data-on={on}>
-                  <div>
+                <li key={node.id} className={"sc-card" + (on ? " learned" : "") + (locked ? " locked" : "")}>
+                  <div className="sc-card-text">
                     <strong>
                       {node.name}
-                      {node.rank ? ` · lv ${node.rank}` : ""}
+                      {node.rank ? <small> · rank {node.rank}</small> : null}
                     </strong>
                     <span>{node.detail}</span>
                   </div>
-                  <button className="btn" disabled={on || locked} onClick={() => onUnlock(node.id)}>
-                    {on ? "Learned" : locked ? "Locked" : "Learn"}
+                  <button className={"sc-btn sc-btn-sm" + (!on && !locked && hud.skillPoints > 0 ? " sc-btn-primary" : "")} disabled={on || locked || hud.skillPoints <= 0} onClick={() => onUnlock(node.id)}>
+                    {on ? <CheckIcon size={16} /> : locked ? <LockIcon size={16} /> : "Learn"}
                   </button>
                 </li>
               );
@@ -1069,25 +1823,28 @@ function SkillTree({ hud, onUnlock }: { hud: GameApi["hud"]; onUnlock: (id: stri
   );
 }
 
-function Ranks({ hud, known }: { hud: GameApi["hud"]; known: Set<number> }) {
+function Ranks({ hud }: { hud: GameApi["hud"] }) {
+  const known = useMemo(() => new Set(hud.found), [hud.found]);
   const pct = Math.min(100, (hud.xp / Math.max(1, hud.xpNeed)) * 100);
   return (
-    <div className="ranks">
-      <p className="lede">
-        Level {hud.level}
-        {hud.nextPerk ? ` · next perk ${hud.nextPerk}` : " · every stud is yours"}. The bar under the hotbar fills as you mine rare studs, smelt, and fight.
-      </p>
-      <div className="rank-bar" aria-hidden="true">
-        <span style={{ width: `${pct}%` }} />
+    <div className="sc-ranks">
+      <div className="sc-rank-hero">
+        <span className="sc-rank-lv">{hud.level}</span>
+        <div>
+          <strong>{hud.rank}</strong>
+          <div className="sc-progress big">
+            <span style={{ width: `${pct}%` }} />
+          </div>
+          <small>
+            {hud.xp} / {hud.xpNeed} studs{hud.nextPerk ? ` · next perk: ${hud.nextPerk}` : " · every perk unlocked"}
+          </small>
+        </div>
       </div>
-      <p className="fine">
-        {hud.xp} / {hud.xpNeed} studs. The rune table enchants the held piece for 3 levels — 20 runes now (Sharpness V, Silk Touch, Mending, Frost Walker…), binds them into books too, and the anvil combines a piece with its off-hand twin — or an enchanted book — to push a rune higher. The grindstone strips runes clean. Tin and copper hide in mid stone. Amber, chrome, and sapphire sit deeper.
-        Prism hugs the baseplate core and the End. Resin sweats on the nether floor.
-      </p>
-      <ul className="perk-list">
+      <p className="sc-label">Perks</p>
+      <ul className="sc-cards">
         {PERKS.map((perk) => (
-          <li key={perk.level} data-on={hud.level >= perk.level}>
-            <div>
+          <li key={perk.level} className={"sc-card" + (hud.level >= perk.level ? " learned" : " locked")}>
+            <div className="sc-card-text">
               <strong>
                 Lv {perk.level} · {perk.name}
               </strong>
@@ -1096,21 +1853,23 @@ function Ranks({ hud, known }: { hud: GameApi["hud"]; known: Set<number> }) {
           </li>
         ))}
       </ul>
-      <p className="eyebrow">Stud codex</p>
-      <ul className="codex">
+      <p className="sc-label">Stud codex</p>
+      <ul className="sc-codex">
         {CODEX.map((entry) => {
           const seen = hud.creative || known.has(entry.id);
           return (
-            <li key={entry.id}>
-              <ItemIcon id={entry.id} muted={!seen} />
+            <li key={entry.id} className={seen ? "" : "unknown"}>
+              <span className="sc-codex-ic">
+                <ItemIcon id={entry.id} muted={!seen} />
+              </span>
               <div>
                 <strong>{seen ? def(entry.id).name : "Unknown stud"}</strong>
                 <span>{seen ? entry.where : "Not catalogued yet"}</span>
                 {seen && (
-                  <span>
+                  <small>
                     {entry.use}
-                    {entry.lvl ? ` Craft gate: level ${entry.lvl}.` : ""}
-                  </span>
+                    {entry.lvl ? ` Craft gate: rank ${entry.lvl}.` : ""}
+                  </small>
                 )}
               </div>
               {seen && !hud.creative && <em>{hud.inv[entry.id] ?? 0}</em>}
@@ -1122,92 +1881,5 @@ function Ranks({ hud, known }: { hud: GameApi["hud"]; known: Set<number> }) {
   );
 }
 
-function TouchControls({ game }: { game: GameApi }) {
-  const origin = useRef<{ id: number; x: number; y: number } | null>(null);
-  const [knob, setKnob] = useState({ x: 40, y: 40 });
-
-  function setMove(x: number, y: number) {
-    game.touch.moveX = x;
-    game.touch.moveY = y;
-  }
-
-  return (
-    <div className="touch-layer">
-      <div
-        className="stick-zone"
-        onPointerDown={(e) => {
-          e.currentTarget.setPointerCapture(e.pointerId);
-          origin.current = { id: e.pointerId, x: e.clientX, y: e.clientY };
-        }}
-        onPointerMove={(e) => {
-          if (!origin.current || origin.current.id !== e.pointerId) return;
-          const dx = e.clientX - origin.current.x;
-          const dy = e.clientY - origin.current.y;
-          const max = 48;
-          const m = Math.hypot(dx, dy) || 1;
-          const scale = Math.min(1, max / m);
-          setKnob({ x: 44 + dx * scale, y: 44 + dy * scale });
-          setMove((dx * scale) / max, -(dy * scale) / max);
-        }}
-        onPointerUp={(e) => {
-          if (origin.current?.id === e.pointerId) {
-            origin.current = null;
-            setKnob({ x: 40, y: 40 });
-            setMove(0, 0);
-          }
-        }}
-        onPointerCancel={() => {
-          origin.current = null;
-          setKnob({ x: 40, y: 40 });
-          setMove(0, 0);
-        }}
-      >
-        <div className="stick-knob" style={{ left: knob.x, top: knob.y }} />
-      </div>
-      <button
-        className="touch-pause"
-        aria-label="Pause and options"
-        onClick={() => {
-          game.touch.mine = false;
-          game.touch.place = false;
-          game.touch.jump = false;
-          game.pauseGame();
-        }}
-      >
-        ⏸
-      </button>
-      <div className="touch-actions">
-        <HoldButton label="Mine" onHold={(v) => (game.touch.mine = v)} />
-        <HoldButton label="Place" onHold={(v) => (game.touch.place = v)} />
-        <HoldButton label="Jump" onHold={(v) => (game.touch.jump = v)} />
-        <button
-          onClick={() => {
-            game.touch.mine = false;
-            game.touch.place = false;
-            game.touch.jump = false;
-            game.toggleInventory();
-          }}
-        >
-          Bin
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function HoldButton({ label, onHold }: { label: string; onHold: (down: boolean) => void }) {
-  return (
-    <button
-      onPointerDown={(e) => {
-        e.preventDefault();
-        onHold(true);
-        if (navigator.vibrate) navigator.vibrate(12);
-      }}
-      onPointerUp={() => onHold(false)}
-      onPointerLeave={() => onHold(false)}
-      onPointerCancel={() => onHold(false)}
-    >
-      {label}
-    </button>
-  );
-}
+// Keep the brick palette referenced for tree-shaking-safe swatches elsewhere.
+export const BRAND_SWATCHES = [ID.Red, ID.Yellow, ID.Blue, ID.Green].map((id) => BLOCKS[id].color);
