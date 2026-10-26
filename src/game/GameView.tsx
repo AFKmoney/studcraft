@@ -1,5 +1,5 @@
 import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
-import { BLOCKS, CATALOG, COLORS, ID, def } from "./blocks";
+import { CATALOG, COLORS, ID, def } from "./blocks";
 import type { EnterKind, GameApi, Phase, Quality, Upscale } from "./game";
 import { RECIPES, type Recipe } from "./recipes";
 import { CODEX, PERKS } from "./ranks";
@@ -353,9 +353,16 @@ function Overlay({ game }: { game: GameApi }) {
   const phase: Phase = game.phase;
   const hud = game.hud;
 
+  if (hud.fatal) return <FatalScreen title="The world hit a snag" detail={hud.fatal} />;
+
   return (
     <>
       {phase === "title" && <MainMenu game={game} />}
+      {phase === "title" && hud.message && (
+        <p className="sc-toast sc-toast-title" key={hud.message}>
+          {hud.message}
+        </p>
+      )}
       {phase === "play" && !hud.hidden && <Hud game={game} touchUI={touchUI} />}
       {phase === "play" && touchUI && <TouchControls game={game} />}
       {phase === "play" && hud.signEdit && <SignEditor game={game} />}
@@ -1516,7 +1523,9 @@ function CraftPage({ game }: { game: GameApi }) {
                 const have = hud.creative ? n : (hud.inv[id] ?? 0);
                 return (
                   <span key={id} className={have >= n ? "sc-need ok" : "sc-need miss"}>
-                    <ItemIcon id={id} />
+                    <span className="sc-need-ic">
+                      <ItemIcon id={id} />
+                    </span>
                     <span>{def(id).name}</span>
                     <b>
                       {have}/{n}
@@ -1880,6 +1889,3 @@ function Ranks({ hud }: { hud: GameApi["hud"] }) {
     </div>
   );
 }
-
-// Keep the brick palette referenced for tree-shaking-safe swatches elsewhere.
-export const BRAND_SWATCHES = [ID.Red, ID.Yellow, ID.Blue, ID.Green].map((id) => BLOCKS[id].color);

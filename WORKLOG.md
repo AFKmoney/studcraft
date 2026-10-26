@@ -1364,3 +1364,50 @@ Trades used to be infinite and reputation-free. Now the hamlet economy has memor
 
 ### Next move (claimed by Muse)
 BO2-8: advanced redstone (Observer, daylight sensor, container comparators).
+
+## v4.0 — 2026-10-25 (Production pass — Philippe's order: no bugs, AAA UI for PC + mobile, light upscaling, better mobs)
+
+Claude (Opus 5.5), on branch `release/v4.0-production`.
+
+### Upscaling (new `src/game/upscale.ts`)
+- FSR 1-style pipeline in plain WebGL2, zero assets: scene → low-res HalfFloat target (MSAA) → resolve (exposure + ACES + sRGB, matching three's own curve) → **EASU** edge-adaptive 12-tap upscale → **RCAS** ring-limited sharpening with a speckle guard. A "fast" path (bilinear + RCAS, one full-res pass) for weak phones on the Fast preset.
+- Settings → Graphics → Upscaling: Auto / Native / Quality (77 %) / Balanced (67 %) / Perf. (50 %), plus a Sharpness slider. Auto = 67 % on phones, 77 % on hi-dpi desktops, native on 1× screens; dynamic resolution trims the internal scale (≥ 70 %) when frames run long. Native scale renders straight to the canvas as before (zero overhead). Driver failure falls back to native for good.
+- Output density on phones went 1.5 → 1.75 dpr while the 3D scene itself renders at ~1.17 dpr: sharper UI edges, fewer shaded pixels.
+
+### UI (GameView.tsx, styles.css, new ui-icons.tsx — lucide no longer used by the game)
+- Main menu with Continue (last world), Worlds list (mode badge, seed, "played 2 h ago", two-step delete), New world (seed + roll, mode cards, world rules), tabbed Settings (Graphics / Controls / Audio / World), How to play.
+- Pause menu with world facts (seed + copy, mode, realm, position, rank, quest) and an Online room sub-screen; death screen; in-game text dialog replaces every `window.prompt` (mob name tags, online rooms); sign editor restyled.
+- HUD: biome/time/weather chip, quest tracker, effect chips, FPS counter (setting), boss bar, toasts, crosshair with dig-progress ring, held-item name, hearts / armor / hunger / air rows (own SVG icons, half states), XP bar with level badge, hurt vignette, loading veil while the first chunks mesh.
+- Inventory hub: side tab rail (bottom bar on phones), item search, owned-only grid, armor + off-hand, colour press; crafting with category chips + "Craftable" filter, ingredient chips with have/need; stations restyled (kiln progress, chest grid, brew cards, beacon tiers, trade offers with icons).
+- Touch: floating joystick with dead zone, big mine / place / jump buttons with haptics (setting), pause + bag buttons, safe-area aware in portrait and landscape; touch UI shows on touch devices only.
+- Menu sounds (hover/click/open/close) on the effects bus; new Music and Effects volume sliders.
+
+### Mobs
+- Gait driven by distance walked (idle mobs stand still instead of moonwalking), idle arm sway, hit flash + squash, knockback as a collision-checked slide (no more teleporting into walls), death topple → puff of studs, contact shadows, floating health bars (distance-scaled) after a hit.
+
+### Bugs fixed
+- **A mob that was attacking could never be hit back**: its attack cooldown and the player's hit cooldown were one timer; separate `hitCd` now (a hit still staggers its next bite).
+- **Dead mobs were never removed** from the mob list (only roaming villagers were) → every despawned night mob stayed in memory and was iterated each frame; long sessions got slower. Compacted every frame now.
+- Mobs could walk inside the player's body (and out of the crosshair).
+- E / Esc closed the inventory without returning crafting-grid items and E reopened the last chest panel instead of the bag (all paths share one close now).
+- Respawn kept fire / poison / tar and the mount.
+- Saves failed silently when browser storage was full — now a toast; each save was also written twice (legacy mirror key), halving the room.
+- Music kept playing after the game unmounted and in background tabs / when the phone app was backgrounded; hidden tab now pauses the game and audio; world saves on `pagehide`.
+- `requestPointerLock().catch` threw on Safari (returns undefined).
+- Narrow desktop windows were treated as touch (no pointer lock).
+- Third-person view setting was never saved.
+- Pinch-zoom on mobile web (viewport now `user-scalable=no`).
+- three r186 removed `PCFSoftShadowMap` (warning every boot) → `PCFShadowMap`.
+- Damaged saves with NaN coordinates dropped the player into the void; a world that fails to load now shows a message instead of breaking the title.
+- A frame that throws no longer freezes silently: logged once, retried, crash screen + save only if it keeps failing. WebGL context loss and missing WebGL2 get a proper screen.
+- Pause / inventory redraw the world at quarter rate (battery).
+
+### QA
+- `tsc --noEmit` clean on the game (strict).
+- Toolchain note: this session's network blocked the npm registry, so `npm install` / Vite could not run. QA used a local esbuild bundle of `standalone/` (Tailwind directives rewritten to plain CSS) in headless Chromium (SwiftShader): desktop 960×540 / 1100×640, phone portrait 390×844, phone landscape 844×390 — every screen captured and checked, 0 page errors.
+- Upscaler compared native vs Quality vs Perf. on the same view with realistic lighting: colours and tone curve identical, Quality indistinguishable at 77 %, Perf. clean (no stair-stepping).
+- Combat: spawned a spider, held attack while it bit back → hp 4 → 0 (was stuck at 3 before the fix), flash + bar observed, corpse animation ran, mob list shrank back.
+- **Not done here**: `npm run build`, the APK, the web zip and the PC exe were not rebuilt (no registry access). Run `npm ci && npm run build` and the APK steps in STANDALONE.md before shipping. Philippe's A54 is still the verdict for feel and frame rate.
+
+### Files
+`src/game/upscale.ts` (new), `src/game/ui-icons.tsx` (new), `src/game/GameView.tsx`, `src/styles.css`, `src/game/game.ts`, `src/game/audio.ts`, `src/game/save.ts`, `src/routes/__root.tsx`, `apk/src/main/AndroidManifest.xml` (versionCode 31 / versionName 4.0), `README.md`, `WORKLOG.md`.

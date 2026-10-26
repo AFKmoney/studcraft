@@ -97,6 +97,8 @@ export type Hud = {
   /** World is generating around the spawn — show the loading veil. */
   loading: number;
   version: string;
+  /** Set when the frame loop keeps failing: the UI shows a crash screen. */
+  fatal: string;
 };
 
 export type TouchState = {
@@ -243,6 +245,7 @@ declare global {
       getMobFx?: () => { kind: string; hp: number; hurt: number; bar: boolean; amp: number; x: number; y: number; z: number; cd?: number; cool?: number }[];
       getCorpses?: () => number;
       getMobCount?: () => number;
+      hurtMe?: (n: number) => boolean;
     };
   }
 }
@@ -365,6 +368,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     renderRes: "",
     loading: 0,
     version: GAME_VERSION,
+    fatal: "",
   };
   const touch: TouchState = { moveX: 0, moveY: 0, jump: false, mine: false, place: false };
   const listeners = new Set<() => void>();
@@ -1869,12 +1873,17 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     creative = data.creative;
     world = new World(seed, flat);
     for (const [x, y, z, id] of data.edits) world.edits.set(x + "," + y + "," + z, id);
-    spawnPoint = { x: data.px, y: data.py, z: data.pz };
-    player.x = data.px;
-    player.y = data.py;
-    player.z = data.pz;
-    player.yaw = data.yaw;
-    player.pitch = data.pitch;
+    // A damaged save with NaN coordinates used to drop the player into the void forever.
+    const okPos = [data.px, data.py, data.pz].every((v) => typeof v === "number" && Number.isFinite(v));
+    const px = okPos ? data.px : 0.5;
+    const pz = okPos ? data.pz : 0.5;
+    const py = okPos ? data.py : world.heightAt(Math.floor(px), Math.floor(pz)) + 2;
+    spawnPoint = { x: px, y: py, z: pz };
+    player.x = px;
+    player.y = py;
+    player.z = pz;
+    player.yaw = Number.isFinite(data.yaw) ? data.yaw : 0;
+    player.pitch = Number.isFinite(data.pitch) ? data.pitch : -0.2;
     player.vx = player.vy = player.vz = 0;
     health = data.health || 20;
     hunger = data.hunger ?? 20;
@@ -6016,15 +6025,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
     sessionStarted = true;
     if (!touchMode) lockPointer();
-    say(
-      (creative
-        ? "Creative. The land does not end. Same seed, same bricks."
-        : "Survival. The land does not end. Skills and mods live in the bin and the pause menu. Hounds, slimes, and a hamlet golem are out there.") +
-        " Seed " +
-        seedText +
-        "." +
-        hamletLine(),
-    );
+    say((flat ? "Baseplate" : creative ? "Creative" : "Survival") + " · seed " + seedText + "." + hamletLine(), 4200);
     emit();
   }
 
@@ -6854,8 +6855,32 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let fpsFrames = 0;
   let fpsWindow = 0;
 
+  // One bad frame must not freeze the game silently: log the first error, keep
+  // going, and only surface a crash screen if every frame keeps failing.
+  let frameErrors = 0;
   function frame() {
     if (!running) return;
+    try {
+      frameBody();
+      frameErrors = 0;
+    } catch (err) {
+      frameErrors++;
+      if (frameErrors === 1) console.error("Studcraft frame error", err);
+      if (frameErrors > 90) {
+        running = false;
+        renderer.setAnimationLoop(null);
+        try {
+          saveWorld();
+        } catch {
+          /* already broken */
+        }
+        hud.fatal = err instanceof Error ? err.message : String(err);
+        listeners.forEach((fn) => fn());
+      }
+    }
+  }
+
+  function frameBody() {
     timer.update();
     const dt = Math.min(timer.getDelta(), 0.05);
     elapsed += dt;
@@ -7288,6 +7313,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         .map((m) => ({ kind: m.kind, hp: m.hp, hurt: m.vis?.hurtT ?? 0, bar: !!m.vis?.bar, amp: m.vis?.amp ?? 0, x: m.x, y: m.y, z: m.z, cd: m.hitCd ?? 0, cool: m.cool })),
     getCorpses: () => corpses.length,
     getMobCount: () => mobs.length,
+    hurtMe: (n: number) => {
+      invuln = 0;
+      hurt(n);
+      return true;
+    },
     spawnMob: (kind: string, dx = 6, dz = 0) => {
       const kinds = ["sheep", "creeper", "cow", "walker", "pig", "chicken", "spider", "skelly", "villager", "ghast", "dragon", "horse", "phantom", "piglin", "frog", "fox", "crab", "wisp", "slime", "wolf", "golem", "wither", "enderman", "blaze", "witch", "bee", "cat", "squid", "bat", "drowned", "husk", "stray", "goat", "axolotl", "parrot", "guardian", "shulker", "pillager", "vindicator", "evoker", "vex", "ravager"];
       if (!kinds.includes(kind)) return false;
@@ -7435,6 +7465,33 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     },
   };
 
+  function enterWorld(kind: EnterKind, id?: string) {
+    audio.unlock();
+    if (kind === "continue") {
+      const save = id ? loadWorld(id) : loadLatest()?.save;
+      const slotId = id || loadLatest()?.id || "";
+      if (!save || !slotId) {
+        say("No world in the bin yet");
+        return;
+      }
+      bootSave(save, slotId);
+      beginPlay();
+      return;
+    }
+    if (kind === "survival") {
+      bootNew(false, false);
+      beginPlay();
+      return;
+    }
+    if (kind === "flat") {
+      bootNew(true, true);
+      beginPlay();
+      return;
+    }
+    bootNew(false, true);
+    beginPlay();
+  }
+
   const api: GameApi = {
     canvas,
     hud,
@@ -7450,30 +7507,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       return listWorlds();
     },
     enter(kind, id) {
-      audio.unlock();
-      if (kind === "continue") {
-        const save = id ? loadWorld(id) : loadLatest()?.save;
-        const slotId = id || loadLatest()?.id || "";
-        if (!save || !slotId) {
-          say("No world in the bin yet");
-          return;
-        }
-        bootSave(save, slotId);
-        beginPlay();
-        return;
+      try {
+        enterWorld(kind, id);
+      } catch (err) {
+        console.error("Studcraft could not open the world", err);
+        phase = "title";
+        say("That world couldn't be opened — it may be from a newer version or damaged.", 6000);
       }
-      if (kind === "survival") {
-        bootNew(false, false);
-        beginPlay();
-        return;
-      }
-      if (kind === "flat") {
-        bootNew(true, true);
-        beginPlay();
-        return;
-      }
-      bootNew(false, true);
-      beginPlay();
     },
     pauseGame() {
       if (phase !== "play") return;

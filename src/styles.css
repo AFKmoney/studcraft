@@ -1549,6 +1549,11 @@ kbd {
   animation: sc-toast 0.28s cubic-bezier(0.2, 0.9, 0.3, 1) both;
 }
 
+.sc-toast-title {
+  z-index: 30;
+  top: calc(18px + var(--safe-t));
+}
+
 @keyframes sc-toast {
   from {
     opacity: 0;
@@ -2110,6 +2115,7 @@ kbd {
 .sc-inv-main {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   padding: 18px 20px 16px;
@@ -2413,13 +2419,13 @@ kbd {
   font-size: 13.5px;
 }
 
-.sc-need .item-icon {
-  width: 26px;
-  height: 26px;
+.sc-need-ic {
+  width: 28px;
+  height: 28px;
   flex: none;
 }
 
-.sc-need span {
+.sc-need > span:not(.sc-need-ic) {
   flex: 1;
 }
 
@@ -2844,6 +2850,22 @@ kbd {
     order: 2;
   }
 
+  .sc-armor {
+    grid-template-columns: repeat(5, 1fr);
+    max-width: 360px;
+  }
+
+  .sc-cell.offhand {
+    grid-column: auto;
+    aspect-ratio: 1;
+    height: auto;
+  }
+
+  .sc-colors {
+    grid-template-columns: repeat(9, 1fr);
+    max-width: 420px;
+  }
+
   .sc-craft-body {
     grid-template-columns: 1fr;
   }
@@ -2945,6 +2967,19 @@ kbd {
     width: 100%;
   }
 
+  .sc-seg {
+    flex-wrap: nowrap;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .sc-seg button {
+    padding: 0 9px;
+    font-size: 12.5px;
+    white-space: nowrap;
+  }
+
   .sc-tabs button span {
     display: none;
   }
@@ -3035,9 +3070,14 @@ kbd {
   }
 }
 
-/* Touch layout: the hotbar lifts off the bottom-right buttons. */
+/* Touch layout: the hotbar lifts off the bottom-right buttons, and the
+   top-right stack clears the pause button. */
 .sc-hud.is-touch .sc-hud-bottom {
   bottom: calc(10px + var(--safe-b));
+}
+
+.sc-hud.is-touch .sc-hud-tr {
+  right: calc(70px + var(--safe-r));
 }
 
 @media (max-height: 520px) and (orientation: landscape) {
@@ -3073,6 +3113,10 @@ kbd {
   }
 
   .sc-tagline {
+    display: none;
+  }
+
+  .sc-held-name {
     display: none;
   }
 }
