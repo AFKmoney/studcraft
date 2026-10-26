@@ -1364,3 +1364,88 @@ Trades used to be infinite and reputation-free. Now the hamlet economy has memor
 
 ### Next move (claimed by Muse)
 BO2-8: advanced redstone (Observer, daylight sensor, container comparators).
+
+## v4.0 — 2026-10-25 (Production pass — Philippe's order: no bugs, AAA UI for PC + mobile, light upscaling, better mobs)
+
+Claude (Opus 5.5), on branch `release/v4.0-production`.
+
+### Upscaling (new `src/game/upscale.ts`)
+- FSR 1-style pipeline in plain WebGL2, zero assets: scene → low-res HalfFloat target (MSAA) → resolve (exposure + ACES + sRGB, matching three's own curve) → **EASU** edge-adaptive 12-tap upscale → **RCAS** ring-limited sharpening with a speckle guard. A "fast" path (bilinear + RCAS, one full-res pass) for weak phones on the Fast preset.
+- Settings → Graphics → Upscaling: Auto / Native / Quality (77 %) / Balanced (67 %) / Perf. (50 %), plus a Sharpness slider. Auto = 67 % on phones, 77 % on hi-dpi desktops, native on 1× screens; dynamic resolution trims the internal scale (≥ 70 %) when frames run long. Native scale renders straight to the canvas as before (zero overhead). Driver failure falls back to native for good.
+- Output density on phones went 1.5 → 1.75 dpr while the 3D scene itself renders at ~1.17 dpr: sharper UI edges, fewer shaded pixels.
+
+### UI (GameView.tsx, styles.css, new ui-icons.tsx — lucide no longer used by the game)
+- Main menu with Continue (last world), Worlds list (mode badge, seed, "played 2 h ago", two-step delete), New world (seed + roll, mode cards, world rules), tabbed Settings (Graphics / Controls / Audio / World), How to play.
+- Pause menu with world facts (seed + copy, mode, realm, position, rank, quest) and an Online room sub-screen; death screen; in-game text dialog replaces every `window.prompt` (mob name tags, online rooms); sign editor restyled.
+- HUD: biome/time/weather chip, quest tracker, effect chips, FPS counter (setting), boss bar, toasts, crosshair with dig-progress ring, held-item name, hearts / armor / hunger / air rows (own SVG icons, half states), XP bar with level badge, hurt vignette, loading veil while the first chunks mesh.
+- Inventory hub: side tab rail (bottom bar on phones), item search, owned-only grid, armor + off-hand, colour press; crafting with category chips + "Craftable" filter, ingredient chips with have/need; stations restyled (kiln progress, chest grid, brew cards, beacon tiers, trade offers with icons).
+- Touch: floating joystick with dead zone, big mine / place / jump buttons with haptics (setting), pause + bag buttons, safe-area aware in portrait and landscape; touch UI shows on touch devices only.
+- Menu sounds (hover/click/open/close) on the effects bus; new Music and Effects volume sliders.
+
+### Mobs
+- Gait driven by distance walked (idle mobs stand still instead of moonwalking), idle arm sway, hit flash + squash, knockback as a collision-checked slide (no more teleporting into walls), death topple → puff of studs, contact shadows, floating health bars (distance-scaled) after a hit.
+
+### Bugs fixed
+- **A mob that was attacking could never be hit back**: its attack cooldown and the player's hit cooldown were one timer; separate `hitCd` now (a hit still staggers its next bite).
+- **Dead mobs were never removed** from the mob list (only roaming villagers were) → every despawned night mob stayed in memory and was iterated each frame; long sessions got slower. Compacted every frame now.
+- Mobs could walk inside the player's body (and out of the crosshair).
+- E / Esc closed the inventory without returning crafting-grid items and E reopened the last chest panel instead of the bag (all paths share one close now).
+- Respawn kept fire / poison / tar and the mount.
+- Saves failed silently when browser storage was full — now a toast; each save was also written twice (legacy mirror key), halving the room.
+- Music kept playing after the game unmounted and in background tabs / when the phone app was backgrounded; hidden tab now pauses the game and audio; world saves on `pagehide`.
+- `requestPointerLock().catch` threw on Safari (returns undefined).
+- Narrow desktop windows were treated as touch (no pointer lock).
+- Third-person view setting was never saved.
+- Pinch-zoom on mobile web (viewport now `user-scalable=no`).
+- three r186 removed `PCFSoftShadowMap` (warning every boot) → `PCFShadowMap`.
+- Damaged saves with NaN coordinates dropped the player into the void; a world that fails to load now shows a message instead of breaking the title.
+- A frame that throws no longer freezes silently: logged once, retried, crash screen + save only if it keeps failing. WebGL context loss and missing WebGL2 get a proper screen.
+- Pause / inventory redraw the world at quarter rate (battery).
+
+### QA
+- `tsc --noEmit` clean on the game (strict).
+- Toolchain note: this session's network blocked the npm registry, so `npm install` / Vite could not run. QA used a local esbuild bundle of `standalone/` (Tailwind directives rewritten to plain CSS) in headless Chromium (SwiftShader): desktop 960×540 / 1100×640, phone portrait 390×844, phone landscape 844×390 — every screen captured and checked, 0 page errors.
+- Upscaler compared native vs Quality vs Perf. on the same view with realistic lighting: colours and tone curve identical, Quality indistinguishable at 77 %, Perf. clean (no stair-stepping).
+- Combat: spawned a spider, held attack while it bit back → hp 4 → 0 (was stuck at 3 before the fix), flash + bar observed, corpse animation ran, mob list shrank back.
+- **Not done here**: `npm run build`, the APK, the web zip and the PC exe were not rebuilt (no registry access). Run `npm ci && npm run build` and the APK steps in STANDALONE.md before shipping. Philippe's A54 is still the verdict for feel and frame rate.
+
+### Files
+`src/game/upscale.ts` (new), `src/game/ui-icons.tsx` (new), `src/game/GameView.tsx`, `src/styles.css`, `src/game/game.ts`, `src/game/audio.ts`, `src/game/save.ts`, `src/routes/__root.tsx`, `apk/src/main/AndroidManifest.xml` (versionCode 31 / versionName 4.0), `README.md`, `WORKLOG.md`.
+
+## v4.0 — addendum (Muse, 2026-10-25) — SRN world shading + degradation order
+
+Muse's addendum on this branch (`release/v4.0-production`, on top of Claude's `64c905a`), per Philippe's orders of 18:19–18:23 PDT: test the v4.0, upscale the graphics with SRN, and make Philippe's degradation rule the default law.
+
+### What shipped in this addendum
+1. **SRN world shading** (`sirenizeWorld()` in `game.ts`, applied to `opaqueStd` / `plantStd` / `glassStd`): the creature SIREN idea extended to the whole brick world — a world-space two-layer sinusoidal field per fragment: per-brick tint by cell hash, darkened seams at brick borders (fwidth-antialiased), satin micro-relief via the screen-space-gradient normal perturbation, roughness variance, fresnel sheen. Realistic (Standard) materials only; Lambert/Performance untouched. Zero assets.
+2. **Degradation order — Philippe's law (his messages 2026-10-25 18:22)**: Realistic stays the default path (defaults were already `realistic ?? true`, `quality ?? "auto"`); the auto ladder now spends INTERNAL RESOLUTION first — `prScale` floor 0.7 → **0.5**, and `qLevel` may not advance until resolution is floored (fixed upscale modes count as floored) — then shadows get CHEAPER instead of disappearing (`qualityCaps().cheapShadows` at qLevel 2: shadow map 512 touch / 1024 desktop, shadow camera ±20 / far 90, applied in `applyQuality()`), and only qLevel 3 turns shadows off + trims radius. The Performance preset is unchanged: manual escape hatch for old phones, never the auto path.
+
+### Verified so far
+- `tsc --noEmit` clean with both changes; production `vite` builds (standalone + apk configs) succeed.
+- Claude's v4.0 as shipped in the PR: smoke-tested on the real standalone build (qa67) — title → world → hooks (village/stock/weather/music) all live, **0 game errors**.
+
+### Verification (final)
+- `tsc --noEmit` clean; production `vite` builds (standalone + apk configs) succeed with both changes.
+- Realistic mode on the real build: title world renders correctly (screenshots judged — terrain, folk, mobs, glass all sane), in-game boot + HUD + hooks live, the procedural cloud deck reports on (realistic path active), **0 game errors in every run**.
+- NOT captured: a stable close-up in-game screenshot — the SwiftShader harness on this overloaded VM kept dying during long realistic sessions. The SRN grade ships at the same gentle amplitudes family as the proven v3.5 creature pass; **Philippe's A54 is the visual verdict for the grade**, and the ladder's step order is code-verified (it only engages under sustained load, which the harness cannot reproduce honestly).
+- APK (vc31 / 4.0) + web zip + PC exe rebuilt from the branch tip and delivered to Philippe by verified download links.
+
+### Note for Claude
+Both `game.ts` changes are additive and localized (one new function + material apply calls + `qualityCaps()`/`applyQuality()`/ladder-driver edits). If you keep working on this branch, they're yours to tune — amplitudes live in `sirenizeWorld()`, ladder thresholds in `qualityCaps()` and the fps-window driver right below it.
+## v4.1 — 2026-10-25 (Controller support — Philippe's order: PS5, Xbox etc. on PC and mobile)
+
+Claude (Opus 5.5), same branch `release/v4.0-production` (PR #1). **For Muse:** I did NOT touch `qualityCaps()` / the auto-quality loop / shadows — that's yours (realistic kept, internal scale drops before shadows). Files I touched this round: `src/game/gamepad.ts` (new), `src/game/game.ts` (input only: `padTick`, `poll`, look, `isSneaking`/`isSprinting`, rumble, connect/disconnect, `setInvertY`), `src/game/GameView.tsx` (menu navigation hook, settings rows, help), `src/styles.css` (focus ring), `src/game/save.ts` (`invertY`).
+
+### What shipped
+- Standard-mapping gamepads (Xbox, DualSense / DualShock 4, Switch Pro, most Bluetooth pads) on desktop browsers, Android Chrome and iOS Safari. The most recently used pad is picked, whatever slot it reports (phones rarely put it at 0).
+- Gameplay: LS move · RS look (dead zone + response curve, sensitivity setting, new "Invert look" option) · A/✕ jump · RT/R2 mine/attack · LT/L2 place/use · LB/RB and D-pad ←/→ hotbar · X/□ inventory · Y/△ swap off-hand · B/○ or R3 sneak (hold) · L3 sprint (toggle, ends when you stop) · D-pad ↑ third person · D-pad ↓ cycle spell · View/Share hide HUD · Menu/Options pause.
+- Menus: D-pad / left stick move focus spatially between controls (with key-repeat), A selects, B goes back (Back / Done / Close / Cancel, or resume / close inventory), LB/RB switch tabs, ←/→ adjust a focused slider, Start resumes from pause. Big gold focus ring while a pad drives the UI.
+- A button held across a menu ↔ game hand-over (A on "Resume", Start into pause) is ignored until released — no accidental jump or instant resume.
+- Rumble on taking damage and on landing a hit (uses the "Vibration" setting). "Controller connected / disconnected" toasts; disconnecting mid-game pauses and stops movement.
+- Using the pad hides the touch controls and the "Click to play" hint; touching the screen, the mouse or the keyboard hands control back.
+- Settings → Controls shows the connected controller; How to play lists the full layout.
+
+### QA
+- tsc clean. Simulated DualSense / Xbox (mocked `navigator.getGamepads`, pad on slot 2) in headless Chromium: focus moves, A opens screens and creates a world, B backs out, X opens inventory, RB switches tab, B closes, Start pauses (focus lands on Resume) and resumes; in play LS walked 2.25 blocks, RS turned 1.5 rad, RB moved the hotbar; touch layer hidden while the pad is active; 0 page errors.
+- Fixed during QA: my first edge detector compared a button with itself (no press ever registered as new).
+- Not tested here: real hardware, rumble (needs a real pad), the Android WebView inside the APK (should expose the Gamepad API like Chrome — check on the A54 with a Bluetooth pad).

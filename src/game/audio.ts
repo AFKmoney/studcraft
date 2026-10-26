@@ -1,12 +1,29 @@
 export function createAudio() {
   let ctx: AudioContext | null = null;
+  let bus: GainNode | null = null;
   let enabled = true;
+  let volume = 1;
 
   function ac(): AudioContext | null {
-    if (!enabled) return null;
-    if (!ctx) ctx = new AudioContext();
-    if (ctx.state === "suspended") void ctx.resume();
+    if (!enabled || volume <= 0) return null;
+    try {
+      if (!ctx) {
+        const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (!Ctor) return null;
+        ctx = new Ctor();
+        bus = ctx.createGain();
+        bus.gain.value = volume;
+        bus.connect(ctx.destination);
+      }
+      if (ctx.state === "suspended") void ctx.resume().catch(() => {});
+    } catch {
+      return null;
+    }
     return ctx;
+  }
+
+  function out(): AudioNode {
+    return (bus ?? ctx!.destination) as AudioNode;
   }
 
   function tone(freq: number, dur: number, type: OscillatorType, gain: number) {
@@ -20,7 +37,7 @@ export function createAudio() {
     g.gain.setValueAtTime(gain, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g);
-    g.connect(c.destination);
+    g.connect(out());
     o.start(t);
     o.stop(t + dur + 0.02);
   }
@@ -43,13 +60,36 @@ export function createAudio() {
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     src.connect(filter);
     filter.connect(g);
-    g.connect(c.destination);
+    g.connect(out());
     src.start(t);
   }
 
   return {
     setEnabled(v: boolean) {
       enabled = v;
+    },
+    setVolume(v: number) {
+      volume = Math.max(0, Math.min(1, v));
+      if (bus && ctx) bus.gain.setTargetAtTime(volume, ctx.currentTime, 0.02);
+    },
+    suspend() {
+      if (ctx && ctx.state === "running") void ctx.suspend().catch(() => {});
+    },
+    // Menu feedback: short, soft, plastic.
+    uiHover() {
+      tone(1320, 0.025, "sine", 0.012);
+    },
+    uiClick() {
+      tone(760, 0.035, "square", 0.022);
+      tone(1140, 0.03, "sine", 0.016);
+    },
+    uiOpen() {
+      tone(520, 0.05, "triangle", 0.03);
+      tone(780, 0.07, "triangle", 0.024);
+    },
+    uiClose() {
+      tone(700, 0.05, "triangle", 0.026);
+      tone(470, 0.07, "triangle", 0.02);
     },
     unlock() {
       ac();
@@ -100,7 +140,7 @@ export function createAudio() {
         g.gain.setValueAtTime(0.04, start);
         g.gain.exponentialRampToValueAtTime(0.0001, start + 0.16);
         o.connect(g);
-        g.connect(c.destination);
+        g.connect(out());
         o.start(start);
         o.stop(start + 0.2);
       });
