@@ -979,7 +979,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   // LOD tiers by chunk distance from the player: 0 = full (2×2 3D studs + AO),
   // 1 = normal-mapped 2×2 studs + AO, 2 = far silhouette.
   function tierFor(d2: number) {
-    return d2 <= 25 ? 0 : d2 <= 49 ? 1 : 2;
+    // v4.12: studs (tier 0) are only readable within ~3 chunks — a 5-chunk
+    // stud field was ~81 chunks × 47k triangles and 141 ms of meshing per
+    // chunk. Tier 0 now covers d2<=9 (~29 chunks), tier 1 d2<=36.
+    return d2 <= 9 ? 0 : d2 <= 36 ? 1 : 2;
   }
 
   const starGeo = new THREE.BufferGeometry();
@@ -2119,6 +2122,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     pathT?: number;
     phase?: number;
     tickAcc?: number;
+    // v4.12 render interpolation: position at the previous AI tick.
+    px?: number;
+    py?: number;
+    pz?: number;
     shadowT?: number;
     mode?: string;
     modeT?: number;
@@ -2258,9 +2265,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       v.kz *= k;
     }
     // Gait: legs swing with distance travelled, so idle mobs stand still.
-    const moved = Math.hypot(m.x - v.lx, m.z - v.lz);
-    v.lx = m.x;
-    v.lz = m.z;
+    // v4.12: measured on the RENDERED position, so interpolated far mobs
+    // swing their legs with the glide instead of chopping at the tick rate.
+    const moved = Math.hypot(m.mesh.position.x - v.lx, m.mesh.position.z - v.lz);
+    v.lx = m.mesh.position.x;
+    v.lz = m.mesh.position.z;
     const dxCam = m.x - camera.position.x;
     const dzCam = m.z - camera.position.z;
     const camDistSq = dxCam * dxCam + dzCam * dzCam;
@@ -2555,6 +2564,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let placeCool = 0;
   let stepTime = 0;
   let bob = 0;
+  let bobAmp = 0; // v4.12: smoothed head-bob amplitude (see renderCamera)
   let swing = 0;
   let shake = 0;
   let flash = 0;
@@ -3193,13 +3203,20 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     for (const key of meshes.keys()) if (!keep.has(key)) dropChunk(key);
     world.releaseFar(cx, cz, r);
     let left = budget;
+    // v4.12: time-box meshing — a fixed count budget let two tier-0 rebuilds
+    // (~140 ms each) land in one frame and stall the game. Always allow the
+    // first chunk, then stop once ~6 ms of meshing is spent this call.
+    const meshStart = performance.now();
+    let meshed = 0;
     for (const item of need) {
       if (left <= 0) break;
       const tier = tierFor(item.d);
       if (meshes.has(item.key) && !dirty.has(item.key) && chunkTier.get(item.key) === tier) continue;
+      if (meshed >= 1 && performance.now() - meshStart > 6) break;
       rebuild(item.cx, item.cz, item.key, tier);
       dirty.delete(item.key);
       left--;
+      meshed++;
     }
   }
 
@@ -7005,10 +7022,31 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (d > 26) {
         m.tickAcc = (m.tickAcc ?? 0) + baseDt;
         if (m.tickAcc < 0.066) {
-          m.mesh.position.set(m.x, m.y + (settings.studs ? STUD_H : 0), m.z);
+          // v4.12: interpolate between AI ticks — applying a 15 Hz step raw
+          // reads as a visible judder. Glide the mesh (and its gait, which
+          // follows the rendered position) across the tick interval.
+          const a = Math.min(1, (m.tickAcc ?? 0) / 0.066);
+          const px = m.px ?? m.x;
+          const py = m.py ?? m.y;
+          const pz = m.pz ?? m.z;
+          const vis = visOf(m);
+          const stride = Math.sin(vis.gait);
+          const bounce =
+            m.kind === "slime"
+              ? Math.abs(stride) * (0.18 + (m.size ?? 1) * 0.22)
+              : m.kind === "frog"
+                ? Math.abs(stride) * 0.2
+                : FLYERS.has(m.kind)
+                  ? Math.abs(stride) * 0.04
+                  : Math.abs(stride) * 0.05 * vis.amp;
+          m.mesh.position.set(px + (m.x - px) * a, py + (m.y - py) * a + (settings.studs ? STUD_H : 0) + bounce, pz + (m.z - pz) * a);
           m.mesh.rotation.y = m.yaw;
+          mobVisuals(m, baseDt, bounce);
           continue;
         }
+        m.px = m.x;
+        m.py = m.y;
+        m.pz = m.z;
         dt = Math.min(m.tickAcc, 0.12);
         m.tickAcc = 0;
       }
@@ -8410,7 +8448,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   function renderCamera(dt: number) {
     const sneak = isSneaking();
     const eye = player.y + (sneak && !flying ? EYE_SNEAK : EYE);
-    const bobY = phase === "play" && player.grounded && !reduceMotion ? Math.sin(bob) * 0.045 : 0;
+    // v4.12: fade the head-bob in/out — the old hard grounded gate made the
+    // camera tremble whenever the physics step flickered at low frame rates.
+    const bobTarget = phase === "play" && player.grounded && !reduceMotion && Math.hypot(player.vx, player.vz) > 0.4 ? 1 : 0;
+    bobAmp += (bobTarget - bobAmp) * Math.min(1, dt * 9);
+    const bobY = Math.sin(bob) * 0.045 * bobAmp;
     camera.rotation.order = "YXZ";
     if (!settings.third || phase === "title") {
       camera.rotation.y = player.yaw;
@@ -8459,7 +8501,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         figHead.rotation.x = THREE.MathUtils.clamp(player.pitch * 0.6, -0.5, 0.5);
         figHead.rotation.y = moving ? THREE.MathUtils.clamp(player.yaw - face, -0.65, 0.65) : 0;
       }
-      const swingLeg = moving ? Math.sin(bob) * 0.7 : 0;
+      const swingLeg = Math.sin(bob) * 0.7 * bobAmp;
       fig.legL.rotation.x = swingLeg;
       fig.legR.rotation.x = -swingLeg;
       fig.armL.rotation.x = -swingLeg;
@@ -10866,10 +10908,10 @@ function beast(kind: string): LegoBody {
     // Modular top & side LEGO wool plates with studs + fluffy tail
     block(g, woolPlate, 0.76, 0.11, 0.48, 0, 0.745, 0, 3, 2);
     put(g, geoBox(0.68, 0.22, 0.56), woolPlate, 0, 0.55, 0);
-    put(g, geoSlope(0.18, 0.16, 0.14), wool, 0, 0.56, 0.43, Math.PI, true);
+    put(g, geoSlope(0.18, 0.16, 0.14), wool, 0, 0.56, 0.30, Math.PI, true);
     // Articulated LEGO Sheep Head with wool crown, horizontal pupils & floppy ears
     const head = new THREE.Group();
-    head.position.set(0, 0.64, -0.38);
+    head.position.set(0, 0.64, -0.32);
     g.add(head);
     g.userData.head = head;
     block(head, faceSkin, 0.26, 0.24, 0.26, 0, 0, -0.04, 0, 0);
@@ -10899,7 +10941,7 @@ function beast(kind: string): LegoBody {
     put(g, geoBox(0.24, 0.09, 0.22), udder, 0.12, 0.38, 0, 0, true);
     // Articulated LEGO Cow Head with horns, ears & tan muzzle
     const head = new THREE.Group();
-    head.position.set(0, 0.74, -0.44);
+    head.position.set(0, 0.74, -0.31);
     g.add(head);
     g.userData.head = head;
     block(head, hide, 0.28, 0.28, 0.28, 0, 0.02, -0.04, 1, 1);
@@ -10916,7 +10958,7 @@ function beast(kind: string): LegoBody {
     put(head, geoBox(0.09, 0.05, 0.05), hide, 0.18, 0.08, -0.02, 0, true);
     // Articulated tail
     const tail = new THREE.Group();
-    tail.position.set(0, 0.72, 0.45);
+    tail.position.set(0, 0.72, 0.22);
     put(tail, geoBox(0.06, 0.28, 0.06), hide, 0, -0.12, 0.04, 0.25, true);
     put(tail, geoBox(0.08, 0.09, 0.08), spot, 0, -0.26, 0.08, 0, true);
     g.add(tail);
@@ -10933,7 +10975,7 @@ function beast(kind: string): LegoBody {
     block(g, pinkPlate, 0.68, 0.10, 0.40, 0, 0.62, 0, 3, 2);
     // Articulated LEGO Pig Head with 3D cylindrical snout, nostrils & floppy ears
     const head = new THREE.Group();
-    head.position.set(0, 0.54, -0.34);
+    head.position.set(0, 0.54, -0.28);
     g.add(head);
     g.userData.head = head;
     block(head, pink, 0.30, 0.26, 0.26, 0, 0.02, -0.04, 2, 1);
@@ -10948,7 +10990,7 @@ function beast(kind: string): LegoBody {
     put(head, geoBox(0.05, 0.10, 0.09), pinkPlate, 0.165, 0.08, -0.05, 0.2, true);
     // Curly brick tail
     const tail = new THREE.Group();
-    tail.position.set(0, 0.50, 0.35);
+    tail.position.set(0, 0.50, 0.20);
     put(tail, geoBox(0.06, 0.08, 0.08), snoutM, 0, 0.02, 0.04, 0.4, true);
     g.add(tail);
     g.userData.tail = tail;
@@ -10986,7 +11028,7 @@ function beast(kind: string): LegoBody {
     put(g, geoBox(0.36, 0.09, 0.42), saddle, 0, 0.99, 0, 0, true);
     // Articulated neck + head group
     const head = new THREE.Group();
-    head.position.set(0, 0.96, -0.44);
+    head.position.set(0, 0.96, -0.28);
     g.add(head);
     g.userData.head = head;
     put(head, geoBox(0.22, 0.38, 0.22), hide, 0, 0.14, -0.06, -0.35);
@@ -11000,7 +11042,7 @@ function beast(kind: string): LegoBody {
     put(head, geoBox(0.045, 0.045, 0.02), black, 0.122, 0.34, -0.22, 0, true);
     // Flowing tail
     const tail = new THREE.Group();
-    tail.position.set(0, 0.88, 0.52);
+    tail.position.set(0, 0.88, 0.16);
     put(tail, geoBox(0.10, 0.38, 0.12), black, 0, -0.16, 0.06, 0.3, true);
     g.add(tail);
     g.userData.tail = tail;
@@ -11011,10 +11053,10 @@ function beast(kind: string): LegoBody {
     const coat = skin(0xf07820);
     const body = block(g, coat, 0.68, 0.26, 0.32, 0, 0.40, 0, 3, 1);
     body.userData.skin = "body";
-    put(g, geoBox(0.28, 0.14, 0.12), white, 0, 0.36, -0.30, 0, true); // Fluffy white chest bib
+    put(g, geoBox(0.28, 0.14, 0.12), white, 0, 0.36, -0.20, 0, true); // Fluffy white chest bib
     // Articulated LEGO Fox Head
     const head = new THREE.Group();
-    head.position.set(0, 0.48, -0.36);
+    head.position.set(0, 0.48, -0.33);
     g.add(head);
     g.userData.head = head;
     block(head, coat, 0.26, 0.20, 0.24, 0, 0.02, -0.04, 1, 1);
@@ -11028,7 +11070,7 @@ function beast(kind: string): LegoBody {
     put(head, geoBox(0.045, 0.04, 0.02), black, 0.075, 0.03, -0.162, 0, true);
     // Articulated bushy tail with white tip
     const tail = new THREE.Group();
-    tail.position.set(0, 0.44, 0.34);
+    tail.position.set(0, 0.44, 0.15);
     block(tail, coat, 0.16, 0.16, 0.24, 0, 0.02, 0.12, 1, 1);
     put(tail, geoBox(0.14, 0.14, 0.12), white, 0, 0.02, 0.28, 0, true);
     g.add(tail);
@@ -11384,7 +11426,7 @@ function beast(kind: string): LegoBody {
     g.add(collar);
     g.userData.collar = collar;
     const head = new THREE.Group();
-    head.position.set(0, 0.44, -0.32);
+    head.position.set(0, 0.44, -0.26);
     g.add(head);
     g.userData.head = head;
     block(head, coat, 0.24, 0.22, 0.24, 0, 0, -0.04, 1, 1);
@@ -11396,7 +11438,7 @@ function beast(kind: string): LegoBody {
     put(head, geoBox(0.055, 0.048, 0.022), catEye, -0.065, 0.03, -0.162, 0, true);
     put(head, geoBox(0.055, 0.048, 0.022), catEye, 0.065, 0.03, -0.162, 0, true);
     const tail = new THREE.Group();
-    tail.position.set(0, 0.44, 0.28);
+    tail.position.set(0, 0.44, 0.15);
     put(tail, geoBox(0.07, 0.07, 0.30), coat, 0, 0.04, 0.14, -0.45);
     g.add(tail);
     g.userData.tail = tail;
@@ -11445,10 +11487,10 @@ function beast(kind: string): LegoBody {
     const hornM = skin(0x5a554c);
     const body = block(g, coat, 0.72, 0.38, 0.44, 0, 0.55, 0, 3, 2);
     body.userData.skin = "body";
-    put(g, geoBox(0.08, 0.14, 0.06), coat, 0, 0.68, 0.26, -0.3, true);
+    put(g, geoBox(0.08, 0.14, 0.06), coat, 0, 0.68, 0.20, -0.3, true);
     // Articulated LEGO Goat Head (pitches down when aiming/charging!)
     const head = new THREE.Group();
-    head.position.set(0, 0.66, -0.36);
+    head.position.set(0, 0.66, -0.31);
     g.add(head);
     g.userData.head = head;
     block(head, coat, 0.26, 0.26, 0.28, 0, 0, -0.04, 1, 1);

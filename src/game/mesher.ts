@@ -90,7 +90,7 @@ export const STUD_OFFSETS = [
   [0.26, 0.74],
   [0.74, 0.74],
 ] as const;
-const STUD_N = 10;
+const STUD_N = 8; // v4.12: 10→8 segments per stud — invisible at stud size, −20 % stud triangles
 const STUD_TOP_R = STUD_R * 0.91;
 const STUD_COS = new Float32Array(STUD_N);
 const STUD_SIN = new Float32Array(STUD_N);
