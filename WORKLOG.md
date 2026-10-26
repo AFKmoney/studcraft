@@ -1938,3 +1938,27 @@ Comprehensive documentation of all internal subsystems in StudCraft to ensure fu
   - **Rounded Hip Hinge Barrel (`legBox` in `game.ts`)**:
     - Added an internal rounded cylinder barrel (`geoCyl(w * 0.48, w * 0.96, 8)`) along the top hinge axis of every leg. As the leg rotates during walking cycles, the rounded barrel remains seated inside the torso's underside socket, preventing gaps from opening up at any angle of swing.
 
+
+---
+
+## 2026-10-26 — v4.13: Real LEGO first-person hand + mob anatomy (no more floating legs) + shadow-map fix (Claude, ordered by Philippe)
+
+**For Muse / Gemini:** touched `src/game/game.ts` only — the first-person arm block (search `v4.13 first-person LEGO minifig arm`), `animateViewmodel()`, the held-item placement in `renderCamera`, `geoClaw()`, `alignQuadruped()` (end of `buildLego`, now `export`ed for QA tooling), and small edits in the golem / squid / parrot / vex / ravager / dragon builders. Did not touch quality, lighting, mobBatch or worldgen.
+
+### Mob anatomy
+- **Root cause found:** sheep, cow, pig, horse, fox, wolf, cat and goat were modelled with the torso long across **X** while they face and walk along **−Z** — every one of them walked broadside, head stuck on the narrow flank, and the horse/cat legs hung off the sides of the body. New `alignQuadruped()` (runs at the end of `buildLego`) turns the torso 90° so it runs head-to-tail, slides head/tail (and face-mounted decorations like the tail slope, chest bib, tamed collar) out to the new ends, and plants every leg under the body. Head, tail and leg pivots are moved but never rotated, so gait (legs swing on X) and head-look keep working.
+- Dragon: head/tail/legs were already lengthwise; only its body box was crosswise → body now 0.44 × 0.44 × 1.5, legs and wing roots moved onto the torso.
+- Golem arms seated on the torso (6 cm gap), squid tentacles reach the body, parrot feet reach the body (were floating 8 cm), vex blade and ravager horns touch.
+- **Automatic check:** a floating-part detector builds every mob (42 kinds), links touching parts and reports anything not connected to the body. Before: 11 mobs with detached parts. After: 0 — only the blaze rods, which orbit freely on purpose.
+
+### First-person hand
+- `geoClaw()` is now a real hollow minifig C-clip (annular sector with a ~90° mouth, bevelled edges) instead of a solid cylinder slice with a black disc faking the hole. Same signature/orientation, so every minifig, the crab claws and the enderman hands got real hands too.
+- New first-person arm built like a minifig: wrist pin enters the back of the C, mouth opens along the forearm, bore runs across the arm; tapered red sleeve with a moulded rim, elbow joint, upper arm off-screen. **Tools now pass through the hand's bore** (handle gripped below the head); blocks rest in the open clip at a sensible size.
+- `animateViewmodel()`: equip (arm drops and comes back up on item change), breathing idle, walk figure-8 (bigger when sprinting), look lag that springs back, attack arc (fast strike, eased recovery), landing dip scaled by fall speed, sprint carry pose; all dampened under reduced motion. Framing lives in `vmBase` (tunable via the `setVm` QA hook).
+
+### Fix
+- `PCFSoftShadowMap` (re-introduced in v4.11) → `PCFShadowMap`: three r186 removed the soft variant and was silently falling back with a warning every boot.
+
+### QA
+- tsc clean. Gap detector: 0 floating parts (blaze excluded by design). Mob lineup rendered before/after (side, top, ¾). First-person captures: empty hand, block, pickaxe and sword through the clip, mid-swing. Smoke test desktop + phone: 0 errors.
+- Not done here: on-device feel on the A54, APK / exe rebuild.

@@ -259,6 +259,9 @@ declare global {
       getCorpses?: () => number;
       getMobCount?: () => number;
       hurtMe?: (n: number) => boolean;
+      setHeld?: (id: number) => boolean;
+      setSwing?: (v: number) => boolean;
+      setVm?: (v: Record<string, number>) => boolean;
     };
   }
 }
@@ -737,7 +740,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   renderer.toneMapping = settings.realistic ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
   renderer.toneMappingExposure = settings.realistic ? 1.02 : 1;
   renderer.shadowMap.enabled = settings.realistic;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap; // r186 removed PCFSoft (it fell back with a warning)
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0x8ec8f5, 28, 72);
@@ -1171,7 +1174,6 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
 
   const fpsSleeveMat = skin(0xe23b2f);
   const fpsSkinMat = skin(0xf3d37a);
-  const fpsDarkMat = skin(0x1a120c);
   const viewBrick = new THREE.Group();
   viewBrick.userData.keepShadow = false;
 
@@ -1974,28 +1976,65 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   heldBrickGroup.rotation.set(0.18, -0.42, 0.08);
   viewBrick.add(heldBrickGroup);
 
-  // Articulated First-Person LEGO Minifig Forearm + Wrist Pin + Open 270° C-Clamp Claw Hand
+  // v4.13 first-person LEGO minifig arm: hollow C-clip hand on a wrist pin, a
+  // tapered sleeve with an elbow bend, and the upper arm running off-screen.
+  // Built around the hand (origin) so the held-item placements stay valid.
   const fpsArmGroup = new THREE.Group();
-  const fpsForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.068, 0.078, 0.28, 14), fpsSleeveMat);
-  fpsForearm.position.set(0.11, -0.14, 0.16);
-  fpsForearm.rotation.set(1.05, -0.32, 0.28);
-  fpsArmGroup.add(fpsForearm);
-
-  const fpsWrist = new THREE.Mesh(new THREE.CylinderGeometry(0.044, 0.046, 0.065, 12), fpsSkinMat);
-  fpsWrist.position.set(0.045, -0.045, 0.035);
-  fpsWrist.rotation.set(1.05, -0.32, 0.28);
-  fpsArmGroup.add(fpsWrist);
-
+  const fpsSeg = (a: THREE.Vector3, b: THREE.Vector3, ra: number, rb: number, mat: THREE.Material, seg = 18) => {
+    const len = a.distanceTo(b);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(rb, ra, len, seg, 1), mat);
+    m.position.copy(a).add(b).multiplyScalar(0.5);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+    fpsArmGroup.add(m);
+    return m;
+  };
+  const fpsJoint = (p: THREE.Vector3, r: number, mat: THREE.Material) => {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 12), mat);
+    m.position.copy(p);
+    fpsArmGroup.add(m);
+  };
+  // Minifig anatomy: the wrist pin enters the back of the C, the mouth opens along
+  // the forearm (away from the elbow) and the bore runs across the arm — so a
+  // tool handle passes straight through the hand.
+  const fpsArmDir = new THREE.Vector3(0.25, -0.3, 0.92).normalize(); // hand → elbow (elbow is nearer the camera)
+  const fpsBore = new THREE.Vector3(-0.35, 0.93, 0).addScaledVector(fpsArmDir, 0.366).normalize();
+  fpsBore.addScaledVector(fpsArmDir, -fpsBore.dot(fpsArmDir)).normalize();
+  {
+    const dir = fpsArmDir;
+    const wristA = dir.clone().multiplyScalar(0.062);
+    const wristB = dir.clone().multiplyScalar(0.112);
+    const elbow = dir.clone().multiplyScalar(0.43);
+    const shoulder = elbow.clone().add(new THREE.Vector3(0.2, -0.36, 0.18));
+    fpsSeg(wristA, wristB, 0.036, 0.04, fpsSkinMat); // wrist pin
+    fpsSeg(wristB.clone().addScaledVector(dir, -0.012), elbow, 0.066, 0.079, fpsSleeveMat); // forearm sleeve
+    // Moulded sleeve rim where the hand pin plugs in
+    const rim = fpsSeg(wristB.clone().addScaledVector(dir, -0.014), wristB.clone().addScaledVector(dir, 0.012), 0.069, 0.069, fpsSleeveMat);
+    rim.scale.set(1.04, 1, 1.04);
+    fpsJoint(elbow, 0.079, fpsSleeveMat);
+    fpsSeg(elbow, shoulder, 0.079, 0.088, fpsSleeveMat); // upper arm, mostly off-screen
+  }
+  // The hand: a real C-clip, mouth turned up-and-in so the held item sits in the bore.
   const fpsClaw = new THREE.Group();
-  fpsClaw.position.set(0.01, -0.01, -0.02);
-  fpsClaw.rotation.set(0.35, -0.35, 0.18);
-  const clawOuter = new THREE.Mesh(geoClaw(0.076, 0.085), fpsSkinMat);
-  clawOuter.rotation.z = Math.PI / 2;
-  const clawBore = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.048, 0.082, 12), fpsDarkMat);
-  clawBore.rotation.z = Math.PI / 2;
-  fpsClaw.add(clawOuter, clawBore);
+  {
+    const zMouth = fpsArmDir.clone().negate();
+    const xAxis = new THREE.Vector3().crossVectors(fpsBore, zMouth).normalize();
+    fpsClaw.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xAxis, fpsBore, zMouth));
+  }
+  const clawOuter = new THREE.Mesh(geoClaw(0.074, 0.084), fpsSkinMat);
+  fpsClaw.add(clawOuter);
   fpsArmGroup.add(fpsClaw);
+  fpsArmGroup.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh) {
+      m.castShadow = false;
+      m.receiveShadow = false;
+    }
+  });
   viewBrick.add(fpsArmGroup);
+
+  // Viewmodel animation state (renderCamera).
+  const vmBase = { x: 0.15, y: -0.075, z: -0.25, s: 0.56, block: 0.58, tool: 0.78, toolSpin: 0.35 };
+  const vm = { equip: 1, land: 0, swayX: 0, swayY: 0, lastYaw: 0, lastPitch: 0, wasGrounded: true, fallV: 0, sprint: 0, place: 0 };
 
   // Positioned at z = -0.27 with scale 0.56 so all 3D parts stay > camera.near (0.08) and < player HW (0.34)
   // while using full hardware Z-buffer depth testing for crisp 3D self-occlusion!
@@ -8445,6 +8484,53 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
   }
 
+  /** v4.13: first-person arm motion — equip, breathing, walk figure-8, look lag,
+   *  attack arc, landing dip and sprint carry. All offsets are in camera space. */
+  function animateViewmodel(dt: number) {
+    const k = reduceMotion ? 0.35 : 1;
+    const grounded = player.grounded;
+    if (!grounded) vm.fallV = Math.min(vm.fallV, player.vy);
+    if (grounded && !vm.wasGrounded && vm.fallV < -3) vm.land = Math.min(1, -vm.fallV / 14);
+    if (grounded) vm.fallV = 0;
+    vm.wasGrounded = grounded;
+    vm.land = Math.max(0, vm.land - dt * 3.2);
+    vm.equip = Math.max(0, vm.equip - dt * 3.2);
+    const moving = Math.hypot(player.vx, player.vz) > 0.8 && grounded;
+    vm.sprint += ((isSprinting() && moving ? 1 : 0) - vm.sprint) * Math.min(1, dt * 6);
+    // Look lag: the arm trails behind fast turns, then springs back.
+    let dYaw = player.yaw - vm.lastYaw;
+    while (dYaw > Math.PI) dYaw -= Math.PI * 2;
+    while (dYaw < -Math.PI) dYaw += Math.PI * 2;
+    const dPitch = player.pitch - vm.lastPitch;
+    vm.lastYaw = player.yaw;
+    vm.lastPitch = player.pitch;
+    const tx = THREE.MathUtils.clamp(dYaw * 1.6, -0.09, 0.09);
+    const ty = THREE.MathUtils.clamp(dPitch * 1.6, -0.07, 0.07);
+    vm.swayX += (tx - vm.swayX) * Math.min(1, dt * 10);
+    vm.swayY += (ty - vm.swayY) * Math.min(1, dt * 10);
+    // Attack arc: fast strike, eased recovery. p goes 0 → 1 over the swing.
+    const p = 1 - swing;
+    const arc = swing > 0 ? Math.sin(Math.min(1, p * 1.35) * Math.PI) : 0;
+    const strike = swing > 0 ? Math.sin(Math.min(1, p * 2.2) * Math.PI * 0.5) * (1 - p) : 0;
+    const eq = vm.equip * vm.equip * (3 - 2 * vm.equip);
+    const walkX = Math.sin(bob) * 0.016 * bobAmp * (1 + vm.sprint * 0.8);
+    const walkY = -Math.abs(Math.cos(bob)) * 0.02 * bobAmp * (1 + vm.sprint * 0.8);
+    const breathe = Math.sin(elapsed * 1.8) * 0.004 * (1 - bobAmp);
+    const landY = -Math.sin(vm.land * Math.PI) * 0.06 * vm.land;
+    const tool = heldIsTool;
+    viewBrick.scale.setScalar(vmBase.s);
+    viewBrick.position.set(
+      vmBase.x + (walkX + vm.swayX * 0.5 - arc * (tool ? 0.07 : 0.05) + vm.sprint * 0.03) * k,
+      vmBase.y + (walkY + breathe + landY - vm.swayY * 0.4 - eq * 0.32 - vm.sprint * 0.05 + arc * 0.02) * k,
+      vmBase.z + (-arc * (tool ? 0.05 : 0.09) + strike * 0.02) * k,
+    );
+    viewBrick.rotation.set(
+      ((tool ? -0.72 : -0.5) * arc + eq * 0.7 - vm.sprint * 0.35 - vm.swayY * 0.6 + Math.sin(bob * 2) * 0.012 * bobAmp) * k,
+      (vm.swayX * 0.9 + arc * (tool ? 0.18 : 0.1)) * k,
+      ((tool ? 0.24 : 0.14) * arc + walkX * 1.4 + vm.sprint * 0.2 + Math.sin(elapsed * 0.9) * 0.01 * (1 - bobAmp)) * k,
+    );
+  }
+
   function renderCamera(dt: number) {
     const sneak = isSneaking();
     const eye = player.y + (sneak && !flying ? EYE_SNEAK : EYE);
@@ -8521,6 +8607,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     hud.flash = flash;
     const held = hotbar[slot] || 0;
     if (held !== lastHeldId || plasticOn !== lastHeldPlastic) {
+      if (held !== lastHeldId) vm.equip = 1;
       lastHeldId = held;
       lastHeldPlastic = plasticOn;
       heldBrickGroup.clear();
@@ -8532,11 +8619,18 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         heldFlames = built1.flames;
         heldBrickGroup.add(built1.group);
         if (heldIsTool) {
-          heldBrickGroup.position.set(-0.01, 0.05, -0.05);
-          heldBrickGroup.rotation.set(-0.38, -Math.PI / 2 + 0.28, 0.12);
+          // Handle through the bore (claw local Y), gripped just below the head.
+          fpsClaw.add(heldBrickGroup);
+          const gripY = def(held).tool === "sword" ? 0.11 : 0.07;
+          heldBrickGroup.position.set(0, gripY * 1.25 * vmBase.tool, 0);
+          heldBrickGroup.rotation.set(0, vmBase.toolSpin, 0);
+          heldBrickGroup.scale.setScalar(1.25 * vmBase.tool);
         } else {
-          heldBrickGroup.position.set(-0.05, 0.04, -0.09);
-          heldBrickGroup.rotation.set(0.22, -0.52, 0.08);
+          viewBrick.add(heldBrickGroup);
+          // Blocks rest on top of the open clip instead of filling the screen.
+          heldBrickGroup.position.set(-0.035, 0.062, -0.03);
+          heldBrickGroup.rotation.set(0.22, -0.62, 0.08);
+          heldBrickGroup.scale.setScalar(vmBase.block);
         }
 
         const built3 = buildLegoItem3D(held);
@@ -8566,10 +8660,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       fl.scale.set(baseS * (1 + (pulse - 1) * 0.5), baseS * pulse, baseS * (1 + (pulse - 1) * 0.5));
       fl.rotation.y = Math.sin(elapsed * 6 + fi) * 0.25;
     }
-    swing = Math.max(0, swing - dt * 4);
-    viewBrick.rotation.x = (heldIsTool ? -0.78 : -0.52) * swing;
-    viewBrick.rotation.z = (heldIsTool ? 0.24 : 0.14) * swing;
-    viewBrick.position.y = -0.16 - swing * 0.05 + bobY * 0.24;
+    swing = Math.max(0, swing - dt * 3.4);
+    animateViewmodel(dt);
     for (const c of cloudData) {
       c.ox += dt * 1.4;
       if (c.ox > 100) c.ox = -100;
@@ -9166,6 +9258,20 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         .map((m) => ({ kind: m.kind, hp: m.hp, hurt: m.vis?.hurtT ?? 0, bar: !!m.vis?.bar, amp: m.vis?.amp ?? 0, x: m.x, y: m.y, z: m.z, cd: m.hitCd ?? 0, cool: m.cool })),
     getCorpses: () => corpses.length,
     getMobCount: () => mobs.length,
+    setHeld: (id: number) => {
+      hotbar[slot] = id;
+      emit();
+      return true;
+    },
+    setVm: (v: Record<string, number>) => {
+      Object.assign(vmBase, v);
+      lastHeldId = -1; // rebuild the held item at the new scale
+      return true;
+    },
+    setSwing: (v: number) => {
+      swing = v;
+      return true;
+    },
     hurtMe: (n: number) => {
       invuln = 0;
       hurt(n);
@@ -10652,11 +10758,28 @@ function geoSlope(w: number, h: number, d: number) {
 }
 
 // Open 270° C-Clamp LEGO Minifig Hand
+// v4.13: a real minifig hand — a hollow C-clip (annular sector, ~90° mouth) with
+// rounded LEGO edges, extruded along Y like the old cylinder slice so every
+// existing caller keeps its orientation (mouth faces +Z, axis along Y).
 function geoClaw(r = 0.058, h = 0.068) {
-  const k = "claw:" + r + ":" + h;
+  const k = "claw2:" + r + ":" + h;
   let g = figGeo.get(k);
   if (!g) {
-    g = new THREE.CylinderGeometry(r, r, h, 14, 1, false, 0.52, Math.PI * 1.52);
+    const inner = r * 0.62;
+    const half = Math.PI * 0.25; // half of the mouth opening
+    const bevel = Math.min(h * 0.16, r * 0.12);
+    const sh = new THREE.Shape();
+    // Shape in XY; mouth centred on +Y here, mapped to +Z after the rotation below.
+    const a0 = Math.PI / 2 + half;
+    const a1 = Math.PI / 2 - half + Math.PI * 2;
+    sh.absarc(0, 0, r - bevel, a0, a1, false);
+    sh.absarc(0, 0, inner + bevel, a1, a0, true);
+    sh.closePath();
+    g = new THREE.ExtrudeGeometry(sh, { depth: h - bevel * 2, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2, curveSegments: 18 });
+    g.translate(0, 0, -(h - bevel * 2) / 2);
+    g.rotateX(-Math.PI / 2); // extrude axis Z → Y, shape +Y → -Z
+    g.rotateY(Math.PI); // mouth back to +Z
+    g.computeVertexNormals();
     figGeo.set(k, g);
   }
   return g;
@@ -10824,7 +10947,6 @@ function makeFig(shirt: number, pants: number, hairCol: number, face: FigFace, h
     clawGrp.rotation.x = Math.PI / 2 + 0.22;
     clawGrp.rotation.z = Math.PI / 2;
     put(clawGrp, geoClaw(0.056, 0.066), headM, 0, 0, 0, 0, true);
-    put(clawGrp, geoCyl(0.034, 0.064, 8), black, 0, 0, 0, 0, true); // Inner C-grip shadow bore
     pivot.add(clawGrp);
     g.add(pivot);
     return pivot;
@@ -11247,7 +11369,7 @@ function beast(kind: string): LegoBody {
   if (kind === "dragon") {
     const hide = skin(0x231636);
     const spine = skin(0x7a4ad4);
-    const body = block(g, hide, 1.5, 0.44, 0.44, 0, 0.7, 0, 5, 2);
+    const body = block(g, hide, 0.44, 0.44, 1.5, 0, 0.7, 0, 2, 5); // v4.13: torso runs head-to-tail
     body.userData.skin = "body";
     for (const sz of [-0.45, -0.15, 0.15, 0.45]) {
       put(g, geoSlope(0.10, 0.16, 0.16), spine, 0, 0.98, sz, Math.PI, true);
@@ -11271,14 +11393,14 @@ function beast(kind: string): LegoBody {
     g.add(tail);
     g.userData.tail = tail;
     const left = new THREE.Group();
-    left.position.set(-0.3, 0.85, 0);
+    left.position.set(-0.21, 0.85, 0);
     put(left, geoBox(1.15, 0.06, 0.58), spine, -0.56, 0, 0);
     g.add(left);
     const right = new THREE.Group();
-    right.position.set(0.3, 0.85, 0);
+    right.position.set(0.21, 0.85, 0);
     put(right, geoBox(1.15, 0.06, 0.58), spine, 0.56, 0, 0);
     g.add(right);
-    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, hide, 0.12, 0.4, 0.12, sx * 0.28, 0.4, sz * 0.35)));
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, hide, 0.12, 0.4, 0.12, sx * 0.14, 0.52, sz * 0.48)));
     legs.push(left, right);
     g.scale.setScalar(1.35);
     return { group: g, legs, bodyMat: hide };
@@ -11326,8 +11448,8 @@ function beast(kind: string): LegoBody {
     const legs = [
       legBox(g, darkIron, 0.18, 0.52, 0.18, -0.16, 0.52, 0),
       legBox(g, darkIron, 0.18, 0.52, 0.18, 0.16, 0.52, 0),
-      hinge(g, iron, 0.085, 0.68, -0.5, 1.36, 0),
-      hinge(g, iron, 0.085, 0.68, 0.5, 1.36, 0),
+      hinge(g, iron, 0.085, 0.68, -0.43, 1.36, 0), // v4.13: shoulders seated on the torso (was a 6 cm gap)
+      hinge(g, iron, 0.085, 0.68, 0.43, 1.36, 0),
     ];
     return { group: g, legs, bodyMat: iron };
   }
@@ -11458,7 +11580,7 @@ function beast(kind: string): LegoBody {
     put(g, geoBox(0.04, 0.05, 0.024), black, -0.202, 0.62, -0.09, 0, true);
     put(g, geoBox(0.04, 0.05, 0.024), black, 0.202, 0.62, -0.09, 0, true);
     const legs = [-1, 1].flatMap((sx) =>
-      [-1, 0, 1].map((sz) => legBox(g, hide, 0.07, 0.42, 0.07, sx * 0.12, 0.42, sz * 0.12)),
+      [-1, 0, 1].map((sz) => legBox(g, hide, 0.07, 0.5, 0.07, sx * 0.12, 0.5, sz * 0.12)),
     );
     return { group: g, legs, bodyMat: hide };
   }
@@ -11549,8 +11671,8 @@ function beast(kind: string): LegoBody {
     put(head, geoBox(0.032, 0.032, 0.022), black, -0.08, 0.09, -0.108, 0, true);
     put(head, geoBox(0.032, 0.032, 0.022), black, 0.08, 0.09, -0.108, 0, true);
     put(g, geoBox(0.10, 0.34, 0.04), blue, 0, 0.16, 0.18, 0.35, true);
-    put(g, geoBox(0.04, 0.1, 0.04), yellow, -0.06, 0.1, 0, 0, true);
-    put(g, geoBox(0.04, 0.1, 0.04), yellow, 0.06, 0.1, 0, 0, true);
+    put(g, geoBox(0.04, 0.26, 0.04), yellow, -0.06, 0.13, 0, 0, true); // feet reach the body (were floating)
+    put(g, geoBox(0.04, 0.26, 0.04), yellow, 0.06, 0.13, 0, 0, true);
     const left = new THREE.Group();
     left.position.set(-0.13, 0.5, 0);
     put(left, geoBox(0.24, 0.04, 0.2), blue, -0.12, 0, 0);
@@ -11618,7 +11740,7 @@ function beast(kind: string): LegoBody {
     put(head, geoBox(0.06, 0.05, 0.024), vexEye, -0.07, 0.14, -0.135, 0, true);
     put(head, geoBox(0.06, 0.05, 0.024), vexEye, 0.07, 0.14, -0.135, 0, true);
     // Tiny iron sword held in right hand
-    put(g, geoBox(0.04, 0.28, 0.02), skin(0xc8d0d8), 0.19, 0.42, -0.14, 0.45, true);
+    put(g, geoBox(0.04, 0.28, 0.02), skin(0xc8d0d8), 0.15, 0.42, -0.14, 0.45, true);
     const wL = new THREE.Group();
     put(wL, geoBox(0.42, 0.03, 0.22), wing, -0.21, 0, 0, 0, true);
     wL.position.set(-0.14, 0.6, 0.06);
@@ -11650,8 +11772,8 @@ function beast(kind: string): LegoBody {
     put(head, geoBox(0.08, 0.07, 0.03), ravEye, -0.20, 0.06, -0.51, 0, true);
     put(head, geoBox(0.08, 0.07, 0.03), ravEye, 0.20, 0.06, -0.51, 0, true);
     put(head, geoBox(0.14, 0.12, 0.04), goldM, 0, -0.16, -0.52, 0, true); // Golden nose ring
-    put(head, geoBox(0.08, 0.36, 0.08), hornM, -0.44, 0.20, -0.24, -0.5, true);
-    put(head, geoBox(0.08, 0.36, 0.08), hornM, 0.44, 0.20, -0.24, -0.5, true);
+    put(head, geoBox(0.08, 0.36, 0.08), hornM, -0.41, 0.20, -0.24, -0.5, true);
+    put(head, geoBox(0.08, 0.36, 0.08), hornM, 0.41, 0.20, -0.24, -0.5, true);
     const legs: THREE.Object3D[] = [];
     for (const sx of [-1, 1])
       for (const sz of [-0.52, 0.55]) {
@@ -11756,7 +11878,7 @@ function decorateVillagerRole(group: THREE.Group, role?: TraderRole) {
   }
 }
 
-function buildLego(kind: string, scale: number): LegoBody {
+export function buildLego(kind: string, scale: number): LegoBody {
   const figKind =
     kind === "villager"
       ? makeFig(0x8d5a34, 0x6b3e22, 0x4a3424, "nose")
@@ -11876,6 +11998,63 @@ function buildLego(kind: string, scale: number): LegoBody {
     put(g, geoBox(0.18, 0.05, 0.06), transTile(0x36e868, 0x148834), 0.28, 0.54, -0.17, 0, true);
   }
 
+  alignQuadruped(built, kind);
   if (scale !== 1) built.group.scale.multiplyScalar(scale);
   return built;
+}
+
+// v4.13 anatomy fix: these beasts were modelled with the torso long across X
+// while they face and walk along -Z — they moved broadside, with the head on the
+// narrow flank and legs hanging off the sides. Turn the torso 90° so its length
+// runs head-to-tail, slide head/tail to the new ends and plant every leg under
+// the body. Head, tail and leg pivots are moved but never rotated, so the gait
+// (legs swing on X) and head-look (Y) keep working unchanged.
+const BROADSIDE = new Set(["sheep", "cow", "pig", "horse", "fox", "wolf", "cat", "goat"]);
+function alignQuadruped(built: LegoBody, kind: string) {
+  if (!BROADSIDE.has(kind)) return;
+  const g = built.group;
+  let body: THREE.Mesh | null = null;
+  g.traverse((o) => {
+    if (!body && (o as THREE.Mesh).isMesh && o.userData.skin === "body") body = o as THREE.Mesh;
+  });
+  const bm = body as THREE.Mesh | null;
+  if (!bm) return;
+  const params = (bm.geometry as THREE.BoxGeometry).parameters;
+  if (!params || !(params.width > params.depth * 1.15)) return;
+  const hw = params.width / 2; // old half-length along X → new half-length along Z
+  const hd = params.depth / 2; // old half-depth along Z → new half-width along X
+  const head = g.userData.head as THREE.Object3D | undefined;
+  const tail = g.userData.tail as THREE.Object3D | undefined;
+  const legSet = new Set(built.legs);
+  const rot = new THREE.Matrix4().makeRotationY(Math.PI / 2);
+  for (const c of [...g.children]) {
+    if (c === head || c === tail) {
+      const z = c.position.z;
+      // Only parts attached at the old narrow face move out to the new ends.
+      if (Math.abs(z) < (hd + hw) / 2) c.position.z = z + Math.sign(z || (c === head ? -1 : 1)) * (hw - hd);
+      continue;
+    }
+    if (legSet.has(c)) {
+      const box = new THREE.Box3().setFromObject(c);
+      const lw = Math.max(0.04, (box.max.x - box.min.x) / 2);
+      const ld = Math.max(0.04, (box.max.z - box.min.z) / 2);
+      const ox = c.position.x;
+      const oz = c.position.z;
+      const nx = Math.sign(oz || ox) * Math.min(Math.abs(oz) || Math.abs(ox), hd - lw - 0.01);
+      const nz = Math.sign(ox || oz) * Math.min(Math.abs(ox), hw - ld - 0.02);
+      c.position.set(nx, c.position.y, nz);
+      continue;
+    }
+    // Classify by where the part actually sits (a group like the tamed collar
+    // lives at the origin but its bricks hang off the old front face).
+    const cb = new THREE.Box3().setFromObject(c, true);
+    const z = Number.isFinite(cb.min.z) ? (cb.min.z + cb.max.z) / 2 : c.position.z;
+    if (Math.abs(z) > hd + 0.005) {
+      // Decoration on the old front/back face (tail slope, chest bib, collar):
+      // keep its orientation, carry it to the new front/back face at the same offset.
+      c.position.z += Math.sign(z) * (hw - hd);
+      continue;
+    }
+    c.applyMatrix4(rot);
+  }
 }
