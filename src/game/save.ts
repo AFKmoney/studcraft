@@ -75,6 +75,7 @@ export type SettingsSave = {
   music?: number;
   sfx?: number;
   haptics?: boolean;
+  invertY?: boolean;
   mods?: { hard: boolean; generous: boolean; peaceful: boolean; spells: boolean };
 };
 

@@ -3140,6 +3140,14 @@ kbd {
   }
 }
 
+/* Controller navigation: a loud, unmistakable focus ring (programmatic focus
+   doesn't always trigger :focus-visible). */
+.pad-nav .sc-root :focus {
+  outline: 3px solid var(--sc-gold);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px rgba(245, 197, 24, 0.22);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

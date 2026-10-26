@@ -1432,3 +1432,20 @@ Muse's addendum on this branch (`release/v4.0-production`, on top of Claude's `6
 
 ### Note for Claude
 Both `game.ts` changes are additive and localized (one new function + material apply calls + `qualityCaps()`/`applyQuality()`/ladder-driver edits). If you keep working on this branch, they're yours to tune — amplitudes live in `sirenizeWorld()`, ladder thresholds in `qualityCaps()` and the fps-window driver right below it.
+## v4.1 — 2026-10-25 (Controller support — Philippe's order: PS5, Xbox etc. on PC and mobile)
+
+Claude (Opus 5.5), same branch `release/v4.0-production` (PR #1). **For Muse:** I did NOT touch `qualityCaps()` / the auto-quality loop / shadows — that's yours (realistic kept, internal scale drops before shadows). Files I touched this round: `src/game/gamepad.ts` (new), `src/game/game.ts` (input only: `padTick`, `poll`, look, `isSneaking`/`isSprinting`, rumble, connect/disconnect, `setInvertY`), `src/game/GameView.tsx` (menu navigation hook, settings rows, help), `src/styles.css` (focus ring), `src/game/save.ts` (`invertY`).
+
+### What shipped
+- Standard-mapping gamepads (Xbox, DualSense / DualShock 4, Switch Pro, most Bluetooth pads) on desktop browsers, Android Chrome and iOS Safari. The most recently used pad is picked, whatever slot it reports (phones rarely put it at 0).
+- Gameplay: LS move · RS look (dead zone + response curve, sensitivity setting, new "Invert look" option) · A/✕ jump · RT/R2 mine/attack · LT/L2 place/use · LB/RB and D-pad ←/→ hotbar · X/□ inventory · Y/△ swap off-hand · B/○ or R3 sneak (hold) · L3 sprint (toggle, ends when you stop) · D-pad ↑ third person · D-pad ↓ cycle spell · View/Share hide HUD · Menu/Options pause.
+- Menus: D-pad / left stick move focus spatially between controls (with key-repeat), A selects, B goes back (Back / Done / Close / Cancel, or resume / close inventory), LB/RB switch tabs, ←/→ adjust a focused slider, Start resumes from pause. Big gold focus ring while a pad drives the UI.
+- A button held across a menu ↔ game hand-over (A on "Resume", Start into pause) is ignored until released — no accidental jump or instant resume.
+- Rumble on taking damage and on landing a hit (uses the "Vibration" setting). "Controller connected / disconnected" toasts; disconnecting mid-game pauses and stops movement.
+- Using the pad hides the touch controls and the "Click to play" hint; touching the screen, the mouse or the keyboard hands control back.
+- Settings → Controls shows the connected controller; How to play lists the full layout.
+
+### QA
+- tsc clean. Simulated DualSense / Xbox (mocked `navigator.getGamepads`, pad on slot 2) in headless Chromium: focus moves, A opens screens and creates a world, B backs out, X opens inventory, RB switches tab, B closes, Start pauses (focus lands on Resume) and resumes; in play LS walked 2.25 blocks, RS turned 1.5 rad, RB moved the hotbar; touch layer hidden while the pad is active; 0 page errors.
+- Fixed during QA: my first edge detector compared a button with itself (no press ever registered as new).
+- Not tested here: real hardware, rumble (needs a real pad), the Android WebView inside the APK (should expose the Gamepad API like Chrome — check on the A54 with a Bluetooth pad).

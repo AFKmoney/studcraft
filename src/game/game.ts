@@ -13,6 +13,7 @@ import { buildAtlas } from "./textures";
 import { CS, HEIGHT, World, decorate, folkLayout, penSheep, paintEndCrystals, END_PILLARS, type Decor, type FolkSpot } from "./world";
 import { stockChest } from "./loot";
 import { Upscaler, upscaleScale } from "./upscale";
+import { BTN, PadEdges, activePad, padBusy, padLabel, rumble, stick } from "./gamepad";
 import { parseSeed } from "./noise";
 
 export type Phase = "title" | "play" | "pause" | "inventory" | "dead";
@@ -99,6 +100,9 @@ export type Hud = {
   version: string;
   /** Set when the frame loop keeps failing: the UI shows a crash screen. */
   fatal: string;
+  /** Connected controller name ("" = none) and whether it is the input in use. */
+  pad: string;
+  padActive: boolean;
 };
 
 export type TouchState = {
@@ -131,6 +135,7 @@ export type GameApi = {
     music: number;
     sfx: number;
     haptics: boolean;
+    invertY: boolean;
     mods: { hard: boolean; generous: boolean; peaceful: boolean; spells: boolean };
   };
   phase: Phase;
@@ -187,6 +192,7 @@ export type GameApi = {
   setMusic: (n: number) => void;
   setSfx: (n: number) => void;
   setHaptics: (on: boolean) => void;
+  setInvertY: (on: boolean) => void;
   /** Resolve the in-game text prompt (replaces window.prompt). null = cancelled. */
   answer: (text: string | null) => void;
   /** Short UI feedback sound for menus. */
@@ -282,6 +288,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     music: savedSettings?.music ?? 0.7,
     sfx: savedSettings?.sfx ?? 0.9,
     haptics: savedSettings?.haptics ?? true,
+    invertY: savedSettings?.invertY ?? false,
     mods: {
       hard: savedSettings?.mods?.hard ?? false,
       generous: savedSettings?.mods?.generous ?? false,
@@ -369,8 +376,90 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     loading: 0,
     version: GAME_VERSION,
     fatal: "",
+    pad: "",
+    padActive: false,
   };
   const touch: TouchState = { moveX: 0, moveY: 0, jump: false, mine: false, place: false };
+  // ── Controller (v4.0) ───────────────────────────────────────────────────
+  // Gameplay layout (Xbox name · PlayStation name):
+  //   LS move · RS look · A/✕ jump · RT/R2 mine-attack · LT/L2 place-use
+  //   LB/L1 · RB/R1 hotbar · X/□ inventory · Y/△ swap off-hand
+  //   B/○ or R3 sneak (hold) · L3 sprint (toggle) · D-pad ←/→ hotbar
+  //   D-pad ↑ third person · D-pad ↓ cycle spell · View/Share hide HUD · Menu/Options pause
+  // Menus are driven by the UI layer (GameView useGamepadMenu).
+  const padIn = { x: 0, y: 0, lx: 0, ly: 0, jump: false, mine: false, place: false, sneak: false, sprint: false };
+  const padEdges = new PadEdges();
+  let padSprint = false;
+  let padWasPlay = false;
+  function padTick() {
+    const p = activePad();
+    const name = p ? padLabel(p.id) : "";
+    if (name !== hud.pad) hud.pad = name;
+    if (p && padBusy(p) && !hud.padActive) {
+      hud.padActive = true;
+      emit();
+    }
+    const inPlay = phase === "play" && !hud.ask && !hud.signEdit;
+    // Buttons held while a menu handed control back (A on "Resume") don't leak into play.
+    if (inPlay && !padWasPlay) padEdges.blockHeld(p);
+    padWasPlay = inPlay;
+    const e = padEdges.update(p);
+    if (!p || !inPlay) {
+      padIn.x = padIn.y = padIn.lx = padIn.ly = 0;
+      padIn.jump = padIn.mine = padIn.place = padIn.sneak = padIn.sprint = false;
+      padSprint = false;
+      return;
+    }
+    const mv = stick(p.axes[0] ?? 0, p.axes[1] ?? 0, 0.16, 1);
+    const lk = stick(p.axes[2] ?? 0, p.axes[3] ?? 0, 0.14, 1.6);
+    padIn.x = mv.x;
+    padIn.y = -mv.y;
+    padIn.lx = lk.x;
+    padIn.ly = lk.y;
+    padIn.jump = e.down(BTN.A);
+    padIn.mine = e.down(BTN.RT);
+    padIn.place = e.down(BTN.LT);
+    padIn.sneak = e.down(BTN.B) || e.down(BTN.R3);
+    if (e.pressed(BTN.L3)) padSprint = !padSprint;
+    if (mv.m < 0.2) padSprint = false; // like a stick-click sprint: stopping ends it
+    padIn.sprint = padSprint;
+    if (e.pressed(BTN.START)) {
+      api.pauseGame();
+      return;
+    }
+    if (e.pressed(BTN.X)) {
+      api.toggleInventory();
+      return;
+    }
+    if (e.pressed(BTN.Y)) keys.add("KeyF"); // poll() swaps the off-hand on KeyF
+    if (e.pressed(BTN.LB) || e.pressed(BTN.LEFT)) api.setSlot(slot - 1);
+    if (e.pressed(BTN.RB) || e.pressed(BTN.RIGHT)) api.setSlot(slot + 1);
+    if (e.pressed(BTN.UP)) {
+      settings.third = !settings.third;
+      emit();
+    }
+    if (e.pressed(BTN.DOWN)) {
+      const list = spellsFor(skills);
+      if (!list.length) say("Learn Spark to cast");
+      else {
+        spellIx = (spellIx + 1) % list.length;
+        say(list[spellIx].name);
+      }
+    }
+    if (e.pressed(BTN.VIEW)) {
+      hud.hidden = !hud.hidden;
+      emit();
+    }
+  }
+  function padRumble(strong: number, weak: number, ms: number) {
+    if (settings.haptics && hud.padActive) rumble(activePad(), strong, weak, ms);
+  }
+  function isSneaking() {
+    return keys.has("ShiftLeft") || keys.has("ShiftRight") || padIn.sneak;
+  }
+  function isSprinting() {
+    return keys.has("ControlLeft") || keys.has("ControlRight") || padIn.sprint;
+  }
   const listeners = new Set<() => void>();
   const keys = new Set<string>();
   let steerOverride = 0;
@@ -1527,6 +1616,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       music: settings.music,
       sfx: settings.sfx,
       haptics: settings.haptics,
+      invertY: settings.invertY,
       mods: { ...settings.mods },
     });
   }
@@ -2166,7 +2256,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
 
   function hurt(n: number) {
     if (creative || n <= 0 || phase !== "play" || invuln > 0) return;
-    const sneaking = keys.has("ShiftLeft") || keys.has("ShiftRight");
+    const sneaking = isSneaking();
     if (sneaking && (hotbar.includes(ID.Shield) || offhand === ID.Shield)) {
       n *= 0.35;
       if (hotbar[slot] === ID.Shield || offhand === ID.Shield) wearHeld();
@@ -2185,6 +2275,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     flash = 1;
     shake = Math.max(shake, 0.18);
     audio.hurt();
+    padRumble(0.75, 0.4, 160);
     if (health <= 0) die();
   }
 
@@ -2915,7 +3006,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   }
 
   function tryPlace(hit: NonNullable<ReturnType<typeof raycast>>) {
-    const sneaking = keys.has("ShiftLeft") || keys.has("ShiftRight");
+    const sneaking = isSneaking();
     const held = hotbar[slot];
     const heldDef = def(held);
     if (held === ID.Bow || held === ID.Crossbow) return shootHeld();
@@ -6050,19 +6141,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (steerOverride) str += -steerOverride;
     fwd += touch.moveY;
     str += touch.moveX;
-    const pads = navigator.getGamepads?.();
-    const pad = pads ? pads[0] : null;
-    let jump = keys.has("Space") || touch.jump;
-    let mine = mouseMine || touch.mine;
-    let place = mousePlace || touch.place;
-    if (pad) {
-      const dz = radial(pad.axes[0] ?? 0, pad.axes[1] ?? 0, 0.18);
-      str += dz.x;
-      fwd += -dz.y;
-      if (pad.buttons[0]?.pressed) jump = true;
-      if ((pad.buttons[7]?.value ?? 0) > 0.45) mine = true;
-      if ((pad.buttons[6]?.value ?? 0) > 0.45) place = true;
-    }
+    str += padIn.x;
+    fwd += padIn.y;
+    const jump = keys.has("Space") || touch.jump || padIn.jump;
+    const mine = mouseMine || touch.mine || padIn.mine;
+    const place = mousePlace || touch.place || padIn.place;
     const mag = Math.hypot(fwd, str);
     if (mag > 1) {
       fwd /= mag;
@@ -6071,8 +6154,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     return {
       fwd,
       str,
-      sneak: keys.has("ShiftLeft") || keys.has("ShiftRight"),
-      sprint: keys.has("ControlLeft") || keys.has("ControlRight"),
+      sneak: isSneaking(),
+      sprint: isSprinting(),
       jump,
       mine,
       place,
@@ -6333,6 +6416,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         if (blade.tool === "sword" && enchLvl(hotbar[slot], "fire") > 0) mob.burn = Math.max(mob.burn ?? 0, 2 + enchLvl(hotbar[slot], "fire"));
         if (blade.tool === "sword" || blade.tool === "bow") wearHeld();
         mob.hitCd = 0.42;
+        padRumble(0.25, 0.45, 60);
         mob.cool = Math.max(mob.cool, 0.42); // a hit still staggers its next bite
         mob.fuse = Math.max(0, mob.fuse - 0.25);
         const kb = 0.4 + (blade.tool === "sword" ? enchLvl(hotbar[slot], "knockback") * 0.3 : 0);
@@ -6718,7 +6802,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   }
 
   function renderCamera(dt: number) {
-    const sneak = keys.has("ShiftLeft") || keys.has("ShiftRight");
+    const sneak = isSneaking();
     const eye = player.y + (sneak && !flying ? EYE_SNEAK : EYE);
     const bobY = phase === "play" && player.grounded && !reduceMotion ? Math.sin(bob) * 0.045 : 0;
     camera.rotation.order = "YXZ";
@@ -6727,7 +6811,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       camera.rotation.x = player.pitch;
     }
     const baseFov = settings.fov;
-    camera.fov = THREE.MathUtils.lerp(camera.fov, keys.has("ControlLeft") && phase === "play" && !flying ? baseFov + 8 : baseFov, 0.1);
+    camera.fov = THREE.MathUtils.lerp(camera.fov, isSprinting() && phase === "play" && !flying ? baseFov + 8 : baseFov, 0.1);
     camera.updateProjectionMatrix();
     if (phase === "title") {
       if (!reduceMotion) orbit += dt * 0.15;
@@ -6960,11 +7044,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     player.pitch = Math.max(-1.45, Math.min(1.45, player.pitch));
     lookDx = 0;
     lookDy = 0;
-    const pad = navigator.getGamepads?.()?.[0];
-    if (pad && phase === "play") {
-      const look = radial(pad.axes[2] ?? 0, pad.axes[3] ?? 0, 0.18);
-      player.yaw -= look.x * 2.4 * dt * settings.sens;
-      player.pitch -= look.y * 1.8 * dt * settings.sens;
+    padTick();
+    if (phase === "play" && (padIn.lx || padIn.ly)) {
+      player.yaw -= padIn.lx * 3.1 * dt * settings.sens;
+      player.pitch -= padIn.ly * (settings.invertY ? -1 : 1) * 2.3 * dt * settings.sens;
       player.pitch = Math.max(-1.45, Math.min(1.45, player.pitch));
     }
 
@@ -7121,6 +7204,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   window.addEventListener(
     "keydown",
     (e) => {
+      if (hud.padActive) {
+        hud.padActive = false;
+        emit();
+      }
       const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
       if (typing) return;
       if (e.code === "Space" || e.code.startsWith("Arrow")) e.preventDefault();
@@ -7177,6 +7264,34 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     opt,
   );
   window.addEventListener("keyup", (e) => keys.delete(e.code), opt);
+  const leavePad = () => {
+    if (!hud.padActive) return;
+    hud.padActive = false;
+    emit();
+  };
+  window.addEventListener("pointerdown", leavePad, { ...opt, passive: true });
+  window.addEventListener("mousemove", (e) => (Math.abs(e.movementX) + Math.abs(e.movementY) > 4 ? leavePad() : undefined), { ...opt, passive: true });
+  window.addEventListener(
+    "gamepadconnected",
+    (e) => {
+      hud.pad = padLabel(e.gamepad.id);
+      say(hud.pad + " connected", 2600);
+    },
+    opt,
+  );
+  window.addEventListener(
+    "gamepaddisconnected",
+    (e) => {
+      const left = padLabel(e.gamepad.id);
+      hud.pad = activePad() ? padLabel(activePad()!.id) : "";
+      if (!hud.pad) hud.padActive = false;
+      // Losing the controller mid-game should not leave the player walking.
+      padIn.x = padIn.y = padIn.lx = padIn.ly = 0;
+      if (phase === "play") phase = "pause";
+      say(left + " disconnected", 3000);
+    },
+    opt,
+  );
   window.addEventListener("blur", () => keys.clear(), opt);
   document.addEventListener(
     "visibilitychange",
@@ -8164,6 +8279,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       persistSettings();
       emit();
     },
+    setInvertY(on) {
+      settings.invertY = on;
+      persistSettings();
+      emit();
+    },
     answer(text) {
       const resolve = askResolve;
       askResolve = null;
@@ -8265,13 +8385,6 @@ function lerpHex(a: number, b: number, t: number) {
   const g = ag + (bg - ag) * t;
   const bl = ab + (bb - ab) * t;
   return ((r | 0) << 16) | ((g | 0) << 8) | (bl | 0);
-}
-
-function radial(x: number, y: number, dz: number) {
-  const m = Math.hypot(x, y);
-  if (m < dz) return { x: 0, y: 0 };
-  const scale = (m - dz) / (1 - dz) / m;
-  return { x: x * scale, y: y * scale };
 }
 
 let plasticOn = true;

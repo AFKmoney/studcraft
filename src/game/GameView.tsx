@@ -6,6 +6,7 @@ import { CODEX, PERKS } from "./ranks";
 import { ItemIcon } from "./icons";
 import { SKILLS } from "./skills";
 import type { WorldSlot } from "./save";
+import { BTN, PadEdges, activePad, stick } from "./gamepad";
 import {
   BackIcon,
   BagIcon,
@@ -237,6 +238,149 @@ function useMenuSounds(game: GameApi) {
   }, [game]);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Controller menu navigation: D-pad / left stick move focus between controls,
+// A/✕ activates, B/○ goes back, LB/RB switch tabs, ←/→ adjust a focused slider.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FOCUSABLE = 'button:not([disabled]), [role="tab"], [role="switch"], [role="radio"], input:not([type="hidden"]):not([disabled])';
+
+function navRoot(): HTMLElement | null {
+  const modal = document.querySelector<HTMLElement>(".sc-modal");
+  if (modal) return modal;
+  const layers = document.querySelectorAll<HTMLElement>(".sc-menu-layer");
+  return layers.length ? layers[layers.length - 1] : null;
+}
+
+function candidates(root: HTMLElement) {
+  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden";
+  });
+}
+
+function moveFocus(dx: number, dy: number) {
+  const root = navRoot();
+  if (!root) return;
+  const list = candidates(root);
+  if (!list.length) return;
+  const cur = document.activeElement as HTMLElement | null;
+  if (!cur || !list.includes(cur)) {
+    const first = list.find((el) => el.matches(".sc-btn-primary, [aria-selected=true], [aria-checked=true]")) ?? list[0];
+    first.focus();
+    first.scrollIntoView({ block: "nearest", inline: "nearest" });
+    return;
+  }
+  const a = cur.getBoundingClientRect();
+  const ax = a.left + a.width / 2;
+  const ay = a.top + a.height / 2;
+  let best: HTMLElement | null = null;
+  let bestScore = Infinity;
+  for (const el of list) {
+    if (el === cur) continue;
+    const b = el.getBoundingClientRect();
+    const bx = b.left + b.width / 2;
+    const by = b.top + b.height / 2;
+    const along = (bx - ax) * dx + (by - ay) * dy;
+    if (along <= 4) continue;
+    const across = Math.abs((bx - ax) * dy - (by - ay) * dx);
+    const score = along + across * 2.2;
+    if (score < bestScore) {
+      bestScore = score;
+      best = el;
+    }
+  }
+  if (best) {
+    best.focus();
+    best.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
+}
+
+function nudgeRange(el: HTMLInputElement, dir: number) {
+  const step = Number(el.step) || 1;
+  const v = Math.max(Number(el.min), Math.min(Number(el.max), Number(el.value) + dir * step));
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  setter?.call(el, String(v));
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function clickBack(game: GameApi) {
+  const root = navRoot();
+  if (root) {
+    const back = root.querySelector<HTMLElement>('[aria-label="Back"], [aria-label="Done"], [aria-label="Close"]');
+    if (back) return back.click();
+    const cancel = Array.from(root.querySelectorAll<HTMLElement>("button")).find((b) => b.textContent?.trim() === "Cancel");
+    if (cancel) return cancel.click();
+  }
+  if (game.hud.ask) return game.answer(null);
+  if (game.phase === "pause") return game.resume();
+  if (game.phase === "inventory") return game.toggleInventory();
+}
+
+function switchTab(dir: number) {
+  const root = navRoot();
+  const tabs = root ? Array.from(root.querySelectorAll<HTMLElement>('[role="tab"]')) : [];
+  if (tabs.length < 2) return;
+  const cur = tabs.findIndex((t) => t.getAttribute("aria-selected") === "true");
+  const next = tabs[(Math.max(0, cur) + dir + tabs.length) % tabs.length];
+  next.click();
+  next.focus();
+}
+
+function useGamepadMenu(game: GameApi, active: boolean) {
+  useEffect(() => {
+    if (!active) return;
+    const edges = new PadEdges();
+    edges.blockHeld(activePad()); // the press that opened this menu is not a menu press
+    let raf = 0;
+    let held = "";
+    let nextRepeat = 0;
+    const tick = (t: number) => {
+      raf = requestAnimationFrame(tick);
+      const p = activePad();
+      if (!p) return;
+      const e = edges.update(p);
+      const ls = stick(p.axes[0] ?? 0, p.axes[1] ?? 0, 0.5, 1);
+      let dir = "";
+      if (e.down(BTN.UP) || ls.y < -0.3) dir = "up";
+      else if (e.down(BTN.DOWN) || ls.y > 0.3) dir = "down";
+      else if (e.down(BTN.LEFT) || ls.x < -0.3) dir = "left";
+      else if (e.down(BTN.RIGHT) || ls.x > 0.3) dir = "right";
+      if (!dir) held = "";
+      else if (dir !== held || t >= nextRepeat) {
+        nextRepeat = t + (dir !== held ? 380 : 110);
+        held = dir;
+        document.documentElement.classList.add("pad-nav");
+        const el = document.activeElement as HTMLElement | null;
+        const range = el instanceof HTMLInputElement && el.type === "range";
+        if (range && (dir === "left" || dir === "right")) nudgeRange(el as HTMLInputElement, dir === "left" ? -1 : 1);
+        else moveFocus(dir === "left" ? -1 : dir === "right" ? 1 : 0, dir === "up" ? -1 : dir === "down" ? 1 : 0);
+        game.uiSound("hover");
+      }
+      if (e.pressed(BTN.A)) {
+        document.documentElement.classList.add("pad-nav");
+        const el = document.activeElement as HTMLElement | null;
+        const root = navRoot();
+        if (el && root?.contains(el) && el.matches(FOCUSABLE)) {
+          if (!(el instanceof HTMLInputElement && el.type !== "checkbox")) el.click();
+          else if (el.form) el.form.requestSubmit();
+        } else moveFocus(0, 0);
+      }
+      if (e.pressed(BTN.B)) clickBack(game);
+      if (e.pressed(BTN.START) && game.phase === "pause") game.resume();
+      if (e.pressed(BTN.LB)) switchTab(-1);
+      if (e.pressed(BTN.RB)) switchTab(1);
+    };
+    raf = requestAnimationFrame(tick);
+    const off = () => document.documentElement.classList.remove("pad-nav");
+    window.addEventListener("pointermove", off, { passive: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("pointermove", off);
+    };
+  }, [game, active]);
+}
+
 function Screen({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <div className={"sc-screen " + className}>{children}</div>;
 }
@@ -352,6 +496,7 @@ function Overlay({ game }: { game: GameApi }) {
   const touchUI = useTouchUI();
   const phase: Phase = game.phase;
   const hud = game.hud;
+  useGamepadMenu(game, phase !== "play" || !!hud.ask || !!hud.signEdit);
 
   if (hud.fatal) return <FatalScreen title="The world hit a snag" detail={hud.fatal} />;
 
@@ -363,8 +508,8 @@ function Overlay({ game }: { game: GameApi }) {
           {hud.message}
         </p>
       )}
-      {phase === "play" && !hud.hidden && <Hud game={game} touchUI={touchUI} />}
-      {phase === "play" && touchUI && <TouchControls game={game} />}
+      {phase === "play" && !hud.hidden && <Hud game={game} touchUI={touchUI && !hud.padActive} />}
+      {phase === "play" && touchUI && !hud.padActive && <TouchControls game={game} />}
       {phase === "play" && hud.signEdit && <SignEditor game={game} />}
       {phase === "pause" && <PauseMenu game={game} />}
       {phase === "inventory" && <Inventory game={game} />}
@@ -617,6 +762,20 @@ function HelpPanel({ onBack }: { onBack: () => void }) {
     ["F5 · F1", "Third person · hide HUD"],
     ["Esc", "Pause"],
   ];
+  const padList: [string, string][] = [
+    ["LS · RS", "Move · look"],
+    ["A · ✕", "Jump"],
+    ["RT · R2", "Mine / attack"],
+    ["LT · L2", "Place / use"],
+    ["LB RB · L1 R1", "Hotbar"],
+    ["X · □", "Inventory"],
+    ["Y · △", "Swap off-hand"],
+    ["B · ○ / R3", "Sneak (hold)"],
+    ["L3", "Sprint"],
+    ["D-pad ↑ · ↓", "Third person · spells"],
+    ["Menu · Options", "Pause"],
+    ["In menus", "D-pad moves · A selects · B back · LB/RB tabs"],
+  ];
   return (
     <section className="sc-panel sc-panel-tall">
       <PanelHead eyebrow="Guide" title="How to play" onBack={onBack} />
@@ -636,6 +795,17 @@ function HelpPanel({ onBack }: { onBack: () => void }) {
             </dl>
           </div>
           <div>
+            <p className="sc-label">Controller (Xbox · PlayStation)</p>
+            <dl className="sc-keys">
+              {padList.map(([k, v]) => (
+                <div key={k}>
+                  <dt>
+                    <kbd>{k}</kbd>
+                  </dt>
+                  <dd>{v}</dd>
+                </div>
+              ))}
+            </dl>
             <p className="sc-label">Touch</p>
             <ul className="sc-bullets">
               <li>Left thumb: drag anywhere on the left to walk.</li>
@@ -741,8 +911,14 @@ function SettingsPanel({ game, onBack }: { game: GameApi; onBack: () => void }) 
             <Row title="Third-person view" detail="Also F5 on a keyboard.">
               <Toggle label="Third-person view" on={s.third} onChange={(v) => game.setThird(v)} />
             </Row>
-            <Row title="Vibration" detail="Short pulses on touch buttons (phones).">
+            <Row title="Vibration" detail="Touch buttons on phones and controller rumble.">
               <Toggle label="Vibration" on={s.haptics} onChange={(v) => game.setHaptics(v)} />
+            </Row>
+            <Row title="Controller" detail={game.hud.pad ? game.hud.pad + " connected — Xbox, PlayStation, Switch Pro and most Bluetooth pads work." : "Plug in or pair an Xbox, PlayStation or Switch Pro controller, then press any button."}>
+              <span className={"sc-chip" + (game.hud.pad ? " rep good" : "")}>{game.hud.pad ? "Ready" : "None"}</span>
+            </Row>
+            <Row title="Invert look (controller)" detail="Right stick up looks down.">
+              <Toggle label="Invert look" on={s.invertY} onChange={(v) => game.setInvertY(v)} />
             </Row>
           </>
         )}
@@ -1057,7 +1233,7 @@ function Hud({ game, touchUI }: { game: GameApi; touchUI: boolean }) {
         )}
       </div>
       {hud.targetName && <div className="sc-target">{hud.targetName}</div>}
-      {!touchUI && !hud.locked && (
+      {!touchUI && !hud.locked && !hud.padActive && (
         <button
           className="sc-capture"
           onClick={() => {
