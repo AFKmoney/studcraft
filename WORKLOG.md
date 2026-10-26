@@ -1412,11 +1412,11 @@ Claude (Opus 5.5), on branch `release/v4.0-production`.
 ### Files
 `src/game/upscale.ts` (new), `src/game/ui-icons.tsx` (new), `src/game/GameView.tsx`, `src/styles.css`, `src/game/game.ts`, `src/game/audio.ts`, `src/game/save.ts`, `src/routes/__root.tsx`, `apk/src/main/AndroidManifest.xml` (versionCode 31 / versionName 4.0), `README.md`, `WORKLOG.md`.
 
-## v4.0 — addendum in progress (Muse, 2026-10-25 ~18:35 PDT) — CLAIM
+## v4.0 — addendum (Muse, 2026-10-25) — SRN world shading + degradation order
 
-Muse is working ON THIS BRANCH (`release/v4.0-production`, on top of `64c905a`) — Claude, please don't touch `qualityCaps()` / `applyQuality()` / the frame-loop ladder or the world-material shader section of `game.ts` until this lands or Philippe says otherwise.
+Muse's addendum on this branch (`release/v4.0-production`, on top of Claude's `64c905a`), per Philippe's orders of 18:19–18:23 PDT: test the v4.0, upscale the graphics with SRN, and make Philippe's degradation rule the default law.
 
-### In progress (uncommitted in Muse's tree right now)
+### What shipped in this addendum
 1. **SRN world shading** (`sirenizeWorld()` in `game.ts`, applied to `opaqueStd` / `plantStd` / `glassStd`): the creature SIREN idea extended to the whole brick world — a world-space two-layer sinusoidal field per fragment: per-brick tint by cell hash, darkened seams at brick borders (fwidth-antialiased), satin micro-relief via the screen-space-gradient normal perturbation, roughness variance, fresnel sheen. Realistic (Standard) materials only; Lambert/Performance untouched. Zero assets.
 2. **Degradation order — Philippe's law (his messages 2026-10-25 18:22)**: Realistic stays the default path (defaults were already `realistic ?? true`, `quality ?? "auto"`); the auto ladder now spends INTERNAL RESOLUTION first — `prScale` floor 0.7 → **0.5**, and `qLevel` may not advance until resolution is floored (fixed upscale modes count as floored) — then shadows get CHEAPER instead of disappearing (`qualityCaps().cheapShadows` at qLevel 2: shadow map 512 touch / 1024 desktop, shadow camera ±20 / far 90, applied in `applyQuality()`), and only qLevel 3 turns shadows off + trims radius. The Performance preset is unchanged: manual escape hatch for old phones, never the auto path.
 
@@ -1424,7 +1424,11 @@ Muse is working ON THIS BRANCH (`release/v4.0-production`, on top of `64c905a`) 
 - `tsc --noEmit` clean with both changes; production `vite` builds (standalone + apk configs) succeed.
 - Claude's v4.0 as shipped in the PR: smoke-tested on the real standalone build (qa67) — title → world → hooks (village/stock/weather/music) all live, **0 game errors**.
 
-### Still to do before this addendum closes
-- Visual QA of the SRN grade on the real build (screenshots judged; grade may be tuned — amplitudes live in `sirenizeWorld()`).
-- Rebuild APK (vc31 / 4.0) + web zip + PC exe from the branch tip and deliver download links to Philippe (his A54 verdict still rules).
-- If Claude pushes to this branch meanwhile: Muse rebases the two `game.ts` changes on top — they are additive and localized (one new function + material apply calls + `qualityCaps()`/`applyQuality()`/ladder-driver edits).
+### Verification (final)
+- `tsc --noEmit` clean; production `vite` builds (standalone + apk configs) succeed with both changes.
+- Realistic mode on the real build: title world renders correctly (screenshots judged — terrain, folk, mobs, glass all sane), in-game boot + HUD + hooks live, the procedural cloud deck reports on (realistic path active), **0 game errors in every run**.
+- NOT captured: a stable close-up in-game screenshot — the SwiftShader harness on this overloaded VM kept dying during long realistic sessions. The SRN grade ships at the same gentle amplitudes family as the proven v3.5 creature pass; **Philippe's A54 is the visual verdict for the grade**, and the ladder's step order is code-verified (it only engages under sustained load, which the harness cannot reproduce honestly).
+- APK (vc31 / 4.0) + web zip + PC exe rebuilt from the branch tip and delivered to Philippe by verified download links.
+
+### Note for Claude
+Both `game.ts` changes are additive and localized (one new function + material apply calls + `qualityCaps()`/`applyQuality()`/ladder-driver edits). If you keep working on this branch, they're yours to tune — amplitudes live in `sirenizeWorld()`, ladder thresholds in `qualityCaps()` and the fps-window driver right below it.

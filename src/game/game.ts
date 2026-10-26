@@ -818,6 +818,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     vertexColors: true,
     envMapIntensity: 0.15,
   });
+  // SRN world shading on the realistic set (see sirenizeWorld below).
+  sirenizeWorld(opaqueStd, 1, 1, "srn-world-opaque-1");
+  sirenizeWorld(plantStd, 0.5, 0.6, "srn-world-plant-1");
+  sirenizeWorld(glassStd, 0.25, 0.3, "srn-world-glass-1");
   let opaqueMat: THREE.Material = settings.realistic ? opaqueStd : opaqueLam;
   let glassMat: THREE.Material = settings.realistic ? glassStd : glassLam;
   let waterMat: THREE.Material = settings.realistic ? waterStd : waterLam;
@@ -6827,26 +6831,50 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     upscaler.path = touchMode && settings.quality === "performance" ? "fast" : "easu";
     upscaler.render(scene, camera);
   }
-  // Quality ladder (Philippe's law: no lag on the A54). Manual modes
-  // fix the caps; "auto" starts at the balanced profile on touch and
-  // steps down under sustained load - pixel ratio, then the shadow
-  // pass, then draw distance - and climbs back when frames are cheap.
+  // Quality ladder (Philippe's law, 2026-10-25: Realistic is the normal
+  // path — it is the default, and the Performance preset is a manual
+  // escape hatch for old phones only). Under sustained load "auto" gives
+  // up INTERNAL RESOLUTION first (the upscaler trims to 50 % before
+  // anything else moves), then shadows get CHEAPER (smaller map, shorter
+  // shadow distance), and only as a last resort do shadows switch off
+  // and the draw distance trim. It climbs back when frames are cheap.
   let qLevel = 0;
   let qBad = 0;
   let qGood = 0;
   let fpsShown = 0;
-  function qualityCaps(): { pr: number; shadows: boolean; radius: number } {
+  function qualityCaps(): { pr: number; shadows: boolean; cheapShadows: boolean; radius: number } {
     const q = settings.quality;
     // pr is the OUTPUT (display) density. The 3D scene itself renders at
     // pr × renderScale() and the upscaler reconstructs it to this density.
-    if (q === "performance") return { pr: touchMode ? 1.25 : 1.5, shadows: false, radius: 5 };
-    if (q === "balanced") return { pr: touchMode ? 1.75 : 1.75, shadows: qLevel < 2, radius: 6 };
-    if (q === "high") return { pr: touchMode ? 2 : 2, shadows: true, radius: 99 };
-    if (touchMode) return { pr: 1.75, shadows: qLevel < 2, radius: qLevel >= 3 ? 5 : 6 };
-    return { pr: 2, shadows: qLevel < 2, radius: 99 };
+    if (q === "performance") return { pr: touchMode ? 1.25 : 1.5, shadows: false, cheapShadows: false, radius: 5 };
+    if (q === "balanced") return { pr: touchMode ? 1.75 : 1.75, shadows: qLevel < 3, cheapShadows: qLevel === 2, radius: 6 };
+    if (q === "high") return { pr: touchMode ? 2 : 2, shadows: true, cheapShadows: false, radius: 99 };
+    if (touchMode) return { pr: 1.75, shadows: qLevel < 3, cheapShadows: qLevel === 2, radius: qLevel >= 3 ? 5 : 6 };
+    return { pr: 2, shadows: qLevel < 3, cheapShadows: qLevel === 2, radius: 99 };
   }
   function applyQuality() {
-    sun.castShadow = qualityCaps().shadows && settings.realistic;
+    const caps = qualityCaps();
+    sun.castShadow = caps.shadows && settings.realistic;
+    // Cheap-shadow profile: quarter-size map (512 touch / 1024 desktop)
+    // and a tighter shadow camera, instead of no shadows at all.
+    const size = caps.cheapShadows ? (touchMode ? 512 : 1024) : narrow ? 1024 : 2048;
+    if (sun.shadow.mapSize.x !== size) {
+      sun.shadow.mapSize.set(size, size);
+      if (sun.shadow.map) {
+        sun.shadow.map.dispose();
+        (sun.shadow as { map: unknown }).map = null;
+      }
+    }
+    const ext = caps.cheapShadows ? 20 : 30;
+    const sc = sun.shadow.camera;
+    if (sc.left !== -ext) {
+      sc.left = -ext;
+      sc.right = ext;
+      sc.top = ext;
+      sc.bottom = -ext;
+      sc.far = caps.cheapShadows ? 90 : 140;
+      sc.updateProjectionMatrix();
+    }
   }
   function effRadius() {
     return Math.max(3, Math.min(settings.radius, qualityCaps().radius));
@@ -6895,10 +6923,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         if (avg > 0.026) { qBad++; qGood = 0; }
         else if (avg < 0.0125) { qGood++; qBad = 0; }
         else { qBad = 0; qGood = 0; }
-        if (qBad >= 2 && qLevel < 3) { qLevel++; qBad = 0; applyQuality(); }
+        // Resolution reaches its 50 % floor BEFORE the ladder may touch
+        // shadows (a fixed upscale mode counts as already floored).
+        const resFloored = settings.upscale !== "auto" || prScale <= 0.51;
+        if (qBad >= 2 && qLevel < 3 && resFloored) { qLevel++; qBad = 0; applyQuality(); }
         else if (qGood >= 4 && qLevel > 0) { qLevel--; qGood = 0; applyQuality(); }
       }
-      if (avg > 0.024 && prScale > 0.7) prScale = Math.max(0.7, prScale - 0.1);
+      if (avg > 0.024 && prScale > 0.5) prScale = Math.max(0.5, prScale - 0.1);
       else if (avg < 0.0125 && prScale < 1) prScale = Math.min(1, prScale + 0.05);
       fpsAcc = 0;
       fpsFrames = 0;
@@ -8308,6 +8339,102 @@ normal = normalize(normal + sirenField(vSirenPos * 48.0) * 0.05 * uSirenAmt);`,
       );
   };
   mat.customProgramCacheKey = () => "siren-creature-1";
+  return mat;
+}
+
+// SRN world shading (Philippe, 2026-10-25, on top of the v4.0 pass): the
+// creature SIREN field grows to the whole brick world. Chunk surfaces get
+// their micro-detail from the same mathematics — a two-layer sinusoidal
+// representation field in WORLD space, evaluated per fragment: per-brick
+// tint variation (each block cell hashes its own shade, so a wall of one
+// brick type stops reading as one flat stamp), darkened seams where two
+// bricks meet, a satin micro-relief that perturbs the normal through the
+// field's screen-space gradient (the unparametrized-surface trick — no
+// tangents, no textures), roughness variance across the field, and a
+// fresnel sheen at grazing angles. Zero assets, a dozen sin() calls, and
+// it resolves at any distance — the detail is math, not pixels, so the
+// upscaler only ever makes it cleaner. Realistic (Standard) materials
+// only; the Lambert performance set stays exactly as it was.
+const srnWorldAmt = { value: 1 };
+
+function sirenizeWorld(mat: THREE.MeshStandardMaterial, seamScale: number, reliefScale: number, cacheKey: string) {
+  const seamU = { value: seamScale };
+  const reliefU = { value: reliefScale };
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uSrnAmt = srnWorldAmt;
+    shader.uniforms.uSrnSeam = seamU;
+    shader.uniforms.uSrnRelief = reliefU;
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec3 vSrnPos;\nvarying vec3 vSrnNrm;")
+      .replace("#include <beginnormal_vertex>", "#include <beginnormal_vertex>\nvSrnNrm = normalize(mat3(modelMatrix) * objectNormal);")
+      .replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\nvSrnPos = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+varying vec3 vSrnPos;
+varying vec3 vSrnNrm;
+uniform float uSrnAmt;
+uniform float uSrnSeam;
+uniform float uSrnRelief;
+float gSrnF;
+float gSrnSeam;
+float gSrnH;
+float srnHashW(vec3 c) { return fract(sin(dot(c, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }`,
+      )
+      .replace(
+        "#include <map_fragment>",
+        `#include <map_fragment>
+{
+  vec3 srnCell = floor(vSrnPos + 0.0001);
+  gSrnH = srnHashW(srnCell);
+  gSrnF = sin(vSrnPos.x * 1.9 + sin(vSrnPos.z * 1.3) * 1.7 + gSrnH * 6.2831) * 0.55
+        + sin(vSrnPos.y * 2.6 + vSrnPos.x * 1.1) * 0.45;
+  float srnMicro = sin(vSrnPos.x * 23.0) * sin(vSrnPos.y * 21.0 + 1.3) * sin(vSrnPos.z * 25.0 - 0.7);
+  diffuseColor.rgb *= 1.0 + ((gSrnH - 0.5) * 0.11 + gSrnF * 0.038 + srnMicro * 0.012) * uSrnAmt;
+  vec3 srnAn = abs(normalize(vSrnNrm));
+  vec3 srnFp = fract(vSrnPos);
+  vec3 srnBd = min(srnFp, 1.0 - srnFp) + srnAn * 10.0;
+  float srnB = min(srnBd.x, min(srnBd.y, srnBd.z));
+  float srnFw = fwidth(srnB) + 0.00001;
+  gSrnSeam = 1.0 - smoothstep(0.0, 0.028 + srnFw * 1.2, srnB);
+  diffuseColor.rgb *= 1.0 - gSrnSeam * 0.16 * uSrnSeam * uSrnAmt;
+}`,
+      )
+      .replace(
+        "#include <roughnessmap_fragment>",
+        `#include <roughnessmap_fragment>
+roughnessFactor = clamp(roughnessFactor + (gSrnF * 0.07 + (gSrnH - 0.5) * 0.10 - gSrnSeam * 0.04) * uSrnAmt, 0.04, 1.0);`,
+      )
+      .replace(
+        "#include <normal_fragment_maps>",
+        `#include <normal_fragment_maps>
+{
+  float srnHgt = sin(vSrnPos.x * 9.0 + sin(vSrnPos.y * 7.0)) * 0.5 + sin(vSrnPos.z * 11.0 - vSrnPos.y * 5.0) * 0.5 + gSrnF * 0.6;
+  float srnFade = clamp(14.0 / (1.0 + length(vViewPosition)), 0.15, 1.0);
+  vec2 srnD = vec2(dFdx(srnHgt), dFdy(srnHgt)) * (0.5 * uSrnRelief * uSrnAmt * srnFade);
+  vec3 srnPosV = -vViewPosition;
+  vec3 srnQ0 = dFdx(srnPosV);
+  vec3 srnQ1 = dFdy(srnPosV);
+  vec3 srnR1 = cross(srnQ1, normal);
+  vec3 srnR2 = cross(normal, srnQ0);
+  float srnDet = dot(srnQ0, srnR1);
+  if (abs(srnDet) > 0.000001) {
+    vec3 srnGrad = sign(srnDet) * (srnD.x * srnR1 + srnD.y * srnR2);
+    normal = normalize(abs(srnDet) * normal - srnGrad);
+  }
+}`,
+      )
+      .replace(
+        "#include <emissivemap_fragment>",
+        `#include <emissivemap_fragment>
+{
+  float srnRim = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
+  totalEmissiveRadiance += diffuseColor.rgb * srnRim * 0.05 * uSrnAmt;
+}`,
+      );
+  };
+  mat.customProgramCacheKey = () => cacheKey;
   return mat;
 }
 
