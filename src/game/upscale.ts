@@ -27,9 +27,11 @@ const VERT = /* glsl */ `
 
 const RESOLVE = /* glsl */ `
   uniform sampler2D tSrc;
+  uniform vec2 uInSize;
   uniform float uExposure;
   uniform bool uAces;
   varying vec2 vUv;
+  float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
   vec3 rrtOdt(vec3 v) {
     vec3 a = v * (v + 0.0245786) - 0.000090537;
     vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081;
@@ -49,7 +51,36 @@ const RESOLVE = /* glsl */ `
   }
   void main() {
     vec3 c = texture2D(tSrc, vUv).rgb;
-    c = uAces ? aces(c) : clamp(c, 0.0, 1.0);
+    // Karis bilateral HDR firefly filter: suppresses isolated sub-pixel specular spikes before upscaling
+    vec2 tx = 1.0 / max(uInSize, vec2(1.0));
+    vec3 n0 = texture2D(tSrc, vUv + vec2(tx.x, 0.0)).rgb;
+    vec3 n1 = texture2D(tSrc, vUv - vec2(tx.x, 0.0)).rgb;
+    vec3 n2 = texture2D(tSrc, vUv + vec2(0.0, tx.y)).rgb;
+    vec3 n3 = texture2D(tSrc, vUv - vec2(0.0, tx.y)).rgb;
+    vec3 nbMax = max(max(n0, n1), max(n2, n3));
+    vec3 nbAvg = 0.25 * (n0 + n1 + n2 + n3);
+    float cLum = luma(c);
+    float maxLum = luma(nbMax);
+    if (cLum > maxLum * 1.22 + 0.04) {
+      c = mix(nbAvg, nbMax, 0.65);
+    }
+    if (uAces) {
+      // Subtle Macro Tilt-Shift Depth-of-Field (Bokeh) at extreme horizon/foreground bands
+      // Simulates a 50mm f/2.8 macro lens photographing physical LEGO bricks while keeping center crosshair 100% sharp
+      float tiltBand = smoothstep(0.28, 0.49, abs(vUv.y - 0.50));
+      if (tiltBand > 0.005) {
+        vec2 r = tx * (1.35 * tiltBand);
+        vec3 d0 = texture2D(tSrc, vUv + vec2( r.x,  r.y)).rgb * uExposure;
+        vec3 d1 = texture2D(tSrc, vUv + vec2(-r.x,  r.y)).rgb * uExposure;
+        vec3 d2 = texture2D(tSrc, vUv + vec2( r.x, -r.y)).rgb * uExposure;
+        vec3 d3 = texture2D(tSrc, vUv + vec2(-r.x, -r.y)).rgb * uExposure;
+        vec3 bokeh = 0.30 * c + 0.35 * nbAvg + 0.35 * 0.25 * (d0 + d1 + d2 + d3);
+        c = mix(c, bokeh, tiltBand * 0.58);
+      }
+      c = aces(c);
+    } else {
+      c = clamp(c, 0.0, 1.0);
+    }
     gl_FragColor = vec4(toSrgb(c), 1.0);
   }
 `;
@@ -186,7 +217,7 @@ const RCAS = /* glsl */ `
     float nz = 0.25 * (bL + dL + fL + hL) - eL;
     float rng = max(max(max(bL, dL), max(eL, fL)), hL) - min(min(min(bL, dL), min(eL, fL)), hL);
     nz = clamp(abs(nz) / max(rng, 1e-4), 0.0, 1.0);
-    lobe *= 1.0 - 0.5 * nz;
+    lobe *= 1.0 - 0.85 * nz;
     vec3 col = (lobe * (b + d + h + f) + e) / (4.0 * lobe + 1.0);
     gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
   }
@@ -223,7 +254,7 @@ export class Upscaler {
     this.hdr = ext.has("EXT_color_buffer_float") || ext.has("EXT_color_buffer_half_float");
     const mk = (frag: string, uniforms: Record<string, THREE.IUniform>) =>
       new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: frag, uniforms, depthTest: false, depthWrite: false, toneMapped: false });
-    this.resolveMat = mk(RESOLVE, { tSrc: { value: null }, uExposure: { value: 1 }, uAces: { value: false } });
+    this.resolveMat = mk(RESOLVE, { tSrc: { value: null }, uInSize: { value: new THREE.Vector2(1, 1) }, uExposure: { value: 1 }, uAces: { value: false } });
     this.easuMat = mk(EASU, { tSrc: { value: null }, uInSize: { value: new THREE.Vector2() }, uOutSize: { value: new THREE.Vector2() } });
     this.rcasMat = mk(RCAS, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uSharp: { value: 0.5 } });
     this.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.resolveMat);
@@ -277,6 +308,7 @@ export class Upscaler {
       r.autoClear = true;
 
       this.resolveMat.uniforms.tSrc.value = this.sceneRT.texture;
+      this.resolveMat.uniforms.uInSize.value.set(this.inW, this.inH);
       this.resolveMat.uniforms.uExposure.value = this.exposure;
       this.resolveMat.uniforms.uAces.value = this.aces;
       this.blit(this.resolveMat, this.ldrRT);

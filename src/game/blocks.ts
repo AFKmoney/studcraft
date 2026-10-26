@@ -297,6 +297,55 @@ export const ID = {
   DiscC: 295,
   DiscD: 296,
   DiscE: 297,
+  Daylight: 298,
+  DaylightInv: 299,
+  Target: 300,
+  GuardianSpike: 301,
+  PharaohGold: 302,
+  WitchVenom: 303,
+  IllagerBadge: 304,
+  VoidCore: 305,
+  TidalBlade: 306,
+  PharaohStaff: 307,
+  WitchStaff: 308,
+  ExecutionerAxe: 309,
+  VoidBlade: 310,
+  GuardianPlate: 311,
+  PharaohCrown: 312,
+  // --- Registry repair (Muse, 2026-10-26, at Philippe's order): Gemini's
+  // v4.5–v4.11 code (game.ts held-item renderer, CATALOG) references these
+  // ids, but the blocks.ts exported from AI Studio predates them. Append-only:
+  // no existing id changes value, so old saves stay valid.
+  CoalOre: 313,
+  GoldOre: 314,
+  DiamondOre: 315,
+  LapisOre: 316,
+  RedOre: 317,
+  Mycelium: 318,
+  Podzol: 319,
+  HelmLeather: 320,
+  ChestLeather: 321,
+  LegsLeather: 322,
+  BootsLeather: 323,
+  HelmIron: 324,
+  ChestIron: 325,
+  LegsIron: 326,
+  BootsIron: 327,
+  HelmGold: 328,
+  ChestGold: 329,
+  LegsGold: 330,
+  BootsGold: 331,
+  HelmCrystal: 332,
+  ChestCrystal: 333,
+  LegsCrystal: 334,
+  BootsCrystal: 335,
+  HelmNetherite: 336,
+  ChestNetherite: 337,
+  LegsNetherite: 338,
+  BootsNetherite: 339,
+  EyeOfEnder: 340,
+  Steak: 341,
+  Spark: 342,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -812,6 +861,9 @@ item(ID.DiscB, "Disc — Moonloop", "#7a8ac0");
 item(ID.DiscC, "Disc — Emberdeep", "#e85a4a");
 item(ID.DiscD, "Disc — Warloop", "#5a5a5a");
 item(ID.DiscE, "Disc — Rainloop", "#4a9ac0");
+put(b(ID.Daylight, "Daylight sensor", "#f0c43a", "#fff2b2", "#8d5a34", "#6b3e22", { hard: 0.4, slab: true }));
+put(b(ID.DaylightInv, "Night sensor", "#3d7ad4", "#8ec8f5", "#4a3c30", "#2a2218", { hard: 0.4, slab: true, placeable: false, drop: ID.Daylight }));
+put(b(ID.Target, "Target block", "#f4f1ea", "#e23b2f", "#f4f1ea", "#e6c14a", { hard: 0.5 }));
 put(b(ID.Grindstone, "Grindstone", "#8e959c", "#a7aeb4", "#6d4426", "#4a2e1a", { hard: 1.5, tough: true, work: "anvil" }));
 item(ID.Copper, "Copper", "#e07a3d");
 item(ID.Bronze, "Bronze", "#cd7f32");
@@ -1043,11 +1095,77 @@ for (let d = 0; d < 4; d++) {
   put(b(ID.StairsCobble0 + d, "Cobble stairs", "#8e959c", "#9aa1a8", "#7e868e", "#6e767e", { hard: 1.3, tough: true, need: 1, stairs: true, dir: d, drop: ID.StairsCobble0 }));
 }
 put(b(ID.Sign, "Sign", "#c4924a", "#e0b15a", "#a67c3a", "#8a6428", { hard: 0.4, solid: false, sign: true }));
+put(b(ID.GuardianSpike, "Guardian spike", "#3fc4b6", "#5ce0d2", "#2a988c", "#1f746a", { placeable: false }));
+put(b(ID.PharaohGold, "Scarab relic", "#f5c518", "#ffd84a", "#c99812", "#9a700a", { placeable: false }));
+put(b(ID.WitchVenom, "Witch essence", "#9b45e4", "#ba6eff", "#732ab5", "#4e1882", { placeable: false }));
+put(b(ID.IllagerBadge, "Illager emblem", "#8e959c", "#cfd6dc", "#585e66", "#383d42", { placeable: false }));
+put(b(ID.VoidCore, "Ender core", "#2e9888", "#5cf2dc", "#1b5e54", "#103832", { placeable: false }));
+put(b(ID.TidalBlade, "Tidal trident blade", "#32b8cb", "#64e5f5", "#1f8da0", "#146070", { placeable: false, tool: "sword", tier: 4, maxUse: 480 }));
+put(b(ID.PharaohStaff, "Sun pharaoh scepter", "#ffd84a", "#fff088", "#d69b1a", "#9e6d0c", { placeable: false, tool: "sword", tier: 4, maxUse: 460 }));
+put(b(ID.WitchStaff, "Covensoul blade", "#a33de2", "#c875ff", "#7220a8", "#4a1072", { placeable: false, tool: "sword", tier: 4, maxUse: 440 }));
+put(b(ID.ExecutionerAxe, "Royal executioner axe", "#a7aeb4", "#d8dfe6", "#6e767e", "#484e54", { placeable: false, tool: "axe", tier: 4, maxUse: 500 }));
+put(b(ID.VoidBlade, "Voidblink katana", "#42d4ba", "#85ffe8", "#248c78", "#124c40", { placeable: false, tool: "sword", tier: 5, maxUse: 620 }));
+put(b(ID.GuardianPlate, "Prismarine carapace", "#36b2a6", "#5cd8cc", "#24847a", `#165a52`, { placeable: false, armor: 5, armorSlot: 2, maxUse: 380 }));
+put(b(ID.PharaohCrown, "Nemes pharaoh crown", "#f5c518", "#ffe268", "#1d4ed8", "#1e3a8a", { placeable: false, armor: 4, armorSlot: 1, maxUse: 340 }));
 
 /** Canonical (dir-0) stairs id + a facing -> the placed variant id. */
 export function stairsVariant(canonical: number, dir: number): number {
   return def(canonical).stairs ? canonical + ((dir % 4) + 4) % 4 : canonical;
 }
+
+// --- Registry repair defs (Muse, 2026-10-26): the ids declared above at
+// 313–342. Ores mirror IronOre/EmeraldOre; armor goes through wear() with
+// per-material armor values set right after, like HelmChrome/ResinBoots.
+put(b(ID.CoalOre, "Coal ore", "#9aa1a8", "#a7aeb4", "#565d64", "#7a8188", { hard: 1.6, tough: true, need: 1, drop: ID.Coal }));
+put(b(ID.GoldOre, "Gold ore", "#c9b458", "#a7aeb4", "#d8b93a", "#7a8188", { hard: 1.8, tough: true, need: 2, drop: ID.Gold }));
+put(b(ID.DiamondOre, "Diamond ore", "#7fd8d8", "#a7aeb4", "#5fc8c0", "#7a8188", { hard: 1.9, tough: true, need: 2, drop: ID.Diamond }));
+put(b(ID.LapisOre, "Lapis ore", "#3b5fc4", "#a7aeb4", "#2f4fa8", "#7a8188", { hard: 1.6, tough: true, need: 1, drop: ID.Blue }));
+put(b(ID.RedOre, "Red ore", "#c43a3a", "#a7aeb4", "#a82f2f", "#7a8188", { hard: 1.7, tough: true, need: 2, drop: ID.Red }));
+put(b(ID.Mycelium, "Mycelium", "#8a728e", "#8a728e", "#8d5a34", "#6d4426", { hard: 0.35, drop: ID.Dirt }));
+put(b(ID.Podzol, "Podzol", "#6a4424", "#6a4424", "#8d5a34", "#5c3a22", { hard: 0.35, drop: ID.Dirt }));
+wear(ID.HelmLeather, "Leather cap", "#a06838", 1);
+wear(ID.ChestLeather, "Leather shell", "#a06838", 2);
+wear(ID.LegsLeather, "Leather legs", "#96602f", 3);
+wear(ID.BootsLeather, "Leather boots", "#8a5a2b", 4);
+wear(ID.HelmIron, "Iron cap", "#c8d0d8", 1);
+wear(ID.ChestIron, "Iron shell", "#c8d0d8", 2);
+wear(ID.LegsIron, "Iron legs", "#b8c2cc", 3);
+wear(ID.BootsIron, "Iron boots", "#aeb8c2", 4);
+wear(ID.HelmGold, "Gold cap", "#f5c518", 1);
+wear(ID.ChestGold, "Gold shell", "#f5c518", 2);
+wear(ID.LegsGold, "Gold legs", "#eab308", 3);
+wear(ID.BootsGold, "Gold boots", "#e0aa06", 4);
+wear(ID.HelmCrystal, "Crystal cap", "#3ed8e8", 1);
+wear(ID.ChestCrystal, "Crystal shell", "#3ed8e8", 2);
+wear(ID.LegsCrystal, "Crystal legs", "#2fc4d8", 3);
+wear(ID.BootsCrystal, "Crystal boots", "#28b4c8", 4);
+wear(ID.HelmNetherite, "Netherite cap", "#4a3f45", 1);
+wear(ID.ChestNetherite, "Netherite shell", "#4a3f45", 2);
+wear(ID.LegsNetherite, "Netherite legs", "#41373d", 3);
+wear(ID.BootsNetherite, "Netherite boots", "#383034", 4);
+BLOCKS[ID.HelmLeather].armor = 0.08;
+BLOCKS[ID.ChestLeather].armor = 0.16;
+BLOCKS[ID.LegsLeather].armor = 0.1;
+BLOCKS[ID.BootsLeather].armor = 0.07;
+BLOCKS[ID.HelmIron].armor = 0.14;
+BLOCKS[ID.ChestIron].armor = 0.26;
+BLOCKS[ID.LegsIron].armor = 0.18;
+BLOCKS[ID.BootsIron].armor = 0.12;
+BLOCKS[ID.HelmGold].armor = 0.11;
+BLOCKS[ID.ChestGold].armor = 0.2;
+BLOCKS[ID.LegsGold].armor = 0.13;
+BLOCKS[ID.BootsGold].armor = 0.09;
+BLOCKS[ID.HelmCrystal].armor = 0.2;
+BLOCKS[ID.ChestCrystal].armor = 0.36;
+BLOCKS[ID.LegsCrystal].armor = 0.26;
+BLOCKS[ID.BootsCrystal].armor = 0.17;
+BLOCKS[ID.HelmNetherite].armor = 0.24;
+BLOCKS[ID.ChestNetherite].armor = 0.42;
+BLOCKS[ID.LegsNetherite].armor = 0.31;
+BLOCKS[ID.BootsNetherite].armor = 0.2;
+item(ID.EyeOfEnder, "Eye of ender", "#35b586");
+item(ID.Steak, "Steak", "#b45a32", { food: 8 });
+item(ID.Spark, "Spark", "#ffc46b");
 
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];
@@ -1175,6 +1293,8 @@ export const CATALOG = [
   ID.Repeater,
   ID.Comparator,
   ID.Observer,
+  ID.Daylight,
+  ID.Target,
   ID.Hard,
   ID.Farmland,
   ID.Red,
@@ -1295,6 +1415,101 @@ export const CATALOG = [
   ID.DiscC,
   ID.DiscD,
   ID.DiscE,
+  ID.Netherrack,
+  ID.Basalt,
+  ID.Calcite,
+  ID.Tuff,
+  ID.EndStone,
+  ID.Soul,
+  ID.Cactus,
+  ID.Cane,
+  ID.Plate,
+  ID.Dispenser,
+  ID.Hopper,
+  ID.Note,
+  ID.Spawner,
+  ID.Emerald,
+  ID.RawIron,
+  ID.Scrap,
+  ID.SwordS,
+  ID.SwordG,
+  ID.AxeI,
+  ID.ShovelI,
+  ID.NetherPick,
+  ID.Legs,
+  ID.Boots,
+  ID.Elytra,
+  ID.Totem,
+  ID.Saddle,
+  ID.WaterBucket,
+  ID.LavaBucket,
+  ID.Wheat,
+  ID.Carrot,
+  ID.Potato,
+  ID.Beetroot,
+  ID.RawMeat,
+  ID.Fish,
+  ID.Cookie,
+  ID.Gapple,
+  ID.Milk,
+  ID.Egg,
+  ID.Bottle,
+  ID.PotionHeal,
+  ID.PotionSpeed,
+  ID.PotionStr,
+  ID.Bone,
+  ID.Feather,
+  ID.String,
+  ID.Powder,
+  ID.Blaze,
+  ID.Wart,
+  ID.Eye,
+  ID.Spark,
+  ID.Ash,
+  ID.WitherSkull,
+  ID.NetherStar,
+  ID.GuardianSpike,
+  ID.PharaohGold,
+  ID.WitchVenom,
+  ID.IllagerBadge,
+  ID.VoidCore,
+  ID.TidalBlade,
+  ID.PharaohStaff,
+  ID.WitchStaff,
+  ID.ExecutionerAxe,
+  ID.VoidBlade,
+  ID.GuardianPlate,
+  ID.PharaohCrown,
+  ID.CoalOre,
+  ID.GoldOre,
+  ID.DiamondOre,
+  ID.LapisOre,
+  ID.RedOre,
+  ID.Mycelium,
+  ID.Podzol,
+  ID.HelmLeather,
+  ID.ChestLeather,
+  ID.LegsLeather,
+  ID.BootsLeather,
+  ID.HelmIron,
+  ID.ChestIron,
+  ID.LegsIron,
+  ID.BootsIron,
+  ID.HelmGold,
+  ID.ChestGold,
+  ID.LegsGold,
+  ID.BootsGold,
+  ID.HelmCrystal,
+  ID.ChestCrystal,
+  ID.LegsCrystal,
+  ID.BootsCrystal,
+  ID.HelmNetherite,
+  ID.ChestNetherite,
+  ID.LegsNetherite,
+  ID.BootsNetherite,
+  ID.EyeOfEnder,
+  ID.Steak,
+  ID.Spark,
 ];
 
 export const COLORS = [ID.Red, ID.Orange, ID.Yellow, ID.Green, ID.Blue, ID.Azure, ID.Pink, ID.White, ID.Black];

@@ -1,8 +1,7 @@
 import * as THREE from "three";
-import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { BLOCKS, CREATIVE_BAR, ID, def, stairsVariant } from "./blocks";
 import { createAudio } from "./audio";
-import { STUD_H, STUD_R, buildChunk, type Surface } from "./mesher";
+import { STUD_H, STUD_OFFSETS, STUD_R, buildChunk, type Surface } from "./mesher";
 import { NEIGHBORS, RECIPES, SMELT, fuelTime, matchGrid } from "./recipes";
 import { DISCOVER, MOB_XP, ORE_HEAR, ORE_XP, nextPerk, rankTitle, xpNeed } from "./ranks";
 import { manaMaxFor, skillById, spellsFor } from "./skills";
@@ -15,6 +14,7 @@ import { stockChest } from "./loot";
 import { Upscaler, upscaleScale } from "./upscale";
 import { BTN, PadEdges, activePad, padBusy, padLabel, rumble, stick } from "./gamepad";
 import { parseSeed } from "./noise";
+import { MobBatchRenderer } from "./mobBatch";
 
 export type Phase = "title" | "play" | "pause" | "inventory" | "dead";
 export type EnterKind = "play" | "survival" | "flat" | "continue";
@@ -56,6 +56,10 @@ export type Hud = {
   z: number;
   biome: string;
   timeLabel: string;
+  timeClock: string;
+  timeTicks: number;
+  timeProgress: number;
+  dayCount: number;
   mine: number;
   targetName: string;
   signEdit: { x: number; y: number; z: number; text: string } | null;
@@ -73,6 +77,7 @@ export type Hud = {
   traderBlurb: string;
   beaconLevel: number;
   beaconBuff: string;
+  bookshelves: number;
   offers: { pay: number; pn: number; out: number; on: number; payName: string; outName: string; tier: number; locked: boolean; stock: number }[];
   reputation: number;
   repWord: string;
@@ -154,11 +159,13 @@ export type GameApi = {
   shiftStack: (id: number) => void;
   gridTap: (i: number) => void;
   craftTake: () => void;
-  craft: (id: string) => void;
+  craft: (id: string, times?: number) => void;
+  fillGrid: (recipeId: string) => void;
+  clearGrid: () => void;
   armorTap: (i: number) => void;
   furnaceTap: (part: number) => void;
   chestTap: (i: number) => void;
-  enchant: () => void;
+  enchant: (tier?: number) => void;
   combine: () => void;
   disenchant: () => void;
   setSignText: (t: string) => void;
@@ -337,6 +344,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     z: 0,
     biome: "",
     timeLabel: "Day",
+    timeClock: "06:00 AM",
+    timeTicks: 0,
+    timeProgress: 0.22,
+    dayCount: 1,
     mine: 0,
     targetName: "",
     signEdit: null as { x: number; y: number; z: number; text: string } | null,
@@ -354,6 +365,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     traderBlurb: "",
     beaconLevel: 0,
     beaconBuff: "",
+    bookshelves: 0,
     reputation: 0,
     repWord: "Stranger",
     offers: [],
@@ -574,12 +586,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
 
   type EnchDef = { key: string; name: string; max: number; for: (d: ReturnType<typeof def>) => boolean };
   const ENCHANTS: EnchDef[] = [
-    { key: "sharpness", name: "Sharpness", max: 5, for: (d) => d.tool === "sword" || d.tool === "axe" },
-    { key: "smite", name: "Smite", max: 5, for: (d) => d.tool === "sword" || d.tool === "axe" },
+    { key: "sharpness", name: "Sharpness", max: 5, for: (d) => d.tool === "sword" || d.tool === "axe" || d.id === ID.Trident },
+    { key: "smite", name: "Smite", max: 5, for: (d) => d.tool === "sword" || d.tool === "axe" || d.id === ID.Trident },
     { key: "bane", name: "Bane of Spiders", max: 5, for: (d) => d.tool === "sword" || d.tool === "axe" },
-    { key: "fire", name: "Fire Aspect", max: 2, for: (d) => d.tool === "sword" },
-    { key: "knockback", name: "Knockback", max: 2, for: (d) => d.tool === "sword" },
-    { key: "looting", name: "Looting", max: 3, for: (d) => d.tool === "sword" },
+    { key: "fire", name: "Fire Aspect", max: 2, for: (d) => d.tool === "sword" || d.id === ID.Trident },
+    { key: "knockback", name: "Knockback", max: 2, for: (d) => d.tool === "sword" || d.id === ID.Trident },
+    { key: "looting", name: "Looting", max: 3, for: (d) => d.tool === "sword" || d.id === ID.Trident },
     { key: "efficiency", name: "Efficiency", max: 5, for: (d) => d.tool === "pick" || d.tool === "axe" || d.tool === "shovel" },
     { key: "fortune", name: "Fortune", max: 3, for: (d) => d.tool === "pick" },
     { key: "silk", name: "Silk Touch", max: 1, for: (d) => d.tool === "pick" || d.tool === "axe" || d.tool === "shovel" },
@@ -587,10 +599,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     { key: "mending", name: "Mending", max: 1, for: (d) => d.maxUse > 0 },
     { key: "protection", name: "Protection", max: 4, for: (d) => d.armor > 0 },
     { key: "thorns", name: "Thorns", max: 3, for: (d) => d.armor > 0 },
-    { key: "power", name: "Power", max: 5, for: (d) => d.tool === "bow" },
-    { key: "flame", name: "Flame", max: 1, for: (d) => d.tool === "bow" },
-    { key: "punch", name: "Punch", max: 2, for: (d) => d.tool === "bow" },
-    { key: "infinity", name: "Infinity", max: 1, for: (d) => d.tool === "bow" },
+    { key: "power", name: "Power", max: 5, for: (d) => d.tool === "bow" || d.id === ID.Crossbow },
+    { key: "flame", name: "Flame", max: 1, for: (d) => d.tool === "bow" || d.id === ID.Crossbow },
+    { key: "punch", name: "Punch", max: 2, for: (d) => d.tool === "bow" || d.id === ID.Crossbow },
+    { key: "infinity", name: "Infinity", max: 1, for: (d) => d.tool === "bow" || d.id === ID.Crossbow },
     { key: "feather", name: "Feather Fall", max: 4, for: (d) => d.armorSlot === 4 },
     { key: "depth", name: "Depth Strider", max: 3, for: (d) => d.armorSlot === 4 },
     { key: "frost", name: "Frost Walker", max: 2, for: (d) => d.armorSlot === 4 },
@@ -611,7 +623,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   }
   const repOut = new Map<string, boolean>();
   const repTimer = new Map<string, number>();
+  const obsSeen = new Map<string, number>();
+  const obsPulse = new Map<string, number>();
   let rsAcc = 0;
+  let hopperAcc = 0;
+  let lastDaylightLvl = -1;
   const RS_DIRS: ReadonlyArray<readonly [number, number]> = [
     [0, -1],
     [1, 0],
@@ -719,9 +735,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   renderer.setClearColor(0x8ec8f5, 1);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = settings.realistic ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
-  renderer.toneMappingExposure = settings.realistic ? 1.08 : 1;
+  renderer.toneMappingExposure = settings.realistic ? 1.02 : 1;
   renderer.shadowMap.enabled = settings.realistic;
-  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0x8ec8f5, 28, 72);
@@ -729,19 +745,19 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   camera.rotation.order = "YXZ";
   scene.add(camera);
 
-  const hemi = new THREE.HemisphereLight(0xcfe6ff, 0x6d8a4e, 0.55);
-  const ambient = new THREE.AmbientLight(0xffffff, 0.28);
-  const sun = new THREE.DirectionalLight(0xfff4dd, 0.85);
+  const hemi = new THREE.HemisphereLight(0xd8eeff, 0x6b8450, 0.56);
+  const ambient = new THREE.AmbientLight(0xfffaf0, 0.20);
+  const sun = new THREE.DirectionalLight(0xfff5e2, 1.35);
   sun.position.set(40, 80, 20);
   sun.castShadow = settings.realistic;
   sun.shadow.mapSize.set(narrow ? 1024 : 2048, narrow ? 1024 : 2048);
-  sun.shadow.bias = -0.0002;
-  sun.shadow.normalBias = 0.06;
+  sun.shadow.bias = -0.00018;
+  sun.shadow.normalBias = 0.016;
   const shadowCam = sun.shadow.camera;
-  shadowCam.left = -30;
-  shadowCam.right = 30;
-  shadowCam.top = 30;
-  shadowCam.bottom = -30;
+  shadowCam.left = -32;
+  shadowCam.right = 32;
+  shadowCam.top = 32;
+  shadowCam.bottom = -32;
   shadowCam.near = 0.5;
   shadowCam.far = 140;
   scene.add(hemi, ambient, sun, sun.target);
@@ -784,10 +800,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         void main() {
           vec3 d = normalize(vDir);
           float h = clamp(d.y, -1.0, 1.0);
-          vec3 col = mix(horizonColor, topColor, pow(max(h, 0.0), 0.5));
+          vec3 col = mix(horizonColor, topColor, pow(max(h, 0.0), 0.55));
           if (h < 0.0) col = mix(horizonColor, horizonColor * 0.55, clamp(-h * 3.0, 0.0, 1.0));
           float s = max(dot(d, normalize(sunDirection)), 0.0);
-          col += sunColor * (pow(s, 350.0) * 1.4 + pow(s, 10.0) * 0.16) * uGlow;
+          col += sunColor * (pow(s, 320.0) * 1.15 + pow(s, 10.0) * 0.14) * uGlow;
           gl_FragColor = vec4(col, 1.0);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
@@ -798,8 +814,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   skyDome.frustumCulled = false;
   scene.add(skyDome);
   const lamps: THREE.PointLight[] = [];
-  for (let i = 0; i < 4; i++) {
-    const lamp = new THREE.PointLight(0xffc56b, 0, 9, 1.4);
+  for (let i = 0; i < 6; i++) {
+    const lamp = new THREE.PointLight(0xffb85c, 0, 14, 1.45);
     scene.add(lamp);
     lamps.push(lamp);
   }
@@ -810,13 +826,41 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   atlas.anisotropy = aniso;
   atlases.rough.anisotropy = Math.min(4, aniso);
   atlases.normal.anisotropy = Math.min(4, aniso);
+  // Build a Studio Macro HDRI + Sky-Dome PMREM environment with two crisp studio softbox
+  // windows and warm table bounce so ABS plastic studs and chamfers catch realistic macro strip reflections.
   const pmrem = new THREE.PMREMGenerator(renderer);
-  const room = new RoomEnvironment();
-  const envTex = pmrem.fromScene(room, 0.04).texture;
-  room.dispose();
+  const envScene = new THREE.Scene();
+  const envDomeGeo = new THREE.SphereGeometry(20, 24, 16);
+  const envDomeMat = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    vertexShader: `
+      varying vec3 vP;
+      void main() {
+        vP = normalize(position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      varying vec3 vP;
+      void main() {
+        float y = vP.y;
+        vec3 zenith = vec3(0.56, 0.78, 0.98);
+        vec3 horizon = vec3(0.92, 0.91, 0.88);
+        vec3 ground = vec3(0.38, 0.42, 0.34);
+        vec3 c = y >= 0.0 ? mix(horizon, zenith, pow(y, 0.6)) : mix(horizon, ground, pow(min(1.0, -y * 1.6), 0.7));
+        // Primary key studio softbox window + secondary fill softbox strip
+        float sbKey = smoothstep(0.76, 0.90, dot(vP, normalize(vec3(0.45, 0.78, 0.35))));
+        float sbFill = smoothstep(0.80, 0.93, dot(vP, normalize(vec3(-0.62, 0.60, -0.50))));
+        c += vec3(1.0, 0.97, 0.90) * sbKey * 0.85 + vec3(0.88, 0.94, 1.0) * sbFill * 0.45;
+        gl_FragColor = vec4(c, 1.0);
+      }`,
+  });
+  envScene.add(new THREE.Mesh(envDomeGeo, envDomeMat));
+  const envTex = pmrem.fromScene(envScene, 0.045).texture;
+  envDomeGeo.dispose();
+  envDomeMat.dispose();
   pmrem.dispose();
   scene.environment = settings.realistic ? envTex : null;
-  scene.environmentIntensity = settings.realistic ? 0.35 : 1;
+  scene.environmentIntensity = settings.realistic ? 0.52 : 1;
 
   const opaqueLam = new THREE.MeshLambertMaterial({ map: atlas });
   const glassLam = new THREE.MeshLambertMaterial({
@@ -839,65 +883,75 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   });
   const opaqueStd = new THREE.MeshStandardMaterial({
     map: atlas,
-    roughness: 1,
-    metalness: 0,
+    roughness: 0.92,
+    metalness: 0.0,
     roughnessMap: atlases.rough,
     normalMap: atlases.normal,
+    normalScale: new THREE.Vector2(0.58, 0.58),
     emissiveMap: atlases.glow,
     emissive: new THREE.Color(0xffffff),
-    emissiveIntensity: 1.15,
+    emissiveIntensity: 1.25,
     vertexColors: true,
-    envMapIntensity: 0.55,
+    envMapIntensity: 0.62,
   });
   const glassStd = new THREE.MeshStandardMaterial({
     map: atlas,
-    roughness: 0.08,
+    roughness: 0.09,
     metalness: 0,
     transparent: true,
-    opacity: 0.35,
+    opacity: 0.42,
     depthWrite: false,
-    envMapIntensity: 0.7,
+    envMapIntensity: 0.85,
     vertexColors: true,
   });
   const waterTime = { value: 0 };
   const waterStd = new THREE.MeshStandardMaterial({
     map: atlas,
-    roughness: 0.08,
+    roughness: 0.07,
     metalness: 0,
     transparent: true,
-    opacity: 0.55,
+    opacity: 0.58,
     depthWrite: false,
     side: THREE.DoubleSide,
-    envMapIntensity: 1,
+    envMapIntensity: 0.95,
     vertexColors: true,
   });
   waterStd.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = waterTime;
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nvarying vec2 vRippleUv;")
-      .replace("#include <uv_vertex>", "#include <uv_vertex>\nvRippleUv = uv;");
+      .replace("#include <common>", "#include <common>\nvarying vec2 vRippleUv;\nvarying vec3 vWaterWPos;")
+      .replace("#include <uv_vertex>", "#include <uv_vertex>\nvRippleUv = uv;")
+      .replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\nvWaterWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;");
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\nuniform float uTime;\nvarying vec2 vRippleUv;")
+      .replace("#include <common>", "#include <common>\nuniform float uTime;\nvarying vec2 vRippleUv;\nvarying vec3 vWaterWPos;")
       .replace(
         "#include <normal_fragment_maps>",
         `#include <normal_fragment_maps>
         vec2 wuv = vRippleUv * 6.0;
         float r1 = sin(wuv.x * 3.2 + uTime * 1.4) * cos(wuv.y * 2.6 - uTime * 0.9);
         float r2 = sin((wuv.x + wuv.y) * 2.1 - uTime * 0.6);
-        normal = normalize(normal + vec3(r1, r2, 0.0) * 0.22);`,
+        normal = normalize(normal + vec3(r1, r2, 0.0) * 0.16);`,
       )
       .replace(
         "#include <opaque_fragment>",
-        `float ndv = clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0);
-        float fres = pow(1.0 - ndv, 2.4);
-        diffuseColor.a = mix(0.38, 0.82, fres);
+        `{
+          vec3 wV = normalize(vViewPosition);
+          float ndv = clamp(dot(normalize(normal), wV), 0.0, 1.0);
+          // Trans-Clear / Trans-Light-Blue ABS IOR 1.54 Fresnel + internal underside anti-stud tube refraction shadow
+          float fres = 0.0452 + (1.0 - 0.0452) * pow(1.0 - ndv, 4.2);
+          vec2 cellUv = fract(vWaterWPos.xz - wV.xz * 0.18);
+          float tubeD = abs(length(cellUv - 0.5) - 0.22);
+          float tubeShadow = 1.0 - smoothstep(0.0, 0.045, tubeD) * 0.22;
+          outgoingLight = outgoingLight * tubeShadow + vec3(0.85, 0.95, 1.0) * fres * 0.32;
+          diffuseColor.a = mix(0.42, 0.88, fres);
+        }
         #include <opaque_fragment>`,
       );
   };
-  waterStd.customProgramCacheKey = () => "studcraft-water";
+  waterStd.customProgramCacheKey = () => "studcraft-water-v2";
   const plantStd = new THREE.MeshStandardMaterial({
     map: atlas,
-    roughness: 0.86,
+    roughness: 0.88,
     metalness: 0,
     alphaTest: 0.45,
     side: THREE.DoubleSide,
@@ -905,12 +959,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     emissive: new THREE.Color(0xffffff),
     emissiveIntensity: 1.15,
     vertexColors: true,
-    envMapIntensity: 0.15,
+    envMapIntensity: 0.25,
   });
   // SRN world shading on the realistic set (see sirenizeWorld below).
-  sirenizeWorld(opaqueStd, 1, 1, "srn-world-opaque-1");
-  sirenizeWorld(plantStd, 0.5, 0.6, "srn-world-plant-1");
-  sirenizeWorld(glassStd, 0.25, 0.3, "srn-world-glass-1");
+  sirenizeWorld(opaqueStd, 1, 1, "srn-world-opaque-3");
+  sirenizeWorld(plantStd, 0.35, 0.4, "srn-world-plant-3");
+  sirenizeWorld(glassStd, 0.2, 0.2, "srn-world-glass-3");
   let opaqueMat: THREE.Material = settings.realistic ? opaqueStd : opaqueLam;
   let glassMat: THREE.Material = settings.realistic ? glassStd : glassLam;
   let waterMat: THREE.Material = settings.realistic ? waterStd : waterLam;
@@ -922,10 +976,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   const dirty = new Set<string>();
   const chunkTier = new Map<string, number>();
 
-  // LOD tiers by chunk distance from the player: 0 = full (studs + AO),
-  // 1 = no studs, AO kept, 2 = no studs, no AO (far silhouette chunks).
+  // LOD tiers by chunk distance from the player: 0 = full (2×2 3D studs + AO),
+  // 1 = normal-mapped 2×2 studs + AO, 2 = far silhouette.
   function tierFor(d2: number) {
-    return d2 <= 9 ? 0 : d2 <= 36 ? 1 : 2;
+    return d2 <= 25 ? 0 : d2 <= 49 ? 1 : 2;
   }
 
   const starGeo = new THREE.BufferGeometry();
@@ -1080,11 +1134,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   highlight.add(
     new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1.02, 1.02, 1.02)), outlineMat),
   );
-  const studOutline = new THREE.LineSegments(
-    new THREE.EdgesGeometry(new THREE.CylinderGeometry(STUD_R, STUD_R, STUD_H, 16)),
-    outlineMat,
-  );
-  studOutline.position.y = 0.51 + STUD_H / 2;
+  const studOutline = new THREE.Group();
+  const studOutlineGeo = new THREE.EdgesGeometry(new THREE.CylinderGeometry(STUD_R, STUD_R, STUD_H, 12));
+  for (const [ox, oz] of STUD_OFFSETS) {
+    const studSeg = new THREE.LineSegments(studOutlineGeo, outlineMat);
+    studSeg.position.set(ox - 0.5, 0.51 + STUD_H / 2, oz - 0.5);
+    studOutline.add(studSeg);
+  }
   highlight.add(studOutline);
   highlight.visible = false;
   scene.add(highlight);
@@ -1094,9 +1150,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   ghost.userData.keepShadow = false;
   const ghostBody = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.98, 0.98), ghostMat);
   ghost.add(ghostBody);
-  const ghostStud = new THREE.Mesh(new THREE.CylinderGeometry(STUD_R, STUD_R, STUD_H, 24), ghostMat);
-  ghostStud.position.y = 0.49 + STUD_H / 2;
-  ghost.add(ghostStud);
+  const ghostStudGeo = new THREE.CylinderGeometry(STUD_R * 0.9, STUD_R, STUD_H, 16);
+  for (const [ox, oz] of STUD_OFFSETS) {
+    const ghostStud = new THREE.Mesh(ghostStudGeo, ghostMat);
+    ghostStud.position.set(ox - 0.5, 0.49 + STUD_H / 2, oz - 0.5);
+    ghost.add(ghostStud);
+  }
   ghost.visible = false;
   scene.add(ghost);
 
@@ -1107,30 +1166,920 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   bolt.userData.keepShadow = false;
   scene.add(bolt);
 
-  const brickMat = skin(0xe23b2f, { depthTest: false });
+  const fpsSleeveMat = skin(0xe23b2f);
+  const fpsSkinMat = skin(0xf3d37a);
+  const fpsDarkMat = skin(0x1a120c);
   const viewBrick = new THREE.Group();
   viewBrick.userData.keepShadow = false;
-  const hand = 0.32;
-  viewBrick.add(new THREE.Mesh(new THREE.BoxGeometry(hand, hand, hand), brickMat));
-  const handStud = new THREE.Mesh(
-    new THREE.CylinderGeometry(hand * STUD_R, hand * STUD_R, hand * STUD_H, 20),
-    brickMat,
-  );
-  handStud.position.y = hand / 2 + (hand * STUD_H) / 2;
-  viewBrick.add(handStud);
-  viewBrick.position.set(0.34, -0.3, -0.52);
-  viewBrick.renderOrder = 999;
+
+  // Dynamic 3D LEGO Item & Multi-Part Block Builder (used by 1st-person hand, 3rd-person Minifig & world drops)
+  function shiftHex(hex: number, f: number): number {
+    const r = Math.min(255, Math.max(0, Math.round(((hex >> 16) & 255) * f)));
+    const g = Math.min(255, Math.max(0, Math.round(((hex >> 8) & 255) * f)));
+    const b = Math.min(255, Math.max(0, Math.round((hex & 255) * f)));
+    return (r << 16) | (g << 8) | b;
+  }
+
+  function addStudGrid(
+    parent: THREE.Group,
+    w: number,
+    yTop: number,
+    d: number,
+    nx: number,
+    nz: number,
+    mat: THREE.Material,
+    ox = 0,
+    oz = 0,
+    hollow = false,
+  ) {
+    const sr = Number((Math.min(w / nx, d / nz) * 0.29).toFixed(4));
+    const sh = Number((sr * 0.66).toFixed(4));
+    const sGeo = geoCyl(Number((sr * 0.92).toFixed(4)), sh, 10, sr);
+    const dimpleGeo = hollow ? geoCyl(Number((sr * 0.48).toFixed(4)), Number((sh * 0.35).toFixed(4)), 8) : null;
+    const darkMat = hollow ? skin(0x181412) : null;
+    for (let ix = 0; ix < nx; ix++) {
+      for (let iz = 0; iz < nz; iz++) {
+        const sx = ox - w / 2 + (w / nx) * (ix + 0.5);
+        const sz = oz - d / 2 + (d / nz) * (iz + 0.5);
+        const st = new THREE.Mesh(sGeo, mat);
+        st.position.set(sx, yTop + sh / 2, sz);
+        st.castShadow = false;
+        st.userData.noShadow = true;
+        parent.add(st);
+        if (dimpleGeo && darkMat) {
+          const dm = new THREE.Mesh(dimpleGeo, darkMat);
+          dm.position.set(sx, yTop + sh * 0.88, sz);
+          dm.castShadow = false;
+          dm.userData.noShadow = true;
+          parent.add(dm);
+        }
+      }
+    }
+  }
+
+  function addBoxPart(
+    parent: THREE.Group,
+    w: number,
+    h: number,
+    d: number,
+    x: number,
+    y: number,
+    z: number,
+    mat: THREE.Material,
+  ): THREE.Mesh {
+    const m = new THREE.Mesh(geoBox(w, h, d), mat);
+    m.position.set(x, y, z);
+    parent.add(m);
+    return m;
+  }
+
+  function addCylPart(
+    parent: THREE.Group,
+    rt: number,
+    rb: number,
+    h: number,
+    x: number,
+    y: number,
+    z: number,
+    mat: THREE.Material,
+    segs = 10,
+  ): THREE.Mesh {
+    const m = new THREE.Mesh(geoCyl(rt, h, segs, rb), mat);
+    m.position.set(x, y, z);
+    parent.add(m);
+    return m;
+  }
+
+  function addSculptedLegoFlame(parent: THREE.Group, x: number, y: number, z: number, scale = 1, soul = false) {
+    const fg = new THREE.Group();
+    fg.position.set(x, y, z);
+    fg.scale.setScalar(scale);
+    fg.userData.legoFlame = true;
+    fg.userData.baseY = y;
+    fg.userData.baseScale = scale;
+    const outerCol = soul ? 0x28d7ff : 0xff6200;
+    const innerCol = soul ? 0xb8ffff : 0xffe438;
+    const outerMat = skin(outerCol);
+    outerMat.emissive = new THREE.Color(outerCol);
+    outerMat.emissiveIntensity = 0.85;
+    const innerMat = skin(innerCol);
+    innerMat.emissive = new THREE.Color(innerCol);
+    innerMat.emissiveIntensity = 1.05;
+
+    // Base stem pin + S-curved molded LEGO flame tongues
+    addCylPart(fg, 0.018, 0.022, 0.035, 0, 0.017, 0, outerMat, 8);
+    const l1 = addCylPart(fg, 0.032, 0.020, 0.065, -0.006, 0.055, 0, outerMat, 10);
+    l1.rotation.z = 0.22;
+    const l2 = addCylPart(fg, 0.024, 0.032, 0.065, 0.008, 0.102, 0, outerMat, 10);
+    l2.rotation.z = -0.26;
+    const tip = addCylPart(fg, 0.005, 0.022, 0.055, -0.004, 0.148, 0, outerMat, 8);
+    tip.rotation.z = 0.18;
+    // Inner bright core
+    addCylPart(fg, 0.016, 0.014, 0.075, 0.002, 0.072, 0.008, innerMat, 8);
+    parent.add(fg);
+    return fg;
+  }
+
+  function buildLegoItem3D(id: number): { group: THREE.Group; isTool: boolean; flames: THREE.Object3D[] } {
+    const group = new THREE.Group();
+    const flames: THREE.Object3D[] = [];
+    if (!id) return { group, isTool: false, flames };
+    const d = def(id);
+    const baseHex = Number.parseInt(d.color.replace("#", ""), 16) || 0x8a8f96;
+    const s = 0.25;
+    const hs = s / 2;
+
+    // 1. WORKSTATIONS & BESPOKE MULTI-PART LEGO BLOCKS
+    if (id === ID.Furnace) {
+      const darkStone = skin(0x3e4248);
+      const midStone = skin(0x6c7179);
+      const lightStone = skin(0x888e96);
+      const cavityMat = skin(0x100a06);
+      const grateMat = skin(0x262a30);
+      const emberMat = skin(0xff3b10);
+      emberMat.emissive = new THREE.Color(0xff2a00);
+      emberMat.emissiveIntensity = 0.9;
+
+      // Stepped dark stone base plate + hearth lip
+      addBoxPart(group, s * 1.04, s * 0.18, s * 1.04, 0, -hs + s * 0.09, 0, darkStone);
+      // Left, right & back masonry walls (stacked LEGO bricks)
+      addBoxPart(group, s * 0.24, s * 0.62, s * 0.98, -hs + s * 0.12, s * 0.02, 0, midStone);
+      addBoxPart(group, s * 0.24, s * 0.62, s * 0.98, hs - s * 0.12, s * 0.02, 0, midStone);
+      addBoxPart(group, s * 0.56, s * 0.62, s * 0.34, 0, s * 0.02, hs - s * 0.17, midStone);
+      // Recessed dark firebox interior
+      addBoxPart(group, s * 0.54, s * 0.50, s * 0.18, 0, -s * 0.02, -hs + s * 0.26, cavityMat);
+      // Arched stone lintel above firebox + ventilation slits
+      addBoxPart(group, s * 0.62, s * 0.18, s * 0.26, 0, s * 0.24, -hs + s * 0.13, lightStone);
+      addBoxPart(group, s * 0.44, s * 0.05, s * 0.28, -s * 0.02, s * 0.24, -hs + s * 0.13, darkStone);
+      // Top cap plate + 4 LEGO studs + circular chimney exhaust ring
+      addBoxPart(group, s * 1.02, s * 0.18, s * 1.02, 0, hs - s * 0.09, 0, lightStone);
+      addStudGrid(group, s * 0.96, hs, s * 0.96, 2, 2, midStone, 0, 0, true);
+      addCylPart(group, s * 0.22, s * 0.24, s * 0.06, 0, hs + s * 0.03, 0, darkStone, 12);
+      addCylPart(group, s * 0.13, s * 0.13, s * 0.07, 0, hs + s * 0.035, 0, emberMat, 10);
+
+      // Glowing 1×1 LEGO coal studs inside hearth
+      for (const ox of [-0.042, 0, 0.042]) {
+        addCylPart(group, 0.018, 0.020, 0.022, ox, -hs + s * 0.22, -hs + s * 0.14, emberMat, 10);
+      }
+      // Sculpted 3D LEGO Flames roaring inside the furnace mouth
+      flames.push(addSculptedLegoFlame(group, 0, -hs + s * 0.22, -hs + s * 0.13, 0.42));
+      flames.push(addSculptedLegoFlame(group, -0.032, -hs + s * 0.20, -hs + s * 0.15, 0.30));
+      flames.push(addSculptedLegoFlame(group, 0.032, -hs + s * 0.20, -hs + s * 0.15, 0.30));
+
+      // Iron grate bars across lower firebox opening
+      for (const gx of [-0.045, -0.015, 0.015, 0.045]) {
+        addBoxPart(group, 0.008, s * 0.18, 0.012, gx, -hs + s * 0.25, -hs + 0.01, grateMat);
+      }
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Bench) {
+      const darkWood = skin(0x5e3819);
+      const midWood = skin(0x9b6636);
+      const topWood = skin(0xc88f54);
+      const gridCell = skin(0x4b2c12);
+      const gridStud = skin(0xdca468);
+      const ironMat = skin(0x888f98);
+      const clipMat = skin(0x52575e);
+
+      // Base frame + 4 corner timber pillars
+      addBoxPart(group, s * 0.94, s * 0.78, s * 0.94, 0, -s * 0.08, 0, midWood);
+      for (const [cx, cz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
+        addBoxPart(group, s * 0.20, s * 0.82, s * 0.20, cx * (hs - s * 0.09), -s * 0.08, cz * (hs - s * 0.09), darkWood);
+      }
+      // Overhanging workbench top plate
+      addBoxPart(group, s * 1.06, s * 0.22, s * 1.06, 0, hs - s * 0.10, 0, topWood);
+      // Recessed 3×3 LEGO Crafting Grid on top (9 dark cells + 9 miniature LEGO studs!)
+      addBoxPart(group, s * 0.78, 0.008, s * 0.78, 0, hs + 0.004, 0, darkWood);
+      for (let gx = -1; gx <= 1; gx++) {
+        for (let gz = -1; gz <= 1; gz++) {
+          const cx = gx * (s * 0.24);
+          const cz = gz * (s * 0.24);
+          addBoxPart(group, s * 0.20, 0.012, s * 0.20, cx, hs + 0.008, cz, gridCell);
+          addCylPart(group, 0.015, 0.016, 0.016, cx, hs + 0.020, cz, gridStud, 10);
+        }
+      }
+      // Front SNOT tool rack: grey LEGO clip + miniature 3D LEGO Hammer & Hand-Saw!
+      addBoxPart(group, s * 0.76, 0.020, 0.018, 0, s * 0.12, -hs - 0.008, darkWood);
+      // Mini LEGO Hammer on left
+      addBoxPart(group, 0.022, 0.020, 0.022, -s * 0.20, s * 0.12, -hs - 0.016, clipMat);
+      addCylPart(group, 0.009, 0.009, s * 0.42, -s * 0.20, -s * 0.02, -hs - 0.018, darkWood, 8);
+      addBoxPart(group, 0.052, 0.024, 0.026, -s * 0.20, s * 0.16, -hs - 0.020, ironMat);
+      // Mini LEGO Saw on right
+      addBoxPart(group, 0.022, 0.020, 0.022, s * 0.18, s * 0.12, -hs - 0.016, clipMat);
+      addBoxPart(group, 0.036, 0.028, 0.018, s * 0.18, s * 0.14, -hs - 0.020, topWood);
+      addBoxPart(group, 0.028, s * 0.36, 0.008, s * 0.18, -s * 0.04, -hs - 0.020, ironMat);
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Chest || id === ID.ShulkerBox) {
+      const isShulker = id === ID.ShulkerBox;
+      const bodyMat = skin(isShulker ? 0x7c3e96 : 0x9b622e);
+      const lidMat = skin(isShulker ? 0x924eb0 : 0xb27438);
+      const rimMat = skin(isShulker ? 0x4a205c : 0x422711);
+      const goldMat = skin(0xf5c518);
+
+      // Lower chest box
+      addBoxPart(group, s * 0.96, s * 0.56, s * 0.88, 0, -hs + s * 0.28, 0, bodyMat);
+      // Dark seam gap between box and hinged lid
+      addBoxPart(group, s * 0.98, s * 0.05, s * 0.90, 0, s * 0.08, 0, rimMat);
+      // Hinged upper lid + 4 top studs
+      addBoxPart(group, s * 0.96, s * 0.34, s * 0.88, 0, hs - s * 0.19, 0, lidMat);
+      addStudGrid(group, s * 0.86, hs - 0.005, s * 0.78, 2, 2, lidMat, 0, 0, true);
+      // Protruding 1×1 gold LEGO latch plate + central gold stud
+      addBoxPart(group, s * 0.22, s * 0.28, 0.026, 0, s * 0.08, -hs * 0.88 - 0.01, goldMat);
+      const latchStud = addCylPart(group, 0.018, 0.018, 0.018, 0, s * 0.08, -hs * 0.88 - 0.026, goldMat, 10);
+      latchStud.rotation.x = Math.PI / 2;
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Anvil) {
+      const baseMat = skin(0x3a3e45);
+      const waistMat = skin(0x282b30);
+      const topMat = skin(0x525760);
+      addBoxPart(group, s * 0.88, s * 0.24, s * 0.72, 0, -hs + s * 0.12, 0, baseMat);
+      addStudGrid(group, s * 0.80, -hs + s * 0.24, s * 0.64, 2, 2, baseMat);
+      addBoxPart(group, s * 0.42, s * 0.34, s * 0.38, 0, -s * 0.04, 0, waistMat);
+      addBoxPart(group, s * 1.06, s * 0.34, s * 0.64, 0, hs - s * 0.20, 0, topMat);
+      addStudGrid(group, s * 0.96, hs - s * 0.03, s * 0.56, 2, 2, topMat, 0, 0, true);
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Enchanter) {
+      const obsMat = skin(0x1b1428);
+      const clothMat = skin(0xc4282f);
+      const goldMat = skin(0xf5c518);
+      const cyanMat = skin(0x4ef2f7);
+      cyanMat.emissive = new THREE.Color(0x28d7e8);
+      cyanMat.emissiveIntensity = 0.75;
+      const coverMat = skin(0x6e3b1e);
+      const pageMat = skin(0xf5eedc);
+
+      // Obsidian pedestal (3/4 height) + red diamond cloth + 4 glowing cyan corner studs
+      addBoxPart(group, s * 0.98, s * 0.68, s * 0.98, 0, -hs + s * 0.34, 0, obsMat);
+      addBoxPart(group, s * 1.02, s * 0.16, s * 1.02, 0, s * 0.10, 0, clothMat);
+      addStudGrid(group, s * 0.90, s * 0.18, s * 0.90, 2, 2, cyanMat);
+      // Open LEGO spellbook angled on top
+      const bookG = new THREE.Group();
+      bookG.position.set(0, s * 0.29, 0);
+      bookG.rotation.set(-0.32, 0.45, 0);
+      const lCov = new THREE.Mesh(new THREE.BoxGeometry(s * 0.36, 0.016, s * 0.46), coverMat);
+      lCov.position.set(-s * 0.17, 0, 0);
+      lCov.rotation.z = 0.26;
+      const rCov = new THREE.Mesh(new THREE.BoxGeometry(s * 0.36, 0.016, s * 0.46), coverMat);
+      rCov.position.set(s * 0.17, 0, 0);
+      rCov.rotation.z = -0.26;
+      const lPg = new THREE.Mesh(new THREE.BoxGeometry(s * 0.32, 0.022, s * 0.42), pageMat);
+      lPg.position.set(-s * 0.15, 0.014, 0);
+      lPg.rotation.z = 0.26;
+      const rPg = new THREE.Mesh(new THREE.BoxGeometry(s * 0.32, 0.022, s * 0.42), pageMat);
+      rPg.position.set(s * 0.15, 0.014, 0);
+      rPg.rotation.z = -0.26;
+      const spine = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.026, s * 0.48), goldMat);
+      bookG.add(lCov, rCov, lPg, rPg, spine);
+      group.add(bookG);
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Brew) {
+      const stoneMat = skin(0x70757d);
+      const rodMat = skin(0xffb82e);
+      rodMat.emissive = new THREE.Color(0xff9400);
+      rodMat.emissiveIntensity = 0.7;
+      const potCols = [0xe23b2f, 0x4ec5f7, 0x68d854];
+
+      // Cobblestone base plate + 4 studs
+      addBoxPart(group, s * 0.96, s * 0.18, s * 0.96, 0, -hs + s * 0.09, 0, stoneMat);
+      addStudGrid(group, s * 0.88, -hs + s * 0.18, s * 0.88, 2, 2, stoneMat);
+      // Central glowing Blaze rod + top stud + cross manifold
+      const rod = addCylPart(group, 0.020, 0.022, s * 0.76, 0, s * 0.06, 0, rodMat, 10);
+      flames.push(rod);
+      addBoxPart(group, s * 0.68, 0.022, 0.022, 0, s * 0.22, 0, rodMat);
+      addBoxPart(group, 0.022, 0.022, s * 0.68, 0, s * 0.22, 0, rodMat);
+      // 3 LEGO Potion bottles around the base
+      const dirs = [[-s * 0.28, 0], [s * 0.28, 0], [0, -s * 0.28]] as const;
+      dirs.forEach(([px, pz], idx) => {
+        const pMat = skin(potCols[idx]);
+        pMat.emissive = new THREE.Color(potCols[idx]);
+        pMat.emissiveIntensity = 0.25;
+        addCylPart(group, 0.032, 0.036, s * 0.28, px, -hs + s * 0.32, pz, pMat, 10);
+        addCylPart(group, 0.016, 0.016, s * 0.10, px, -hs + s * 0.50, pz, skin(0xd8f0ff), 8);
+        addCylPart(group, 0.019, 0.019, 0.018, px, -hs + s * 0.56, pz, rodMat, 8);
+      });
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Campfire) {
+      const logMat = skin(0x5c3a1e);
+      const barkMat = skin(0x422812);
+      const coalMat = skin(0xff4210);
+      coalMat.emissive = new THREE.Color(0xff2a00);
+      coalMat.emissiveIntensity = 0.85;
+
+      // 4 crossed LEGO logs with studs
+      addBoxPart(group, s * 0.94, s * 0.18, s * 0.22, 0, -hs + s * 0.09, -s * 0.24, logMat);
+      addBoxPart(group, s * 0.94, s * 0.18, s * 0.22, 0, -hs + s * 0.09, s * 0.24, logMat);
+      addBoxPart(group, s * 0.22, s * 0.18, s * 0.94, -s * 0.24, -hs + s * 0.24, 0, barkMat);
+      addBoxPart(group, s * 0.22, s * 0.18, s * 0.94, s * 0.24, -hs + s * 0.24, 0, barkMat);
+      // Glowing ember bed + 3 sculpted LEGO flames
+      addBoxPart(group, s * 0.38, s * 0.10, s * 0.38, 0, -hs + s * 0.12, 0, coalMat);
+      flames.push(addSculptedLegoFlame(group, 0, -hs + s * 0.16, 0, 0.72));
+      flames.push(addSculptedLegoFlame(group, -0.036, -hs + s * 0.14, 0.025, 0.48));
+      flames.push(addSculptedLegoFlame(group, 0.036, -hs + s * 0.14, -0.025, 0.48));
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Barrel) {
+      const woodMat = skin(0x82542b);
+      const hoopMat = skin(0x363a40);
+      const bungMat = skin(0xc8963e);
+      addBoxPart(group, s * 0.96, s * 0.98, s * 0.96, 0, 0, 0, woodMat);
+      addBoxPart(group, s * 1.02, s * 0.12, s * 1.02, 0, s * 0.24, 0, hoopMat);
+      addBoxPart(group, s * 1.02, s * 0.12, s * 1.02, 0, -s * 0.24, 0, hoopMat);
+      addStudGrid(group, s * 0.90, hs, s * 0.90, 2, 2, woodMat);
+      addCylPart(group, 0.026, 0.026, 0.020, 0, hs + 0.01, 0, bungMat, 10);
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.TNT) {
+      const redMat = skin(0xd82e22);
+      const bandMat = skin(0xf4f1ea);
+      const inkMat = skin(0x1e1a18);
+      const topMat = skin(0x383838);
+      addBoxPart(group, s * 0.98, s * 0.98, s * 0.98, 0, 0, 0, redMat);
+      addBoxPart(group, s * 1.02, s * 0.30, s * 1.02, 0, 0, 0, bandMat);
+      // "TNT" micro-bars on front band
+      for (const tx of [-s * 0.26, 0, s * 0.26]) {
+        addBoxPart(group, 0.028, s * 0.20, 0.014, tx, 0, -hs - 0.006, inkMat);
+      }
+      addBoxPart(group, s * 0.96, 0.012, s * 0.96, 0, hs, 0, topMat);
+      addStudGrid(group, s * 0.92, hs + 0.006, s * 0.92, 2, 2, bandMat);
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Bookshelf) {
+      const woodMat = skin(0x9b6839);
+      const darkMat = skin(0x24180e);
+      addBoxPart(group, s * 0.98, s * 0.20, s * 0.98, 0, -hs + s * 0.10, 0, woodMat);
+      addBoxPart(group, s * 0.98, s * 0.16, s * 0.98, 0, 0, 0, woodMat);
+      addBoxPart(group, s * 0.98, s * 0.20, s * 0.98, 0, hs - s * 0.10, 0, woodMat);
+      addBoxPart(group, s * 0.88, s * 0.76, s * 0.88, 0, 0, 0, darkMat);
+      const bookCols = [0xc4282f, 0x2e6bc4, 0x389848, 0xd89e28, 0x7c3e96];
+      for (let row = 0; row < 2; row++) {
+        const ry = row === 0 ? -s * 0.20 : s * 0.20;
+        for (let b = 0; b < 5; b++) {
+          const bx = -s * 0.34 + b * (s * 0.17);
+          const bm = skin(bookCols[(b + row * 2) % bookCols.length]);
+          addBoxPart(group, s * 0.14, s * 0.24, s * 0.96, bx, ry, 0, bm);
+        }
+      }
+      addStudGrid(group, s * 0.92, hs, s * 0.92, 2, 2, woodMat);
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Bed) {
+      const woodMat = skin(0x7c522b);
+      const redMat = skin(0xc92c24);
+      const whiteMat = skin(0xf4f2ec);
+      addBoxPart(group, s * 0.96, s * 0.18, s * 1.16, 0, -hs + s * 0.14, 0, woodMat);
+      addBoxPart(group, s * 0.94, s * 0.24, s * 0.78, 0, -hs + s * 0.34, s * 0.16, redMat);
+      addBoxPart(group, s * 0.90, s * 0.26, s * 0.34, 0, -hs + s * 0.36, -s * 0.38, whiteMat);
+      addStudGrid(group, s * 0.86, -hs + s * 0.46, s * 0.70, 2, 2, redMat, 0, s * 0.16);
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Beacon || id === ID.Conduit) {
+      const obsMat = skin(0x1b1428);
+      const coreMat = skin(0x64f6ff);
+      coreMat.emissive = new THREE.Color(0x38e8ff);
+      coreMat.emissiveIntensity = 0.95;
+      addBoxPart(group, s * 0.96, s * 0.22, s * 0.96, 0, -hs + s * 0.11, 0, obsMat);
+      const core = addBoxPart(group, s * 0.46, s * 0.46, s * 0.46, 0, s * 0.04, 0, coreMat);
+      core.rotation.set(0.5, 0.5, 0.3);
+      flames.push(core);
+      addStudGrid(group, s * 0.88, -hs + s * 0.22, s * 0.88, 2, 2, coreMat);
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Cactus) {
+      const greenMat = skin(0x2d8a3c);
+      const darkRibMat = skin(0x1b5e26);
+      const lightRibMat = skin(0x46b454);
+      const spineMat = skin(0xf4ebd2);
+      const flowerMat = skin(0xf26498);
+      const pollenMat = skin(0xffd838);
+      // 3 stacked ribbed green LEGO column courses
+      addBoxPart(group, s * 0.64, s * 0.34, s * 0.64, 0, -hs + s * 0.17, 0, greenMat);
+      addBoxPart(group, s * 0.64, s * 0.34, s * 0.64, 0, -hs + s * 0.53, 0, darkRibMat);
+      addBoxPart(group, s * 0.64, s * 0.32, s * 0.64, 0, hs - s * 0.16, 0, greenMat);
+      // 4 vertical fluted LEGO rib plates
+      for (const off of [-s * 0.16, s * 0.16]) {
+        addBoxPart(group, s * 0.74, s * 0.96, s * 0.10, 0, 0, off, lightRibMat);
+        addBoxPart(group, s * 0.10, s * 0.96, s * 0.74, off, 0, 0, lightRibMat);
+      }
+      // Left & Right L-shaped 3D LEGO Saguaro Side Arms with top studs
+      addBoxPart(group, s * 0.32, s * 0.20, s * 0.24, s * 0.42, -s * 0.04, 0, greenMat);
+      addBoxPart(group, s * 0.24, s * 0.44, s * 0.24, s * 0.50, s * 0.22, 0, lightRibMat);
+      addStudGrid(group, s * 0.22, s * 0.44, s * 0.22, 1, 1, lightRibMat, s * 0.50, 0, true);
+
+      addBoxPart(group, s * 0.32, s * 0.20, s * 0.24, -s * 0.42, -s * 0.18, 0, greenMat);
+      addBoxPart(group, s * 0.24, s * 0.42, s * 0.24, -s * 0.50, s * 0.08, 0, lightRibMat);
+      addStudGrid(group, s * 0.22, s * 0.29, s * 0.22, 1, 1, lightRibMat, -s * 0.50, 0, true);
+
+      // Protruding cream LEGO spines
+      for (const sy of [-s * 0.24, s * 0.18]) {
+        for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
+          addBoxPart(group, 0.022, 0.016, 0.022, sx * s * 0.36, sy, sz * s * 0.36, spineMat);
+        }
+      }
+      // 4 top LEGO studs + blooming LEGO desert flower stud on crown
+      addStudGrid(group, s * 0.60, hs, s * 0.60, 2, 2, lightRibMat, 0, 0, true);
+      addCylPart(group, 0.036, 0.028, 0.024, 0, hs + 0.022, 0, flowerMat, 8);
+      addCylPart(group, 0.018, 0.018, 0.016, 0, hs + 0.040, 0, pollenMat, 8);
+      return { group, isTool: false, flames };
+    }
+
+    // 2. TORCHES, LANTERNS & LIGHT SOURCES
+    if (id === ID.Torch || id === ID.RedTorch || id === ID.RedTorchOn) {
+      const isRed = id !== ID.Torch;
+      const stickMat = skin(0x7c522b);
+      const collarMat = skin(isRed ? 0x8e1e18 : 0xd89e28);
+      addCylPart(group, 0.024, 0.028, s * 0.95, 0, -s * 0.08, 0, stickMat, 10);
+      addCylPart(group, 0.036, 0.036, 0.024, 0, -s * 0.52, 0, stickMat, 10);
+      addCylPart(group, 0.032, 0.030, 0.032, 0, s * 0.36, 0, collarMat, 10);
+      if (isRed) {
+        const bulbMat = skin(0xff2a1e);
+        bulbMat.emissive = new THREE.Color(0xff1e10);
+        bulbMat.emissiveIntensity = id === ID.RedTorchOn ? 0.95 : 0.35;
+        const b = addCylPart(group, 0.032, 0.032, 0.055, 0, s * 0.50, 0, bulbMat, 10);
+        flames.push(b);
+      } else {
+        flames.push(addSculptedLegoFlame(group, 0, s * 0.38, 0, 0.72));
+      }
+      return { group, isTool: true, flames };
+    }
+
+    if (id === ID.Lantern) {
+      const ironMat = skin(0x2d3138);
+      const glowMat = skin(0xffb82e);
+      glowMat.emissive = new THREE.Color(0xff8c12);
+      glowMat.emissiveIntensity = 0.95;
+      addBoxPart(group, s * 0.62, s * 0.14, s * 0.62, 0, -s * 0.32, 0, ironMat);
+      const core = addBoxPart(group, s * 0.44, s * 0.48, s * 0.44, 0, -s * 0.02, 0, glowMat);
+      flames.push(core);
+      for (const [cx, cz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
+        addBoxPart(group, 0.014, s * 0.50, 0.014, cx * s * 0.24, -s * 0.02, cz * s * 0.24, ironMat);
+      }
+      addBoxPart(group, s * 0.64, s * 0.14, s * 0.64, 0, s * 0.26, 0, ironMat);
+      addCylPart(group, 0.024, 0.028, s * 0.14, 0, s * 0.38, 0, ironMat, 10);
+      return { group, isTool: false, flames };
+    }
+
+    // 3. MOLDED 3D LEGO MINIFIG TOOLS & WEAPONS
+    if (d.tool === "pick") {
+      const handleMat = skin(0x7c522b);
+      const headMat = skin(baseHex);
+      const darkHead = skin(shiftHex(baseHex, 0.75));
+      // Cylindrical LEGO grip + bottom pommel ring
+      addCylPart(group, 0.020, 0.022, 0.34, 0, 0, 0, handleMat, 10);
+      addCylPart(group, 0.028, 0.028, 0.024, 0, -0.165, 0, handleMat, 10);
+      // Central head socket collar + top LEGO stud
+      addBoxPart(group, 0.062, 0.056, 0.048, 0, 0.13, 0, darkHead);
+      addCylPart(group, 0.018, 0.020, 0.020, 0, 0.18, 0, headMat, 10);
+      // Curved left & right pickaxe arms + chisel tips
+      const armL = addBoxPart(group, 0.13, 0.036, 0.034, -0.082, 0.12, 0, headMat);
+      armL.rotation.z = 0.26;
+      const tipL = addBoxPart(group, 0.055, 0.024, 0.026, -0.152, 0.092, 0, darkHead);
+      tipL.rotation.z = 0.48;
+      const armR = addBoxPart(group, 0.13, 0.036, 0.034, 0.082, 0.12, 0, headMat);
+      armR.rotation.z = -0.26;
+      const tipR = addBoxPart(group, 0.055, 0.024, 0.026, 0.152, 0.092, 0, darkHead);
+      tipR.rotation.z = -0.48;
+      return { group, isTool: true, flames };
+    }
+
+    if (d.tool === "axe") {
+      const handleMat = skin(0x7c522b);
+      const headMat = skin(baseHex);
+      const edgeMat = skin(shiftHex(baseHex, 1.18));
+      addCylPart(group, 0.020, 0.022, 0.34, 0, 0, 0, handleMat, 10);
+      addCylPart(group, 0.028, 0.028, 0.024, 0, -0.165, 0, handleMat, 10);
+      addBoxPart(group, 0.065, 0.062, 0.046, 0, 0.12, 0, headMat);
+      addCylPart(group, 0.018, 0.020, 0.020, 0, 0.18, 0, headMat, 10);
+      // Stepped LEGO axe blade on -X side + rear poll block on +X
+      addBoxPart(group, 0.085, 0.11, 0.032, -0.062, 0.115, 0, headMat);
+      addBoxPart(group, 0.034, 0.145, 0.018, -0.108, 0.11, 0, edgeMat);
+      addBoxPart(group, 0.042, 0.046, 0.036, 0.046, 0.12, 0, headMat);
+      return { group, isTool: true, flames };
+    }
+
+    if (d.tool === "shovel") {
+      const handleMat = skin(0x7c522b);
+      const headMat = skin(baseHex);
+      addCylPart(group, 0.020, 0.022, 0.30, 0, -0.02, 0, handleMat, 10);
+      addCylPart(group, 0.028, 0.028, 0.024, 0, -0.165, 0, handleMat, 10);
+      addCylPart(group, 0.026, 0.024, 0.032, 0, 0.11, 0, skin(shiftHex(baseHex, 0.78)), 10);
+      addBoxPart(group, 0.095, 0.115, 0.024, 0, 0.175, 0, headMat);
+      addBoxPart(group, 0.068, 0.032, 0.020, 0, 0.242, 0, skin(shiftHex(baseHex, 1.15)));
+      const st = addCylPart(group, 0.018, 0.018, 0.016, 0, 0.165, -0.016, headMat, 10);
+      st.rotation.x = Math.PI / 2;
+      return { group, isTool: true, flames };
+    }
+
+    if (d.tool === "hoe") {
+      const handleMat = skin(0x7c522b);
+      const headMat = skin(baseHex);
+      addCylPart(group, 0.020, 0.022, 0.34, 0, 0, 0, handleMat, 10);
+      addCylPart(group, 0.028, 0.028, 0.024, 0, -0.165, 0, handleMat, 10);
+      addBoxPart(group, 0.060, 0.048, 0.044, 0, 0.135, 0, headMat);
+      addCylPart(group, 0.018, 0.020, 0.020, 0, 0.18, 0, headMat, 10);
+      const tine = addBoxPart(group, 0.115, 0.034, 0.030, -0.072, 0.128, 0, headMat);
+      tine.rotation.z = 0.22;
+      return { group, isTool: true, flames };
+    }
+
+    if (d.tool === "sword") {
+      const isTrident = id === ID.Trident || id === ID.TidalBlade;
+      if (isTrident) {
+        const shaftMat = skin(id === ID.TidalBlade ? 0x165a6e : 0x2a8478);
+        const headMat = skin(id === ID.TidalBlade ? 0x20d8e8 : 0x66e8dc);
+        const prongMat = skin(id === ID.TidalBlade ? 0xff9a2e : 0xe8ffff);
+        addCylPart(group, 0.019, 0.021, 0.38, 0, -0.01, 0, shaftMat, 10);
+        addBoxPart(group, 0.14, 0.036, 0.034, 0, 0.16, 0, headMat);
+        for (const px of [-0.052, 0, 0.052]) {
+          addCylPart(group, 0.006, 0.014, 0.11, px, 0.225, 0, prongMat, 8);
+        }
+        return { group, isTool: true, flames };
+      }
+      const gripMat = skin(0x5c381c);
+      const guardMat = skin(0xd8a22e);
+      const bladeMat = skin(baseHex);
+      const ridgeMat = skin(shiftHex(baseHex, 1.22));
+      addCylPart(group, 0.019, 0.021, 0.11, 0, -0.11, 0, gripMat, 10);
+      addCylPart(group, 0.028, 0.028, 0.026, 0, -0.172, 0, guardMat, 10);
+      addBoxPart(group, 0.135, 0.032, 0.038, 0, -0.048, 0, guardMat);
+      addBoxPart(group, 0.058, 0.23, 0.022, 0, 0.082, 0, bladeMat);
+      addBoxPart(group, 0.024, 0.21, 0.028, 0, 0.080, 0, ridgeMat);
+      const tip = addBoxPart(group, 0.040, 0.040, 0.020, 0, 0.20, 0, bladeMat);
+      tip.rotation.z = Math.PI / 4;
+      return { group, isTool: true, flames };
+    }
+
+    if (id === ID.Bow || id === ID.Crossbow) {
+      const woodMat = skin(0x7c522b);
+      const stringMat = skin(0xe8e4dc);
+      const gripMat = skin(0x4a2e16);
+      const tipMat = skin(0xb0b6be);
+      const fletchMat = skin(0xd82e22);
+      addBoxPart(group, 0.034, 0.08, 0.036, 0.03, 0, 0, gripMat);
+      const uLimb = addBoxPart(group, 0.028, 0.15, 0.030, 0.005, 0.10, 0, woodMat);
+      uLimb.rotation.z = 0.42;
+      const lLimb = addBoxPart(group, 0.028, 0.15, 0.030, 0.005, -0.10, 0, woodMat);
+      lLimb.rotation.z = -0.42;
+      addCylPart(group, 0.005, 0.005, 0.30, -0.048, 0, 0, stringMat, 6);
+      // Knocked LEGO arrow
+      const arr = addCylPart(group, 0.008, 0.008, 0.24, 0.01, 0, 0, woodMat, 8);
+      arr.rotation.z = Math.PI / 2;
+      addBoxPart(group, 0.032, 0.026, 0.026, 0.13, 0, 0, tipMat);
+      addBoxPart(group, 0.032, 0.032, 0.010, -0.09, 0, 0, fletchMat);
+      return { group, isTool: true, flames };
+    }
+
+    if (id === ID.Shield) {
+      const woodMat = skin(0x8e5c2e);
+      const ironMat = skin(0x5a6068);
+      const goldMat = skin(0xf5c518);
+      addBoxPart(group, 0.22, 0.30, 0.028, 0, 0, 0, woodMat);
+      addBoxPart(group, 0.24, 0.028, 0.034, 0, 0.14, 0, ironMat);
+      addBoxPart(group, 0.24, 0.028, 0.034, 0, -0.14, 0, ironMat);
+      addBoxPart(group, 0.028, 0.30, 0.034, -0.105, 0, 0, ironMat);
+      addBoxPart(group, 0.028, 0.30, 0.034, 0.105, 0, 0, ironMat);
+      const boss = addCylPart(group, 0.034, 0.038, 0.024, 0, 0, -0.022, goldMat, 12);
+      boss.rotation.x = Math.PI / 2;
+      return { group, isTool: true, flames };
+    }
+
+    // 4. POTIONS, BUCKETS, FOOD, INGOTS & GEMS
+    if (
+      id === ID.Bottle ||
+      id === ID.PotionHeal ||
+      id === ID.PotionSpeed ||
+      id === ID.PotionStr ||
+      id === ID.PotionRegen ||
+      id === ID.PotionFire ||
+      id === ID.PotionLeap ||
+      id === ID.PotionGill ||
+      id === ID.PotionVeil ||
+      id === ID.PotionVenom ||
+      id === ID.PotionTar ||
+      id === ID.SplashVenom ||
+      id === ID.SplashTar ||
+      id === ID.Focus ||
+      id === ID.WitchVenom
+    ) {
+      const glassFlask = skin(0xd8f0ff);
+      const liqMat = skin(baseHex);
+      if (id !== ID.Bottle) {
+        liqMat.emissive = new THREE.Color(baseHex);
+        liqMat.emissiveIntensity = 0.35;
+      }
+      const corkMat = skin(0xc8963e);
+      addCylPart(group, 0.068, 0.076, 0.13, 0, -0.03, 0, id === ID.Bottle ? glassFlask : liqMat, 12);
+      addCylPart(group, 0.032, 0.036, 0.06, 0, 0.06, 0, glassFlask, 10);
+      addCylPart(group, 0.038, 0.038, 0.028, 0, 0.10, 0, corkMat, 10);
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Bucket || id === ID.WaterBucket || id === ID.LavaBucket || id === ID.Milk) {
+      const ironMat = skin(0x8e959e);
+      const darkRim = skin(0x50555c);
+      addCylPart(group, 0.095, 0.072, 0.18, 0, -0.01, 0, ironMat, 12);
+      addCylPart(group, 0.102, 0.102, 0.028, 0, 0.075, 0, darkRim, 12);
+      const fillHex = id === ID.WaterBucket ? 0x2a7fff : id === ID.LavaBucket ? 0xff5a12 : id === ID.Milk ? 0xf8f8f4 : 0x262a30;
+      const fillMat = skin(fillHex);
+      if (id === ID.LavaBucket) {
+        fillMat.emissive = new THREE.Color(0xff4500);
+        fillMat.emissiveIntensity = 0.85;
+      }
+      addCylPart(group, 0.086, 0.086, 0.022, 0, 0.082, 0, fillMat, 12);
+      return { group, isTool: false, flames };
+    }
+
+    if (
+      id === ID.Ingot ||
+      id === ID.Gold ||
+      id === ID.Copper ||
+      id === ID.Tin ||
+      id === ID.Chrome ||
+      id === ID.Resin ||
+      id === ID.Scrap ||
+      id === ID.PharaohGold ||
+      id === ID.IllagerBadge
+    ) {
+      const mat = skin(baseHex);
+      const topMat = skin(shiftHex(baseHex, 1.15));
+      addBoxPart(group, 0.22, 0.065, 0.12, 0, -0.02, 0, mat);
+      addBoxPart(group, 0.19, 0.022, 0.095, 0, 0.022, 0, topMat);
+      addStudGrid(group, 0.18, 0.033, 0.09, 2, 1, topMat, 0, 0, true);
+      return { group, isTool: false, flames };
+    }
+
+    if (
+      id === ID.Diamond ||
+      id === ID.Emerald ||
+      id === ID.Sapphire ||
+      id === ID.Amber ||
+      id === ID.Prism ||
+      id === ID.Crystal ||
+      id === ID.EnderPearl ||
+      id === ID.EyeOfEnder ||
+      id === ID.NetherStar ||
+      id === ID.GuardianSpike ||
+      id === ID.VoidCore
+    ) {
+      const gemMat = skin(baseHex);
+      gemMat.emissive = new THREE.Color(baseHex);
+      gemMat.emissiveIntensity = 0.28;
+      addCylPart(group, 0.075, 0.045, 0.09, 0, -0.02, 0, gemMat, 8);
+      addCylPart(group, 0.048, 0.075, 0.06, 0, 0.055, 0, skin(shiftHex(baseHex, 1.25)), 8);
+      addCylPart(group, 0.026, 0.028, 0.022, 0, 0.095, 0, gemMat, 10);
+      return { group, isTool: false, flames };
+    }
+
+    if (d.food) {
+      const foodMat = skin(baseHex);
+      const rimMat = skin(shiftHex(baseHex, 0.80));
+      if (id === ID.Apple || id === ID.Gapple) {
+        if (id === ID.Gapple) {
+          foodMat.emissive = new THREE.Color(0xffb81c);
+          foodMat.emissiveIntensity = 0.35;
+        }
+        addCylPart(group, 0.078, 0.068, 0.13, 0, -0.01, 0, foodMat, 12);
+        addCylPart(group, 0.026, 0.028, 0.022, 0, 0.065, 0, foodMat, 10);
+        addBoxPart(group, 0.045, 0.016, 0.024, 0.024, 0.072, 0, skin(0x3ca842));
+      } else if (id === ID.Steak || id === ID.RawMeat) {
+        addBoxPart(group, 0.18, 0.065, 0.13, -0.02, 0, 0, foodMat);
+        addCylPart(group, 0.022, 0.022, 0.09, 0.08, 0, 0, skin(0xf4f0e4), 8).rotation.z = Math.PI / 2;
+        addStudGrid(group, 0.16, 0.032, 0.11, 2, 1, rimMat, -0.02, 0);
+      } else {
+        addBoxPart(group, 0.19, 0.075, 0.12, 0, 0, 0, foodMat);
+        addStudGrid(group, 0.17, 0.038, 0.10, 2, 1, rimMat);
+      }
+      return { group, isTool: false, flames };
+    }
+
+    // 5. ALL PLACEABLE WORLD BLOCKS: True 3-Course Modular LEGO Sub-Brick Assembly!
+    // Renders the top 2×2 LEGO plate (with 4 hollow studs) + 2 staggered courses of 1×2 LEGO bricks with real 3D seam gaps!
+    const isGrassLike = id === ID.Grass || id === ID.Snow || id === ID.Mycelium || id === ID.Podzol;
+    const topHex =
+      id === ID.Grass
+        ? 0x52a842
+        : id === ID.Snow
+          ? 0xf2f6fa
+          : id === ID.Mycelium
+            ? 0x8a728e
+            : id === ID.Podzol
+              ? 0x6a4424
+              : shiftHex(baseHex, 1.08);
+    const bodyHex = isGrassLike ? 0x7c5432 : baseHex;
+    const matTop = skin(topHex);
+    const matA = skin(bodyHex);
+    const matB = skin(shiftHex(bodyHex, 0.90));
+    const matC = skin(shiftHex(bodyHex, 1.06));
+    const seamMat = skin(shiftHex(bodyHex, 0.35));
+
+    if (d.slab) {
+      addBoxPart(group, s, s * 0.48, s, 0, -hs + s * 0.24, 0, matTop);
+      addStudGrid(group, s * 0.96, -hs + s * 0.48, s * 0.96, 2, 2, matTop, 0, 0, true);
+      return { group, isTool: false, flames };
+    }
+
+    if (d.stairs) {
+      addBoxPart(group, s, s * 0.48, s, 0, -hs + s * 0.24, 0, matA);
+      addStudGrid(group, s * 0.96, -hs + s * 0.48, s * 0.48, 2, 1, matA, 0, -s * 0.24, true);
+      addBoxPart(group, s, s * 0.48, s * 0.48, 0, s * 0.24, s * 0.26, matTop);
+      addStudGrid(group, s * 0.96, hs, s * 0.48, 2, 1, matTop, 0, s * 0.26, true);
+      return { group, isTool: false, flames };
+    }
+
+    // Core dark seam spine (visible in the 0.1 mm gaps between stacked sub-bricks)
+    addBoxPart(group, s * 0.94, s * 0.94, s * 0.94, 0, 0, 0, seamMat);
+
+    // Bottom course (y: -hs to -hs + 0.35*s): two 1×2 bricks side by side along X
+    const c1H = s * 0.34;
+    const c1Y = -hs + c1H / 2;
+    addBoxPart(group, s * 0.485, c1H, s * 0.99, -s * 0.255, c1Y, 0, matA);
+    addBoxPart(group, s * 0.485, c1H, s * 0.99, s * 0.255, c1Y, 0, matB);
+
+    // Middle course (y: -hs + 0.365*s to -hs + 0.715*s): two 2×1 bricks staggered along Z
+    const c2H = s * 0.34;
+    const c2Y = -hs + s * 0.365 + c2H / 2;
+    addBoxPart(group, s * 0.99, c2H, s * 0.485, 0, c2Y, -s * 0.255, matC);
+    addBoxPart(group, s * 0.99, c2H, s * 0.485, 0, c2Y, s * 0.255, matA);
+
+    // Top course (y: hs - 0.265*s to hs): 2×2 LEGO plate + 4 bevelled hollow studs
+    const c3H = s * 0.265;
+    const c3Y = hs - c3H / 2;
+    addBoxPart(group, s * 1.0, c3H, s * 1.0, 0, c3Y, 0, matTop);
+    addStudGrid(group, s * 0.96, hs, s * 0.96, 2, 2, matTop, 0, 0, true);
+
+    // If this block is an Ore, add protruding 3D gemstone studs on the front/side faces!
+    const oreCol =
+      id === ID.CoalOre
+        ? 0x1e2024
+        : id === ID.IronOre
+          ? 0xd8af93
+          : id === ID.GoldOre
+            ? 0xf5c518
+            : id === ID.DiamondOre
+              ? 0x4ef2f7
+              : id === ID.EmeraldOre
+                ? 0x2ed868
+                : id === ID.RedOre
+                  ? 0xe8241c
+                  : id === ID.LapisOre
+                    ? 0x2456d8
+                    : id === ID.CopperOre
+                      ? 0xd87238
+                      : id === ID.TinOre
+                        ? 0xc4d0dc
+                        : id === ID.AmberOre
+                          ? 0xf59818
+                          : id === ID.ChromeOre
+                            ? 0xdce6f2
+                            : id === ID.SapphireOre
+                              ? 0x2868f5
+                              : 0;
+    if (oreCol) {
+      const oMat = skin(oreCol);
+      for (const [ox, oy] of [[-0.045, 0.02], [0.042, -0.035], [0.01, 0.048]] as const) {
+        const st = addCylPart(group, 0.018, 0.020, 0.018, ox, oy, -hs - 0.008, oMat, 8);
+        st.rotation.x = Math.PI / 2;
+      }
+    }
+
+    return { group, isTool: false, flames };
+  }
+
+  // Held 3D LEGO Item/Block gripped inside the first-person Minifig C-clamp hand
+  const heldBrickGroup = new THREE.Group();
+  let heldFlames: THREE.Object3D[] = [];
+  let heldIsTool = false;
+  let lastHeldId = -1;
+  let lastHeldPlastic = !plasticOn;
+  heldBrickGroup.position.set(-0.04, 0.04, -0.08);
+  heldBrickGroup.rotation.set(0.18, -0.42, 0.08);
+  viewBrick.add(heldBrickGroup);
+
+  // Articulated First-Person LEGO Minifig Forearm + Wrist Pin + Open 270° C-Clamp Claw Hand
+  const fpsArmGroup = new THREE.Group();
+  const fpsForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.068, 0.078, 0.28, 14), fpsSleeveMat);
+  fpsForearm.position.set(0.11, -0.14, 0.16);
+  fpsForearm.rotation.set(1.05, -0.32, 0.28);
+  fpsArmGroup.add(fpsForearm);
+
+  const fpsWrist = new THREE.Mesh(new THREE.CylinderGeometry(0.044, 0.046, 0.065, 12), fpsSkinMat);
+  fpsWrist.position.set(0.045, -0.045, 0.035);
+  fpsWrist.rotation.set(1.05, -0.32, 0.28);
+  fpsArmGroup.add(fpsWrist);
+
+  const fpsClaw = new THREE.Group();
+  fpsClaw.position.set(0.01, -0.01, -0.02);
+  fpsClaw.rotation.set(0.35, -0.35, 0.18);
+  const clawOuter = new THREE.Mesh(geoClaw(0.076, 0.085), fpsSkinMat);
+  clawOuter.rotation.z = Math.PI / 2;
+  const clawBore = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.048, 0.082, 12), fpsDarkMat);
+  clawBore.rotation.z = Math.PI / 2;
+  fpsClaw.add(clawOuter, clawBore);
+  fpsArmGroup.add(fpsClaw);
+  viewBrick.add(fpsArmGroup);
+
+  // Positioned at z = -0.27 with scale 0.56 so all 3D parts stay > camera.near (0.08) and < player HW (0.34)
+  // while using full hardware Z-buffer depth testing for crisp 3D self-occlusion!
+  viewBrick.scale.setScalar(0.56);
+  viewBrick.position.set(0.20, -0.16, -0.27);
   camera.add(viewBrick);
 
   const fig = makeMinifig();
+  const figHeldGroup = new THREE.Group();
+  figHeldGroup.position.set(-0.08, -0.58, -0.10);
+  fig.armR.add(figHeldGroup);
   fig.group.visible = false;
   if (plasticOn) {
     fig.group.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
-      if (mesh.isMesh) mesh.castShadow = true;
+      if (mesh.isMesh && !mesh.userData.noShadow) mesh.castShadow = true;
     });
   }
   scene.add(fig.group);
+
+  let figArmorKey = "";
+  const figHelmGrp = new THREE.Group();
+  const figChestGrp = new THREE.Group();
+  const figLegsGrpL = new THREE.Group();
+  const figLegsGrpR = new THREE.Group();
+  (fig.group.userData.head ?? fig.group).add(figHelmGrp);
+  fig.group.add(figChestGrp);
+  fig.legL.add(figLegsGrpL);
+  fig.legR.add(figLegsGrpR);
+
+  function armorHex(id: number): number {
+    if (id === ID.HelmLeather || id === ID.ChestLeather || id === ID.LegsLeather || id === ID.BootsLeather) return 0x8d542c;
+    if (id === ID.HelmIron || id === ID.ChestIron || id === ID.LegsIron || id === ID.BootsIron) return 0xc8d0d8;
+    if (id === ID.HelmGold || id === ID.ChestGold || id === ID.LegsGold || id === ID.BootsGold) return 0xf5c518;
+    if (id === ID.HelmCrystal || id === ID.ChestCrystal || id === ID.LegsCrystal || id === ID.BootsCrystal) return 0x3ed8e8;
+    if (id === ID.HelmNetherite || id === ID.ChestNetherite || id === ID.LegsNetherite || id === ID.BootsNetherite) return 0x383238;
+    return 0;
+  }
+
+  function updateFigArmor() {
+    const key = `${armor[0]}:${armor[1]}:${armor[2]}:${armor[3]}`;
+    if (key === figArmorKey) return;
+    figArmorKey = key;
+    for (const grp of [figHelmGrp, figChestGrp, figLegsGrpL, figLegsGrpR]) {
+      while (grp.children.length > 0) grp.remove(grp.children[0]);
+    }
+    if (armor[0]) {
+      const m = skin(armorHex(armor[0]));
+      const trim = skin(shiftHex(armorHex(armor[0]), 0.72));
+      const dome = new THREE.Mesh(geoCyl(0.175, 0.16, 14), m);
+      dome.position.set(0, 0.12, 0);
+      const visor = new THREE.Mesh(geoBox(0.32, 0.055, 0.24), trim);
+      visor.position.set(0, 0.09, -0.06);
+      const crest = new THREE.Mesh(geoBox(0.06, 0.06, 0.28), trim);
+      crest.position.set(0, 0.21, 0);
+      figHelmGrp.add(dome, visor, crest);
+    }
+    if (armor[1]) {
+      const m = skin(armorHex(armor[1]));
+      const trim = skin(shiftHex(armorHex(armor[1]), 0.75));
+      const plate = new THREE.Mesh(geoTrap(0.39, 0.46, 0.36, 0.265), m);
+      plate.position.set(0, 0.74, 0);
+      const pauldronL = new THREE.Mesh(geoBox(0.14, 0.11, 0.28), trim);
+      pauldronL.position.set(-0.23, 0.89, 0);
+      const pauldronR = new THREE.Mesh(geoBox(0.14, 0.11, 0.28), trim);
+      pauldronR.position.set(0.23, 0.89, 0);
+      figChestGrp.add(plate, pauldronL, pauldronR);
+    }
+    if (armor[2]) {
+      const m = skin(armorHex(armor[2]));
+      const cuisseL = new THREE.Mesh(geoBox(0.168, 0.22, 0.198), m);
+      cuisseL.position.set(0, -0.14, 0);
+      const cuisseR = new THREE.Mesh(geoBox(0.168, 0.22, 0.198), m);
+      cuisseR.position.set(0, -0.14, 0);
+      figLegsGrpL.add(cuisseL);
+      figLegsGrpR.add(cuisseR);
+    }
+    if (armor[3]) {
+      const m = skin(armorHex(armor[3]));
+      const bootL = new THREE.Mesh(geoBox(0.172, 0.11, 0.24), m);
+      bootL.position.set(0, -0.365, -0.02);
+      const bootR = new THREE.Mesh(geoBox(0.172, 0.11, 0.24), m);
+      bootR.position.set(0, -0.365, -0.02);
+      figLegsGrpL.add(bootL);
+      figLegsGrpR.add(bootR);
+    }
+  }
 
   type Mob = {
     burn?: number;
@@ -1202,6 +2151,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     bar: { bg: THREE.Sprite; fill: THREE.Sprite } | null;
   };
   const mobs: Mob[] = [];
+  const mobBatchRenderer = new MobBatchRenderer(scene, (hex, opts) => skin(hex, opts));
   const corpses: { mesh: THREE.Object3D; t: number; x: number; y: number; z: number; mats: THREE.Material[] }[] = [];
   // Flying and swimming kinds animate on a clock; walkers animate by distance covered.
   const FLYERS = new Set(["ghast", "phantom", "bat", "bee", "vex", "blaze", "dragon", "wither", "parrot", "wisp", "squid", "guardian"]);
@@ -1311,6 +2261,15 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const moved = Math.hypot(m.x - v.lx, m.z - v.lz);
     v.lx = m.x;
     v.lz = m.z;
+    const dxCam = m.x - camera.position.x;
+    const dzCam = m.z - camera.position.z;
+    const camDistSq = dxCam * dxCam + dzCam * dzCam;
+    // Frustum culling for limb/head animations when mob is behind camera (> 6m away)
+    if (camDistSq > 36 && v.hurtT <= 0 && v.barT <= 0) {
+      const fwdX = -Math.sin(camera.rotation.y);
+      const fwdZ = -Math.cos(camera.rotation.y);
+      if (dxCam * fwdX + dzCam * fwdZ < -2.5) return;
+    }
     const flyer = FLYERS.has(m.kind);
     if (flyer || m.kind === "slime" || m.kind === "frog") {
       v.gait = elapsed * (m.kind === "slime" ? 6 : 8) + (m.phase ?? 0);
@@ -1322,11 +2281,60 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
     const stride = Math.sin(v.gait);
     const idle = Math.sin(elapsed * 1.7 + (m.phase ?? 0)) * 0.05 * (1 - v.amp);
+    const zombiePose = m.kind === "walker" || m.kind === "husk" || m.kind === "drowned";
     for (let i = 0; i < m.legs.length; i++) {
       const part = m.legs[i];
       if (!part) continue;
       const arm = i >= 2;
-      part.rotation.x = stride * (i % 2 === 0 ? 0.62 : -0.62) * v.amp + (arm ? idle : 0);
+      if (arm && zombiePose) {
+        part.rotation.x = -1.25 + stride * (i % 2 === 0 ? 0.18 : -0.18) * v.amp + idle * 1.5;
+      } else {
+        part.rotation.x = stride * (i % 2 === 0 ? 0.62 : -0.62) * v.amp + (arm ? idle : 0);
+      }
+    }
+    // Articulated LEGO Head Tracking & Dynamic Creature Parts
+    const ud = m.mesh.userData;
+    if (ud.collar) ud.collar.visible = !!m.tame;
+    if (ud.head && camDistSq < 576) {
+      const head = ud.head as THREE.Object3D;
+      let targetYaw = Math.sin(elapsed * 0.9 + (m.phase ?? 0) * 2.3) * 0.22 * (1 - v.amp * 0.6);
+      let targetPitch = Math.cos(elapsed * 0.7 + (m.phase ?? 0)) * 0.06;
+      if (camDistSq < 110) {
+        const toPlayerYaw = Math.atan2(m.x - player.x, m.z - player.z);
+        let relYaw = toPlayerYaw - m.yaw;
+        while (relYaw > Math.PI) relYaw -= Math.PI * 2;
+        while (relYaw < -Math.PI) relYaw += Math.PI * 2;
+        if (Math.abs(relYaw) < 1.35) {
+          targetYaw = THREE.MathUtils.clamp(relYaw, -0.78, 0.78);
+          const dy = (player.y + 1.4) - (m.y + v.h * 0.8);
+          const dist2d = Math.max(0.5, Math.sqrt(camDistSq));
+          targetPitch = THREE.MathUtils.clamp(-Math.atan2(dy, dist2d) * 0.65, -0.42, 0.42);
+        }
+      }
+      if (m.kind === "goat" && (m.mode === "aim" || m.mode === "charge")) {
+        targetPitch = 0.55;
+      } else if ((m.kind === "sheep" || m.kind === "cow") && v.amp < 0.08 && Math.sin(elapsed * 0.45 + (m.phase ?? 0)) > 0.65) {
+        targetPitch = 0.42; // Grazing grass animation
+      }
+      const lerpK = Math.min(1, dt * 8);
+      head.rotation.y += (targetYaw - head.rotation.y) * lerpK;
+      head.rotation.x += (targetPitch - head.rotation.x) * lerpK;
+    }
+    if (ud.tail && camDistSq < 400) {
+      const tail = ud.tail as THREE.Object3D;
+      const wagSpeed = m.tame ? 9.5 : 4.2;
+      tail.rotation.y = Math.sin(elapsed * wagSpeed + (m.phase ?? 0)) * (m.tame ? 0.38 : 0.22 + v.amp * 0.25);
+    }
+    if (ud.throat && camDistSq < 256) {
+      const throat = ud.throat as THREE.Object3D;
+      const croak = Math.max(0, Math.sin(elapsed * 3.2 + (m.phase ?? 0) * 3));
+      throat.scale.setScalar(1 + croak * 0.38);
+    }
+    if (ud.topShell && camDistSq < 400) {
+      const topShell = ud.topShell as THREE.Object3D;
+      const peek = camDistSq < 196 ? 0.22 + Math.sin(elapsed * 2.4 + (m.phase ?? 0)) * 0.06 : 0;
+      topShell.position.y += ((0.73 + peek) - topShell.position.y) * Math.min(1, dt * 6);
+      topShell.rotation.y = peek > 0.02 ? elapsed * 0.9 : 0;
     }
     // Hurt flash: hot red on every plastic part, fading out.
     if (v.hurtT > 0) {
@@ -1383,17 +2391,15 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
   }
 
-  /** Death: the figure topples, flashes, then pops into a puff of studs. */
+  /** Death: the figure unclips into a physical LEGO Brick Ragdoll disassembly! */
   function topple(m: Mob) {
     const v = m.vis;
     if (v) {
       dropBar(v);
       if (v.blob) v.blob.visible = false;
     }
-    if (m.mesh.parent !== scene || reduceMotion) {
-      scene.remove(m.mesh);
-      return;
-    }
+    // Extract actual ABS plastic colors from the mob's LEGO parts and launch tumbling 3D bricks & plates
+    const colors: string[] = [];
     const mats: THREE.Material[] = [];
     m.mesh.traverse((o) => {
       const mesh = o as THREE.Mesh;
@@ -1401,10 +2407,25 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       const list = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       for (const mat of list) {
         const std = mat as THREE.MeshStandardMaterial;
+        if (std.color && colors.length < 16) colors.push("#" + std.color.getHexString());
         if (std.emissive) std.emissive.setHex(0x8a1010);
         mats.push(mat);
       }
     });
+    spawnMobRagdoll(m.x, m.y + 0.45, m.z, colors.length ? colors : ["#e23b2f", "#1f5fbf", "#f3d37a"], 14);
+    if (m.mesh.parent !== scene || reduceMotion) {
+      scene.remove(m.mesh);
+      return;
+    }
+    // Give each direct sub-assembly child of the mob a mechanical unclipping velocity so limbs/head separate
+    for (const child of m.mesh.children) {
+      if (child === v?.blob) continue;
+      child.userData.ragVx = (Math.random() - 0.5) * 2.4;
+      child.userData.ragVy = 1.2 + Math.random() * 2.2;
+      child.userData.ragVz = (Math.random() - 0.5) * 2.4;
+      child.userData.ragRx = (Math.random() - 0.5) * 7.5;
+      child.userData.ragRz = (Math.random() - 0.5) * 7.5;
+    }
     corpses.push({ mesh: m.mesh, t: 0, x: m.x, y: m.y, z: m.z, mats });
     if (corpses.length > 24) scene.remove(corpses.shift()!.mesh);
   }
@@ -1413,13 +2434,25 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     for (let i = corpses.length - 1; i >= 0; i--) {
       const c = corpses[i];
       c.t += dt;
-      const fall = Math.min(1, c.t / 0.38);
-      c.mesh.rotation.z = (1 - (1 - fall) * (1 - fall)) * (Math.PI / 2) * 0.92;
+      // Unclip and tumble individual LEGO limbs/bricks during death ragdoll
+      for (const child of c.mesh.children) {
+        if (child.userData.ragVy !== undefined) {
+          child.userData.ragVy -= 11.5 * dt;
+          child.position.x += child.userData.ragVx * dt;
+          child.position.y = Math.max(0.08, child.position.y + child.userData.ragVy * dt);
+          child.position.z += child.userData.ragVz * dt;
+          if (child.position.y <= 0.085 && child.userData.ragVy < 0) {
+            child.userData.ragVy = -child.userData.ragVy * 0.42;
+            child.userData.ragVx *= 0.68;
+            child.userData.ragVz *= 0.68;
+          }
+          child.rotation.x += child.userData.ragRx * dt;
+          child.rotation.z += child.userData.ragRz * dt;
+        }
+      }
       const base = (c.mesh.userData.baseScale ??= c.mesh.scale.x) as number;
       if (c.t > 0.55) c.mesh.scale.setScalar(base * Math.max(0.001, 1 - (c.t - 0.55) / 0.3));
       if (c.t > 0.85) {
-        burst(c.x, c.y + 0.5, c.z, "#f4f1ea", 10);
-        burst(c.x, c.y + 0.5, c.z, "#d8d2c4", 6);
         scene.remove(c.mesh);
         corpses.splice(i, 1);
       }
@@ -1439,22 +2472,24 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     applyQuality();
     plasticOn = settings.realistic;
     renderer.toneMapping = settings.realistic ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
-    renderer.toneMappingExposure = settings.realistic ? 1.08 : 1;
+    renderer.toneMappingExposure = settings.realistic ? 1.02 : 1;
     renderer.shadowMap.enabled = settings.realistic;
     scene.environment = settings.realistic ? envTex : null;
-    scene.environmentIntensity = settings.realistic ? 0.35 : 1;
+    scene.environmentIntensity = settings.realistic ? 0.36 : 1;
     sun.castShadow = settings.realistic;
+    mobBatchRenderer.setShadows(settings.realistic, settings.realistic);
     opaqueMat = settings.realistic ? opaqueStd : opaqueLam;
     glassMat = settings.realistic ? glassStd : glassLam;
     waterMat = settings.realistic ? waterStd : waterLam;
     plantMat = settings.realistic ? plantStd : plantLam;
-    for (const list of meshes.values()) {
+    for (const [k, list] of meshes.entries()) {
+      const tier = chunkTier.get(k) ?? 0;
       for (const mesh of list) {
         if (mesh.renderOrder === 2) mesh.material = glassMat;
         else if (mesh.renderOrder === 1) mesh.material = waterMat;
         else if (mesh.renderOrder === 3) mesh.material = plantMat;
         else mesh.material = opaqueMat;
-        mesh.castShadow = settings.realistic && mesh.renderOrder !== 1 && mesh.renderOrder !== 3;
+        mesh.castShadow = settings.realistic && tier === 0 && mesh.renderOrder === 0;
         mesh.receiveShadow = settings.realistic;
       }
     }
@@ -1505,7 +2540,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
   }
 
-  let worldTime = 0.22;
+  const MC_DAY_SECONDS = 1200; // Exact vanilla Minecraft day/night length: 20 minutes = 1,200 seconds = 24,000 ticks
+  let worldDays = 1;
+  let worldTime = 0.0416; // 07:00 AM morning
   let orbit = 0.4;
   let lookDx = 0;
   let lookDy = 0;
@@ -1580,7 +2617,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   };
   const rockets: { mesh: THREE.Mesh; t: number; color: string; trail: number }[] = [];
   const shots: Shot[] = [];
-  type Drop = { id: number; n: number; x: number; y: number; z: number; vy: number; mesh: THREE.Mesh };
+  type Drop = { id: number; n: number; x: number; y: number; z: number; vy: number; mesh: THREE.Object3D };
   const drops: Drop[] = [];
   let jumpTap = -10;
   let elapsed = 0;
@@ -1681,6 +2718,18 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       .filter(Boolean)
       .join(" ");
     hud.heldEnch = enchSummary(hotbar[slot]);
+    if (panel === "enchant") {
+      let shelves = 0;
+      for (let dy = 0; dy <= 1; dy++) {
+        for (let dz = -2; dz <= 2; dz++) {
+          for (let dx = -2; dx <= 2; dx++) {
+            if (Math.max(Math.abs(dx), Math.abs(dz)) !== 2) continue;
+            if (world.get(focus.x + dx, focus.y + dy, focus.z + dz) === ID.Bookshelf) shelves++;
+          }
+        }
+      }
+      hud.bookshelves = Math.min(15, shelves);
+    }
     hud.creative = creative;
     hud.flying = flying;
     hud.hammer = hammer;
@@ -1697,6 +2746,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     hud.readyChunks = meshes.size;
     hud.flat = flat;
     hud.timeLabel = timeWord();
+    hud.timeClock = formatClockTime(worldTime);
+    hud.timeTicks = Math.floor(worldTime * 24000);
+    hud.timeProgress = worldTime;
+    hud.dayCount = worldDays;
     const trader = traderOf(traderRole);
     hud.trader = trader.name;
     hud.traderBlurb = trader.blurb;
@@ -1759,14 +2812,25 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     pub.hasSave = hasSaveFlag;
   }
 
-  function timeWord() {
-    const ang = worldTime * Math.PI * 2;
+  function formatClockTime(t = worldTime) {
+    const totalMinutes = Math.floor(((t * 24 * 60) + 360) % 1440);
+    const hours24 = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    const padMin = minutes < 10 ? "0" + minutes : String(minutes);
+    const ampm = hours24 >= 12 ? "PM" : "AM";
+    const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
+    return `${hours12}:${padMin} ${ampm}`;
+  }
+
+  function timeWord(t = worldTime) {
+    const ang = t * Math.PI * 2;
     const sunH = Math.sin(ang);
     const rising = Math.cos(ang) > 0;
     if (sunH > 0.45) return "Day";
-    if (sunH > 0.05) return rising ? "Morning" : "Evening";
-    if (sunH > -0.35) return rising ? "Dawn" : "Dusk";
-    return "Night";
+    if (sunH > 0.12) return rising ? "Morning" : "Afternoon";
+    if (sunH > -0.15) return rising ? "Sunrise" : "Sunset";
+    if (sunH > -0.45) return rising ? "Dawn" : "Dusk";
+    return sunH < -0.85 ? "Midnight" : "Night";
   }
 
   let clockHeard = "";
@@ -1775,10 +2839,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       clockHeard = "";
       return;
     }
-    const word = timeWord();
-    if (word === clockHeard) return;
-    clockHeard = word;
-    say(word);
+    const label = `${timeWord()} · ${formatClockTime(worldTime)} (Day ${worldDays})`;
+    if (label === clockHeard) return;
+    clockHeard = label;
+    say(`🕒 ${label}`, 2400);
   }
 
   function addInv(id: number, n: number) {
@@ -1897,6 +2961,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     for (const c of corpses) scene.remove(c.mesh);
     corpses.length = 0;
     mobs.length = 0;
+    mobBatchRenderer.update([], camera, elapsed, settings.studs, STUD_H);
     for (const s of shots) scene.remove(s.mesh);
     shots.length = 0;
     for (const d of drops) scene.remove(d.mesh);
@@ -1948,6 +3013,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     player.pitch = -0.25;
     resetVitals();
     hammer = false;
+    worldTime = 0.0416; // 07:00 AM morning
+    worldDays = 1;
     for (const k of Object.keys(inv)) delete inv[Number(k)];
     if (creative) resetHotbarCreative();
     else hotbar = [0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -1979,6 +3046,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     player.yaw = Number.isFinite(data.yaw) ? data.yaw : 0;
     player.pitch = Number.isFinite(data.pitch) ? data.pitch : -0.2;
     player.vx = player.vy = player.vz = 0;
+    worldTime = typeof data.worldTime === "number" && Number.isFinite(data.worldTime) ? ((data.worldTime % 1) + 1) % 1 : 0.0416;
+    worldDays = typeof data.worldDays === "number" && Number.isFinite(data.worldDays) && data.worldDays >= 1 ? Math.floor(data.worldDays) : 1;
     health = data.health || 20;
     hunger = data.hunger ?? 20;
     found.clear();
@@ -2064,7 +3133,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     stream(narrow ? 6 : 10);
   }
 
-  function surfaceToMesh(surf: Surface, material: THREE.Material, order: number) {
+  function surfaceToMesh(surf: Surface, material: THREE.Material, order: number, tier = 0) {
     if (surf.pos.length === 0) return null;
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.Float32BufferAttribute(surf.pos, 3));
@@ -2073,7 +3142,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (surf.col.length === surf.pos.length) geo.setAttribute("color", new THREE.Float32BufferAttribute(surf.col, 3));
     if (surf.tan.length * 3 === surf.pos.length * 4) geo.setAttribute("tangent", new THREE.Float32BufferAttribute(surf.tan, 4));
     const mesh = new THREE.Mesh(geo, material);
-    mesh.castShadow = settings.realistic && order !== 1 && order !== 3;
+    mesh.castShadow = settings.realistic && tier === 0 && order === 0;
     mesh.receiveShadow = settings.realistic;
     mesh.renderOrder = order;
     return mesh;
@@ -2096,10 +3165,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     chunkTier.set(key, tier);
     const list: THREE.Mesh[] = [];
     for (const mesh of [
-      surfaceToMesh(built.opaque, opaqueMat, 0),
-      surfaceToMesh(built.glass, glassMat, 2),
-      surfaceToMesh(built.water, waterMat, 1),
-      surfaceToMesh(built.plant, plantMat, 3),
+      surfaceToMesh(built.opaque, opaqueMat, 0, tier),
+      surfaceToMesh(built.glass, glassMat, 2, tier),
+      surfaceToMesh(built.water, waterMat, 1, tier),
+      surfaceToMesh(built.plant, plantMat, 3, tier),
     ]) {
       if (!mesh) continue;
       chunkRoot.add(mesh);
@@ -2478,7 +3547,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (id === ID.Mushroom || id === ID.MushroomRed) bumpQuest("break", "shroom");
     if (id === ID.Web) bumpQuest("break", "web");
     if (id === ID.EndCrystal) popCrystal(x, y, z);
-    burst(x + 0.5, y + 0.5, z + 0.5, block.color, 14);
+    burstModularBlock(x + 0.5, y + 0.5, z + 0.5, block);
     audio.break();
     swing = 1;
     saveDirty = true;
@@ -2627,7 +3696,20 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       const near = site && Math.hypot(x - site.x, z - site.z) < 48;
       const lm = world.nearestLandmark(x, z);
       const lmKind = lm && Math.hypot(x - lm.x, z - lm.z) < 40 ? lm.kind : null;
-      stockChest(bin, x, y, z, world.seed, lmKind === "monument" ? "deep" : lmKind === "mansion" ? "hamlet" : lmKind ? "nether" : near ? "hamlet" : "wild");
+      const lootPool =
+        lmKind === "monument" ||
+        lmKind === "mansion" ||
+        lmKind === "pyramid" ||
+        lmKind === "temple" ||
+        lmKind === "witch_hut" ||
+        lmKind === "castle"
+          ? lmKind
+          : lmKind
+            ? "nether"
+            : near
+              ? "hamlet"
+              : "wild";
+      stockChest(bin, x, y, z, world.seed, lootPool);
     }
     if (next === "furnace") ensureFurnace(x + "," + y + "," + z, x, y, z);
     if (phase !== "inventory") {
@@ -2659,13 +3741,47 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       id === ID.RedTorch || id === ID.RedTorchOn ||
       id === ID.Repeater || id === ID.RepeaterOn ||
       id === ID.Comparator || id === ID.ComparatorOn ||
+      id === ID.Observer || id === ID.ObserverOn ||
+      id === ID.Daylight || id === ID.DaylightInv ||
+      id === ID.Target ||
       id === ID.Lamp || id === ID.LampOn ||
-      id === ID.Piston || id === ID.Note || id === ID.Dispenser
+      id === ID.Piston || id === ID.Note || id === ID.Dispenser ||
+      id === ID.Door || id === ID.DoorOpen ||
+      id === ID.Gate || id === ID.GateOpen ||
+      id === ID.TNT
     );
   }
 
-  function isDirectional(id: number) {
-    return id === ID.Repeater || id === ID.RepeaterOn || id === ID.Comparator || id === ID.ComparatorOn;
+  function containerSignalAt(x: number, y: number, z: number): number {
+    const id = world.get(x, y, z);
+    const key = x + "," + y + "," + z;
+    if (id === ID.Chest || id === ID.Barrel || id === ID.ShulkerBox) {
+      const bin = chests.get(key);
+      if (!bin) return 0;
+      let total = 0;
+      let slotsUsed = 0;
+      for (let i = 0; i < bin.ids.length; i++) {
+        if (bin.ids[i] > 0 && (bin.ns[i] ?? 0) > 0) {
+          slotsUsed++;
+          total += Math.min(64, bin.ns[i]);
+        }
+      }
+      if (slotsUsed === 0) return 0;
+      return Math.min(15, 1 + Math.floor((total / (27 * 64)) * 14));
+    }
+    if (id === ID.Furnace) {
+      const f = furnaces.get(key);
+      if (!f) return 0;
+      const total = (f.in ? f.inN : 0) + (f.fuel ? f.fuelN : 0) + (f.out ? f.outN : 0);
+      if (total <= 0) return 0;
+      return Math.min(15, 1 + Math.floor((total / (3 * 64)) * 14));
+    }
+    if (id === ID.Jukebox) {
+      const disc = jukeDiscs.get(key);
+      if (!disc) return 0;
+      return Math.min(15, Math.max(1, (disc - ID.DiscA + 1) * 3));
+    }
+    return -1;
   }
 
   // What cell (fx,fy,fz) emits toward the adjacent cell (tx,ty,tz),
@@ -2678,6 +3794,18 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       return 15;
     }
     if (id === ID.LeverOn || id === ID.PlateOn) return 15;
+    if (id === ID.Daylight || id === ID.DaylightInv || id === ID.Target) {
+      return levels.get(rsKey(fx, fy, fz)) ?? 0;
+    }
+    if (id === ID.Observer || id === ID.ObserverOn) {
+      const k = rsKey(fx, fy, fz);
+      if ((obsPulse.get(k) ?? 0) <= 0) return 0;
+      const c = comps.get(k);
+      if (!c) return 15;
+      const d = RS_DIRS[c.dir];
+      if (fx + d[0] === tx && fz + d[1] === tz && fy === ty) return 15;
+      return 0;
+    }
     if (id === ID.Dust || id === ID.DustOn) return levels.get(rsKey(fx, fy, fz)) ?? 0;
     if (id === ID.Repeater || id === ID.RepeaterOn) {
       const c = comps.get(rsKey(fx, fy, fz));
@@ -2729,6 +3857,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (!cells.length) return;
     const levels = new Map<string, number>();
     for (const c of cells) levels.set(rsKey(c.x, c.y, c.z), power.get(rsKey(c.x, c.y, c.z)) ?? 0);
+    const sunElev = Math.sin(worldTime * Math.PI * 2);
+    const daySig = Math.round(Math.max(0, sunElev) * 15 * (1 - wxCur.dark * 0.4));
+    const nightSig = Math.round(Math.max(0, -sunElev) * 15);
     // Solve to a fixpoint.
     for (let pass = 0; pass < 14; pass++) {
       let changed = false;
@@ -2737,6 +3868,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         let next = 0;
         if (c.id === ID.LeverOn || c.id === ID.PlateOn) next = 15;
         else if (c.id === ID.Lever || c.id === ID.Plate) next = 0;
+        else if (c.id === ID.Daylight) next = daySig;
+        else if (c.id === ID.DaylightInv) next = nightSig;
+        else if (c.id === ID.Target) next = (obsPulse.get(k) ?? 0) > 0 ? 15 : 0;
+        else if (c.id === ID.Observer || c.id === ID.ObserverOn) next = (obsPulse.get(k) ?? 0) > 0 ? 15 : 0;
         else if (c.id === ID.RedTorch || c.id === ID.RedTorchOn) {
           // Inverter: lit unless its support block is powered.
           next = inputAt(c.x, c.y - 1, c.z, levels) > 0 ? 0 : 15;
@@ -2748,10 +3883,20 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           const comp = comps.get(k);
           if (comp) {
             const d = RS_DIRS[comp.dir];
-            const back = emittedToward(c.x - d[0], c.y, c.z - d[1], c.x, c.y, c.z, levels);
+            const bx = c.x - d[0];
+            const bz = c.z - d[1];
+            const contSig = containerSignalAt(bx, c.y, bz);
+            const back = contSig >= 0 ? contSig : emittedToward(bx, c.y, bz, c.x, c.y, c.z, levels);
             const sideA = emittedToward(c.x + d[1], c.y, c.z + d[0], c.x, c.y, c.z, levels);
             const sideB = emittedToward(c.x - d[1], c.y, c.z - d[0], c.x, c.y, c.z, levels);
-            next = back > 0 && back >= Math.max(sideA, sideB) ? back : 0;
+            const maxSide = Math.max(sideA, sideB);
+            if (comp.delay === 2) {
+              // Subtract mode
+              next = Math.max(0, back - maxSide);
+            } else {
+              // Compare mode
+              next = back > 0 && back >= maxSide ? back : 0;
+            }
           }
         }
         if ((levels.get(k) ?? 0) !== next) {
@@ -2771,6 +3916,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       else if ((c.id === ID.RedTorch || c.id === ID.RedTorchOn)) want = lvl > 0 ? ID.RedTorchOn : ID.RedTorch;
       else if ((c.id === ID.Repeater || c.id === ID.RepeaterOn)) want = repOut.get(k) ? ID.RepeaterOn : ID.Repeater;
       else if ((c.id === ID.Comparator || c.id === ID.ComparatorOn)) want = lvl > 0 ? ID.ComparatorOn : ID.Comparator;
+      else if ((c.id === ID.Observer || c.id === ID.ObserverOn)) want = (obsPulse.get(k) ?? 0) > 0 ? ID.ObserverOn : ID.Observer;
       if (want && want !== c.id && world.set(c.x, c.y, c.z, want)) {
         markDirtyAt(c.x, c.z);
         c.id = want;
@@ -2782,13 +3928,25 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       if (c.id === ID.Lamp || c.id === ID.LampOn) {
         const next = inputAt(c.x, c.y, c.z, levels) > 0 ? ID.LampOn : ID.Lamp;
         if (next !== c.id && world.set(c.x, c.y, c.z, next)) markDirtyAt(c.x, c.z);
+      } else if (c.id === ID.Door || c.id === ID.DoorOpen) {
+        const on = inputAt(c.x, c.y, c.z, levels) > 0;
+        const next = on ? ID.DoorOpen : ID.Door;
+        if (next !== c.id && world.set(c.x, c.y, c.z, next)) markDirtyAt(c.x, c.z);
+      } else if (c.id === ID.Gate || c.id === ID.GateOpen) {
+        const on = inputAt(c.x, c.y, c.z, levels) > 0;
+        const next = on ? ID.GateOpen : ID.Gate;
+        if (next !== c.id && world.set(c.x, c.y, c.z, next)) markDirtyAt(c.x, c.z);
+      } else if (c.id === ID.TNT) {
+        const on = inputAt(c.x, c.y, c.z, levels) > 0;
+        if (on && !fuses.some((f) => f.x === c.x && f.y === c.y && f.z === c.z)) {
+          fuses.push({ x: c.x, y: c.y, z: c.z, t: 2.1 });
+          audio.place();
+          say("Redstone ignited TNT!");
+        }
       } else if (c.id === ID.Piston) {
         const on = inputAt(c.x, c.y, c.z, levels) > 0;
         if (on && !pistonHot.has(k)) {
           pistonHot.add(k);
-          // Pistons placed with a facing comp push along their facing (the
-          // repeater convention); older pistons without a comp keep the
-          // original upward push.
           const comp = comps.get(k);
           const d = comp ? RS_DIRS[comp.dir] : null;
           const tx = d ? c.x + d[0] : c.x;
@@ -2839,16 +3997,100 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   }
 
   // One redstone tick = 0.1 s. Repeaters sample their back input and
-  // flip their latched output after their configured delay.
+  // flip their latched output after their configured delay; Observers
+  // watch the cell in front of them and emit a 2-tick pulse when it changes;
+  // Daylight sensors refresh when solar power shifts; Hoppers transfer items.
   function tickRedstone(dt: number) {
     rsAcc += dt;
+    hopperAcc += dt;
+    if (hopperAcc >= 0.8) {
+      hopperAcc = 0;
+      const px = Math.floor(player.x);
+      const py = Math.floor(player.y);
+      const pz = Math.floor(player.z);
+      for (let dy = -5; dy <= 5; dy++) {
+        for (let dz = -10; dz <= 10; dz++) {
+          for (let dx = -10; dx <= 10; dx++) {
+            const hx = px + dx;
+            const hy = py + dy;
+            const hz = pz + dz;
+            if (world.get(hx, hy, hz) !== ID.Hopper) continue;
+            if (inputAt(hx, hy, hz, power) > 0) continue; // Redstone locks hoppers
+            const aboveId = world.get(hx, hy + 1, hz);
+            const belowId = world.get(hx, hy - 1, hz);
+            let moved = false;
+            if (aboveId === ID.Furnace && (belowId === ID.Chest || belowId === ID.Barrel || belowId === ID.ShulkerBox)) {
+              const f = furnaces.get(hx + "," + (hy + 1) + "," + hz);
+              if (f && f.out > 0 && f.outN > 0) {
+                const bin = ensureChest(hx + "," + (hy - 1) + "," + hz);
+                const slotI = bin.ids.findIndex((id, i) => id === f.out || (bin.ns[i] ?? 0) === 0);
+                if (slotI >= 0) {
+                  bin.ids[slotI] = f.out;
+                  bin.ns[slotI] = (bin.ns[slotI] ?? 0) + 1;
+                  f.outN -= 1;
+                  if (f.outN <= 0) f.out = 0;
+                  moved = true;
+                }
+              }
+            } else if ((aboveId === ID.Chest || aboveId === ID.Barrel || aboveId === ID.ShulkerBox) && (belowId === ID.Chest || belowId === ID.Barrel || belowId === ID.ShulkerBox)) {
+              const src = chests.get(hx + "," + (hy + 1) + "," + hz);
+              if (src) {
+                const sIdx = src.ids.findIndex((id, i) => id > 0 && (src.ns[i] ?? 0) > 0);
+                if (sIdx >= 0) {
+                  const item = src.ids[sIdx];
+                  const dst = ensureChest(hx + "," + (hy - 1) + "," + hz);
+                  const dIdx = dst.ids.findIndex((id, i) => id === item || (dst.ns[i] ?? 0) === 0);
+                  if (dIdx >= 0) {
+                    dst.ids[dIdx] = item;
+                    dst.ns[dIdx] = (dst.ns[dIdx] ?? 0) + 1;
+                    src.ns[sIdx] -= 1;
+                    if (src.ns[sIdx] <= 0) src.ids[sIdx] = 0;
+                    moved = true;
+                  }
+                }
+              }
+            }
+            if (moved) {
+              saveDirty = true;
+              recompute(hx, hy - 1, hz);
+            }
+          }
+        }
+      }
+    }
     while (rsAcc >= 0.1) {
       rsAcc -= 0.1;
+      const sunElev = Math.sin(worldTime * Math.PI * 2);
+      const dayLvl = Math.round(Math.max(0, sunElev) * 15);
+      if (dayLvl !== lastDaylightLvl) {
+        lastDaylightLvl = dayLvl;
+        recompute(Math.floor(player.x), Math.floor(player.y), Math.floor(player.z));
+      }
+      for (const [k, left] of [...obsPulse.entries()]) {
+        const [x, y, z] = k.split(",").map(Number);
+        if (left <= 1) {
+          obsPulse.delete(k);
+          recompute(x, y, z);
+        } else {
+          obsPulse.set(k, left - 1);
+        }
+      }
       for (const [k, comp] of [...comps.entries()]) {
         const [x, y, z] = k.split(",").map(Number);
         const id = world.get(x, y, z);
-        if (id !== ID.Repeater && id !== ID.RepeaterOn) continue;
         if (Math.hypot(x - player.x, z - player.z) > 48) continue;
+        if (id === ID.Observer || id === ID.ObserverOn) {
+          const d = RS_DIRS[comp.dir];
+          const watched = world.get(x - d[0], y, z - d[1]);
+          const prev = obsSeen.get(k);
+          obsSeen.set(k, watched);
+          if (prev !== undefined && prev !== watched) {
+            obsPulse.set(k, 2);
+            recompute(x, y, z);
+          }
+          continue;
+        }
+        if (id !== ID.Repeater && id !== ID.RepeaterOn) continue;
         const d = RS_DIRS[comp.dir];
         const want = emittedToward(x - d[0], y, z - d[1], x, y, z, power) > 0;
         const cur = repOut.get(k) ?? false;
@@ -2882,6 +4124,28 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       say("Repeater delay " + comp.delay);
       audio.place();
       saveDirty = true;
+      return true;
+    }
+    if (hit.id === ID.Comparator || hit.id === ID.ComparatorOn) {
+      const k = rsKey(hit.x, hit.y, hit.z);
+      const comp = comps.get(k) ?? { dir: facingDir(), delay: 1 };
+      comp.delay = comp.delay === 2 ? 1 : 2;
+      comps.set(k, comp);
+      recompute(hit.x, hit.y, hit.z);
+      say(comp.delay === 2 ? "Comparator: subtract mode" : "Comparator: compare mode");
+      audio.place();
+      saveDirty = true;
+      return true;
+    }
+    if (hit.id === ID.Daylight || hit.id === ID.DaylightInv) {
+      const next = hit.id === ID.Daylight ? ID.DaylightInv : ID.Daylight;
+      if (world.set(hit.x, hit.y, hit.z, next)) {
+        markDirtyAt(hit.x, hit.z);
+        recompute(hit.x, hit.y, hit.z);
+        say(next === ID.DaylightInv ? "Night sensor mode" : "Daylight sensor mode");
+        audio.place();
+        saveDirty = true;
+      }
       return true;
     }
     if (hit.id === ID.Lamp) {
@@ -2960,11 +4224,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         say("Not with those nearby");
         return true;
       }
-      worldTime = 0.22;
+      worldTime = 0.0416;
+      worldDays++;
       spawnPoint = { x: player.x, y: player.y, z: player.z };
       sinceSleep = 0;
       if (hunger > 0) health = Math.min(20, health + 4);
-      say("Slept until morning");
+      say(`Slept until morning · Day ${worldDays}`);
       saveDirty = true;
       return true;
     }
@@ -3164,7 +4429,14 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       say("The shulker box kept its contents");
     }
     if (!creative) spend(held, 1);
-    if (placeId === ID.Repeater || placeId === ID.Comparator || placeId === ID.Piston) comps.set(rsKey(px, py, pz), { dir: facingDir(), delay: 1 });
+    if (placeId === ID.Repeater || placeId === ID.Comparator || placeId === ID.Piston || placeId === ID.Observer) {
+      const dir = facingDir();
+      comps.set(rsKey(px, py, pz), { dir, delay: 1 });
+      if (placeId === ID.Observer) {
+        const d = RS_DIRS[dir];
+        obsSeen.set(rsKey(px, py, pz), world.get(px - d[0], py, pz - d[1]));
+      }
+    }
     if (isComponent(placeId) || isComponent(world.get(px, py + 1, pz))) recompute(px, py, pz);
     if (held === ID.Torch) bumpQuest("place", "torch");
     burst(px + 0.5, py + 0.8, pz + 0.5, heldDef.color, 6);
@@ -3175,8 +4447,18 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
 
   function dropItem(id: number, n: number, x: number, y: number, z: number) {
     if (!id || n <= 0) return;
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.22), skin(def(id).color));
+    const { group: mesh } = buildLegoItem3D(id);
+    mesh.scale.setScalar(0.92);
     mesh.position.set(x, y, z);
+    if (plasticOn) {
+      mesh.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (m.isMesh) {
+          m.castShadow = true;
+          m.receiveShadow = true;
+        }
+      });
+    }
     scene.add(mesh);
     drops.push({
       id,
@@ -4145,7 +5427,16 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       const bx = Math.floor(s.x);
       const by = Math.floor(s.y);
       const bz = Math.floor(s.z);
-      if (def(world.get(bx, by, bz)).solid) dead = true;
+      const hitBlockId = world.get(bx, by, bz);
+      if (def(hitBlockId).solid) {
+        dead = true;
+        if (hitBlockId === ID.Target) {
+          obsPulse.set(rsKey(bx, by, bz), 8);
+          recompute(bx, by, bz);
+          audio.note(16);
+          say("Bullseye!", 1200);
+        }
+      }
       if (!dead && s.friendly) {
         for (const m of mobs) {
           if (m.dead || m.kind === "boat" || m.kind === "cart") continue;
@@ -4257,30 +5548,195 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     emit();
   }
 
-  const particles: { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; color: string }[] =
-    [];
-  const pgeo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
-  const pmat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-  const pmesh = new THREE.InstancedMesh(pgeo, pmat, 360);
+  // 3D Molded LEGO Sub-Brick (1×2 brick with 2 studs) & Plate (2×2 plate with 4 studs) Ragdoll/Debris System:
+  // Replaces generic unlit cubes with real 3D studded LEGO sub-pieces that spin, bounce off terrain, and clatter!
+  type DebrisPiece = {
+    x: number;
+    y: number;
+    z: number;
+    vx: number;
+    vy: number;
+    vz: number;
+    rx: number;
+    ry: number;
+    rz: number;
+    vrx: number;
+    vry: number;
+    vrz: number;
+    life: number;
+    maxLife: number;
+    scale: number;
+    color: string;
+    isPlate: boolean;
+  };
+  const particles: DebrisPiece[] = [];
+
+  function buildStuddedSubPieceGeo(w: number, h: number, d: number, nx: number, nz: number): THREE.BufferGeometry {
+    const parts: THREE.BufferGeometry[] = [new THREE.BoxGeometry(w, h, d)];
+    const sr = Math.min(w / nx, d / nz) * 0.31;
+    const sh = sr * 0.68;
+    for (let ix = 0; ix < nx; ix++) {
+      for (let iz = 0; iz < nz; iz++) {
+        const cyl = new THREE.CylinderGeometry(sr * 0.92, sr, sh, 10);
+        cyl.translate(-w / 2 + (w / nx) * (ix + 0.5), h / 2 + sh / 2, -d / 2 + (d / nz) * (iz + 0.5));
+        parts.push(cyl);
+      }
+    }
+    let totalVerts = 0;
+    let totalIdx = 0;
+    for (const p of parts) {
+      totalVerts += p.attributes.position.count;
+      totalIdx += p.index ? p.index.count : 0;
+    }
+    const posArr = new Float32Array(totalVerts * 3);
+    const nrmArr = new Float32Array(totalVerts * 3);
+    const idxArr = new Uint16Array(totalIdx);
+    let vOff = 0;
+    let iOff = 0;
+    for (const p of parts) {
+      const pos = p.attributes.position as THREE.BufferAttribute;
+      const nrm = p.attributes.normal as THREE.BufferAttribute;
+      posArr.set(pos.array as Float32Array, vOff * 3);
+      nrmArr.set(nrm.array as Float32Array, vOff * 3);
+      if (p.index) {
+        const ix = p.index.array;
+        for (let k = 0; k < ix.length; k++) idxArr[iOff + k] = ix[k] + vOff;
+        iOff += ix.length;
+      }
+      vOff += pos.count;
+      p.dispose();
+    }
+    const merged = new THREE.BufferGeometry();
+    merged.setAttribute("position", new THREE.BufferAttribute(posArr, 3));
+    merged.setAttribute("normal", new THREE.BufferAttribute(nrmArr, 3));
+    merged.setIndex(new THREE.BufferAttribute(idxArr, 1));
+    return merged;
+  }
+
+  const pgeoBrick1x2 = buildStuddedSubPieceGeo(0.24, 0.13, 0.12, 2, 1);
+  const pgeoPlate2x2 = buildStuddedSubPieceGeo(0.22, 0.065, 0.22, 2, 2);
+  const pmat = skin(0xffffff);
+  const pmesh = new THREE.InstancedMesh(pgeoBrick1x2, pmat, 360);
   pmesh.count = 0;
+  pmesh.castShadow = settings.realistic;
+  pmesh.receiveShadow = settings.realistic;
   pmesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(360 * 3), 3);
   scene.add(pmesh);
+
+  const plateMesh = new THREE.InstancedMesh(pgeoPlate2x2, pmat, 240);
+  plateMesh.count = 0;
+  plateMesh.castShadow = settings.realistic;
+  plateMesh.receiveShadow = settings.realistic;
+  plateMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(240 * 3), 3);
+  scene.add(plateMesh);
   const pdummy = new THREE.Object3D();
 
   function burst(x: number, y: number, z: number, color: string, n: number) {
     for (let i = 0; i < n; i++) {
+      const life = 0.55 + Math.random() * 0.45;
       particles.push({
-        x,
-        y,
-        z,
-        vx: (Math.random() - 0.5) * 3.2,
-        vy: Math.random() * 3.4,
-        vz: (Math.random() - 0.5) * 3.2,
-        life: 0.35 + Math.random() * 0.35,
+        x: x + (Math.random() - 0.5) * 0.28,
+        y: y + (Math.random() - 0.5) * 0.28,
+        z: z + (Math.random() - 0.5) * 0.28,
+        vx: (Math.random() - 0.5) * 3.6,
+        vy: 1.4 + Math.random() * 3.4,
+        vz: (Math.random() - 0.5) * 3.6,
+        rx: Math.random() * Math.PI * 2,
+        ry: Math.random() * Math.PI * 2,
+        rz: Math.random() * Math.PI * 2,
+        vrx: (Math.random() - 0.5) * 11,
+        vry: (Math.random() - 0.5) * 11,
+        vrz: (Math.random() - 0.5) * 11,
+        life,
+        maxLife: life,
+        scale: 0.72 + Math.random() * 0.32,
         color,
+        isPlate: i % 3 === 0,
       });
     }
-    if (particles.length > 340) particles.splice(0, particles.length - 340);
+    if (particles.length > 420) particles.splice(0, particles.length - 420);
+  }
+
+  // Granular Modular Block Destruction: ejects the actual 2×2 top plate and running-bond 1×2 / 2×1 sub-bricks
+  function burstModularBlock(x: number, y: number, z: number, block: ReturnType<typeof def>) {
+    const topCol = block.top || block.color;
+    const sideCol = block.side || block.color;
+    // 1. Eject the top 2×2 LEGO plate (e.g. green grass plate on Grass blocks)
+    for (let i = 0; i < 2; i++) {
+      const life = 0.85 + Math.random() * 0.45;
+      particles.push({
+        x: x + (Math.random() - 0.5) * 0.32,
+        y: y + 0.26,
+        z: z + (Math.random() - 0.5) * 0.32,
+        vx: (Math.random() - 0.5) * 3.2,
+        vy: 2.2 + Math.random() * 2.6,
+        vz: (Math.random() - 0.5) * 3.2,
+        rx: (Math.random() - 0.5) * 0.5,
+        ry: Math.random() * Math.PI * 2,
+        rz: (Math.random() - 0.5) * 0.5,
+        vrx: (Math.random() - 0.5) * 9,
+        vry: (Math.random() - 0.5) * 9,
+        vrz: (Math.random() - 0.5) * 9,
+        life,
+        maxLife: life,
+        scale: 1.05,
+        color: topCol,
+        isPlate: true,
+      });
+    }
+    // 2. Eject the 6 running-bond 1×2 and 2×1 sub-bricks from courses 0 & 1
+    for (let i = 0; i < 8; i++) {
+      const life = 0.85 + Math.random() * 0.5;
+      particles.push({
+        x: x + (Math.random() - 0.5) * 0.42,
+        y: y + (i < 4 ? 0.0 : -0.22),
+        z: z + (Math.random() - 0.5) * 0.42,
+        vx: (Math.random() - 0.5) * 3.8,
+        vy: 1.6 + Math.random() * 3.2,
+        vz: (Math.random() - 0.5) * 3.8,
+        rx: (Math.random() - 0.5) * 0.8,
+        ry: (i % 2) * (Math.PI / 2) + (Math.random() - 0.5) * 0.4,
+        rz: (Math.random() - 0.5) * 0.8,
+        vrx: (Math.random() - 0.5) * 10,
+        vry: (Math.random() - 0.5) * 10,
+        vrz: (Math.random() - 0.5) * 10,
+        life,
+        maxLife: life,
+        scale: 1.0,
+        color: sideCol,
+        isPlate: false,
+      });
+    }
+    if (particles.length > 420) particles.splice(0, particles.length - 420);
+  }
+
+  // Mob Brick Ragdoll Disassembly: scatters larger constituent 1×2 LEGO bricks & 2×2 plates on death/explosion
+  function spawnMobRagdoll(x: number, y: number, z: number, colors: string[], count: number) {
+    for (let i = 0; i < count; i++) {
+      const life = 1.05 + Math.random() * 0.55;
+      const ang = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
+      const spd = 1.8 + Math.random() * 2.8;
+      particles.push({
+        x: x + Math.cos(ang) * 0.18,
+        y: y + (Math.random() - 0.3) * 0.45,
+        z: z + Math.sin(ang) * 0.18,
+        vx: Math.cos(ang) * spd,
+        vy: 2.2 + Math.random() * 3.2,
+        vz: Math.sin(ang) * spd,
+        rx: Math.random() * Math.PI * 2,
+        ry: Math.random() * Math.PI * 2,
+        rz: Math.random() * Math.PI * 2,
+        vrx: (Math.random() - 0.5) * 12,
+        vry: (Math.random() - 0.5) * 12,
+        vrz: (Math.random() - 0.5) * 12,
+        life,
+        maxLife: life,
+        scale: 1.12,
+        color: colors[i % colors.length],
+        isPlate: i % 3 === 0,
+      });
+    }
+    if (particles.length > 420) particles.splice(0, particles.length - 420);
   }
 
   let heardAt = 0;
@@ -4340,31 +5796,61 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
 
   function updateParticles(dt: number) {
     let w = 0;
+    let bCount = 0;
+    let pCount = 0;
     for (let i = 0; i < particles.length; i++) {
       const p = particles[i];
       p.life -= dt;
       if (p.life <= 0) continue;
-      p.vy -= 9 * dt;
+      p.vy -= 14.5 * dt;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.z += p.vz * dt;
+      p.rx += p.vrx * dt;
+      p.ry += p.vry * dt;
+      p.rz += p.vrz * dt;
+      // Physical terrain bounce for unclipped LEGO bricks & plates
+      const gy = groundY(p.x, p.z) + (settings.studs ? STUD_H : 0) + 0.05;
+      if (p.y < gy && p.vy < 0) {
+        p.y = gy;
+        p.vy = -p.vy * 0.45;
+        p.vx *= 0.72;
+        p.vz *= 0.72;
+        p.vrx *= 0.65;
+        p.vry *= 0.75;
+        p.vrz *= 0.65;
+        if (Math.abs(p.vy) < 0.35) {
+          p.vy = 0;
+          p.rx = Math.round(p.rx / (Math.PI / 2)) * (Math.PI / 2);
+          p.rz = Math.round(p.rz / (Math.PI / 2)) * (Math.PI / 2);
+          p.vrx = 0;
+          p.vrz = 0;
+        }
+      }
       particles[w++] = p;
+      const fade = Math.min(1, p.life / Math.min(0.25, p.maxLife));
+      pdummy.position.set(p.x, p.y, p.z);
+      pdummy.rotation.set(p.rx, p.ry, p.rz);
+      pdummy.scale.setScalar(p.scale * fade);
+      pdummy.updateMatrix();
+      tmp.set(p.color);
+      if (p.isPlate && pCount < 240) {
+        plateMesh.setMatrixAt(pCount, pdummy.matrix);
+        plateMesh.setColorAt(pCount, tmp);
+        pCount++;
+      } else if (bCount < 360) {
+        pmesh.setMatrixAt(bCount, pdummy.matrix);
+        pmesh.setColorAt(bCount, tmp);
+        bCount++;
+      }
     }
     particles.length = w;
-    const count = Math.min(w, 360);
-    pmesh.count = count;
-    for (let i = 0; i < count; i++) {
-      const p = particles[i];
-      pdummy.position.set(p.x, p.y, p.z);
-      const s = Math.max(0.2, p.life * 2.2);
-      pdummy.scale.setScalar(s);
-      pdummy.updateMatrix();
-      pmesh.setMatrixAt(i, pdummy.matrix);
-      tmp.set(p.color);
-      pmesh.setColorAt(i, tmp);
-    }
+    pmesh.count = bCount;
+    plateMesh.count = pCount;
     pmesh.instanceMatrix.needsUpdate = true;
+    plateMesh.instanceMatrix.needsUpdate = true;
     if (pmesh.instanceColor) pmesh.instanceColor.needsUpdate = true;
+    if (plateMesh.instanceColor) plateMesh.instanceColor.needsUpdate = true;
   }
 
   function groundY(x: number, z: number) {
@@ -4402,7 +5888,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       mob.role = spot.role;
       mob.homeX = spot.x;
       mob.homeZ = spot.z;
-      mob.bodyMat?.color.setHex(traderOf(spot.role).tint);
+      mob.bodyMat?.color.setHex(traderOf(spot.role as TraderRole).tint);
+      decorateVillagerRole(mob.mesh, spot.role as TraderRole);
     }
     if (villageAt) {
       const mob = spawnKind("golem", villageAt.x + 14.5, villageAt.z + 8.5);
@@ -4445,7 +5932,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       mob.homeX = spot.x;
       mob.homeZ = spot.z;
       mob.roam = true;
-      mob.bodyMat?.color.setHex(traderOf(spot.role).tint);
+      mob.bodyMat?.color.setHex(traderOf(spot.role as TraderRole).tint);
+      decorateVillagerRole(mob.mesh, spot.role as TraderRole);
       live.push(mob);
     }
   }
@@ -4577,21 +6065,53 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     };
     const count = (kind: Mob["kind"], rad: number) => mobs.filter((m) => m.kind === kind && !m.dead && Math.hypot(m.x - lm.x, m.z - lm.z) < rad).length;
     if (lm.kind === "monument") {
-      greet("Something ancient sleeps beneath these waves…");
+      greet("Marine Labyrinth — Guardians patrol the prismarine halls beneath the waves…");
       const guards = mobs.filter((m) => m.kind === "guardian" && !m.dead && Math.hypot(m.x - lm.x, m.z - lm.z) < 32);
       if (!guards.some((m) => (m.maxHp ?? 0) >= 30)) {
         const elder = spawnKind("guardian", lm.x + 2, lm.z, 1.7);
         elder.hp = 32;
         elder.maxHp = 32;
       }
-      for (let i = guards.length; i < 3; i++) spawnKind("guardian", lm.x - 4 + i * 3, lm.z + 4);
-    } else if (lm.kind === "mansion") {
-      greet("A dark mansion broods between the trees.");
-      if (count("vindicator", 32) === 0) {
-        spawnKind("vindicator", lm.x + 12, lm.z + 10);
-        spawnKind("vindicator", lm.x - 12, lm.z - 9);
+      for (let i = guards.length; i < 4; i++) spawnKind("guardian", lm.x - 6 + i * 4, lm.z + 6);
+    } else if (lm.kind === "pyramid") {
+      greet("Desert Pyramid — Pharaoh Mummies guard the sunken treasure vault below!");
+      if (count("husk", 32) < 2) {
+        spawnKind("husk", lm.x - 4, lm.z + 10);
+        spawnKind("husk", lm.x + 4, lm.z + 10);
+        const pharaoh = spawnKind("husk", lm.x, lm.z - 3, 1.22);
+        pharaoh.hp = 18;
+        pharaoh.maxHp = 18;
       }
-      if (count("evoker", 32) === 0) spawnKind("evoker", lm.x, lm.z + 11);
+    } else if (lm.kind === "temple") {
+      greet("Jungle Temple — Mossy traps and bone archers guard the lever vault!");
+      if (count("skelly", 30) === 0) {
+        spawnKind("skelly", lm.x - 3, lm.z + 6);
+        spawnKind("skelly", lm.x + 3, lm.z - 4);
+      }
+      if (count("spider", 30) === 0) spawnKind("spider", lm.x, lm.z + 3);
+    } else if (lm.kind === "witch_hut") {
+      greet("Swamp Witch Hut — Potions bubble inside the stilt cabin…");
+      if (count("witch", 28) === 0) {
+        spawnKind("witch", lm.x, lm.z + 3);
+      }
+      if (count("slime", 28) === 0) spawnKind("slime", lm.x + 5, lm.z - 3, 0.85);
+    } else if (lm.kind === "castle") {
+      greet("Royal LEGO Fortress — Illager knights & crossbowmen hold the battlements!");
+      if (count("pillager", 34) < 2) {
+        spawnKind("pillager", lm.x - 4, lm.z + 11);
+        spawnKind("pillager", lm.x + 4, lm.z + 11);
+      }
+      if (count("vindicator", 34) === 0) {
+        spawnKind("vindicator", lm.x, lm.z + 5);
+        spawnKind("vindicator", lm.x, lm.z - 4);
+      }
+    } else if (lm.kind === "mansion") {
+      greet("Woodland Mansion — Vindicators and an Evoker guard the library.");
+      if (count("vindicator", 32) === 0) {
+        spawnKind("vindicator", lm.x + 10, lm.z + 8);
+        spawnKind("vindicator", lm.x - 10, lm.z - 7);
+      }
+      if (count("evoker", 32) === 0) spawnKind("evoker", lm.x, lm.z + 9);
     } else if (lm.kind === "fortress") {
       greet("An ember-brick fortress spans the lava sea.");
       if (count("blaze", 36) === 0) {
@@ -4973,94 +6493,97 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
                 ? [ID.String]
                 : mob.kind === "skelly" || mob.kind === "stray"
                   ? [ID.Bone, ID.Arrow]
-                  : mob.kind === "walker" || mob.kind === "husk"
+                  : mob.kind === "walker"
                     ? [ID.RawMeat, ID.Bone]
-                    : mob.kind === "creeper"
-                      ? [ID.Powder]
-                      : mob.kind === "enderman"
-                        ? [ID.EnderPearl]
-                        : mob.kind === "blaze"
-                          ? [ID.Blaze]
-                          : mob.kind === "witch"
-                            ? [ID.PotionHeal]
-                            : mob.kind === "drowned"
-                              ? [ID.RawMeat, ID.Bone]
-                              : mob.kind === "bee"
-                                ? [ID.Wax]
-                                : mob.kind === "cat"
-                                  ? [ID.String]
-                                  : mob.kind === "squid"
-                                    ? [ID.InkSac]
-                                    : mob.kind === "bat" || mob.kind === "axolotl"
-                                      ? []
-                                      : mob.kind === "ghast"
-                        ? [ID.Blaze, ID.Powder]
-                        : mob.kind === "piglin"
-                          ? [ID.Scrap]
-                          : mob.kind === "phantom" || mob.kind === "parrot"
-                            ? [ID.Feather]
-                            : mob.kind === "dragon"
-                              ? [ID.Elytra, ID.Totem, ID.Scrap]
-                              : mob.kind === "wither"
-                                ? [ID.NetherStar]
-                                : mob.kind === "frog"
-                                ? [ID.Slime]
-                                : mob.kind === "fox"
-                                  ? [ID.Fur, ID.RawMeat]
-                                  : mob.kind === "crab"
-                                    ? [ID.Scale]
-                                    : mob.kind === "wisp"
-                                      ? [ID.Wisp]
-                                      : mob.kind === "slime"
-                                        ? (mob.size ?? 1) <= 0.5
-                                          ? [ID.Slime]
-                                          : []
-                                        : mob.kind === "wolf"
-                                          ? [ID.Bone]
-                                          : mob.kind === "golem"
-                                            ? [ID.Ingot]
-                                            : mob.kind === "guardian"
-                                              ? [ID.Crystal]
-                                              : mob.kind === "shulker"
-                                                ? [ID.ShulkerShell]
-                                                : mob.kind === "pillager"
-                                                  ? [ID.Arrow, ID.Arrow]
-                                                  : mob.kind === "vindicator"
-                                                    ? [ID.Emerald]
-                                                    : mob.kind === "evoker"
-                                                      ? [ID.Totem, ID.Emerald]
-                                                      : mob.kind === "vex"
-                                                        ? []
-                                                        : mob.kind === "ravager"
-                                                          ? [ID.Fur, ID.RawMeat, ID.RawMeat]
-                                                          : mob.kind === "villager"
-                                                            ? [ID.Emerald]
-                                                            : [ID.Green];
+                    : mob.kind === "husk"
+                      ? [ID.PharaohGold, ID.Bone]
+                      : mob.kind === "creeper"
+                        ? [ID.Powder]
+                        : mob.kind === "enderman"
+                          ? [ID.EnderPearl, ID.VoidCore]
+                          : mob.kind === "blaze"
+                            ? [ID.Blaze]
+                            : mob.kind === "witch"
+                              ? [ID.WitchVenom, ID.PotionHeal]
+                              : mob.kind === "drowned"
+                                ? [ID.RawMeat, ID.Copper]
+                                : mob.kind === "bee"
+                                  ? [ID.Wax]
+                                  : mob.kind === "cat"
+                                    ? [ID.String]
+                                    : mob.kind === "squid"
+                                      ? [ID.InkSac]
+                                      : mob.kind === "bat" || mob.kind === "axolotl"
+                                        ? []
+                                        : mob.kind === "ghast"
+                          ? [ID.Blaze, ID.Powder]
+                          : mob.kind === "piglin"
+                            ? [ID.Scrap, ID.Gold]
+                            : mob.kind === "phantom" || mob.kind === "parrot"
+                              ? [ID.Feather]
+                              : mob.kind === "dragon"
+                                ? [ID.Elytra, ID.Totem, ID.Scrap, ID.VoidCore]
+                                : mob.kind === "wither"
+                                  ? [ID.NetherStar]
+                                  : mob.kind === "frog"
+                                  ? [ID.Slime]
+                                  : mob.kind === "fox"
+                                    ? [ID.Fur, ID.RawMeat]
+                                    : mob.kind === "crab"
+                                      ? [ID.Scale]
+                                      : mob.kind === "wisp"
+                                        ? [ID.Wisp]
+                                        : mob.kind === "slime"
+                                          ? (mob.size ?? 1) <= 0.5
+                                            ? [ID.Slime]
+                                            : []
+                                          : mob.kind === "wolf"
+                                            ? [ID.Bone]
+                                            : mob.kind === "golem"
+                                              ? [ID.Ingot]
+                                              : mob.kind === "guardian"
+                                                ? [ID.GuardianSpike, ID.Crystal]
+                                                : mob.kind === "shulker"
+                                                  ? [ID.ShulkerShell, ID.VoidCore]
+                                                  : mob.kind === "pillager"
+                                                    ? [ID.IllagerBadge, ID.Arrow]
+                                                    : mob.kind === "vindicator"
+                                                      ? [ID.IllagerBadge, ID.Emerald]
+                                                      : mob.kind === "evoker"
+                                                        ? [ID.Totem, ID.IllagerBadge, ID.Emerald]
+                                                        : mob.kind === "vex"
+                                                          ? [ID.Wisp]
+                                                          : mob.kind === "ravager"
+                                                            ? [ID.IllagerBadge, ID.Fur, ID.RawMeat]
+                                                            : mob.kind === "villager"
+                                                              ? [ID.Emerald]
+                                                              : [ID.Green];
     if (!creative) {
       for (const drop of drops) dropItem(drop, 1, mob.x, mob.y + 0.4, mob.z);
       // Looting on the held blade: bonus copies of the base drops.
       const lootLvl = def(hotbar[slot]).tool === "sword" ? enchLvl(hotbar[slot], "looting") : 0;
       for (const drop of drops) for (let f = 0; f < lootLvl; f++) if (Math.random() < 0.35) dropItem(drop, 1, mob.x, mob.y + 0.4, mob.z);
       const trophy = skills.has("trophy");
-      const luck = trophy || settings.mods.generous ? 0.62 : 0.28;
+      const luck = trophy || settings.mods.generous ? 0.62 : 0.38;
       const extra: number[] = [];
       if (mob.kind === "walker" && Math.random() < luck) extra.push(ID.Fang);
-      if ((mob.kind === "skelly" || mob.kind === "phantom") && Math.random() < luck) extra.push(ID.Wisp);
+      if (mob.kind === "husk" && Math.random() < luck) extra.push(ID.PharaohGold);
+      if ((mob.kind === "skelly" || mob.kind === "stray" || mob.kind === "phantom") && Math.random() < luck) extra.push(ID.Wisp);
       if (mob.kind === "creeper" && Math.random() < luck) extra.push(ID.Slime);
       if (mob.kind === "fox" && Math.random() < luck) extra.push(ID.Pelt);
       if (mob.kind === "crab" && Math.random() < luck) extra.push(ID.Shell);
       if (mob.kind === "frog" && Math.random() < luck * 0.6) extra.push(ID.Wax);
       if (mob.kind === "wisp" && Math.random() < luck) extra.push(ID.Frost);
-      if (mob.kind === "enderman" && Math.random() < luck) extra.push(ID.EnderPearl);
-      if (mob.kind === "drowned" && Math.random() < luck) extra.push(ID.Copper);
-      if (mob.kind === "drowned" && Math.random() < 0.22) extra.push(ID.Trident);
-      if (mob.kind === "guardian" && Math.random() < luck) extra.push(ID.Crystal);
-      if (mob.kind === "pillager" && Math.random() < 0.14) extra.push(ID.Crossbow);
-      if (mob.kind === "pillager" && Math.random() < luck) extra.push(ID.Emerald);
-      if (mob.kind === "vindicator" && Math.random() < 0.12) extra.push(ID.AxeI);
+      if (mob.kind === "enderman" && Math.random() < luck) extra.push(ID.VoidCore);
+      if (mob.kind === "drowned" && Math.random() < luck) extra.push(ID.GuardianSpike);
+      if (mob.kind === "drowned" && Math.random() < 0.25) extra.push(ID.Trident);
+      if (mob.kind === "guardian" && Math.random() < luck) extra.push(ID.GuardianSpike);
+      if (mob.kind === "pillager" && Math.random() < 0.18) extra.push(ID.Crossbow);
+      if ((mob.kind === "pillager" || mob.kind === "vindicator" || mob.kind === "evoker") && Math.random() < luck) extra.push(ID.IllagerBadge);
+      if (mob.kind === "vindicator" && Math.random() < 0.16) extra.push(ID.AxeI);
       if (mob.kind === "ravager" && Math.random() < luck) extra.push(ID.Emerald);
       if (mob.kind === "squid" && Math.random() < luck) extra.push(ID.InkSac);
-      if (mob.kind === "witch" && Math.random() < luck * 0.6) extra.push(ID.Bottle);
+      if (mob.kind === "witch" && Math.random() < luck) extra.push(ID.WitchVenom);
       if ((mob.kind === "creeper" || mob.kind === "ghast") && Math.random() < luck * 0.7) extra.push(ID.Cinder);
       if ((mob.kind === "skelly" || mob.kind === "walker") && Math.random() < luck * 0.45) extra.push(ID.Antler);
       if ((skills.has("butcher") || settings.mods.generous) && (mob.kind === "sheep" || mob.kind === "cow" || mob.kind === "pig" || mob.kind === "fox" || mob.kind === "frog" || mob.kind === "wolf")) {
@@ -5948,6 +7471,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         if (m.bodyMat) m.bodyMat.emissive.setHex(Math.sin(m.fuse * 24) > 0 ? 0xffffff : 0x000000);
         if (m.fuse > 1.2) {
           m.dead = true;
+          spawnMobRagdoll(m.x, m.y + 0.6, m.z, ["#3aaa4c", "#329842", "#101a12", "#6aff7a"], 22);
           scene.remove(m.mesh);
           explode(Math.round(m.x), Math.round(m.y), Math.round(m.z), m.charged ? 5 : 3);
         }
@@ -6024,6 +7548,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       mobs[w++] = m;
     }
     mobs.length = w;
+    mobBatchRenderer.update(mobs, camera, elapsed, settings.studs, STUD_H);
   }
 
   function packSave(): SaveV1 {
@@ -6091,6 +7616,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       mana,
       spell: spellIx,
       won,
+      worldTime,
+      worldDays,
       pets: mobs.filter((m) => m.kind === "wolf" && m.tame && !m.dead).map((m) => ({ x: m.x, z: m.z })),
     };
   }
@@ -6374,26 +7901,57 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
                                                 : mob.kind === "bat"
                                                   ? "Bat"
                                                   : mob.kind === "phantom"
-                                    ? "Sleepless"
-                                    : mob.kind === "boat"
-                                      ? "Boat"
-                                      : "Cart";
+                                      ? "Sleepless"
+                                      : mob.kind === "husk"
+                                        ? "Pharaoh mummy"
+                                        : mob.kind === "stray"
+                                          ? "Frost archer"
+                                          : mob.kind === "guardian"
+                                            ? (mob.maxHp ?? 0) >= 30
+                                              ? "Elder guardian"
+                                              : "Sea guardian"
+                                            : mob.kind === "pillager"
+                                              ? "Crossbow illager"
+                                              : mob.kind === "vindicator"
+                                                ? "Royal vindicator"
+                                                : mob.kind === "evoker"
+                                                  ? "Arch-evoker"
+                                                  : mob.kind === "ravager"
+                                                    ? "Siege ravager"
+                                                    : mob.kind === "vex"
+                                                      ? "Vex imp"
+                                                      : mob.kind === "shulker"
+                                                        ? "Shulker"
+                                                        : mob.kind === "boat"
+                                                          ? "Boat"
+                                                          : "Cart";
       if (sample.first && sample.place && !prevPlace) interactMob(mob);
       // Player hits are gated by the mob's own hurt cooldown (hitCd), not by its
       // attack cooldown: sharing one timer meant a mob biting you every second
       // reset it just before your swing was checked — it could never be hit back.
       if (sample.mine && (mob.hitCd ?? 0) <= 0 && mob.kind !== "boat" && mob.kind !== "cart") {
-        const blade = def(hotbar[slot]);
-        let dmg = blade.tool === "sword" ? 1 + blade.tier * 2 : 1;
+        const heldWeaponId = hotbar[slot];
+        const blade = def(heldWeaponId);
+        let dmg =
+          blade.tool === "sword"
+            ? 1 + blade.tier * 2
+            : blade.tool === "axe"
+              ? 1 + blade.tier * 2
+              : heldWeaponId === ID.Trident
+                ? 7
+                : 1;
         if (strengthT > 0) dmg += 2;
-        if (blade.tool === "sword" || blade.tool === "axe") dmg += enchLvl(hotbar[slot], "sharpness");
-        if ((blade.tool === "sword" || blade.tool === "axe") && (mob.kind === "walker" || mob.kind === "skelly" || mob.kind === "drowned" || mob.kind === "wither" || mob.kind === "phantom")) dmg += enchLvl(hotbar[slot], "smite") * 2;
-        if ((blade.tool === "sword" || blade.tool === "axe") && mob.kind === "spider") dmg += enchLvl(hotbar[slot], "bane") * 2;
+        if (blade.tool === "sword" || blade.tool === "axe" || heldWeaponId === ID.Trident) dmg += enchLvl(heldWeaponId, "sharpness");
+        if ((blade.tool === "sword" || blade.tool === "axe" || heldWeaponId === ID.Trident) && (mob.kind === "walker" || mob.kind === "skelly" || mob.kind === "drowned" || mob.kind === "husk" || mob.kind === "stray" || mob.kind === "wither" || mob.kind === "phantom")) dmg += enchLvl(heldWeaponId, "smite") * 2;
+        if ((blade.tool === "sword" || blade.tool === "axe") && mob.kind === "spider") dmg += enchLvl(heldWeaponId, "bane") * 2;
+        if ((heldWeaponId === ID.TidalBlade || heldWeaponId === ID.Trident) && (mob.kind === "guardian" || mob.kind === "drowned" || inWaterNow())) dmg += 3;
         if (rankLv >= 18 && blade.tool === "sword") dmg += 1;
         const hostile =
           mob.kind === "walker" ||
           mob.kind === "creeper" ||
           mob.kind === "skelly" ||
+          mob.kind === "husk" ||
+          mob.kind === "stray" ||
           mob.kind === "spider" ||
           mob.kind === "phantom" ||
           mob.kind === "ghast" ||
@@ -6403,6 +7961,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           mob.kind === "blaze" ||
           mob.kind === "witch" ||
           mob.kind === "drowned" ||
+          mob.kind === "guardian" ||
+          mob.kind === "pillager" ||
+          mob.kind === "vindicator" ||
+          mob.kind === "evoker" ||
+          mob.kind === "ravager" ||
           mob.kind === "dragon";
         if (skills.has("mark") && blade.tool === "sword" && hostile) dmg += 1;
         if (player.vy < -0.2 && !player.grounded) dmg = Math.ceil(dmg * 1.5);
@@ -6413,8 +7976,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           addRep(repKeyFor(mob.homeX ?? mob.x, mob.homeZ ?? mob.z), mob.kind === "villager" ? -3 : -2);
         }
         if (mob.kind === "enderman" || mob.kind === "bee") mob.mad = true;
-        if (blade.tool === "sword" && enchLvl(hotbar[slot], "fire") > 0) mob.burn = Math.max(mob.burn ?? 0, 2 + enchLvl(hotbar[slot], "fire"));
-        if (blade.tool === "sword" || blade.tool === "bow") wearHeld();
+        if ((blade.tool === "sword" || heldWeaponId === ID.Trident) && enchLvl(heldWeaponId, "fire") > 0) mob.burn = Math.max(mob.burn ?? 0, 2 + enchLvl(heldWeaponId, "fire"));
+        if (heldWeaponId === ID.PharaohStaff || heldWeaponId === ID.CinderBlade) mob.burn = Math.max(mob.burn ?? 0, 4);
+        if (heldWeaponId === ID.WitchStaff) {
+          mob.burn = Math.max(mob.burn ?? 0, 3);
+          mob.slowT = Math.max(mob.slowT ?? 0, 5);
+        }
+        if (blade.tool === "sword" || blade.tool === "axe" || blade.tool === "bow" || heldWeaponId === ID.Trident) wearHeld();
         mob.hitCd = 0.42;
         padRumble(0.25, 0.45, 60);
         mob.cool = Math.max(mob.cool, 0.42); // a hit still staggers its next bite
@@ -6654,7 +8222,14 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   }
 
   function sky(dt: number) {
-    worldTime = (worldTime + dt / 200) % 1;
+    const step = dt / MC_DAY_SECONDS;
+    const nextTime = (worldTime + step) % 1;
+    if (nextTime < worldTime) {
+      worldDays++;
+      saveDirty = true;
+    }
+    worldTime = nextTime;
+
     // Villager restock (v3.9): twice a day, morning and afternoon.
     for (const mark of [0.04, 0.3]) {
       const crossed = (prevWorldTime < mark && worldTime >= mark) || (worldTime < prevWorldTime && (mark >= prevWorldTime || mark < worldTime));
@@ -6676,16 +8251,20 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const ang = worldTime * Math.PI * 2;
     const sunH = Math.sin(ang);
     const sunX = Math.cos(ang);
-    const day = 0x8ec8f5;
-    const hor = 0xf0a06a;
-    const night = 0x10182e;
-    // Atmosphere pass 2: continuous blend factors replace the binary
-    // sunH > 0 switches that popped at the horizon. dayF eases day<->night,
-    // duskF peaks while the sun skims the horizon (golden hour).
-    const dayF = THREE.MathUtils.smoothstep(sunH, -0.08, 0.25);
-    const duskF = Math.max(0, 1 - Math.abs(sunH) / 0.3);
-    let fogHex = sunH > 0 ? lerpHex(hor, day, Math.min(1, sunH * 1.5)) : lerpHex(hor, night, Math.min(1, -sunH * 1.15));
-    if (duskF > 0) fogHex = lerpHex(fogHex, 0xf07840, duskF * 0.22);
+    const isSunrise = sunX >= 0;
+
+    // Smooth C1 continuous celestial interpolation (v4.11)
+    // dayF smoothly eases day<->night across the horizon without any popping.
+    // goldenF peaks during sunrise and sunset transitions.
+    const dayF = THREE.MathUtils.smoothstep(sunH, -0.10, 0.25);
+    const goldenF = Math.max(0, 1 - Math.abs(sunH) / 0.26);
+
+    const nightFog = lerpHex(0x050a18, 0x0c1b33, Math.max(0, (sunH + 1) * 0.5));
+    const twilightGlow = isSunrise ? 0xfba472 : 0xf56230;
+    let fogHex = lerpHex(nightFog, 0x8ec8f5, dayF);
+    if (goldenF > 0.01) {
+      fogHex = lerpHex(fogHex, twilightGlow, goldenF * 0.38);
+    }
     if (realm === 0 && wxCur.dark > 0.01) fogHex = lerpHex(fogHex, 0x87919c, wxCur.dark * 0.55);
     renderer.setClearColor(fogHex, 1);
     const fog = scene.fog as THREE.Fog;
@@ -6713,32 +8292,52 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       camera.far = camFar;
       camera.updateProjectionMatrix();
     }
-    // Continuous light grading: hemisphere eases into night blue, the sun
-    // warms to deep amber at the horizon and becomes steel-blue moonlight
-    // after dark (its position already parks it above the scene at night).
-    hemi.color.setHex(lerpHex(0x22304e, 0xcfe6ff, dayF));
-    const sunDay = lerpHex(0xffb35c, 0xfff2d2, Math.min(1, Math.max(0, sunH * 2.4)));
-    sun.color.setHex(lerpHex(0x7d90bd, sunDay, dayF));
+    // Continuous light grading: hemisphere eases into deep nocturnal blue, the sun
+    // warms to rich amber at the horizon and becomes cool silver-blue moonlight
+    // after dark with genuine nocturnal contrast.
+    const hemiDay = 0xd4ebff;
+    const hemiNight = 0x16243c;
+    const hemiSunset = 0xffc488;
+    let hemiSky = lerpHex(hemiNight, hemiDay, dayF);
+    if (goldenF > 0.01) hemiSky = lerpHex(hemiSky, hemiSunset, goldenF * 0.28);
+    hemi.color.setHex(hemiSky);
+    hemi.groundColor.setHex(lerpHex(0x08101a, 0x6b8450, dayF));
+
+    const middaySun = 0xfff8ee;
+    const goldenSun = isSunrise ? 0xffb068 : 0xff7c38;
+    const sunDayCol = lerpHex(goldenSun, middaySun, Math.min(1, Math.max(0, sunH * 2.2)));
+    const moonCol = 0x82a5dc;
+    sun.color.setHex(lerpHex(moonCol, sunDayCol, dayF));
+    ambient.color.setHex(lerpHex(0x18243a, 0xfff6ea, dayF));
+
+    const lightX = sunH >= -0.02 ? sunX : -sunX;
+    const lightY = sunH >= -0.02 ? Math.max(0.22, sunH) : Math.max(0.28, -sunH * 0.85);
+    srnLightU.uSunDir.value.set(lightX, lightY, 0.32).normalize();
+    srnLightU.uSunCol.value.copy(sun.color);
+    srnLightU.uSkyCol.value.copy(hemi.color);
+    srnLightU.uDayF.value = dayF;
     if (settings.realistic) {
-      hemi.intensity = 0.34 + dayF * 0.26;
-      ambient.intensity = 0.3 + dayF * 0.05;
-      sun.intensity = 0.22 + dayF * (0.35 + 0.65 * Math.min(1, Math.max(0, sunH * 1.6))) * 1.65;
-      scene.environmentIntensity = 0.36 + dayF * 0.19;
+      hemi.intensity = 0.16 + dayF * 0.44;
+      ambient.intensity = 0.08 + dayF * 0.16;
+      sun.intensity = 0.22 + dayF * (0.42 + 0.68 * Math.min(1, Math.max(0, sunH * 1.6))) * 1.68;
+      scene.environmentIntensity = 0.10 + dayF * 0.38;
+      renderer.toneMappingExposure = 0.94 + dayF * 0.10;
       const texel = 60 / (narrow ? 1024 : 2048);
       const px = Math.round(player.x / texel) * texel;
       const py = Math.round((player.y + 1) / texel) * texel;
       const pz = Math.round(player.z / texel) * texel;
       const lift = 48;
       sun.target.position.set(px, py, pz);
-      sun.position.set(px + sunX * lift, py + Math.max(12, sunH * lift + 18), pz + 14);
-      sun.castShadow = sunH > -0.02;
-      sun.shadow.intensity = THREE.MathUtils.clamp((sunH + 0.02) / 0.12, 0.15, 1);
-      sun.shadow.camera.updateProjectionMatrix();
+      sun.position.set(px + lightX * lift, py + Math.max(14, lightY * lift + 14), pz + 16);
+      sun.castShadow = true;
+      sun.shadow.intensity = sunH >= -0.02
+        ? THREE.MathUtils.clamp((sunH + 0.02) / 0.12, 0.25, 1)
+        : THREE.MathUtils.clamp((-sunH - 0.02) / 0.18, 0.22, 0.62);
     } else {
-      hemi.intensity = 0.3 + dayF * 0.35;
-      ambient.intensity = 0.24 + dayF * 0.1;
-      sun.intensity = 0.22 + dayF * 0.78;
-      sun.position.set(sunX * 60, sunH * 50 + 8, 24);
+      hemi.intensity = 0.22 + dayF * 0.42;
+      ambient.intensity = 0.16 + dayF * 0.16;
+      sun.intensity = 0.18 + dayF * 0.82;
+      sun.position.set(lightX * 60, lightY * 50 + 8, 24);
       sun.castShadow = false;
     }
     if (realm === 0) sun.intensity *= 1 - wxCur.cover * 0.45;
@@ -6748,7 +8347,14 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     moonMesh.visible = sunH < 0.25;
     (stars.material as THREE.PointsMaterial).opacity = Math.max(0, Math.min(1, -sunH * 1.4));
     stars.position.set(player.x, 0, player.z);
-    let zenHex = sunH > 0 ? lerpHex(0x2c4a73, 0x2a6ad4, Math.min(1, sunH * 1.6)) : lerpHex(0x2c4a73, 0x030612, Math.min(1, -sunH * 1.2));
+
+    const nightZen = lerpHex(0x02040c, 0x091224, Math.max(0, (sunH + 1) * 0.5));
+    const dayZen = 0x1b6fd8;
+    const twilightZen = isSunrise ? 0x224878 : 0x362c5c;
+    let zenHex = lerpHex(nightZen, dayZen, dayF);
+    if (goldenF > 0.01) {
+      zenHex = lerpHex(zenHex, twilightZen, goldenF * 0.35);
+    }
     if (realm === 0 && wxCur.dark > 0.01) zenHex = lerpHex(zenHex, 0x59636e, wxCur.dark * 0.5);
     if (submerged) {
       skyU.topColor.value.setHex(lerpHex(uwHex, 0x000000, 0.35));
@@ -6843,15 +8449,21 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       camera.position.set(player.x + backX * dist, player.y + 1.15 + dist * 0.22, player.z + backZ * dist);
       camera.lookAt(player.x, aimY, player.z);
       fig.group.visible = true;
+      updateFigArmor();
       fig.group.position.set(player.x, player.y + (settings.studs ? STUD_H : 0), player.z);
       const moving = Math.hypot(player.vx, player.vz) > 0.4;
       const face = moving ? Math.atan2(-player.vx, -player.vz) : player.yaw;
       fig.group.rotation.y = face;
+      const figHead = fig.group.userData.head as THREE.Object3D | undefined;
+      if (figHead) {
+        figHead.rotation.x = THREE.MathUtils.clamp(player.pitch * 0.6, -0.5, 0.5);
+        figHead.rotation.y = moving ? THREE.MathUtils.clamp(player.yaw - face, -0.65, 0.65) : 0;
+      }
       const swingLeg = moving ? Math.sin(bob) * 0.7 : 0;
       fig.legL.rotation.x = swingLeg;
       fig.legR.rotation.x = -swingLeg;
       fig.armL.rotation.x = -swingLeg;
-      fig.armR.rotation.x = swingLeg;
+      fig.armR.rotation.x = swingLeg - swing * 0.95;
       viewBrick.visible = false;
     } else {
       camera.position.set(player.x, eye + bobY, player.z);
@@ -6865,14 +8477,57 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
     flash = Math.max(0, flash - dt * 1.6);
     hud.flash = flash;
-    const held = hotbar[slot];
-    viewBrick.visible = viewBrick.visible && !!held;
-    if (held) {
-      brickMat.color.set(def(held).color);
-      swing = Math.max(0, swing - dt * 4);
-      viewBrick.rotation.x = -0.5 * swing;
-      viewBrick.position.y = -0.3 - swing * 0.08 + bobY * 0.4;
+    const held = hotbar[slot] || 0;
+    if (held !== lastHeldId || plasticOn !== lastHeldPlastic) {
+      lastHeldId = held;
+      lastHeldPlastic = plasticOn;
+      heldBrickGroup.clear();
+      figHeldGroup.clear();
+      heldFlames = [];
+      if (held) {
+        const built1 = buildLegoItem3D(held);
+        heldIsTool = built1.isTool;
+        heldFlames = built1.flames;
+        heldBrickGroup.add(built1.group);
+        if (heldIsTool) {
+          heldBrickGroup.position.set(-0.01, 0.05, -0.05);
+          heldBrickGroup.rotation.set(-0.38, -Math.PI / 2 + 0.28, 0.12);
+        } else {
+          heldBrickGroup.position.set(-0.05, 0.04, -0.09);
+          heldBrickGroup.rotation.set(0.22, -0.52, 0.08);
+        }
+
+        const built3 = buildLegoItem3D(held);
+        if (built3.isTool) {
+          built3.group.scale.setScalar(1.35);
+          built3.group.rotation.set(Math.PI / 2, Math.PI / 2, 0);
+        } else {
+          built3.group.scale.setScalar(1.1);
+          built3.group.rotation.set(0.2, -0.4, 0);
+        }
+        if (plasticOn) {
+          built3.group.traverse((o) => {
+            const m = o as THREE.Mesh;
+            if (m.isMesh) m.castShadow = true;
+          });
+        }
+        figHeldGroup.add(built3.group);
+      }
     }
+    heldBrickGroup.visible = !!held;
+    figHeldGroup.visible = !!held;
+    // Animate internal 3D LEGO flames on held Furnace, Campfire, Torch, Lantern, Brew Stand, or Beacon
+    for (let fi = 0; fi < heldFlames.length; fi++) {
+      const fl = heldFlames[fi];
+      const baseS = (fl.userData.baseScale as number) || 1;
+      const pulse = 1 + Math.sin(elapsed * 14 + fi * 2.1) * 0.12 + Math.cos(elapsed * 23 + fi) * 0.06;
+      fl.scale.set(baseS * (1 + (pulse - 1) * 0.5), baseS * pulse, baseS * (1 + (pulse - 1) * 0.5));
+      fl.rotation.y = Math.sin(elapsed * 6 + fi) * 0.25;
+    }
+    swing = Math.max(0, swing - dt * 4);
+    viewBrick.rotation.x = (heldIsTool ? -0.78 : -0.52) * swing;
+    viewBrick.rotation.z = (heldIsTool ? 0.24 : 0.14) * swing;
+    viewBrick.position.y = -0.16 - swing * 0.05 + bobY * 0.24;
     for (const c of cloudData) {
       c.ox += dt * 1.4;
       if (c.ox > 100) c.ox = -100;
@@ -7135,23 +8790,33 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         } else if (f.cook > 0) f.cook = Math.max(0, f.cook - dt * 2);
       }
       lightAcc += dt;
-      if (lightAcc > 0.25) {
+      if (lightAcc > 0.16) {
         lightAcc = 0;
-        const found: { x: number; y: number; z: number }[] = [];
+        const foundLamps: { x: number; y: number; z: number; power: number }[] = [];
+        const heldLight = Math.max(def(hotbar[slot]).light, def(offhand).light);
+        if (heldLight > 0) {
+          foundLamps.push({
+            x: player.x - Math.sin(player.yaw) * 0.45,
+            y: player.y + 1.35,
+            z: player.z - Math.cos(player.yaw) * 0.45,
+            power: heldLight * 0.95,
+          });
+        }
         const ox = Math.floor(player.x);
         const oy = Math.floor(player.y);
         const oz = Math.floor(player.z);
-        for (let dy = -3; dy <= 3 && found.length < 4; dy++) {
-          for (let dz = -6; dz <= 6 && found.length < 4; dz++) {
-            for (let dx = -6; dx <= 6 && found.length < 4; dx++) {
+        for (let dy = -3; dy <= 3 && foundLamps.length < lamps.length; dy++) {
+          for (let dz = -7; dz <= 7 && foundLamps.length < lamps.length; dz++) {
+            for (let dx = -7; dx <= 7 && foundLamps.length < lamps.length; dx++) {
               const id = world.get(ox + dx, oy + dy, oz + dz);
-              if (def(id).light) found.push({ x: ox + dx + 0.5, y: oy + dy + 0.6, z: oz + dz + 0.5 });
+              const l = def(id).light;
+              if (l) foundLamps.push({ x: ox + dx + 0.5, y: oy + dy + 0.65, z: oz + dz + 0.5, power: l });
             }
           }
         }
         for (let i = 0; i < lamps.length; i++) {
-          const spot = found[i];
-          lamps[i].intensity = spot ? 1.35 : 0;
+          const spot = foundLamps[i];
+          lamps[i].intensity = spot ? 1.65 * Math.min(1.2, spot.power) : 0;
           if (spot) lamps[i].position.set(spot.x, spot.y, spot.z);
         }
       }
@@ -7784,26 +9449,76 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       say(def(matched.out).name);
       emit();
     },
-    craft(id) {
+    craft(id, times = 1) {
       const recipe = RECIPES.find((entry) => entry.id === id);
       if (!recipe) return;
       if (!gate(recipe.lvl)) return;
       if (recipe.skill && !creative && !skills.has(recipe.skill)) {
         return say("Need the " + (skillById(recipe.skill)?.name ?? "skill") + " skill");
       }
-      if (recipe.skill && !creative && !skills.has(recipe.skill)) {
-        return say("Need the " + (skillById(recipe.skill)?.name ?? "skill") + " skill");
-      }
       if (recipe.special === "hammer" && hammer) return say("Hammer's already on your belt");
-      if (!creative) {
-        for (const [needId, n] of recipe.need) {
-          if ((inv[needId] ?? 0) < n) return say("Need " + n + " " + def(needId).name.toLowerCase());
+      const maxBatch = recipe.special || def(recipe.out).maxUse || def(recipe.out).armorSlot ? 1 : Math.max(1, Math.min(64, times));
+      let crafted = 0;
+      for (let t = 0; t < maxBatch; t++) {
+        if (!creative) {
+          for (const [needId, n] of recipe.need) {
+            if ((inv[needId] ?? 0) < n) {
+              if (crafted === 0) say("Need " + n + " " + def(needId).name.toLowerCase());
+              break;
+            }
+          }
+          let canAfford = true;
+          for (const [needId, n] of recipe.need) {
+            if ((inv[needId] ?? 0) < n) canAfford = false;
+          }
+          if (!canAfford) break;
+          for (const [needId, n] of recipe.need) spend(needId, n);
         }
-        for (const [needId, n] of recipe.need) spend(needId, n);
+        give(recipe.out, recipe.n, recipe.special);
+        crafted++;
+        if (recipe.special) break;
       }
-      give(recipe.out, recipe.n, recipe.special);
-      if (!recipe.special) say(recipe.name);
-      if (recipe.lvl) gainXp(2);
+      if (crafted > 0) {
+        if (!recipe.special) say(crafted > 1 ? `${recipe.name} ×${crafted * recipe.n}` : recipe.name);
+        if (recipe.lvl) gainXp(2 * crafted);
+        audio.place();
+      }
+      emit();
+    },
+    fillGrid(recipeId) {
+      const recipe = RECIPES.find((entry) => entry.id === recipeId);
+      if (!recipe || !recipe.shape || !recipe.w || !recipe.h) return;
+      const span = panel === "bench" ? 3 : 2;
+      if (recipe.w > span || recipe.h > span) {
+        say("Needs a 3×3 Crafting Bench");
+        return;
+      }
+      for (let i = 0; i < 9; i++) {
+        if (grid[i]) {
+          if (!creative) addInv(grid[i], 1);
+          grid[i] = 0;
+        }
+      }
+      for (let y = 0; y < recipe.h; y++) {
+        for (let x = 0; x < recipe.w; x++) {
+          const item = recipe.shape[x + y * recipe.w] || 0;
+          if (!item) continue;
+          if (creative || (inv[item] ?? 0) > 0) {
+            if (!creative) spend(item, 1);
+            grid[x + y * 3] = item;
+          }
+        }
+      }
+      audio.uiClick();
+      emit();
+    },
+    clearGrid() {
+      for (let i = 0; i < 9; i++) {
+        if (grid[i]) {
+          if (!creative) addInv(grid[i], 1);
+          grid[i] = 0;
+        }
+      }
       emit();
     },
     armorTap(i) {
@@ -7883,21 +9598,28 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       hud.signEdit = null;
       emit();
     },
-    enchant() {
+    enchant(tier = 3) {
+      const chosenTier = Math.max(1, Math.min(3, Math.round(tier)));
+      const shelves = hud.bookshelves || 0;
+      const needShelves = chosenTier === 3 ? 6 : chosenTier === 2 ? 2 : 0;
+      if (!creative && shelves < needShelves) {
+        return say(`Tier ${ROMAN[chosenTier]} requires ${needShelves} Bookshelves around the Enchanting Table (have ${shelves})`);
+      }
       const id = hotbar[slot];
       // A held book takes any rune and becomes an enchanted book.
       if (id === ID.Book) {
         const cur = { ...(ench.get(ID.EnchBook) ?? {}) };
         if (ENCHANTS.every((e) => (cur[e.key] ?? 0) >= e.max)) return say("That book knows every rune");
-        if (!spendLevels(3)) return say("Need builder level 3");
-        const rolls = 1 + (Math.random() < 0.6 ? 1 : 0) + (Math.random() < 0.3 ? 1 : 0);
+        if (!spendLevels(chosenTier)) return say("Need builder level " + chosenTier);
+        const rolls = chosenTier;
         const got: string[] = [];
         for (let i = 0; i < rolls; i++) {
           const e = ENCHANTS[Math.floor(Math.random() * ENCHANTS.length)];
           if ((cur[e.key] ?? 0) >= e.max) continue;
           const conf = ENCH_CONFLICTS[e.key];
           if (conf && (cur[conf] ?? 0) > 0) continue;
-          cur[e.key] = (cur[e.key] ?? 0) + 1;
+          const boost = chosenTier === 3 && shelves >= 10 && cur[e.key] === undefined ? Math.min(e.max, 2) : 1;
+          cur[e.key] = Math.min(e.max, (cur[e.key] ?? 0) + boost);
           got.push(e.name + (cur[e.key] > 1 ? " " + ROMAN[cur[e.key]] : ""));
         }
         if (!got.length) return say("The runes fizzle — try again");
@@ -7905,31 +9627,37 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         if (!creative) spend(ID.Book, 1);
         addInv(ID.EnchBook, 1);
         hotbar[slot] = ID.EnchBook;
+        burst(focus.x + 0.5, focus.y + 1.1, focus.z + 0.5, "#ba6eff", 14);
         say("The book glows: " + got.join(", "));
         saveDirty = true;
         emit();
         return;
       }
       const d = def(id);
-      if (!id || !d.maxUse) return say("Hold a tool, weapon or armor piece");
+      if (!id || (!d.maxUse && !d.armor)) return say("Hold a tool, weapon, armor piece, or book");
       const pool = ENCHANTS.filter((e) => e.for(d));
       if (!pool.length) return say("Nothing can enchant that");
       const cur = { ...(ench.get(id) ?? {}) };
       if (pool.every((e) => (cur[e.key] ?? 0) >= e.max)) return say("That piece is fully enchanted");
-      if (!spendLevels(3)) return say("Need builder level 3");
-      const rolls = 1 + (Math.random() < 0.6 ? 1 : 0) + (Math.random() < 0.3 ? 1 : 0);
+      if (!spendLevels(chosenTier)) return say("Need builder level " + chosenTier);
+      const rolls = chosenTier === 3 ? 2 + (Math.random() < 0.65 ? 1 : 0) : chosenTier === 2 ? 1 + (Math.random() < 0.75 ? 1 : 0) : 1;
       const got: string[] = [];
       for (let i = 0; i < rolls; i++) {
-        const e = pool[Math.floor(Math.random() * pool.length)];
-        if ((cur[e.key] ?? 0) >= e.max) continue;
-        const conf = ENCH_CONFLICTS[e.key];
-        if (conf && (cur[conf] ?? 0) > 0) continue;
-        cur[e.key] = (cur[e.key] ?? 0) + 1;
+        const candidates = pool.filter((e) => {
+          if ((cur[e.key] ?? 0) >= e.max) return false;
+          const conf = ENCH_CONFLICTS[e.key];
+          return !(conf && (cur[conf] ?? 0) > 0);
+        });
+        if (!candidates.length) break;
+        const e = candidates[Math.floor(Math.random() * candidates.length)];
+        const addLv = chosenTier === 3 && shelves >= 8 && Math.random() < 0.55 ? 2 : 1;
+        cur[e.key] = Math.min(e.max, (cur[e.key] ?? 0) + addLv);
         got.push(e.name + (cur[e.key] > 1 ? " " + ROMAN[cur[e.key]] : ""));
       }
       if (!got.length) return say("The runes fizzle — try again");
       ench.set(id, cur);
-      say("Enchanted: " + got.join(", "));
+      burst(focus.x + 0.5, focus.y + 1.1, focus.z + 0.5, "#5ce0d2", 16);
+      say(`Tier ${ROMAN[chosenTier]} Enchanted: ` + got.join(", "));
       saveDirty = true;
       emit();
     },
@@ -8341,6 +10069,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       glassMat.dispose();
       waterMat.dispose();
       plantMat.dispose();
+      mobBatchRenderer.dispose();
       renderer.dispose();
       if (window.__controlsTest) delete window.__controlsTest;
     },
@@ -8358,8 +10087,19 @@ function AXE_OK(id: number) {
   return (
     id === ID.Log ||
     id === ID.Planks ||
+    id === ID.SlabPlanks ||
+    id === ID.StairsPlanks0 ||
+    id === ID.StairsPlanks1 ||
+    id === ID.StairsPlanks2 ||
+    id === ID.StairsPlanks3 ||
     id === ID.Bench ||
     id === ID.Chest ||
+    id === ID.Barrel ||
+    id === ID.Bookshelf ||
+    id === ID.Jukebox ||
+    id === ID.Sign ||
+    id === ID.Banner ||
+    id === ID.Campfire ||
     id === ID.Door ||
     id === ID.DoorOpen ||
     id === ID.Ladder ||
@@ -8371,7 +10111,20 @@ function AXE_OK(id: number) {
   );
 }
 function SHOVEL_OK(id: number) {
-  return id === ID.Dirt || id === ID.Sand || id === ID.Grass || id === ID.Farmland || id === ID.Gravel || id === ID.Soul;
+  return (
+    id === ID.Dirt ||
+    id === ID.Sand ||
+    id === ID.Grass ||
+    id === ID.Farmland ||
+    id === ID.Gravel ||
+    id === ID.GravelBar ||
+    id === ID.Soul ||
+    id === ID.Mud ||
+    id === ID.Clay ||
+    id === ID.Snow ||
+    id === ID.AshSoil ||
+    id === ID.Moss
+  );
 }
 
 function lerpHex(a: number, b: number, t: number) {
@@ -8389,85 +10142,136 @@ function lerpHex(a: number, b: number, t: number) {
 
 let plasticOn = true;
 
-// SIREN creature shading (Philippe, 2026-10-25): mob and folk surfaces
-// carry NO detail textures. Their micro-surface is a small sinusoidal
-// representation field evaluated per fragment in the shared creature
-// program — two layers of sine waves (the SIREN trick: sin activations
-// all the way down) produce per-brick tint variation, darkened stud
-// seams, a satin micro-bump and a fresnel sheen. The detail costs a
-// handful of sin() calls and zero bytes of storage, and every creature
-// material shares ONE compiled program through skin(). Realistic mode
-// only; the performance profile keeps its plain Lambert untouched.
+const srnLightU = {
+  uSunDir: { value: new THREE.Vector3(0.45, 0.82, 0.35).normalize() },
+  uSunCol: { value: new THREE.Color(0xfff5e0) },
+  uSkyCol: { value: new THREE.Color(0xd4ebff) },
+  uDayF: { value: 1.0 },
+};
+
+// Band-Limited Physical SIREN (Sinusoidal Representation Network) for Mobs & Minifigs:
+// Uses a coupled 2-layer sinusoidal representation with analytic Gaussian Nyquist
+// band-limiting so minifigs and creatures exhibit smooth injection-molded ABS satin
+// sheen, subtle part-line seams, and light-coupled subsurface scattering without
+// high-frequency aliasing or unlit night-time glow.
 const sirenAmt = { value: 1 };
 
 function sirenize(mat: THREE.MeshStandardMaterial) {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uSirenAmt = sirenAmt;
+    shader.uniforms.uSunDir = srnLightU.uSunDir;
+    shader.uniforms.uSunCol = srnLightU.uSunCol;
+    shader.uniforms.uSkyCol = srnLightU.uSkyCol;
+    shader.uniforms.uDayF = srnLightU.uDayF;
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nvarying vec3 vSirenPos;")
-      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvSirenPos = position;");
+      .replace("#include <common>", "#include <common>\nvarying vec3 vSirenPos;\nvarying vec3 vSirenWPos;\nvarying vec3 vSirenWNrm;")
+      .replace(
+        "#include <beginnormal_vertex>",
+        `#include <beginnormal_vertex>
+#ifdef USE_INSTANCING
+vSirenWNrm = normalize(mat3(modelMatrix) * (mat3(instanceMatrix) * objectNormal));
+#else
+vSirenWNrm = normalize(mat3(modelMatrix) * objectNormal);
+#endif`,
+      )
+      .replace(
+        "#include <begin_vertex>",
+        `#include <begin_vertex>
+vSirenPos = position;
+#ifdef USE_INSTANCING
+vSirenWPos = (modelMatrix * (instanceMatrix * vec4(position, 1.0))).xyz;
+#else
+vSirenWPos = (modelMatrix * vec4(position, 1.0)).xyz;
+#endif`,
+      );
     shader.fragmentShader = shader.fragmentShader
       .replace(
         "#include <common>",
         `#include <common>
 varying vec3 vSirenPos;
+varying vec3 vSirenWPos;
+varying vec3 vSirenWNrm;
 uniform float uSirenAmt;
+uniform vec3 uSunDir;
+uniform vec3 uSunCol;
+uniform vec3 uSkyCol;
+uniform float uDayF;
+float gFigSubH;
 float sirenHash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.45, 37.719))) * 43758.5453); }
-vec3 sirenField(vec3 p) {
+vec3 sirenFieldBand(vec3 p, float atten) {
   vec3 a = sin(p * 1.7 + sin(p.zxy * 2.3));
-  vec3 b = sin(p * 3.1 + a * 1.4);
-  return a * 0.65 + b * 0.35;
+  vec3 b = cos(p * 3.1 + a * 1.4);
+  return (a * 0.55 + b * 0.45) * atten;
 }`,
       )
       .replace(
         "#include <map_fragment>",
         `#include <map_fragment>
 {
-  vec3 scell = vSirenPos * 7.0;
-  diffuseColor.rgb *= 0.93 + 0.14 * sirenHash(floor(scell));
+  vec3 scell = vSirenPos * 6.0;
+  gFigSubH = sirenHash(floor(scell));
+  diffuseColor.rgb *= 0.975 + 0.05 * gFigSubH;
   vec3 sf = abs(fract(scell) - 0.5);
-  float seam = smoothstep(0.36, 0.5, max(sf.x, max(sf.y, sf.z)));
-  diffuseColor.rgb *= 1.0 - seam * 0.16 * uSirenAmt;
-  float micro = sin(vSirenPos.x * 130.0) * sin(vSirenPos.y * 130.0) * sin(vSirenPos.z * 130.0);
-  diffuseColor.rgb *= 1.0 + micro * 0.03 * uSirenAmt;
+  float seam = smoothstep(0.43, 0.5, max(sf.x, max(sf.y, sf.z)));
+  diffuseColor.rgb *= 1.0 - seam * 0.09 * uSirenAmt;
 }`,
       )
       .replace(
         "#include <roughnessmap_fragment>",
         `#include <roughnessmap_fragment>
-roughnessFactor = clamp(roughnessFactor + (sirenHash(floor(vSirenPos * 23.0)) - 0.5) * 0.22 * uSirenAmt, 0.05, 1.0);`,
+roughnessFactor = clamp(roughnessFactor * 0.78 + (sirenHash(floor(vSirenPos * 16.0)) - 0.5) * 0.05 * uSirenAmt, 0.20, 0.68);`,
       )
       .replace(
         "#include <normal_fragment_begin>",
         `#include <normal_fragment_begin>
-normal = normalize(normal + sirenField(vSirenPos * 48.0) * 0.05 * uSirenAmt);`,
+{
+  vec3 fw = fwidth(vSirenPos * 24.0);
+  float atten = exp(-1.8 * dot(fw, fw));
+  vec3 microScratch = sirenFieldBand(vSirenPos * 28.0, atten) * 0.018;
+  normal = normalize(normal + microScratch * uSirenAmt);
+}`,
       )
       .replace(
         "#include <opaque_fragment>",
         `{
-  float fres = pow(1.0 - clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0), 3.0);
-  outgoingLight += diffuseColor.rgb * fres * 0.16 * uSirenAmt;
+  vec3 vDir = normalize(vViewPosition);
+  vec3 nV = normalize(normal);
+  vec3 nW = normalize(vSirenWNrm);
+  float ndv = clamp(dot(nV, vDir), 0.0, 1.0);
+  // True ABS plastic IOR = 1.54 -> Schlick F0 = 0.0452
+  float fres = 0.0452 + (1.0 - 0.0452) * pow(1.0 - ndv, 4.5);
+  float litLuma = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
+  float lightGate = clamp(litLuma * 2.3, 0.0, 1.0);
+  // Analytical Studio Softbox HDRI reflection + warm back-lit ABS Subsurface Scattering
+  vec3 viewW = normalize(cameraPosition - vSirenWPos);
+  vec3 reflW = reflect(-viewW, nW);
+  float sbKey = smoothstep(0.72, 0.90, dot(reflW, normalize(vec3(0.45, 0.78, 0.35))));
+  float sbFill = smoothstep(0.76, 0.92, dot(reflW, normalize(vec3(-0.62, 0.60, -0.50))));
+  vec3 studioSpec = (vec3(1.0, 0.98, 0.92) * sbKey * 0.36 + vec3(0.86, 0.93, 1.0) * sbFill * 0.20) * fres * lightGate;
+  float sunBack = clamp(dot(-viewW, uSunDir) * 0.5 + 0.5, 0.0, 1.0);
+  vec3 sss = pow(max(diffuseColor.rgb, vec3(0.02)), vec3(0.82)) * (1.0 - ndv) * (0.09 + 0.08 * sunBack) * lightGate;
+  outgoingLight += (studioSpec + sss) * uSirenAmt;
 }
 #include <opaque_fragment>`,
       );
   };
-  mat.customProgramCacheKey = () => "siren-creature-1";
+  mat.customProgramCacheKey = () => "siren-creature-v5";
   return mat;
 }
 
-// SRN world shading (Philippe, 2026-10-25, on top of the v4.0 pass): the
-// creature SIREN field grows to the whole brick world. Chunk surfaces get
-// their micro-detail from the same mathematics — a two-layer sinusoidal
-// representation field in WORLD space, evaluated per fragment: per-brick
-// tint variation (each block cell hashes its own shade, so a wall of one
-// brick type stops reading as one flat stamp), darkened seams where two
-// bricks meet, a satin micro-relief that perturbs the normal through the
-// field's screen-space gradient (the unparametrized-surface trick — no
-// tangents, no textures), roughness variance across the field, and a
-// fresnel sheen at grazing angles. Zero assets, a dozen sin() calls, and
-// it resolves at any distance — the detail is math, not pixels, so the
-// upscaler only ever makes it cleaner. Realistic (Standard) materials
-// only; the Lambert performance set stays exactly as it was.
+// Band-Limited Coupled 2-Layer Physical SIREN + Modular Sub-Brick Partitioning
+// for Hyper-Realistic Macro LEGO ABS Plastic Bricks (v4.5):
+//   1. Sub-Brick Running-Bond Partitioning (Zero extra polygons):
+//      Every 1×1×1 block is mathematically partitioned into 3 horizontal courses
+//      (y = 0.36, y = 0.72) and staggered running-bond vertical joints (1×2 bricks,
+//      2×1 bricks, and a top 2×2 plate). Each sub-piece receives its own deterministic
+//      hash `gSrnSubH = srnHashW(cell, course, subPiece)` for factory ABS tint tolerance,
+//      satin roughness variation, and mechanical assembly micro-tilt (`gSrnTiltW`).
+//   2. Stud-Aware Bevel Masking (`srnOnStud`) & Deep 3D Cavity Seams (`gSrnSeam`):
+//      True 3D cylindrical studs protrude in silhouette without being sliced by block seams,
+//      while inter-piece course joints carve deep analytical bevel normals and Cavity AO.
+//   3. Macro ABS Optics (IOR 1.54 -> F0 = 0.0452, Analytical Studio Softbox HDRI,
+//      Anisotropic Circular Micro-Scratches, Thick-Wall SSS & Trans-Clear Tube Refraction).
 const srnWorldAmt = { value: 1 };
 
 function sirenizeWorld(mat: THREE.MeshStandardMaterial, seamScale: number, reliefScale: number, cacheKey: string) {
@@ -8477,6 +10281,10 @@ function sirenizeWorld(mat: THREE.MeshStandardMaterial, seamScale: number, relie
     shader.uniforms.uSrnAmt = srnWorldAmt;
     shader.uniforms.uSrnSeam = seamU;
     shader.uniforms.uSrnRelief = reliefU;
+    shader.uniforms.uSunDir = srnLightU.uSunDir;
+    shader.uniforms.uSunCol = srnLightU.uSunCol;
+    shader.uniforms.uSkyCol = srnLightU.uSkyCol;
+    shader.uniforms.uDayF = srnLightU.uDayF;
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nvarying vec3 vSrnPos;\nvarying vec3 vSrnNrm;")
       .replace("#include <beginnormal_vertex>", "#include <beginnormal_vertex>\nvSrnNrm = normalize(mat3(modelMatrix) * objectNormal);")
@@ -8490,64 +10298,239 @@ varying vec3 vSrnNrm;
 uniform float uSrnAmt;
 uniform float uSrnSeam;
 uniform float uSrnRelief;
+uniform vec3 uSunDir;
+uniform vec3 uSunCol;
+uniform vec3 uSkyCol;
+uniform float uDayF;
 float gSrnF;
 float gSrnSeam;
 float gSrnH;
+float gSrnSubH;
+float gSrnScratch;
+float gSrnEdgeSSS;
+vec3 gSrnBevelW;
+vec3 gSrnMicroNrmW;
 float srnHashW(vec3 c) { return fract(sin(dot(c, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }`,
       )
       .replace(
         "#include <map_fragment>",
         `#include <map_fragment>
 {
-  vec3 srnCell = floor(vSrnPos + 0.0001);
+  vec3 srnCell = floor(vSrnPos + vec3(0.0002, -0.14, 0.0002));
   gSrnH = srnHashW(srnCell);
-  gSrnF = sin(vSrnPos.x * 1.9 + sin(vSrnPos.z * 1.3) * 1.7 + gSrnH * 6.2831) * 0.55
-        + sin(vSrnPos.y * 2.6 + vSrnPos.x * 1.1) * 0.45;
-  float srnMicro = sin(vSrnPos.x * 23.0) * sin(vSrnPos.y * 21.0 + 1.3) * sin(vSrnPos.z * 25.0 - 0.7);
-  diffuseColor.rgb *= 1.0 + ((gSrnH - 0.5) * 0.11 + gSrnF * 0.038 + srnMicro * 0.012) * uSrnAmt;
-  vec3 srnAn = abs(normalize(vSrnNrm));
+  gSrnSubH = gSrnH;
+
+  // Coupled 2-Layer Sinusoidal Representation Network (SIREN) with Analytic Nyquist Band-Limiting
+  vec3 srnFwPos = fwidth(vSrnPos);
+  float srnBand1 = exp(-12.0 * dot(srnFwPos, srnFwPos));
+  float srnBand2 = exp(-160.0 * dot(srnFwPos, srnFwPos));
+
+  vec3 srnL1 = sin(vSrnPos * 2.4 + gSrnH * 6.28318);
+  vec3 srnL2Phase = vSrnPos.yzx * 4.8 + srnL1 * 1.35;
+  vec3 srnL2 = sin(srnL2Phase) * srnBand1;
+  gSrnF = dot(srnL2, vec3(0.38, 0.34, 0.28));
+
+  // Circular micro-scratch field (only glints inside specular highlights)
+  vec3 srnScratchP = vSrnPos * 26.0 + sin(vSrnPos.zxy * 19.0) * 1.6;
+  gSrnScratch = sin(srnScratchP.x + cos(srnScratchP.y - srnScratchP.z)) * srnBand2;
+
+  // Analytic derivative of Layer-2 + high-frequency satin ABS mold micro-field (zero dFdx noise)
+  vec3 srnSatinPhase = vSrnPos * 18.0 + srnL1.yzx * 1.8;
+  gSrnMicroNrmW = (cos(srnL2Phase) * 0.012 * srnBand1 + cos(srnSatinPhase) * 0.016 * srnBand2) * uSrnRelief * uSrnAmt;
+
+  vec3 srnNrmW = normalize(vSrnNrm);
+  vec3 srnAn = abs(srnNrmW);
   vec3 srnFp = fract(vSrnPos);
-  vec3 srnBd = min(srnFp, 1.0 - srnFp) + srnAn * 10.0;
-  float srnB = min(srnBd.x, min(srnBd.y, srnBd.z));
-  float srnFw = fwidth(srnB) + 0.00001;
-  gSrnSeam = 1.0 - smoothstep(0.0, 0.028 + srnFw * 1.2, srnB);
-  diffuseColor.rgb *= 1.0 - gSrnSeam * 0.16 * uSrnSeam * uSrnAmt;
+
+  // Detect whether fragment belongs to one of the 4 cylindrical 3D studs on top of a brick
+  vec2 qCenter = vec2(srnFp.x < 0.5 ? 0.26 : 0.74, srnFp.z < 0.5 ? 0.26 : 0.74);
+  vec2 sVec = srnFp.xz - qCenter;
+  float sDist = length(sVec);
+  vec2 sDir = sVec / (sDist + 0.0001);
+  bool srnOnStud = (srnFp.y > 0.0004 && srnFp.y < 0.135 && sDist < 0.185);
+
+  gSrnSeam = 0.0;
+  gSrnBevelW = vec3(0.0);
+  gSrnEdgeSSS = 0.0;
+
+  if (srnOnStud) {
+    // 3D Stud Surface: never slice the stud with the y=0 block boundary seam!
+    float studIdx = (srnFp.x < 0.5 ? 0.0 : 1.0) + (srnFp.z < 0.5 ? 0.0 : 2.0);
+    gSrnSubH = srnHashW(srnCell + vec3(studIdx * 3.7, 9.1, 0.0));
+    diffuseColor.rgb *= 1.0 + ((gSrnH - 0.5) * 0.038 + gSrnF * 0.012) * uSrnAmt;
+    if (srnNrmW.y > 0.75) {
+      // Top cap of the 3D stud: radial crown bevel + central injection-mold gate dimple
+      float crownRim = smoothstep(0.102, 0.148, sDist);
+      gSrnBevelW.xz += sDir * crownRim * (0.32 * uSrnSeam * uSrnAmt);
+      float gateDimple = sin(sDist * 88.0) * smoothstep(0.055, 0.01, sDist) * srnBand2;
+      gSrnBevelW.xz += sDir * gateDimple * (0.07 * uSrnRelief * uSrnAmt);
+      gSrnEdgeSSS = crownRim * 0.85;
+    } else {
+      // Cylindrical side wall of the 3D stud: deep base collar AO near y=0 and warm rim translucency
+      float baseAO = 1.0 - smoothstep(0.001, 0.036, srnFp.y);
+      diffuseColor.rgb *= 1.0 - baseAO * 0.22 * uSrnSeam * uSrnAmt;
+      gSrnEdgeSSS = smoothstep(0.035, 0.11, srnFp.y) * 0.75;
+    }
+  } else {
+    // Modular Sub-Brick Partitioning: 3 horizontal courses (y=0.36, y=0.72) + running-bond vertical joints
+    float srnCourse = srnFp.y < 0.36 ? 0.0 : (srnFp.y < 0.72 ? 1.0 : 2.0);
+    float srnU = srnAn.x > 0.5 ? srnFp.z : srnFp.x;
+    float srnSubIdx = 0.0;
+    if (srnAn.y < 0.5) {
+      if (srnCourse == 1.0) {
+        srnSubIdx = srnU < 0.5 ? 0.0 : 1.0;
+      } else if (srnCourse == 0.0) {
+        srnSubIdx = srnU < 0.25 ? 0.0 : (srnU < 0.75 ? 1.0 : 2.0);
+      } else {
+        srnSubIdx = 3.0;
+      }
+    }
+    gSrnSubH = srnHashW(srnCell * 2.17 + vec3(srnCourse * 7.3, srnSubIdx * 13.7, 1.9));
+    float srnSubH2 = srnHashW(srnCell * 3.91 + vec3(srnSubIdx * 5.1, srnCourse * 11.3, 4.7));
+
+    // Per-sub-piece factory ABS color tolerance & subtle warm/cool pigment shift
+    vec3 srnTintShift = vec3(1.0 + (gSrnSubH - 0.5) * 0.052, 1.0 + (gSrnSubH - 0.5) * 0.044, 1.0 + (srnSubH2 - 0.5) * 0.048);
+    diffuseColor.rgb *= mix(vec3(1.0), srnTintShift + gSrnF * 0.014, uSrnAmt * clamp(uSrnSeam, 0.0, 1.0));
+
+    // Per-sub-piece mechanical assembly micro-tilt (0.35° - 0.75° play between clipped LEGO pieces)
+    vec3 srnTiltW = vec3(gSrnSubH - 0.5, srnSubH2 - 0.5, (gSrnH - 0.5)) * (0.046 * uSrnSeam * uSrnAmt * srnBand1);
+
+    // Outer 1×1×1 voxel perimeter seam & chamfer
+    vec3 srnMask = step(srnAn, vec3(0.5));
+    vec3 srnBd = min(srnFp, 1.0 - srnFp) + (1.0 - srnMask) * 10.0;
+    float srnB = min(srnBd.x, min(srnBd.y, srnBd.z));
+    float srnFw = clamp(fwidth(srnB), 0.0005, 0.06);
+    float srnFadeSeam = clamp(1.0 - srnFw * 11.0, 0.0, 1.0);
+    gSrnSeam = (1.0 - smoothstep(0.0, 0.024 + srnFw * 1.15, srnB)) * srnFadeSeam;
+
+    vec3 srnEdgeSign = sign(srnFp - 0.5);
+    vec3 srnEdgeRamp = smoothstep(0.44, 0.50, abs(srnFp - 0.5)) * srnMask;
+    gSrnBevelW = srnEdgeSign * srnEdgeRamp * (0.36 * uSrnSeam * uSrnAmt) + srnTiltW;
+    gSrnEdgeSSS = max(srnEdgeRamp.x, max(srnEdgeRamp.y, srnEdgeRamp.z));
+
+    // Sub-Brick Running-Bond Cavity Seams on Side Faces (y=0.36, y=0.72 and staggered u joints)
+    if (srnAn.y < 0.5 && uSrnSeam > 0.5) {
+      float dC1 = srnFp.y - 0.36;
+      float dC2 = srnFp.y - 0.72;
+      float hDist = min(abs(dC1), abs(dC2));
+      float hSign = abs(dC1) < abs(dC2) ? sign(dC1) : sign(dC2);
+      float hSeam = (1.0 - smoothstep(0.0, 0.018 + srnFw, hDist)) * srnFadeSeam;
+      gSrnBevelW.y += -hSign * hSeam * (0.28 * uSrnSeam * uSrnAmt);
+
+      float vDist = 10.0;
+      float vSign = 0.0;
+      if (srnCourse == 1.0) {
+        vDist = abs(srnU - 0.5);
+        vSign = sign(srnU - 0.5);
+      } else if (srnCourse == 0.0) {
+        float dQ1 = srnU - 0.25;
+        float dQ2 = srnU - 0.75;
+        vDist = min(abs(dQ1), abs(dQ2));
+        vSign = abs(dQ1) < abs(dQ2) ? sign(dQ1) : sign(dQ2);
+      }
+      float vSeam = (1.0 - smoothstep(0.0, 0.016 + srnFw, vDist)) * srnFadeSeam;
+      vec3 uAxis = srnAn.x > 0.5 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+      gSrnBevelW += -uAxis * (vSign * vSeam * 0.24 * uSrnSeam * uSrnAmt);
+
+      float subCavity = max(hSeam, vSeam * 0.85);
+      gSrnSeam = max(gSrnSeam, subCavity);
+      gSrnEdgeSSS = max(gSrnEdgeSSS, subCavity * 0.55);
+    }
+
+    if (srnNrmW.y > 0.75) {
+      // Top flat plate of the brick: 4 stud base contact AO rings & fillet normals
+      float collar = exp(-((sDist - 0.148) * (sDist - 0.148)) / 0.00042);
+      diffuseColor.rgb *= 1.0 - collar * 0.20 * uSrnSeam * uSrnAmt;
+      gSrnBevelW.xz += sDir * collar * (0.26 * uSrnSeam * uSrnAmt);
+      if (sDist < 0.145) {
+        // For distant LOD chunks where 3D studs fade out, synthesize smooth 3D stud rim relief
+        float lodRim = exp(-((sDist - 0.132) * (sDist - 0.132)) / 0.00035);
+        gSrnBevelW.xz += sDir * lodRim * (0.24 * uSrnSeam * uSrnAmt);
+        gSrnEdgeSSS = max(gSrnEdgeSSS, lodRim * 0.65);
+      }
+    }
+
+    // Deep physical inter-brick & sub-brick Cavity AO
+    diffuseColor.rgb *= 1.0 - gSrnSeam * 0.24 * uSrnSeam * uSrnAmt;
+  }
 }`,
       )
       .replace(
         "#include <roughnessmap_fragment>",
         `#include <roughnessmap_fragment>
-roughnessFactor = clamp(roughnessFactor + (gSrnF * 0.07 + (gSrnH - 0.5) * 0.10 - gSrnSeam * 0.04) * uSrnAmt, 0.04, 1.0);`,
+{
+  // Molded ABS satin roughness (0.22..0.54) with per-sub-brick finger/mold variance & Toksvig AA
+  vec3 dNdx = dFdx(vSrnNrm);
+  vec3 dNdy = dFdy(vSrnNrm);
+  float geomAa = clamp((dot(dNdx, dNdx) + dot(dNdy, dNdy)) * 0.65, 0.0, 0.30);
+  float fingerMatte = (gSrnSubH - 0.5) * 0.048 + gSrnF * 0.028;
+  roughnessFactor = clamp(roughnessFactor * 0.38 + 0.09 + (fingerMatte + gSrnSeam * 0.16) * uSrnAmt + geomAa, 0.22, 0.80);
+}`,
       )
       .replace(
         "#include <normal_fragment_maps>",
         `#include <normal_fragment_maps>
 {
-  float srnHgt = sin(vSrnPos.x * 9.0 + sin(vSrnPos.y * 7.0)) * 0.5 + sin(vSrnPos.z * 11.0 - vSrnPos.y * 5.0) * 0.5 + gSrnF * 0.6;
-  float srnFade = clamp(14.0 / (1.0 + length(vViewPosition)), 0.15, 1.0);
-  vec2 srnD = vec2(dFdx(srnHgt), dFdy(srnHgt)) * (0.5 * uSrnRelief * uSrnAmt * srnFade);
-  vec3 srnPosV = -vViewPosition;
-  vec3 srnQ0 = dFdx(srnPosV);
-  vec3 srnQ1 = dFdy(srnPosV);
-  vec3 srnR1 = cross(srnQ1, normal);
-  vec3 srnR2 = cross(normal, srnQ0);
-  float srnDet = dot(srnQ0, srnR1);
-  if (abs(srnDet) > 0.000001) {
-    vec3 srnGrad = sign(srnDet) * (srnD.x * srnR1 + srnD.y * srnR2);
-    normal = normalize(abs(srnDet) * normal - srnGrad);
-  }
+  // Apply band-limited analytical SIREN micro-normal + sub-brick bevels + per-piece tilt in view space
+  float srnFade = clamp(26.0 / (1.0 + length(vViewPosition)), 0.12, 1.0);
+  vec3 srnPerturbV = mat3(viewMatrix) * (gSrnBevelW + gSrnMicroNrmW);
+  normal = normalize(normal + srnPerturbV * srnFade);
 }`,
       )
       .replace(
-        "#include <emissivemap_fragment>",
-        `#include <emissivemap_fragment>
-{
-  float srnRim = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
-  totalEmissiveRadiance += diffuseColor.rgb * srnRim * 0.05 * uSrnAmt;
-}`,
+        "#include <opaque_fragment>",
+        `{
+  // Macro Toy Photography ABS Optics (IOR = 1.54 -> F0 = 0.0452):
+  //   - Analytical Studio HDRI Softbox reflections on chamfers, sub-brick tilts & 3D studs
+  //   - Circular anisotropic micro-scratches inside specular highlights
+  //   - Thick-wall warm ABS Subsurface Scattering (SSS) on back-lit studs & edges
+  //   - Trans-Clear underside anti-stud coupling tube shadow on transparent blocks
+  vec3 srnV = normalize(vViewPosition);
+  vec3 srnN = normalize(normal);
+  vec3 srnNrmW = normalize(vSrnNrm);
+  float srnNdv = clamp(dot(srnN, srnV), 0.0, 1.0);
+  float srnFresnel = 0.0452 + (1.0 - 0.0452) * pow(1.0 - srnNdv, 4.6);
+
+  float srnLitLuma = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
+  float srnLightGate = clamp(srnLitLuma * 2.4, 0.0, 1.0);
+
+  // World-space reflection vector perturbed by sub-brick bevels & per-piece tilt
+  vec3 srnViewW = normalize(cameraPosition - vSrnPos);
+  vec3 srnPerturbNrmW = normalize(srnNrmW + (gSrnBevelW + gSrnMicroNrmW) * 0.85);
+  vec3 srnReflW = reflect(-srnViewW, srnPerturbNrmW);
+
+  // Analytical Studio Light Dome: Key Softbox + Rim Fill Strip + Sky Dome
+  float sbKey = smoothstep(0.68, 0.90, dot(srnReflW, normalize(vec3(0.45, 0.78, 0.35))));
+  float sbFill = smoothstep(0.74, 0.93, dot(srnReflW, normalize(vec3(-0.62, 0.60, -0.50))));
+  float sbBounce = smoothstep(-0.1, 0.5, -srnReflW.y) * 0.12;
+  float scratchGlint = 1.0 + gSrnScratch * 0.22;
+  vec3 studioSoftbox = (vec3(1.0, 0.98, 0.92) * sbKey * 0.42 + vec3(0.86, 0.94, 1.0) * sbFill * 0.24 + uSkyCol * sbBounce) * scratchGlint;
+  float srnSkyAlign = clamp(srnReflW.y * 0.5 + 0.5, 0.0, 1.0);
+  vec3 srnCoatCol = (mix(uSkyCol, uSunCol, 0.35 * uDayF) * (0.55 * srnFresnel * srnSkyAlign) + studioSoftbox * (0.45 + 0.55 * srnFresnel)) * srnLightGate;
+
+  // Thick-wall ABS Subsurface Scattering (SSS): warm internal glow on back-lit studs & thin edges
+  float srnSunWrap = clamp(dot(srnNrmW, uSunDir) * 0.5 + 0.5, 0.0, 1.0);
+  float srnBackLit = pow(clamp(dot(-srnViewW, uSunDir) * 0.5 + 0.5, 0.0, 1.0), 2.4);
+  vec3 srnWarmTint = pow(max(diffuseColor.rgb, vec3(0.02)), vec3(0.78)) * vec3(1.12, 0.98, 0.86);
+  float srnSssFactor = (gSrnEdgeSSS * 0.14 + (1.0 - srnNdv) * 0.07) * (0.32 + 0.42 * srnSunWrap + 0.46 * srnBackLit);
+  vec3 srnSSS = srnWarmTint * srnSssFactor * srnLightGate;
+
+  // Trans-Clear / Refractive blocks (glassStd has uSrnSeam == 0.2): render internal shadow of
+  // the underside anti-stud coupling tube (paintBottom) and chromatic edge dispersion!
+  if (uSrnSeam > 0.15 && uSrnSeam < 0.25) {
+    vec2 refrUv = fract(vSrnPos.xz - srnViewW.xz * 0.22);
+    float antiTube = abs(length(refrUv - 0.5) - 0.22);
+    float tubeRing = 1.0 - smoothstep(0.0, 0.042, antiTube) * 0.28;
+    outgoingLight *= tubeRing;
+    outgoingLight += vec3(0.88, 0.96, 1.04) * srnFresnel * 0.35 * srnLightGate;
+  }
+
+  outgoingLight += (srnSSS + srnCoatCol) * uSrnAmt;
+}
+#include <opaque_fragment>`,
       );
   };
-  mat.customProgramCacheKey = () => cacheKey;
+  mat.customProgramCacheKey = () => cacheKey + "-siren-v6";
   return mat;
 }
 
@@ -8555,7 +10538,7 @@ function skin(
   color: number | string,
   extra: { transparent?: boolean; opacity?: number; depthWrite?: boolean; depthTest?: boolean; side?: THREE.Side } = {},
 ) {
-  if (plasticOn) return sirenize(new THREE.MeshStandardMaterial({ color, roughness: 0.38, metalness: 0, ...extra }));
+  if (plasticOn) return sirenize(new THREE.MeshStandardMaterial({ color, roughness: 0.38, metalness: 0.0, ...extra }));
   return new THREE.MeshLambertMaterial({ color, ...extra });
 }
 
@@ -8586,24 +10569,97 @@ function geoCyl(r: number, h: number, n = 12, rb = r) {
   return g;
 }
 
-function put(parent: THREE.Object3D, geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, rx = 0) {
+// Authentic tapered LEGO Minifig trapezoidal torso (narrower at neck collar, wider at waist)
+function geoTrap(topW: number, botW: number, h: number, d: number) {
+  const k = "trap:" + topW + ":" + botW + ":" + h + ":" + d;
+  let g = figGeo.get(k);
+  if (!g) {
+    g = new THREE.BoxGeometry(botW, h, d);
+    const pos = g.attributes.position as THREE.BufferAttribute;
+    const ratio = topW / botW;
+    for (let i = 0; i < pos.count; i++) {
+      if (pos.getY(i) > 0) {
+        pos.setX(i, pos.getX(i) * ratio);
+      }
+    }
+    pos.needsUpdate = true;
+    g.computeVertexNormals();
+    figGeo.set(k, g);
+  }
+  return g;
+}
+
+// Authentic 45° LEGO slope brick for creature feet & brick-built snouts
+function geoSlope(w: number, h: number, d: number) {
+  const k = "slope:" + w + ":" + h + ":" + d;
+  let g = figGeo.get(k);
+  if (!g) {
+    g = new THREE.BoxGeometry(w, h, d);
+    const pos = g.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) {
+      // Taper the top-front edge (-Z is forward in mob local space)
+      if (pos.getY(i) > 0 && pos.getZ(i) < 0) {
+        pos.setY(i, pos.getY(i) * 0.25);
+      }
+    }
+    pos.needsUpdate = true;
+    g.computeVertexNormals();
+    figGeo.set(k, g);
+  }
+  return g;
+}
+
+// Open 270° C-Clamp LEGO Minifig Hand
+function geoClaw(r = 0.058, h = 0.068) {
+  const k = "claw:" + r + ":" + h;
+  let g = figGeo.get(k);
+  if (!g) {
+    g = new THREE.CylinderGeometry(r, r, h, 14, 1, false, 0.52, Math.PI * 1.52);
+    figGeo.set(k, g);
+  }
+  return g;
+}
+
+function put(parent: THREE.Object3D, geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, rx = 0, noShadow = false) {
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.set(x, y, z);
   mesh.rotation.x = rx;
-  mesh.castShadow = plasticOn;
+  if (noShadow) {
+    mesh.castShadow = false;
+    mesh.userData.noShadow = true;
+  } else {
+    mesh.castShadow = plasticOn;
+  }
   mesh.receiveShadow = plasticOn;
   parent.add(mesh);
   return mesh;
 }
 
+// Pierced / hollow safety stud on top of LEGO Minifig heads
+function hollowStud(parent: THREE.Object3D, mat: THREE.Material, darkMat: THREE.Material, x: number, y: number, z: number, r = 0.086, h = 0.062) {
+  put(parent, geoCyl(r * 0.94, h, 12, r), mat, x, y + h / 2, z, 0, true);
+  put(parent, geoCyl(r * 0.56, h * 0.35, 10), darkMat, x, y + h - h * 0.14, z, 0, true);
+}
+
+// Translucent refractive Trans-Neon / Trans-Red / Trans-Purple 1×1 LEGO tile material for mob eyes
+function transTile(color: number, glowHex: number) {
+  const mat = skin(color, { transparent: true, opacity: 0.88 });
+  mat.emissive = new THREE.Color(glowHex);
+  if ((mat as THREE.MeshStandardMaterial).isMeshStandardMaterial) {
+    (mat as THREE.MeshStandardMaterial).roughness = 0.08;
+    (mat as THREE.MeshStandardMaterial).emissiveIntensity = 0.85;
+  }
+  return mat;
+}
+
 function studs(parent: THREE.Object3D, mat: THREE.Material, x: number, y: number, z: number, w: number, d: number, nx: number, nz: number) {
   if (nx < 1 || nz < 1) return;
-  const r = Math.min(w / nx, d / nz) * 0.32;
-  const h = r * (4 / 6);
-  const geo = geoCyl(r, h, 10, r * 0.9);
+  const r = Number((Math.min(w / nx, d / nz) * 0.32).toFixed(4));
+  const h = Number((r * (4 / 6)).toFixed(4));
+  const geo = geoCyl(Number((r * 0.92).toFixed(4)), h, 10, r);
   for (let ix = 0; ix < nx; ix++) {
     for (let iz = 0; iz < nz; iz++) {
-      put(parent, geo, mat, x - w / 2 + (w / nx) * (ix + 0.5), y + h / 2, z - d / 2 + (d / nz) * (iz + 0.5));
+      put(parent, geo, mat, x - w / 2 + (w / nx) * (ix + 0.5), y + h / 2, z - d / 2 + (d / nz) * (iz + 0.5), 0, true);
     }
   }
 }
@@ -8629,11 +10685,29 @@ function hinge(parent: THREE.Object3D, mat: THREE.Material, r: number, h: number
 function legBox(parent: THREE.Object3D, mat: THREE.Material, w: number, h: number, d: number, x: number, y: number, z: number) {
   const pivot = new THREE.Group();
   pivot.position.set(x, y, z);
-  const mesh = new THREE.Mesh(geoBox(w, h, d), mat);
-  mesh.position.y = -h / 2;
+  // Rounded hip hinge barrel nesting directly inside body underside socket with zero gap
+  const bR = Math.min(w, d) * 0.48;
+  const bH = Math.min(w, d) * 0.92;
+  const hipHinge = new THREE.Mesh(geoCyl(bR, bH, 10), mat);
+  hipHinge.rotation.z = Math.PI / 2;
+  hipHinge.position.set(0, 0, 0);
+  hipHinge.castShadow = false;
+  hipHinge.userData.noShadow = true;
+  pivot.add(hipHinge);
+  // Upper brick leg column
+  const mesh = new THREE.Mesh(geoBox(w, h * 0.76, d), mat);
+  mesh.position.y = -(h * 0.38);
   mesh.castShadow = plasticOn;
   mesh.receiveShadow = plasticOn;
   pivot.add(mesh);
+  // Sloped 1×2 LEGO foot brick at the bottom with a front toe stud
+  const footH = Math.max(0.06, h * 0.28);
+  const footD = d * 1.28;
+  const foot = new THREE.Mesh(geoSlope(w * 1.04, footH, footD), mat);
+  foot.position.set(0, -h + footH * 0.5, -d * 0.14);
+  foot.castShadow = plasticOn;
+  foot.receiveShadow = plasticOn;
+  pivot.add(foot);
   parent.add(pivot);
   return pivot;
 }
@@ -8649,41 +10723,123 @@ function makeFig(shirt: number, pants: number, hairCol: number, face: FigFace, h
   const hairM = skin(hairCol);
   const black = skin(0x1a120c);
   const white = skin(0xf7f4ee);
-  const legL = hinge(g, pantsM, 0.075, 0.42, -0.09, 0.44, 0);
-  const legR = hinge(g, pantsM, 0.075, 0.42, 0.09, 0.44, 0);
-  block(g, pantsM, 0.36, 0.08, 0.22, 0, 0.48, 0);
-  const torso = block(g, shirtM, 0.44, 0.4, 0.24, 0, 0.74, 0);
+  const beltM = skin(0x3a2616);
+  const goldM = skin(0xf5c518);
+
+  // 1. T-Pelvis Hip Assembly, Molded Belt Buckle & Central Hinge Axle (Zero Gap to Torso)
+  block(g, pantsM, 0.41, 0.065, 0.22, 0, 0.49, 0); // Waist hip plate (y: 0.4575 .. 0.5225)
+  put(g, geoBox(0.415, 0.032, 0.228), beltM, 0, 0.515, 0, 0, true); // Leather waist belt
+  put(g, geoBox(0.075, 0.042, 0.018), goldM, 0, 0.515, -0.116, 0, true); // Belt buckle
+  block(g, pantsM, 0.065, 0.15, 0.20, 0, 0.40, 0); // Vertical T-bar between legs
+  const hipAxle = put(g, geoCyl(0.042, 0.38, 10), pantsM, 0, 0.42, 0, 0, true);
+  hipAxle.rotation.z = Math.PI / 2;
+
+  // 2. Articulated Hinged LEGO Minifig Legs (hip barrel nests directly into pelvis underside)
+  const makeMinifigLeg = (lx: number) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(lx, 0.42, 0);
+    // Rounded upper hip barrel
+    const barrel = put(pivot, geoCyl(0.088, 0.155, 12), pantsM, 0, 0, 0, 0, true);
+    barrel.rotation.z = Math.PI / 2;
+    // Main leg shaft
+    put(pivot, geoBox(0.155, 0.31, 0.185), pantsM, 0, -0.18, 0);
+    // Protruding front foot toe-block
+    put(pivot, geoBox(0.158, 0.085, 0.225), pantsM, 0, -0.375, -0.02);
+    // Two authentic anti-stud socket holes on the back of the leg (+Z)
+    put(pivot, geoCyl(0.038, 0.016, 8), black, 0, -0.13, 0.09, Math.PI / 2, true);
+    put(pivot, geoCyl(0.038, 0.016, 8), black, 0, -0.27, 0.09, Math.PI / 2, true);
+    g.add(pivot);
+    return pivot;
+  };
+  const legL = makeMinifigLeg(-0.115);
+  const legR = makeMinifigLeg(0.115);
+
+  // 3. Tapered Trapezoidal LEGO Torso (y: 0.52 .. 0.94 rests flush on hip plate 0.5225)
+  const torso = put(g, geoTrap(0.35, 0.43, 0.42, 0.23), shirtM, 0, 0.73, 0);
   torso.userData.skin = "body";
-  put(g, geoBox(0.16, 0.05, 0.02), white, 0, 0.78, -0.13);
-  const armR = hinge(g, shirtM, 0.05, 0.34, 0.3, 0.88, 0);
-  const armL = hinge(g, shirtM, 0.05, 0.34, -0.3, 0.88, 0);
-  put(armL, geoCyl(0.045, 0.07, 8), headM, 0, -0.38, 0);
-  put(armR, geoCyl(0.045, 0.07, 8), headM, 0, -0.38, 0);
-  put(g, geoCyl(0.15, 0.3, 16), headM, 0, 1.12, 0);
-  studs(g, headM, 0, 1.27, 0, 0.18, 0.18, 1, 1);
-  put(g, geoBox(0.32, 0.1, 0.18), hairM, 0, 1.22, 0.05);
+  put(g, geoBox(0.16, 0.05, 0.018), white, 0, 0.89, -0.116, 0, true); // Collar undershirt V
+  put(g, geoBox(0.022, 0.28, 0.016), black, 0, 0.71, -0.116, 0, true); // Tunic placket seam
+  put(g, geoBox(0.085, 0.075, 0.016), beltM, -0.105, 0.77, -0.116, 0, true); // Chest pocket print
+  put(g, geoCyl(0.092, 0.07, 12), headM, 0, 0.96, 0, 0, true); // Neck post
+  put(g, geoCyl(0.105, 0.018, 12), black, 0, 0.945, 0, 0, true); // Crisp neck collar shadow ring
+
+  // 4. Curved Cylindrical Arms with Shoulder Sockets tucked flush into Torso (Zero Gap)
+  const makeMinifigArm = (side: -1 | 1) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(side * 0.195, 0.88, 0);
+    pivot.rotation.z = -side * 0.11; // Slight outward flare matching tapered torso
+    // Rounded shoulder ball tucked into torso cavity
+    const sh = put(pivot, geoCyl(0.056, 0.09, 10), shirtM, 0, -0.02, 0, 0, true);
+    sh.rotation.z = Math.PI / 2;
+    // Upper & forearm angled segments
+    put(pivot, geoCyl(0.052, 0.18, 10, 0.056), shirtM, side * 0.035, -0.11, 0.01, -0.10);
+    put(pivot, geoCyl(0.048, 0.16, 10, 0.052), shirtM, side * 0.042, -0.25, -0.015, 0.18);
+    // Wrist pin
+    put(pivot, geoCyl(0.034, 0.055, 8), headM, side * 0.042, -0.34, -0.035, 0.22, true);
+    // Open 270° C-Clamp LEGO Hand oriented to grip forward
+    const clawGrp = new THREE.Group();
+    clawGrp.position.set(side * 0.042, -0.39, -0.055);
+    clawGrp.rotation.x = Math.PI / 2 + 0.22;
+    clawGrp.rotation.z = Math.PI / 2;
+    put(clawGrp, geoClaw(0.056, 0.066), headM, 0, 0, 0, 0, true);
+    put(clawGrp, geoCyl(0.034, 0.064, 8), black, 0, 0, 0, 0, true); // Inner C-grip shadow bore
+    pivot.add(clawGrp);
+    g.add(pivot);
+    return pivot;
+  };
+  const armR = makeMinifigArm(1);
+  const armL = makeMinifigArm(-1);
+
+  // 5. Articulated Cylindrical LEGO Head Group (y: 0.955 sits flush on neck collar ring 0.945 with Zero Gap)
+  const head = new THREE.Group();
+  head.position.set(0, 0.955, 0);
+  g.add(head);
+  g.userData.head = head;
+
+  put(head, geoCyl(0.154, 0.035, 16, 0.122), headM, 0, -0.005, 0, 0, true); // Bottom chin bevel
+  put(head, geoCyl(0.154, 0.23, 18), headM, 0, 0.125, 0); // Main cylindrical head
+  put(head, geoCyl(0.124, 0.035, 16, 0.154), headM, 0, 0.255, 0, 0, true); // Top brow bevel
+  hollowStud(head, headM, black, 0, 0.272, 0, 0.088, 0.062); // Pierced safety stud
+  // Molded hairpiece / cap with sideburns & back nape
+  put(head, geoBox(0.32, 0.09, 0.24), hairM, 0, 0.24, 0.02);
+  put(head, geoBox(0.31, 0.16, 0.08), hairM, 0, 0.14, 0.125, 0, true);
+
+  // 6. Pad-Printed Glossy Ink Face Details (attached to articulated head)
   if (face === "skull") {
-    put(g, geoBox(0.07, 0.07, 0.02), black, -0.06, 1.16, -0.16);
-    put(g, geoBox(0.07, 0.07, 0.02), black, 0.06, 1.16, -0.16);
-    put(g, geoBox(0.1, 0.03, 0.02), black, 0, 1.04, -0.16);
-    put(g, geoBox(0.28, 0.025, 0.02), black, 0, 0.7, -0.13);
-    put(g, geoBox(0.28, 0.025, 0.02), black, 0, 0.8, -0.13);
+    put(head, geoBox(0.068, 0.068, 0.02), black, -0.058, 0.15, -0.152, 0, true);
+    put(head, geoBox(0.068, 0.068, 0.02), black, 0.058, 0.15, -0.152, 0, true);
+    put(head, geoBox(0.032, 0.042, 0.02), black, 0, 0.09, -0.154, 0, true);
+    put(head, geoBox(0.11, 0.028, 0.02), black, 0, 0.04, -0.152, 0, true);
+    put(g, geoBox(0.26, 0.025, 0.02), black, 0, 0.70, -0.122, 0, true);
+    put(g, geoBox(0.26, 0.025, 0.02), black, 0, 0.79, -0.122, 0, true);
   } else if (face === "snout") {
-    put(g, geoCyl(0.07, 0.1, 10), skin(0xf2a2c0), 0, 1.08, -0.18, Math.PI / 2);
-    put(g, geoBox(0.05, 0.05, 0.02), black, -0.06, 1.18, -0.16);
-    put(g, geoBox(0.05, 0.05, 0.02), black, 0.06, 1.18, -0.16);
+    put(head, geoCyl(0.068, 0.095, 10), skin(0xf2a2c0), 0, 0.08, -0.175, Math.PI / 2, true);
+    put(head, geoBox(0.024, 0.032, 0.02), black, -0.025, 0.08, -0.222, 0, true);
+    put(head, geoBox(0.024, 0.032, 0.02), black, 0.025, 0.08, -0.222, 0, true);
+    put(head, geoBox(0.048, 0.048, 0.02), black, -0.06, 0.17, -0.152, 0, true);
+    put(head, geoBox(0.048, 0.048, 0.02), black, 0.06, 0.17, -0.152, 0, true);
+    put(head, geoBox(0.018, 0.018, 0.022), white, -0.066, 0.18, -0.154, 0, true);
+    put(head, geoBox(0.018, 0.018, 0.022), white, 0.052, 0.18, -0.154, 0, true);
   } else if (face === "nose") {
-    put(g, geoBox(0.05, 0.05, 0.02), black, -0.06, 1.16, -0.16);
-    put(g, geoBox(0.05, 0.05, 0.02), black, 0.06, 1.16, -0.16);
-    put(g, geoBox(0.08, 0.03, 0.02), black, 0, 1.05, -0.16);
-    put(g, geoCyl(0.055, 0.16, 10), skin(0xc47a2a), 0, 1.08, -0.2, Math.PI / 2);
+    put(head, geoBox(0.048, 0.048, 0.02), black, -0.058, 0.16, -0.152, 0, true);
+    put(head, geoBox(0.048, 0.048, 0.02), black, 0.058, 0.16, -0.152, 0, true);
+    put(head, geoBox(0.018, 0.018, 0.022), white, -0.064, 0.17, -0.154, 0, true);
+    put(head, geoBox(0.018, 0.018, 0.022), white, 0.052, 0.17, -0.154, 0, true);
+    put(head, geoBox(0.14, 0.024, 0.022), hairM, 0, 0.205, -0.154, 0, true); // Unibrow
+    put(head, geoBox(0.08, 0.026, 0.02), black, 0, 0.045, -0.152, 0, true);
+    put(head, geoCyl(0.05, 0.14, 10), skin(0xc47a2a), 0, 0.08, -0.19, Math.PI / 2, true);
   } else {
-    put(g, geoBox(0.05, 0.05, 0.02), black, -0.06, 1.16, -0.16);
-    put(g, geoBox(0.05, 0.05, 0.02), black, 0.06, 1.16, -0.16);
-    put(g, geoBox(0.1, 0.025, 0.02), black, 0, 1.06, -0.16);
+    // Classic LEGO Minifig Eyes + White Specular Catchlights + Smile/Brow
+    put(head, geoBox(0.046, 0.048, 0.02), black, -0.056, 0.155, -0.152, 0, true);
+    put(head, geoBox(0.046, 0.048, 0.02), black, 0.056, 0.155, -0.152, 0, true);
+    put(head, geoBox(0.016, 0.016, 0.022), white, -0.062, 0.165, -0.154, 0, true);
+    put(head, geoBox(0.016, 0.016, 0.022), white, 0.050, 0.165, -0.154, 0, true);
+    put(head, geoBox(0.095, 0.024, 0.02), black, 0, 0.06, -0.152, 0, true);
+    put(head, geoBox(0.024, 0.024, 0.02), black, -0.052, 0.072, -0.148, 0, true);
+    put(head, geoBox(0.024, 0.024, 0.02), black, 0.052, 0.072, -0.148, 0, true);
     if (face === "mad") {
-      put(g, geoBox(0.07, 0.02, 0.02), black, -0.06, 1.22, -0.17);
-      put(g, geoBox(0.07, 0.02, 0.02), black, 0.06, 1.22, -0.17);
+      put(head, geoBox(0.068, 0.022, 0.022), black, -0.058, 0.205, -0.155, 0, true);
+      put(head, geoBox(0.068, 0.022, 0.022), black, 0.058, 0.205, -0.155, 0, true);
     }
   }
   return { group: g, legs: [legL, legR, armR, armL], bodyMat: shirtM };
@@ -8700,179 +10856,385 @@ function beast(kind: string): LegoBody {
   const g = new THREE.Group();
   const dark = skin(0x2a241c);
   const black = skin(0x1a120c);
+  const white = skin(0xf7f4ee);
   if (kind === "sheep") {
     const wool = skin(0xf4f1ea);
-    const body = block(g, wool, 0.78, 0.4, 0.5, 0, 0.56, 0, 3, 2);
+    const woolPlate = skin(0xe8e4dc);
+    const faceSkin = skin(0xd8b8a0);
+    const body = block(g, wool, 0.78, 0.30, 0.50, 0, 0.54, 0, 0, 0);
     body.userData.skin = "body";
-    block(g, dark, 0.28, 0.26, 0.26, 0, 0.64, -0.4, 1, 1);
-    block(g, dark, 0.12, 0.08, 0.08, 0, 0.56, -0.56);
-    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, dark, 0.12, 0.28, 0.12, sx * 0.22, 0.28, sz * 0.14)));
+    // Modular top & side LEGO wool plates with studs + fluffy tail
+    block(g, woolPlate, 0.76, 0.11, 0.48, 0, 0.745, 0, 3, 2);
+    put(g, geoBox(0.68, 0.22, 0.56), woolPlate, 0, 0.55, 0);
+    put(g, geoSlope(0.18, 0.16, 0.14), wool, 0, 0.56, 0.43, Math.PI, true);
+    // Articulated LEGO Sheep Head with wool crown, horizontal pupils & floppy ears
+    const head = new THREE.Group();
+    head.position.set(0, 0.64, -0.38);
+    g.add(head);
+    g.userData.head = head;
+    block(head, faceSkin, 0.26, 0.24, 0.26, 0, 0, -0.04, 0, 0);
+    block(head, wool, 0.28, 0.10, 0.24, 0, 0.14, -0.02, 2, 1);
+    put(head, geoSlope(0.18, 0.11, 0.12), skin(0xe8c4b8), 0, -0.06, -0.20, 0, true);
+    put(head, geoBox(0.08, 0.05, 0.12), faceSkin, -0.16, 0.02, -0.02, 0, true);
+    put(head, geoBox(0.08, 0.05, 0.12), faceSkin, 0.16, 0.02, -0.02, 0, true);
+    put(head, geoBox(0.065, 0.045, 0.02), white, -0.08, 0.03, -0.172, 0, true);
+    put(head, geoBox(0.065, 0.045, 0.02), white, 0.08, 0.03, -0.172, 0, true);
+    put(head, geoBox(0.04, 0.035, 0.022), black, -0.085, 0.03, -0.175, 0, true);
+    put(head, geoBox(0.04, 0.035, 0.022), black, 0.085, 0.03, -0.175, 0, true);
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, dark, 0.12, 0.39, 0.12, sx * 0.22, 0.39, sz * 0.14)));
     tagWool(g, wool);
+    tagWool(g, woolPlate);
     return { group: g, legs, bodyMat: wool };
   }
   if (kind === "cow") {
-    const hide = skin(0x8d5a34);
+    const hide = skin(0x784828);
     const spot = skin(0xf4f1ea);
-    const body = block(g, hide, 0.9, 0.42, 0.46, 0, 0.62, 0, 4, 2);
+    const udder = skin(0xf2a8c0);
+    const body = block(g, hide, 0.9, 0.34, 0.48, 0, 0.58, 0, 0, 0);
     body.userData.skin = "body";
-    put(g, geoBox(0.16, 0.1, 0.04), spot, -0.18, 0.7, -0.22);
-    put(g, geoBox(0.14, 0.12, 0.04), spot, 0.2, 0.66, 0.22);
-    block(g, hide, 0.28, 0.28, 0.28, 0, 0.78, -0.46, 1, 1);
-    block(g, spot, 0.16, 0.12, 0.1, 0, 0.68, -0.62);
-    put(g, geoCyl(0.04, 0.16, 8), dark, -0.08, 0.96, -0.46);
-    put(g, geoCyl(0.04, 0.16, 8), dark, 0.08, 0.96, -0.46);
-    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, dark, 0.12, 0.36, 0.12, sx * 0.28, 0.36, sz * 0.12)));
+    block(g, hide, 0.88, 0.11, 0.46, 0, 0.805, 0, 4, 2);
+    // Brick-built piebald white patches + pink udder
+    put(g, geoBox(0.26, 0.12, 0.48), spot, -0.16, 0.806, 0, 0, true);
+    put(g, geoBox(0.24, 0.22, 0.50), spot, 0.18, 0.62, 0, 0, true);
+    put(g, geoBox(0.24, 0.09, 0.22), udder, 0.12, 0.38, 0, 0, true);
+    // Articulated LEGO Cow Head with horns, ears & tan muzzle
+    const head = new THREE.Group();
+    head.position.set(0, 0.74, -0.44);
+    g.add(head);
+    g.userData.head = head;
+    block(head, hide, 0.28, 0.28, 0.28, 0, 0.02, -0.04, 1, 1);
+    put(head, geoSlope(0.20, 0.13, 0.14), skin(0xe8d0b8), 0, -0.06, -0.22, 0, true);
+    put(head, geoBox(0.032, 0.032, 0.02), black, -0.05, -0.05, -0.29, 0, true);
+    put(head, geoBox(0.032, 0.032, 0.02), black, 0.05, -0.05, -0.29, 0, true);
+    put(head, geoBox(0.06, 0.05, 0.02), white, -0.09, 0.05, -0.182, 0, true);
+    put(head, geoBox(0.06, 0.05, 0.02), white, 0.09, 0.05, -0.182, 0, true);
+    put(head, geoBox(0.038, 0.045, 0.022), black, -0.09, 0.05, -0.185, 0, true);
+    put(head, geoBox(0.038, 0.045, 0.022), black, 0.09, 0.05, -0.185, 0, true);
+    put(head, geoCyl(0.036, 0.15, 8), spot, -0.13, 0.19, -0.02, -0.2, true);
+    put(head, geoCyl(0.036, 0.15, 8), spot, 0.13, 0.19, -0.02, -0.2, true);
+    put(head, geoBox(0.09, 0.05, 0.05), hide, -0.18, 0.08, -0.02, 0, true);
+    put(head, geoBox(0.09, 0.05, 0.05), hide, 0.18, 0.08, -0.02, 0, true);
+    // Articulated tail
+    const tail = new THREE.Group();
+    tail.position.set(0, 0.72, 0.45);
+    put(tail, geoBox(0.06, 0.28, 0.06), hide, 0, -0.12, 0.04, 0.25, true);
+    put(tail, geoBox(0.08, 0.09, 0.08), spot, 0, -0.26, 0.08, 0, true);
+    g.add(tail);
+    g.userData.tail = tail;
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, dark, 0.12, 0.41, 0.12, sx * 0.28, 0.41, sz * 0.12)));
     return { group: g, legs, bodyMat: hide };
   }
   if (kind === "pig") {
     const pink = skin(0xf2a2c0);
-    const body = block(g, pink, 0.7, 0.36, 0.42, 0, 0.48, 0, 3, 2);
+    const pinkPlate = skin(0xe894b4);
+    const snoutM = skin(0xd96a8a);
+    const body = block(g, pink, 0.7, 0.26, 0.42, 0, 0.44, 0, 0, 0);
     body.userData.skin = "body";
-    block(g, pink, 0.3, 0.26, 0.26, 0, 0.56, -0.36, 1, 1);
-    put(g, geoCyl(0.08, 0.08, 10), skin(0xd96a8a), 0, 0.52, -0.52, Math.PI / 2);
-    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, pink, 0.1, 0.22, 0.1, sx * 0.2, 0.22, sz * 0.12)));
+    block(g, pinkPlate, 0.68, 0.10, 0.40, 0, 0.62, 0, 3, 2);
+    // Articulated LEGO Pig Head with 3D cylindrical snout, nostrils & floppy ears
+    const head = new THREE.Group();
+    head.position.set(0, 0.54, -0.34);
+    g.add(head);
+    g.userData.head = head;
+    block(head, pink, 0.30, 0.26, 0.26, 0, 0.02, -0.04, 2, 1);
+    put(head, geoCyl(0.082, 0.085, 10), snoutM, 0, -0.02, -0.19, Math.PI / 2, true);
+    put(head, geoBox(0.026, 0.036, 0.02), black, -0.03, -0.02, -0.235, 0, true);
+    put(head, geoBox(0.026, 0.036, 0.02), black, 0.03, -0.02, -0.235, 0, true);
+    put(head, geoBox(0.06, 0.05, 0.02), white, -0.085, 0.05, -0.172, 0, true);
+    put(head, geoBox(0.06, 0.05, 0.02), white, 0.085, 0.05, -0.172, 0, true);
+    put(head, geoBox(0.038, 0.045, 0.022), black, -0.085, 0.05, -0.175, 0, true);
+    put(head, geoBox(0.038, 0.045, 0.022), black, 0.085, 0.05, -0.175, 0, true);
+    put(head, geoBox(0.05, 0.10, 0.09), pinkPlate, -0.165, 0.08, -0.05, 0.2, true);
+    put(head, geoBox(0.05, 0.10, 0.09), pinkPlate, 0.165, 0.08, -0.05, 0.2, true);
+    // Curly brick tail
+    const tail = new THREE.Group();
+    tail.position.set(0, 0.50, 0.35);
+    put(tail, geoBox(0.06, 0.08, 0.08), snoutM, 0, 0.02, 0.04, 0.4, true);
+    g.add(tail);
+    g.userData.tail = tail;
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, pink, 0.1, 0.31, 0.1, sx * 0.2, 0.31, sz * 0.12)));
     return { group: g, legs, bodyMat: pink };
   }
   if (kind === "chicken") {
-    const white = skin(0xf7f4ee);
-    const body = block(g, white, 0.32, 0.28, 0.36, 0, 0.36, 0, 2, 2);
+    const red = skin(0xe23b2f);
+    const beak = skin(0xf07820);
+    const body = block(g, white, 0.32, 0.26, 0.36, 0, 0.34, 0, 2, 2);
     body.userData.skin = "body";
-    put(g, geoBox(0.1, 0.08, 0.1), skin(0xe23b2f), 0, 0.54, -0.02);
-    put(g, geoBox(0.08, 0.06, 0.1), skin(0xf07820), 0, 0.36, -0.24);
-    put(g, geoBox(0.05, 0.16, 0.24), white, -0.19, 0.38, 0.02);
-    put(g, geoBox(0.05, 0.16, 0.24), white, 0.19, 0.38, 0.02);
-    put(g, geoBox(0.16, 0.12, 0.06), white, 0, 0.52, 0.2, -0.4);
-    const legs = [legBox(g, skin(0xf07820), 0.06, 0.2, 0.06, -0.06, 0.2, 0), legBox(g, skin(0xf07820), 0.06, 0.2, 0.06, 0.06, 0.2, 0)];
+    put(g, geoBox(0.05, 0.16, 0.24), white, -0.185, 0.36, 0.02, 0, true);
+    put(g, geoBox(0.05, 0.16, 0.24), white, 0.185, 0.36, 0.02, 0, true);
+    put(g, geoSlope(0.16, 0.14, 0.12), white, 0, 0.48, 0.20, Math.PI, true);
+    const head = new THREE.Group();
+    head.position.set(0, 0.46, -0.14);
+    g.add(head);
+    g.userData.head = head;
+    block(head, white, 0.18, 0.22, 0.18, 0, 0.06, 0, 1, 1);
+    put(head, geoBox(0.05, 0.09, 0.13), red, 0, 0.20, 0, 0, true); // Comb crest
+    put(head, geoSlope(0.11, 0.07, 0.12), beak, 0, 0.04, -0.14, 0, true); // Beak
+    put(head, geoBox(0.06, 0.07, 0.06), red, 0, -0.02, -0.11, 0, true); // Wattle
+    put(head, geoBox(0.035, 0.035, 0.02), black, -0.06, 0.09, -0.092, 0, true);
+    put(head, geoBox(0.035, 0.035, 0.02), black, 0.06, 0.09, -0.092, 0, true);
+    const legs = [legBox(g, beak, 0.06, 0.21, 0.06, -0.06, 0.21, 0), legBox(g, beak, 0.06, 0.21, 0.06, 0.06, 0.21, 0)];
     return { group: g, legs, bodyMat: white };
   }
   if (kind === "horse") {
     const hide = skin(0x6b3e22);
-    const body = block(g, hide, 1.05, 0.38, 0.36, 0, 0.78, 0, 4, 1);
+    const saddle = skin(0x9a4820);
+    const blaze = skin(0xf4f1ea);
+    const body = block(g, hide, 1.05, 0.38, 0.38, 0, 0.78, 0, 4, 2);
     body.userData.skin = "body";
-    block(g, hide, 0.22, 0.42, 0.22, 0, 1.05, -0.48);
-    block(g, hide, 0.26, 0.24, 0.36, 0, 1.28, -0.62, 1, 1);
-    put(g, geoBox(0.08, 0.16, 0.2), black, 0, 1.22, -0.28);
-    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, hide, 0.1, 0.5, 0.1, sx * 0.28, 0.5, sz * 0.28)));
+    // Molded LEGO saddle & stirrups
+    put(g, geoBox(0.36, 0.09, 0.42), saddle, 0, 0.99, 0, 0, true);
+    // Articulated neck + head group
+    const head = new THREE.Group();
+    head.position.set(0, 0.96, -0.44);
+    g.add(head);
+    g.userData.head = head;
+    put(head, geoBox(0.22, 0.38, 0.22), hide, 0, 0.14, -0.06, -0.35);
+    block(head, hide, 0.24, 0.22, 0.34, 0, 0.32, -0.18, 1, 1);
+    put(head, geoSlope(0.18, 0.14, 0.18), hide, 0, 0.28, -0.40, 0, true);
+    put(head, geoBox(0.07, 0.06, 0.26), blaze, 0, 0.39, -0.24, 0, true); // White forehead blaze
+    put(head, geoBox(0.07, 0.32, 0.08), black, 0, 0.20, 0.08, -0.35, true); // Dark mane
+    put(head, geoBox(0.05, 0.10, 0.05), hide, -0.08, 0.46, -0.08, 0, true);
+    put(head, geoBox(0.05, 0.10, 0.05), hide, 0.08, 0.46, -0.08, 0, true);
+    put(head, geoBox(0.045, 0.045, 0.02), black, -0.122, 0.34, -0.22, 0, true);
+    put(head, geoBox(0.045, 0.045, 0.02), black, 0.122, 0.34, -0.22, 0, true);
+    // Flowing tail
+    const tail = new THREE.Group();
+    tail.position.set(0, 0.88, 0.52);
+    put(tail, geoBox(0.10, 0.38, 0.12), black, 0, -0.16, 0.06, 0.3, true);
+    g.add(tail);
+    g.userData.tail = tail;
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, hide, 0.11, 0.59, 0.11, sx * 0.28, 0.59, sz * 0.28)));
     return { group: g, legs, bodyMat: hide };
   }
   if (kind === "fox") {
     const coat = skin(0xf07820);
-    const white = skin(0xf4f1ea);
-    const body = block(g, coat, 0.7, 0.28, 0.32, 0, 0.42, 0, 3, 1);
+    const body = block(g, coat, 0.68, 0.26, 0.32, 0, 0.40, 0, 3, 1);
     body.userData.skin = "body";
-    put(g, geoBox(0.28, 0.12, 0.04), white, 0, 0.4, -0.15);
-    block(g, coat, 0.22, 0.2, 0.24, 0, 0.5, -0.4, 1, 1);
-    put(g, geoBox(0.06, 0.1, 0.04), white, -0.06, 0.64, -0.4);
-    put(g, geoBox(0.06, 0.1, 0.04), white, 0.06, 0.64, -0.4);
-    block(g, coat, 0.16, 0.16, 0.28, 0, 0.48, 0.42, 1, 1);
-    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, coat, 0.08, 0.22, 0.08, sx * 0.18, 0.22, sz * 0.1)));
+    put(g, geoBox(0.28, 0.14, 0.12), white, 0, 0.36, -0.30, 0, true); // Fluffy white chest bib
+    // Articulated LEGO Fox Head
+    const head = new THREE.Group();
+    head.position.set(0, 0.48, -0.36);
+    g.add(head);
+    g.userData.head = head;
+    block(head, coat, 0.26, 0.20, 0.24, 0, 0.02, -0.04, 1, 1);
+    put(head, geoSlope(0.12, 0.09, 0.16), white, 0, -0.03, -0.22, 0, true);
+    put(head, geoBox(0.04, 0.04, 0.03), black, 0, -0.01, -0.30, 0, true); // Wet black nose stud
+    put(head, geoBox(0.07, 0.12, 0.04), coat, -0.09, 0.16, -0.04, 0, true);
+    put(head, geoBox(0.07, 0.12, 0.04), coat, 0.09, 0.16, -0.04, 0, true);
+    put(head, geoBox(0.04, 0.07, 0.02), black, -0.09, 0.16, -0.062, 0, true);
+    put(head, geoBox(0.04, 0.07, 0.02), black, 0.09, 0.16, -0.062, 0, true);
+    put(head, geoBox(0.045, 0.04, 0.02), black, -0.075, 0.03, -0.162, 0, true);
+    put(head, geoBox(0.045, 0.04, 0.02), black, 0.075, 0.03, -0.162, 0, true);
+    // Articulated bushy tail with white tip
+    const tail = new THREE.Group();
+    tail.position.set(0, 0.44, 0.34);
+    block(tail, coat, 0.16, 0.16, 0.24, 0, 0.02, 0.12, 1, 1);
+    put(tail, geoBox(0.14, 0.14, 0.12), white, 0, 0.02, 0.28, 0, true);
+    g.add(tail);
+    g.userData.tail = tail;
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, black, 0.08, 0.27, 0.08, sx * 0.18, 0.27, sz * 0.1)));
     return { group: g, legs, bodyMat: coat };
   }
   if (kind === "frog") {
     const green = skin(0x3aaa4c);
-    const body = block(g, green, 0.46, 0.2, 0.36, 0, 0.24, 0, 2, 2);
+    const croakSac = skin(0xf4d47c);
+    const body = block(g, green, 0.46, 0.20, 0.38, 0, 0.24, 0, 2, 2);
     body.userData.skin = "body";
-    studs(g, skin(0xf0c43a), -0.1, 0.36, -0.08, 0.12, 0.12, 1, 1);
-    studs(g, skin(0xf0c43a), 0.1, 0.36, -0.08, 0.12, 0.12, 1, 1);
-    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, green, 0.08, 0.12, 0.1, sx * 0.16, 0.12, sz * 0.12)));
+    const throat = put(g, geoBox(0.28, 0.10, 0.16), croakSac, 0, 0.17, -0.14, 0, true);
+    g.userData.throat = throat;
+    const eyeM = transTile(0xf5d442, 0x6a5200);
+    put(g, geoBox(0.11, 0.10, 0.11), green, -0.12, 0.38, -0.08, 0, true);
+    put(g, geoBox(0.11, 0.10, 0.11), green, 0.12, 0.38, -0.08, 0, true);
+    put(g, geoBox(0.07, 0.06, 0.03), eyeM, -0.12, 0.39, -0.14, 0, true);
+    put(g, geoBox(0.07, 0.06, 0.03), eyeM, 0.12, 0.39, -0.14, 0, true);
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, green, 0.08, 0.14, 0.1, sx * 0.16, 0.14, sz * 0.12)));
     return { group: g, legs, bodyMat: green };
   }
   if (kind === "crab") {
     const red = skin(0xe23b2f);
+    const shell = skin(0xc42b20);
     const body = block(g, red, 0.5, 0.16, 0.36, 0, 0.22, 0, 2, 2);
     body.userData.skin = "body";
-    put(g, geoBox(0.14, 0.1, 0.14), red, -0.32, 0.24, -0.12);
-    put(g, geoBox(0.14, 0.1, 0.14), red, 0.32, 0.24, -0.12);
-    studs(g, skin(0xf4f1ea), -0.08, 0.3, -0.08, 0.08, 0.08, 1, 1);
-    studs(g, skin(0xf4f1ea), 0.08, 0.3, -0.08, 0.08, 0.08, 1, 1);
-    const legs = [-1, 1].flatMap((sx) => [0, 1].map((i) => legBox(g, red, 0.06, 0.1, 0.08, sx * 0.18, 0.1, -0.02 + i * 0.1)));
+    put(g, geoBox(0.42, 0.05, 0.28), shell, 0, 0.31, 0, 0, true);
+    // Open C-clamp pincers + eye stalks
+    put(g, geoBox(0.15, 0.10, 0.16), red, -0.32, 0.24, -0.14);
+    put(g, geoBox(0.15, 0.10, 0.16), red, 0.32, 0.24, -0.14);
+    put(g, geoClaw(0.06, 0.065), red, -0.32, 0.24, -0.24, Math.PI / 2, true);
+    put(g, geoClaw(0.06, 0.065), red, 0.32, 0.24, -0.24, Math.PI / 2, true);
+    put(g, geoCyl(0.025, 0.09, 8), white, -0.09, 0.34, -0.12, 0, true);
+    put(g, geoCyl(0.025, 0.09, 8), white, 0.09, 0.34, -0.12, 0, true);
+    put(g, geoBox(0.04, 0.04, 0.04), black, -0.09, 0.39, -0.12, 0, true);
+    put(g, geoBox(0.04, 0.04, 0.04), black, 0.09, 0.39, -0.12, 0, true);
+    const legs = [-1, 1].flatMap((sx) => [0, 1].map((i) => legBox(g, red, 0.06, 0.14, 0.08, sx * 0.18, 0.14, -0.02 + i * 0.1)));
     return { group: g, legs, bodyMat: red };
   }
   if (kind === "wolf") {
     const coat = skin(0x8a8f98);
-    const body = block(g, coat, 0.72, 0.3, 0.32, 0, 0.48, 0, 3, 1);
+    const ruff = skin(0xb0b5be);
+    const body = block(g, coat, 0.72, 0.28, 0.32, 0, 0.48, 0, 3, 1);
     body.userData.skin = "body";
-    block(g, coat, 0.24, 0.22, 0.28, 0, 0.58, -0.4, 1, 1);
-    put(g, geoBox(0.06, 0.12, 0.04), coat, -0.07, 0.74, -0.4);
-    put(g, geoBox(0.06, 0.12, 0.04), coat, 0.07, 0.74, -0.4);
-    put(g, geoBox(0.08, 0.08, 0.02), black, -0.05, 0.6, -0.55);
-    put(g, geoBox(0.08, 0.08, 0.02), black, 0.05, 0.6, -0.55);
-    block(g, coat, 0.1, 0.1, 0.22, 0, 0.55, 0.38);
-    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, coat, 0.08, 0.28, 0.08, sx * 0.18, 0.28, sz * 0.1)));
+    block(g, ruff, 0.32, 0.34, 0.28, 0, 0.52, -0.22, 1, 1);
+    // Red LEGO Tamed Collar with Golden Tag (shown automatically when m.tame is true)
+    const collar = new THREE.Group();
+    put(collar, geoBox(0.30, 0.32, 0.07), skin(0xe23b2f), 0, 0.52, -0.34, 0, true);
+    put(collar, geoBox(0.06, 0.06, 0.04), skin(0xf5c518), 0, 0.35, -0.36, 0, true);
+    collar.visible = false;
+    g.add(collar);
+    g.userData.collar = collar;
+    // Articulated LEGO Wolf Head
+    const head = new THREE.Group();
+    head.position.set(0, 0.58, -0.38);
+    g.add(head);
+    g.userData.head = head;
+    block(head, coat, 0.26, 0.24, 0.26, 0, 0, -0.06, 1, 1);
+    put(head, geoSlope(0.14, 0.10, 0.16), ruff, 0, -0.04, -0.24, 0, true);
+    put(head, geoBox(0.045, 0.04, 0.03), black, 0, -0.01, -0.32, 0, true);
+    put(head, geoBox(0.07, 0.12, 0.04), coat, -0.08, 0.16, -0.04, 0, true);
+    put(head, geoBox(0.07, 0.12, 0.04), coat, 0.08, 0.16, -0.04, 0, true);
+    put(head, geoBox(0.06, 0.05, 0.02), white, -0.07, 0.03, -0.192, 0, true);
+    put(head, geoBox(0.06, 0.05, 0.02), white, 0.07, 0.03, -0.192, 0, true);
+    put(head, geoBox(0.038, 0.045, 0.022), black, -0.07, 0.03, -0.195, 0, true);
+    put(head, geoBox(0.038, 0.045, 0.022), black, 0.07, 0.03, -0.195, 0, true);
+    // Articulated wagging tail
+    const tail = new THREE.Group();
+    tail.position.set(0, 0.54, 0.34);
+    put(tail, geoBox(0.10, 0.10, 0.26), coat, 0, 0, 0.12, -0.25);
+    g.add(tail);
+    g.userData.tail = tail;
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, coat, 0.08, 0.34, 0.08, sx * 0.18, 0.34, sz * 0.1)));
     return { group: g, legs, bodyMat: coat };
   }
   if (kind === "spider") {
-    const body = block(g, dark, 0.46, 0.22, 0.36, 0, 0.32, 0.08, 2, 2);
+    const carapace = skin(0x1f1916);
+    const body = block(g, dark, 0.48, 0.24, 0.42, 0, 0.34, 0.12, 2, 2);
     body.userData.skin = "body";
-    block(g, dark, 0.28, 0.18, 0.24, 0, 0.28, -0.28, 1, 1);
-    put(g, geoBox(0.06, 0.06, 0.02), skin(0xe23b2f), -0.06, 0.3, -0.4);
-    put(g, geoBox(0.06, 0.06, 0.02), skin(0xe23b2f), 0.06, 0.3, -0.4);
+    block(g, carapace, 0.28, 0.18, 0.22, 0, 0.29, -0.16, 1, 1);
+    const head = new THREE.Group();
+    head.position.set(0, 0.28, -0.28);
+    g.add(head);
+    g.userData.head = head;
+    block(head, dark, 0.28, 0.20, 0.22, 0, 0, -0.06, 1, 1);
+    // Chelicerae fangs + 8 glowing Trans-Red LEGO tile eyes
+    put(head, geoSlope(0.06, 0.09, 0.08), carapace, -0.055, -0.06, -0.19, 0, true);
+    put(head, geoSlope(0.06, 0.09, 0.08), carapace, 0.055, -0.06, -0.19, 0, true);
+    const redEye = transTile(0xff2a22, 0x990a06);
+    put(head, geoBox(0.065, 0.065, 0.028), redEye, -0.065, 0.02, -0.175, 0, true);
+    put(head, geoBox(0.065, 0.065, 0.028), redEye, 0.065, 0.02, -0.175, 0, true);
+    put(head, geoBox(0.042, 0.042, 0.026), redEye, -0.118, 0.04, -0.168, 0, true);
+    put(head, geoBox(0.042, 0.042, 0.026), redEye, 0.118, 0.04, -0.168, 0, true);
     const legs: THREE.Object3D[] = [];
     for (let i = 0; i < 4; i++) {
       const z = -0.12 + i * 0.1;
-      legs.push(hinge(g, dark, 0.03, 0.34, -0.24, 0.3, z));
-      legs.push(hinge(g, dark, 0.03, 0.34, 0.24, 0.3, z));
+      const lL = hinge(g, dark, 0.034, 0.34, -0.24, 0.3, z);
+      lL.rotation.z = 0.52;
+      const lR = hinge(g, dark, 0.034, 0.34, 0.24, 0.3, z);
+      lR.rotation.z = -0.52;
+      legs.push(lL, lR);
     }
     return { group: g, legs, bodyMat: dark };
   }
   if (kind === "creeper") {
+    // Brick-Built LEGO Creeper: continuous zero-gap stacked ABS courses, articulated turntable head, sloped feet & Trans-Neon Green 1×1 tile eyes!
     const green = skin(0x3aaa4c);
     green.emissive = new THREE.Color(0x000000);
-    const body = block(g, green, 0.62, 0.7, 0.4, 0, 0.58, 0, 2, 2);
+    const greenCourse = skin(0x329842);
+    // Continuous zero-gap 3-course stack + hip baseplate
+    block(g, green, 0.44, 0.06, 0.26, 0, 0.22, 0, 0, 0); // Hip baseplate (y: 0.19 .. 0.25)
+    const body = block(g, green, 0.44, 0.22, 0.26, 0, 0.36, 0, 0, 0); // Course 1 (y: 0.25 .. 0.47)
     body.userData.skin = "body";
-    block(g, green, 0.48, 0.36, 0.36, 0, 1.12, 0, 2, 2);
-    const face = skin(0x142018);
-    put(g, geoBox(0.1, 0.1, 0.03), face, -0.1, 1.2, -0.19);
-    put(g, geoBox(0.1, 0.1, 0.03), face, 0.1, 1.2, -0.19);
-    put(g, geoBox(0.1, 0.16, 0.03), face, 0, 1.02, -0.19);
-    put(g, geoBox(0.1, 0.1, 0.03), face, -0.1, 0.9, -0.19);
-    put(g, geoBox(0.1, 0.1, 0.03), face, 0.1, 0.9, -0.19);
-    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, green, 0.16, 0.22, 0.16, sx * 0.16, 0.22, sz * 0.08)));
+    block(g, greenCourse, 0.44, 0.22, 0.26, 0, 0.58, 0, 0, 0); // Course 2 (y: 0.47 .. 0.69)
+    block(g, green, 0.44, 0.20, 0.26, 0, 0.79, 0, 2, 1); // Course 3 (y: 0.69 .. 0.89)
+    // Turntable neck joint + Articulated 2×2 LEGO Head block with 4 top studs (y: 0.89 .. 0.925)
+    put(g, geoCyl(0.14, 0.035, 12), skin(0x1f5c28), 0, 0.9075, 0, 0, true);
+    const head = new THREE.Group();
+    head.position.set(0, 0.905, 0);
+    g.add(head);
+    g.userData.head = head;
+    block(head, green, 0.44, 0.40, 0.40, 0, 0.20, 0, 2, 2);
+    const face = skin(0x101a12);
+    const neonEye = transTile(0x6aff7a, 0x1e8a2c);
+    put(head, geoBox(0.105, 0.105, 0.025), face, -0.10, 0.28, -0.202, 0, true);
+    put(head, geoBox(0.105, 0.105, 0.025), face, 0.10, 0.28, -0.202, 0, true);
+    put(head, geoBox(0.072, 0.072, 0.032), neonEye, -0.10, 0.28, -0.208, 0, true);
+    put(head, geoBox(0.072, 0.072, 0.032), neonEye, 0.10, 0.28, -0.208, 0, true);
+    put(head, geoBox(0.10, 0.14, 0.028), face, 0, 0.13, -0.202, 0, true);
+    put(head, geoBox(0.08, 0.11, 0.028), face, -0.09, 0.06, -0.202, 0, true);
+    put(head, geoBox(0.08, 0.11, 0.028), face, 0.09, 0.06, -0.202, 0, true);
+    // 4 Legs tucking directly into the hip baseplate with zero gap
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, green, 0.16, 0.22, 0.18, sx * 0.15, 0.22, sz * 0.12)));
     return { group: g, legs, bodyMat: green };
   }
   if (kind === "ghast") {
-    const white = skin(0xf7f4ee);
+    const tearM = transTile(0x7ae8ff, 0x226888);
+    const redEye = transTile(0xff3b2f, 0x8a1008);
     const body = block(g, white, 1.15, 1.15, 1.15, 0, 0.7, 0, 3, 3);
     body.userData.skin = "body";
-    put(g, geoBox(0.16, 0.16, 0.04), black, -0.22, 0.85, -0.58);
-    put(g, geoBox(0.16, 0.16, 0.04), black, 0.22, 0.85, -0.58);
-    put(g, geoBox(0.28, 0.1, 0.04), black, 0, 0.5, -0.58);
-    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => hinge(g, white, 0.06, 0.55, sx * 0.32, 0.15, sz * 0.28)));
+    put(g, geoBox(0.20, 0.16, 0.04), black, -0.24, 0.86, -0.58, 0, true);
+    put(g, geoBox(0.20, 0.16, 0.04), black, 0.24, 0.86, -0.58, 0, true);
+    put(g, geoBox(0.13, 0.09, 0.048), redEye, -0.24, 0.86, -0.585, 0, true);
+    put(g, geoBox(0.13, 0.09, 0.048), redEye, 0.24, 0.86, -0.585, 0, true);
+    // Translucent cyan LEGO tear tracks under eyes + wailing mouth
+    put(g, geoBox(0.06, 0.22, 0.042), tearM, -0.24, 0.66, -0.582, 0, true);
+    put(g, geoBox(0.06, 0.22, 0.042), tearM, 0.24, 0.66, -0.582, 0, true);
+    put(g, geoBox(0.28, 0.18, 0.04), black, 0, 0.48, -0.58, 0, true);
+    const legs = [-1, 0, 1].flatMap((sx) => [-1, 1].map((sz) => hinge(g, white, 0.058, 0.58, sx * 0.34, 0.15, sz * 0.30)));
     return { group: g, legs, bodyMat: white };
   }
   if (kind === "phantom") {
     const wing = skin(0x3d7ad4);
-    const body = block(g, wing, 0.7, 0.12, 0.28, 0, 0.3, 0, 3, 1);
+    const bone = skin(0xd8d2c4);
+    const body = block(g, wing, 0.7, 0.14, 0.28, 0, 0.3, 0, 3, 1);
     body.userData.skin = "body";
+    put(g, geoBox(0.52, 0.04, 0.32), bone, 0, 0.25, 0, 0, true); // Exposed skeletal ribs
     const left = new THREE.Group();
     left.position.set(-0.36, 0.3, 0);
-    put(left, geoBox(0.7, 0.05, 0.32), wing, -0.35, 0, 0);
+    put(left, geoBox(0.72, 0.05, 0.32), wing, -0.36, 0, 0);
+    put(left, geoBox(0.68, 0.06, 0.06), bone, -0.34, 0.01, -0.14, 0, true);
     g.add(left);
     const right = new THREE.Group();
     right.position.set(0.36, 0.3, 0);
-    put(right, geoBox(0.7, 0.05, 0.32), wing, 0.35, 0, 0);
+    put(right, geoBox(0.72, 0.05, 0.32), wing, 0.36, 0, 0);
+    put(right, geoBox(0.68, 0.06, 0.06), bone, 0.34, 0.01, -0.14, 0, true);
     g.add(right);
-    put(g, geoBox(0.08, 0.06, 0.02), skin(0x8ec8f5), -0.08, 0.32, -0.15);
-    put(g, geoBox(0.08, 0.06, 0.02), skin(0x8ec8f5), 0.08, 0.32, -0.15);
+    const glowEye = transTile(0x7aff9a, 0x2a8844);
+    put(g, geoBox(0.08, 0.06, 0.025), glowEye, -0.08, 0.32, -0.15, 0, true);
+    put(g, geoBox(0.08, 0.06, 0.025), glowEye, 0.08, 0.32, -0.15, 0, true);
     return { group: g, legs: [left, right], bodyMat: wing };
   }
   if (kind === "dragon") {
-    const hide = skin(0x2a1848);
-    const body = block(g, hide, 1.5, 0.42, 0.42, 0, 0.7, 0, 5, 2);
+    const hide = skin(0x231636);
+    const spine = skin(0x7a4ad4);
+    const body = block(g, hide, 1.5, 0.44, 0.44, 0, 0.7, 0, 5, 2);
     body.userData.skin = "body";
-    block(g, hide, 0.4, 0.36, 0.5, 0, 0.95, -0.85, 1, 1);
-    put(g, geoCyl(0.05, 0.28, 8), skin(0x7a4ad4), -0.1, 1.25, -0.9);
-    put(g, geoCyl(0.05, 0.28, 8), skin(0x7a4ad4), 0.1, 1.25, -0.9);
-    put(g, geoBox(0.08, 0.08, 0.03), skin(0xf5c518), -0.08, 1.0, -1.1);
-    put(g, geoBox(0.08, 0.08, 0.03), skin(0xf5c518), 0.08, 1.0, -1.1);
-    block(g, hide, 0.28, 0.2, 0.55, 0, 0.6, 0.95, 1, 2);
+    for (const sz of [-0.45, -0.15, 0.15, 0.45]) {
+      put(g, geoSlope(0.10, 0.16, 0.16), spine, 0, 0.98, sz, Math.PI, true);
+    }
+    const head = new THREE.Group();
+    head.position.set(0, 0.90, -0.75);
+    g.add(head);
+    g.userData.head = head;
+    block(head, hide, 0.42, 0.34, 0.48, 0, 0.04, -0.14, 2, 2);
+    put(head, geoSlope(0.34, 0.16, 0.28), hide, 0, -0.02, -0.46, 0, true);
+    put(head, geoBox(0.32, 0.08, 0.26), spine, 0, -0.12, -0.44, 0.18, true); // Lower hinged dragon jaw
+    put(head, geoCyl(0.05, 0.28, 8), spine, -0.12, 0.32, -0.12, -0.35, true);
+    put(head, geoCyl(0.05, 0.28, 8), spine, 0.12, 0.32, -0.12, -0.35, true);
+    const wyrmEye = transTile(0xe07aff, 0x8a24b4);
+    put(head, geoBox(0.085, 0.085, 0.032), wyrmEye, -0.10, 0.09, -0.385, 0, true);
+    put(head, geoBox(0.085, 0.085, 0.032), wyrmEye, 0.10, 0.09, -0.385, 0, true);
+    const tail = new THREE.Group();
+    tail.position.set(0, 0.62, 0.72);
+    block(tail, hide, 0.28, 0.2, 0.58, 0, 0, 0.28, 1, 2);
+    put(tail, geoSlope(0.09, 0.14, 0.16), spine, 0, 0.16, 0.28, Math.PI, true);
+    g.add(tail);
+    g.userData.tail = tail;
     const left = new THREE.Group();
     left.position.set(-0.3, 0.85, 0);
-    put(left, geoBox(1.1, 0.06, 0.55), skin(0x7a4ad4), -0.55, 0, 0);
+    put(left, geoBox(1.15, 0.06, 0.58), spine, -0.56, 0, 0);
     g.add(left);
     const right = new THREE.Group();
     right.position.set(0.3, 0.85, 0);
-    put(right, geoBox(1.1, 0.06, 0.55), skin(0x7a4ad4), 0.55, 0, 0);
+    put(right, geoBox(1.15, 0.06, 0.58), spine, 0.56, 0, 0);
     g.add(right);
     const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, hide, 0.12, 0.4, 0.12, sx * 0.28, 0.4, sz * 0.35)));
     legs.push(left, right);
@@ -8887,7 +11249,10 @@ function beast(kind: string): LegoBody {
     return { group: g, legs: [], bodyMat: glow };
   }
   if (kind === "slime") {
-    const gel = skin(0x5dce6a, { transparent: true, opacity: 0.78 });
+    // Translucent Trans-Neon Green LEGO Slime with visible inner solid core brick!
+    const gel = skin(0x5dce6a, { transparent: true, opacity: 0.68 });
+    const innerCore = skin(0x2a8838);
+    put(g, geoBox(0.46, 0.38, 0.46), innerCore, 0, 0.42, 0);
     const body = block(g, gel, 0.85, 0.7, 0.85, 0, 0.45, 0, 2, 2);
     body.userData.skin = "body";
     put(g, geoBox(0.1, 0.1, 0.04), black, -0.16, 0.55, -0.43);
@@ -8898,19 +11263,29 @@ function beast(kind: string): LegoBody {
   if (kind === "golem") {
     const iron = skin(0xc5ccd3);
     const darkIron = skin(0x6e767e);
-    const headC = skin(0xe07a3d);
+    const vineM = skin(0x3a8c3e);
+    const headC = skin(0xd6cfc2);
     const body = block(g, iron, 0.72, 0.72, 0.42, 0, 1.1, 0, 3, 2);
     body.userData.skin = "body";
     block(g, darkIron, 0.5, 0.16, 0.32, 0, 0.66, 0, 2, 1);
-    block(g, headC, 0.4, 0.34, 0.36, 0, 1.66, 0, 2, 2);
-    put(g, geoBox(0.08, 0.08, 0.03), black, -0.09, 1.7, -0.19);
-    put(g, geoBox(0.08, 0.08, 0.03), black, 0.09, 1.7, -0.19);
-    put(g, geoBox(0.16, 0.04, 0.03), black, 0, 1.56, -0.19);
+    // Overgrown LEGO moss & vine plates + red poppy on shoulder
+    put(g, geoBox(0.18, 0.46, 0.44), vineM, -0.22, 1.14, 0, 0, true);
+    put(g, geoBox(0.08, 0.08, 0.08), skin(0xe23b2f), -0.26, 1.50, -0.10, 0, true);
+    const head = new THREE.Group();
+    head.position.set(0, 1.48, 0);
+    g.add(head);
+    g.userData.head = head;
+    block(head, headC, 0.4, 0.36, 0.36, 0, 0.18, 0, 2, 2);
+    put(head, geoCyl(0.045, 0.14, 8), darkIron, 0, 0.14, -0.21, Math.PI / 2, true); // Iron nose
+    const rubyEye = transTile(0xff3b2f, 0x88140c);
+    put(head, geoBox(0.085, 0.085, 0.032), rubyEye, -0.09, 0.22, -0.19, 0, true);
+    put(head, geoBox(0.085, 0.085, 0.032), rubyEye, 0.09, 0.22, -0.19, 0, true);
+    put(head, geoBox(0.16, 0.04, 0.03), black, 0, 0.08, -0.19, 0, true);
     const legs = [
       legBox(g, darkIron, 0.18, 0.52, 0.18, -0.16, 0.52, 0),
       legBox(g, darkIron, 0.18, 0.52, 0.18, 0.16, 0.52, 0),
-      hinge(g, iron, 0.08, 0.58, -0.5, 1.3, 0),
-      hinge(g, iron, 0.08, 0.58, 0.5, 1.3, 0),
+      hinge(g, iron, 0.085, 0.68, -0.5, 1.36, 0),
+      hinge(g, iron, 0.085, 0.68, 0.5, 1.36, 0),
     ];
     return { group: g, legs, bodyMat: iron };
   }
@@ -8935,76 +11310,111 @@ function beast(kind: string): LegoBody {
     return { group: g, legs: [], bodyMat: iron };
   }
   if (kind === "enderman") {
-    // Tall and thin: long hinged limbs, black brick body, violet eyes.
+    // Tall brick-built Enderman: hinged Technic limbs, C-clamp hands, articulated 2×2 studded head, and glowing Trans-Purple 1×1 tile eyes!
     const blackM = skin(0x16121c);
-    const legL = hinge(g, blackM, 0.09, 0.95, -0.11, 0.98, 0);
-    const legR = hinge(g, blackM, 0.09, 0.95, 0.11, 0.98, 0);
+    const legL = hinge(g, blackM, 0.085, 0.95, -0.11, 0.98, 0);
+    const legR = hinge(g, blackM, 0.085, 0.95, 0.11, 0.98, 0);
     const torso = block(g, blackM, 0.42, 0.72, 0.24, 0, 1.34, 0, 2, 1);
     torso.userData.skin = "body";
-    hinge(g, blackM, 0.07, 0.95, -0.28, 1.66, 0);
-    hinge(g, blackM, 0.07, 0.95, 0.28, 1.66, 0);
-    block(g, blackM, 0.36, 0.34, 0.34, 0, 1.9, 0, 2, 2);
-    const eye = skin(0xc77dff);
-    put(g, geoBox(0.09, 0.04, 0.02), eye, -0.09, 1.94, -0.18);
-    put(g, geoBox(0.09, 0.04, 0.02), eye, 0.09, 1.94, -0.18);
-    return { group: g, legs: [legL, legR], bodyMat: blackM };
+    const armL = hinge(g, blackM, 0.068, 0.95, -0.28, 1.66, 0);
+    const armR = hinge(g, blackM, 0.068, 0.95, 0.28, 1.66, 0);
+    put(armL, geoClaw(0.055, 0.065), blackM, 0, -0.96, 0, Math.PI / 2, true);
+    put(armR, geoClaw(0.055, 0.065), blackM, 0, -0.96, 0, Math.PI / 2, true);
+    const head = new THREE.Group();
+    head.position.set(0, 1.72, 0);
+    g.add(head);
+    g.userData.head = head;
+    block(head, blackM, 0.38, 0.36, 0.36, 0, 0.18, 0, 2, 2);
+    const eye = transTile(0xd98aff, 0x8a2be2);
+    put(head, geoBox(0.105, 0.052, 0.028), eye, -0.095, 0.20, -0.185, 0, true);
+    put(head, geoBox(0.105, 0.052, 0.028), eye, 0.095, 0.20, -0.185, 0, true);
+    return { group: g, legs: [legL, legR, armR, armL], bodyMat: blackM };
   }
   if (kind === "blaze") {
-    // Floating ember core with four swirling rods (the legs, animated).
     const core = skin(0xf07820);
     core.emissive = new THREE.Color(0x8a3400);
     const body = block(g, core, 0.36, 0.52, 0.36, 0, 0.82, 0, 2, 2);
     body.userData.skin = "body";
     const headM = skin(0xf5c518);
     headM.emissive = new THREE.Color(0x6a4a00);
-    block(g, headM, 0.3, 0.3, 0.3, 0, 1.26, 0, 1, 1);
-    put(g, geoBox(0.06, 0.08, 0.02), black, -0.08, 1.3, -0.16);
-    put(g, geoBox(0.06, 0.08, 0.02), black, 0.08, 1.3, -0.16);
-    const rodM = skin(0xffc93a);
-    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => hinge(g, rodM, 0.07, 0.55, sx * 0.27, 0.6, sz * 0.27)));
+    const head = new THREE.Group();
+    head.position.set(0, 1.11, 0);
+    g.add(head);
+    g.userData.head = head;
+    block(head, headM, 0.32, 0.32, 0.32, 0, 0.16, 0, 2, 2);
+    const blazeEye = transTile(0xfff08a, 0xc47800);
+    put(head, geoBox(0.07, 0.08, 0.028), blazeEye, -0.08, 0.19, -0.165, 0, true);
+    put(head, geoBox(0.07, 0.08, 0.028), blazeEye, 0.08, 0.19, -0.165, 0, true);
+    const rodM = transTile(0xffc93a, 0x995800);
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => hinge(g, rodM, 0.068, 0.58, sx * 0.28, 0.64, sz * 0.28)));
     return { group: g, legs, bodyMat: core };
   }
   if (kind === "bee") {
     const yellow = skin(0xf5c518);
     const body = block(g, yellow, 0.34, 0.26, 0.46, 0, 0.3, 0, 2, 2);
     body.userData.skin = "body";
-    put(g, geoBox(0.36, 0.28, 0.08), black, 0, 0.3, 0.06);
-    put(g, geoBox(0.36, 0.28, 0.08), black, 0, 0.3, -0.13);
-    put(g, geoBox(0.05, 0.05, 0.02), black, -0.08, 0.34, -0.24);
-    put(g, geoBox(0.05, 0.05, 0.02), black, 0.08, 0.34, -0.24);
-    const wingM = skin(0xf7f4ee);
+    put(g, geoBox(0.36, 0.28, 0.08), black, 0, 0.3, 0.06, 0, true);
+    put(g, geoBox(0.36, 0.28, 0.08), black, 0, 0.3, -0.11, 0, true);
+    put(g, geoBox(0.06, 0.08, 0.025), black, -0.08, 0.32, -0.235, 0, true);
+    put(g, geoBox(0.06, 0.08, 0.025), black, 0.08, 0.32, -0.235, 0, true);
+    put(g, geoBox(0.03, 0.08, 0.06), black, -0.06, 0.42, -0.24, 0.4, true); // Antennae
+    put(g, geoBox(0.03, 0.08, 0.06), black, 0.06, 0.42, -0.24, 0.4, true);
+    put(g, geoCyl(0.022, 0.09, 6), black, 0, 0.28, 0.27, Math.PI / 2, true); // Stinger
+    const wingM = skin(0xe8f6ff, { transparent: true, opacity: 0.76 });
     const left = new THREE.Group();
     left.position.set(-0.12, 0.45, 0);
-    put(left, geoBox(0.24, 0.02, 0.14), wingM, -0.12, 0, 0);
+    put(left, geoBox(0.26, 0.02, 0.16), wingM, -0.13, 0, 0, 0, true);
     g.add(left);
     const right = new THREE.Group();
     right.position.set(0.12, 0.45, 0);
-    put(right, geoBox(0.24, 0.02, 0.14), wingM, 0.12, 0, 0);
+    put(right, geoBox(0.26, 0.02, 0.16), wingM, 0.13, 0, 0, 0, true);
     g.add(right);
     return { group: g, legs: [left, right], bodyMat: yellow };
   }
   if (kind === "cat") {
     const coat = skin(0xd88a3a);
-    const white = skin(0xf4f1ea);
     const body = block(g, coat, 0.56, 0.24, 0.28, 0, 0.34, 0, 3, 1);
     body.userData.skin = "body";
-    put(g, geoBox(0.2, 0.14, 0.04), white, 0, 0.32, -0.15);
-    block(g, coat, 0.24, 0.22, 0.24, 0, 0.44, -0.36, 1, 1);
-    put(g, geoBox(0.06, 0.09, 0.03), coat, -0.08, 0.6, -0.36);
-    put(g, geoBox(0.06, 0.09, 0.03), coat, 0.08, 0.6, -0.36);
-    put(g, geoBox(0.05, 0.05, 0.02), black, -0.06, 0.46, -0.49);
-    put(g, geoBox(0.05, 0.05, 0.02), black, 0.06, 0.46, -0.49);
-    put(g, geoBox(0.07, 0.07, 0.3), coat, 0, 0.48, 0.4, -0.5);
-    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, coat, 0.07, 0.2, 0.07, sx * 0.16, 0.2, sz * 0.2)));
+    put(g, geoBox(0.2, 0.14, 0.04), white, 0, 0.32, -0.15, 0, true);
+    // Red LEGO Tamed Cat Collar with Gold Bell
+    const collar = new THREE.Group();
+    put(collar, geoBox(0.25, 0.23, 0.06), skin(0xe23b2f), 0, 0.41, -0.24, 0, true);
+    put(collar, geoCyl(0.032, 0.04, 8), skin(0xf5c518), 0, 0.28, -0.26, 0, true);
+    collar.visible = false;
+    g.add(collar);
+    g.userData.collar = collar;
+    const head = new THREE.Group();
+    head.position.set(0, 0.44, -0.32);
+    g.add(head);
+    g.userData.head = head;
+    block(head, coat, 0.24, 0.22, 0.24, 0, 0, -0.04, 1, 1);
+    put(head, geoSlope(0.11, 0.08, 0.10), white, 0, -0.04, -0.18, 0, true);
+    put(head, geoBox(0.035, 0.03, 0.02), skin(0xf296b4), 0, -0.02, -0.232, 0, true); // Pink nose
+    put(head, geoBox(0.06, 0.09, 0.04), coat, -0.08, 0.15, -0.04, 0, true);
+    put(head, geoBox(0.06, 0.09, 0.04), coat, 0.08, 0.15, -0.04, 0, true);
+    const catEye = transTile(0x52e868, 0x186e24);
+    put(head, geoBox(0.055, 0.048, 0.022), catEye, -0.065, 0.03, -0.162, 0, true);
+    put(head, geoBox(0.055, 0.048, 0.022), catEye, 0.065, 0.03, -0.162, 0, true);
+    const tail = new THREE.Group();
+    tail.position.set(0, 0.44, 0.28);
+    put(tail, geoBox(0.07, 0.07, 0.30), coat, 0, 0.04, 0.14, -0.45);
+    g.add(tail);
+    g.userData.tail = tail;
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, coat, 0.07, 0.22, 0.07, sx * 0.16, 0.22, sz * 0.2)));
     return { group: g, legs, bodyMat: coat };
   }
   if (kind === "squid") {
-    const hide = skin(0x5068a8);
-    const body = block(g, hide, 0.38, 0.55, 0.38, 0, 0.78, 0, 2, 2);
+    const hide = skin(0x4662a4);
+    const trim = skin(0x82a6dc);
+    const body = block(g, hide, 0.38, 0.56, 0.38, 0, 0.78, 0, 2, 2);
     body.userData.skin = "body";
-    put(g, geoBox(0.4, 0.08, 0.4), skin(0x8aa8d8), 0, 0.52, 0);
-    put(g, geoBox(0.07, 0.09, 0.02), skin(0xf4f1ea), -0.2, 0.62, 0);
-    put(g, geoBox(0.07, 0.09, 0.02), skin(0xf4f1ea), 0.2, 0.62, 0);
+    put(g, geoBox(0.42, 0.08, 0.42), trim, 0, 0.52, 0, 0, true);
+    put(g, geoSlope(0.12, 0.22, 0.22), trim, -0.22, 0.90, 0, 0, true); // Side mantle fins
+    put(g, geoSlope(0.12, 0.22, 0.22), trim, 0.22, 0.90, 0, 0, true);
+    put(g, geoBox(0.07, 0.09, 0.02), white, -0.20, 0.62, -0.08, 0, true);
+    put(g, geoBox(0.07, 0.09, 0.02), white, 0.20, 0.62, -0.08, 0, true);
+    put(g, geoBox(0.04, 0.05, 0.024), black, -0.202, 0.62, -0.09, 0, true);
+    put(g, geoBox(0.04, 0.05, 0.024), black, 0.202, 0.62, -0.09, 0, true);
     const legs = [-1, 1].flatMap((sx) =>
       [-1, 0, 1].map((sz) => legBox(g, hide, 0.07, 0.42, 0.07, sx * 0.12, 0.42, sz * 0.12)),
     );
@@ -9014,10 +11424,11 @@ function beast(kind: string): LegoBody {
     const hide = skin(0x2a2430);
     const body = block(g, hide, 0.2, 0.22, 0.3, 0, 0.3, 0, 1, 1);
     body.userData.skin = "body";
-    put(g, geoBox(0.05, 0.08, 0.03), hide, -0.06, 0.46, -0.08);
-    put(g, geoBox(0.05, 0.08, 0.03), hide, 0.06, 0.46, -0.08);
-    put(g, geoBox(0.04, 0.04, 0.02), skin(0xe23b2f), -0.05, 0.34, -0.16);
-    put(g, geoBox(0.04, 0.04, 0.02), skin(0xe23b2f), 0.05, 0.34, -0.16);
+    put(g, geoBox(0.06, 0.10, 0.03), hide, -0.06, 0.47, -0.08, 0, true);
+    put(g, geoBox(0.06, 0.10, 0.03), hide, 0.06, 0.47, -0.08, 0, true);
+    const batEye = transTile(0xff3b2f, 0x88120a);
+    put(g, geoBox(0.042, 0.042, 0.022), batEye, -0.05, 0.34, -0.16, 0, true);
+    put(g, geoBox(0.042, 0.042, 0.022), batEye, 0.05, 0.34, -0.16, 0, true);
     const left = new THREE.Group();
     left.position.set(-0.1, 0.34, 0);
     put(left, geoBox(0.42, 0.03, 0.2), hide, -0.21, 0, 0);
@@ -9029,155 +11440,205 @@ function beast(kind: string): LegoBody {
     return { group: g, legs: [left, right], bodyMat: hide };
   }
   if (kind === "goat") {
-    const coat = skin(0xbdb8ae);
-    const darkLeg = skin(0x8a857c);
+    const coat = skin(0xd4cfc4);
+    const darkLeg = skin(0x7c766d);
+    const hornM = skin(0x5a554c);
     const body = block(g, coat, 0.72, 0.38, 0.44, 0, 0.55, 0, 3, 2);
     body.userData.skin = "body";
-    block(g, coat, 0.26, 0.26, 0.28, 0, 0.66, -0.38, 1, 1);
-    put(g, geoBox(0.14, 0.1, 0.08), coat, 0, 0.6, -0.55);
-    put(g, geoBox(0.07, 0.14, 0.05), skin(0xf4f1ea), 0, 0.47, -0.52);
-    put(g, geoBox(0.05, 0.16, 0.05), skin(0x6a655c), -0.09, 0.86, -0.34);
-    put(g, geoBox(0.05, 0.16, 0.05), skin(0x6a655c), 0.09, 0.86, -0.34);
-    put(g, geoBox(0.1, 0.04, 0.06), coat, -0.19, 0.7, -0.38);
-    put(g, geoBox(0.1, 0.04, 0.06), coat, 0.19, 0.7, -0.38);
-    put(g, geoBox(0.04, 0.04, 0.02), black, -0.07, 0.7, -0.53);
-    put(g, geoBox(0.04, 0.04, 0.02), black, 0.07, 0.7, -0.53);
-    put(g, geoBox(0.08, 0.14, 0.06), coat, 0, 0.68, 0.26);
-    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, darkLeg, 0.1, 0.3, 0.1, sx * 0.22, 0.3, sz * 0.13)));
+    put(g, geoBox(0.08, 0.14, 0.06), coat, 0, 0.68, 0.26, -0.3, true);
+    // Articulated LEGO Goat Head (pitches down when aiming/charging!)
+    const head = new THREE.Group();
+    head.position.set(0, 0.66, -0.36);
+    g.add(head);
+    g.userData.head = head;
+    block(head, coat, 0.26, 0.26, 0.28, 0, 0, -0.04, 1, 1);
+    put(head, geoSlope(0.16, 0.12, 0.14), coat, 0, -0.04, -0.22, 0, true);
+    put(head, geoBox(0.07, 0.15, 0.05), white, 0, -0.17, -0.18, 0, true); // Goat beard
+    put(head, geoBox(0.055, 0.20, 0.055), hornM, -0.085, 0.20, 0.02, -0.35, true); // Swept horns
+    put(head, geoBox(0.055, 0.20, 0.055), hornM, 0.085, 0.20, 0.02, -0.35, true);
+    put(head, geoBox(0.10, 0.04, 0.06), coat, -0.18, 0.04, -0.02, 0, true);
+    put(head, geoBox(0.10, 0.04, 0.06), coat, 0.18, 0.04, -0.02, 0, true);
+    put(head, geoBox(0.045, 0.045, 0.02), black, -0.08, 0.04, -0.182, 0, true);
+    put(head, geoBox(0.045, 0.045, 0.02), black, 0.08, 0.04, -0.182, 0, true);
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, darkLeg, 0.1, 0.36, 0.1, sx * 0.22, 0.36, sz * 0.13)));
     return { group: g, legs, bodyMat: coat };
   }
   if (kind === "axolotl") {
     const pink = skin(0xf2a8c8);
-    const gill = skin(0xef6a9a);
+    const gill = skin(0xe8568c);
+    const fin = skin(0xf6bfd8, { transparent: true, opacity: 0.85 });
     const body = block(g, pink, 0.4, 0.22, 0.62, 0, 0.2, 0.02, 2, 3);
     body.userData.skin = "body";
-    block(g, pink, 0.46, 0.2, 0.26, 0, 0.22, -0.36, 2, 1);
-    put(g, geoBox(0.05, 0.05, 0.02), black, -0.13, 0.26, -0.5);
-    put(g, geoBox(0.05, 0.05, 0.02), black, 0.13, 0.26, -0.5);
-    for (const sx of [-1, 1]) for (let i = 0; i < 3; i++) put(g, geoBox(0.05, 0.12, 0.05), gill, sx * 0.27, 0.24, -0.44 + i * 0.08);
-    put(g, geoBox(0.04, 0.26, 0.3), pink, 0, 0.22, 0.44);
-    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, pink, 0.06, 0.1, 0.06, sx * 0.14, 0.1, sz * 0.2)));
+    const head = new THREE.Group();
+    head.position.set(0, 0.22, -0.34);
+    g.add(head);
+    g.userData.head = head;
+    block(head, pink, 0.44, 0.20, 0.26, 0, 0, -0.04, 2, 1);
+    put(head, geoBox(0.05, 0.05, 0.02), black, -0.13, 0.03, -0.172, 0, true);
+    put(head, geoBox(0.05, 0.05, 0.02), black, 0.13, 0.03, -0.172, 0, true);
+    for (const sx of [-1, 1]) {
+      for (let i = 0; i < 3; i++) {
+        put(head, geoBox(0.08, 0.045, 0.04), gill, sx * 0.26, 0.04 + (i - 1) * 0.065, -0.02, 0, true);
+      }
+    }
+    const tail = new THREE.Group();
+    tail.position.set(0, 0.22, 0.32);
+    put(tail, geoBox(0.05, 0.24, 0.34), fin, 0, 0, 0.16, 0, true);
+    g.add(tail);
+    g.userData.tail = tail;
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, pink, 0.06, 0.09, 0.06, sx * 0.14, 0.09, sz * 0.2)));
     return { group: g, legs, bodyMat: pink };
   }
   if (kind === "parrot") {
-    const green = skin(0x35b558);
-    const body = block(g, green, 0.24, 0.34, 0.28, 0, 0.42, 0, 1, 1);
+    const red = skin(0xe23b2f);
+    const blue = skin(0x2868d8);
+    const yellow = skin(0xf5c518);
+    const body = block(g, red, 0.24, 0.34, 0.26, 0, 0.42, 0, 1, 1);
     body.userData.skin = "body";
-    block(g, green, 0.22, 0.2, 0.22, 0, 0.68, -0.04, 1, 1);
-    put(g, geoBox(0.16, 0.08, 0.03), skin(0xe23b2f), 0, 0.72, -0.16);
-    put(g, geoBox(0.08, 0.07, 0.08), skin(0xd8d3c8), 0, 0.63, -0.19);
-    put(g, geoBox(0.035, 0.035, 0.02), black, -0.07, 0.7, -0.16);
-    put(g, geoBox(0.035, 0.035, 0.02), black, 0.07, 0.7, -0.16);
-    put(g, geoBox(0.09, 0.34, 0.04), skin(0x3d7ad4), 0, 0.16, 0.18, 0.35);
-    put(g, geoBox(0.04, 0.1, 0.04), skin(0x8a8f98), -0.06, 0.1, 0);
-    put(g, geoBox(0.04, 0.1, 0.04), skin(0x8a8f98), 0.06, 0.1, 0);
+    const head = new THREE.Group();
+    head.position.set(0, 0.60, -0.02);
+    g.add(head);
+    g.userData.head = head;
+    block(head, red, 0.22, 0.20, 0.22, 0, 0.08, 0, 1, 1);
+    put(head, geoSlope(0.06, 0.11, 0.14), yellow, 0, 0.22, 0.02, Math.PI, true); // Feather crest
+    put(head, geoSlope(0.09, 0.09, 0.10), skin(0x2a241c), 0, 0.04, -0.14, 0, true); // Curved beak
+    put(head, geoBox(0.055, 0.055, 0.02), white, -0.08, 0.09, -0.105, 0, true);
+    put(head, geoBox(0.055, 0.055, 0.02), white, 0.08, 0.09, -0.105, 0, true);
+    put(head, geoBox(0.032, 0.032, 0.022), black, -0.08, 0.09, -0.108, 0, true);
+    put(head, geoBox(0.032, 0.032, 0.022), black, 0.08, 0.09, -0.108, 0, true);
+    put(g, geoBox(0.10, 0.34, 0.04), blue, 0, 0.16, 0.18, 0.35, true);
+    put(g, geoBox(0.04, 0.1, 0.04), yellow, -0.06, 0.1, 0, 0, true);
+    put(g, geoBox(0.04, 0.1, 0.04), yellow, 0.06, 0.1, 0, 0, true);
     const left = new THREE.Group();
     left.position.set(-0.13, 0.5, 0);
-    put(left, geoBox(0.26, 0.03, 0.2), green, -0.13, 0, 0);
+    put(left, geoBox(0.24, 0.04, 0.2), blue, -0.12, 0, 0);
+    put(left, geoBox(0.12, 0.042, 0.18), yellow, -0.06, 0, 0, 0, true);
     g.add(left);
     const right = new THREE.Group();
     right.position.set(0.13, 0.5, 0);
-    put(right, geoBox(0.26, 0.03, 0.2), green, 0.13, 0, 0);
+    put(right, geoBox(0.24, 0.04, 0.2), blue, 0.12, 0, 0);
+    put(right, geoBox(0.12, 0.042, 0.18), yellow, 0.06, 0, 0, 0, true);
     g.add(right);
-    return { group: g, legs: [left, right], bodyMat: green };
+    return { group: g, legs: [left, right], bodyMat: red };
   }
   if (kind === "guardian") {
-    const hide = skin(0x5f7f78);
-    const spike = skin(0xd8a860);
+    const hide = skin(0x528278);
+    const spike = skin(0xf07820);
+    const eyeGlow = transTile(0xff8824, 0x993800);
     const body = block(g, hide, 0.72, 0.58, 0.85, 0, 0.55, 0, 3, 3);
     body.userData.skin = "body";
-    put(g, geoBox(0.3, 0.3, 0.04), skin(0xf4f1ea), 0, 0.62, -0.44);
-    put(g, geoBox(0.18, 0.18, 0.03), skin(0xf07820), 0, 0.62, -0.47);
-    put(g, geoBox(0.08, 0.08, 0.03), black, 0, 0.62, -0.49);
-    for (const sz of [-0.25, 0, 0.25]) put(g, geoBox(0.07, 0.16, 0.07), spike, 0, 0.92, sz);
-    for (const sx of [-1, 1]) for (const sz of [-0.1, 0.2]) put(g, geoBox(0.07, 0.14, 0.07), spike, sx * 0.4, 0.66, sz);
-    put(g, geoBox(0.05, 0.4, 0.28), hide, 0, 0.55, 0.56);
-    put(g, geoBox(0.2, 0.05, 0.24), hide, -0.46, 0.4, 0.05);
-    put(g, geoBox(0.2, 0.05, 0.24), hide, 0.46, 0.4, 0.05);
+    put(g, geoBox(0.34, 0.30, 0.04), white, 0, 0.58, -0.44, 0, true);
+    put(g, geoBox(0.18, 0.18, 0.032), eyeGlow, 0, 0.58, -0.46, 0, true);
+    put(g, geoBox(0.08, 0.08, 0.036), black, 0, 0.58, -0.48, 0, true);
+    for (const sz of [-0.25, 0, 0.25]) put(g, geoBox(0.08, 0.18, 0.08), spike, 0, 0.92, sz, 0, true);
+    for (const sx of [-1, 1]) for (const sz of [-0.15, 0.2]) put(g, geoBox(0.16, 0.08, 0.08), spike, sx * 0.42, 0.62, sz, 0, true);
+    const tail = new THREE.Group();
+    tail.position.set(0, 0.55, 0.42);
+    put(tail, geoBox(0.14, 0.22, 0.28), hide, 0, 0, 0.14);
+    put(tail, geoBox(0.05, 0.42, 0.24), spike, 0, 0, 0.36, 0, true);
+    g.add(tail);
+    g.userData.tail = tail;
     return { group: g, legs: [], bodyMat: hide };
   }
   if (kind === "shulker") {
     const shell = skin(0x8a6aa8);
     const rim = skin(0x6a4a88);
-    const body = block(g, shell, 0.84, 0.3, 0.84, 0, 0.15, 0, 3, 3);
+    const body = block(g, shell, 0.84, 0.32, 0.84, 0, 0.16, 0, 0, 0);
     body.userData.skin = "body";
-    put(g, geoBox(0.9, 0.08, 0.9), rim, 0, 0.33, 0);
-    block(g, skin(0xd8c88a), 0.3, 0.26, 0.3, 0, 0.48, 0, 1, 1);
-    put(g, geoBox(0.05, 0.05, 0.02), black, -0.07, 0.5, -0.16);
-    put(g, geoBox(0.05, 0.05, 0.02), black, 0.07, 0.5, -0.16);
-    block(g, shell, 0.78, 0.22, 0.78, 0, 0.73, 0, 3, 3);
+    put(g, geoBox(0.88, 0.08, 0.88), rim, 0, 0.33, 0, 0, true);
+    const head = new THREE.Group();
+    head.position.set(0, 0.46, 0);
+    g.add(head);
+    g.userData.head = head;
+    block(head, skin(0xe8d898), 0.30, 0.26, 0.30, 0, 0, 0, 1, 1);
+    put(head, geoBox(0.055, 0.055, 0.02), black, -0.07, 0.03, -0.155, 0, true);
+    put(head, geoBox(0.055, 0.055, 0.02), black, 0.07, 0.03, -0.155, 0, true);
+    // Articulated upper Shulker shell that lifts & rotates when player is near!
+    const topShell = new THREE.Group();
+    topShell.position.set(0, 0.73, 0);
+    block(topShell, shell, 0.82, 0.26, 0.82, 0, 0, 0, 3, 3);
+    put(topShell, geoBox(0.86, 0.07, 0.86), rim, 0, -0.12, 0, 0, true);
+    g.add(topShell);
+    g.userData.topShell = topShell;
     return { group: g, legs: [], bodyMat: shell };
   }
   if (kind === "vex") {
-    // A palm-sized gremlin: pale body, mad eyes, two swept wings.
-    const pale = skin(0xb8c4cc);
-    const wing = skin(0xdfe9ee);
+    const pale = skin(0x98b4c8);
+    const wing = transTile(0xd4f0ff, 0x3a6e8c);
     const body = block(g, pale, 0.26, 0.34, 0.2, 0, 0.42, 0, 1, 1);
     body.userData.skin = "body";
-    block(g, pale, 0.3, 0.26, 0.26, 0, 0.72, 0, 1, 1);
-    put(g, geoBox(0.05, 0.07, 0.02), black, -0.07, 0.74, -0.14);
-    put(g, geoBox(0.05, 0.07, 0.02), black, 0.07, 0.74, -0.14);
-    put(g, geoBox(0.03, 0.3, 0.03), pale, -0.2, 0.16, 0);
-    put(g, geoBox(0.03, 0.3, 0.03), pale, 0.2, 0.16, 0);
+    const head = new THREE.Group();
+    head.position.set(0, 0.60, 0);
+    g.add(head);
+    g.userData.head = head;
+    block(head, pale, 0.28, 0.26, 0.26, 0, 0.12, 0, 1, 1);
+    const vexEye = transTile(0xff3b2f, 0x99140a);
+    put(head, geoBox(0.06, 0.05, 0.024), vexEye, -0.07, 0.14, -0.135, 0, true);
+    put(head, geoBox(0.06, 0.05, 0.024), vexEye, 0.07, 0.14, -0.135, 0, true);
+    // Tiny iron sword held in right hand
+    put(g, geoBox(0.04, 0.28, 0.02), skin(0xc8d0d8), 0.19, 0.42, -0.14, 0.45, true);
     const wL = new THREE.Group();
-    const wLm = new THREE.Mesh(geoBox(0.4, 0.03, 0.2), wing);
-    wLm.position.set(-0.2, 0, 0);
-    wL.add(wLm);
+    put(wL, geoBox(0.42, 0.03, 0.22), wing, -0.21, 0, 0, 0, true);
     wL.position.set(-0.14, 0.6, 0.06);
     wL.rotation.z = 0.5;
     const wR = new THREE.Group();
-    const wRm = new THREE.Mesh(geoBox(0.4, 0.03, 0.2), wing);
-    wRm.position.set(0.2, 0, 0);
-    wR.add(wRm);
+    put(wR, geoBox(0.42, 0.03, 0.22), wing, 0.21, 0, 0, 0, true);
     wR.position.set(0.14, 0.6, 0.06);
     wR.rotation.z = -0.5;
     g.add(wL, wR);
     return { group: g, legs: [wL, wR], bodyMat: pale };
   }
   if (kind === "ravager") {
-    // A siege beast: shoulder-humped grey bulk, horned brow, iron nose
-    // bar, saddle patch — built to read as heavy from any angle.
     const hide = skin(0x6a6f76);
-    const dark = skin(0x4c5058);
+    const dark = skin(0x42464e);
     const hornM = skin(0xe8e2d4);
+    const goldM = skin(0xf5c518);
     const body = block(g, hide, 0.95, 0.85, 1.5, 0, 0.85, 0.05, 4, 6);
     body.userData.skin = "body";
-    put(g, geoBox(0.8, 0.3, 0.7), dark, 0, 1.35, 0.28);
-    put(g, geoBox(0.6, 0.1, 0.7), skin(0x8a5a34), 0, 1.53, 0.05);
-    block(g, hide, 0.72, 0.62, 0.6, 0, 1.02, -0.98, 3, 2);
-    put(g, geoBox(0.76, 0.16, 0.2), dark, 0, 1.3, -1.12);
-    put(g, geoBox(0.06, 0.06, 0.03), black, -0.2, 1.06, -1.29);
-    put(g, geoBox(0.06, 0.06, 0.03), black, 0.2, 1.06, -1.29);
-    put(g, geoBox(0.4, 0.14, 0.3), dark, 0, 0.78, -1.18);
-    put(g, geoBox(0.05, 0.34, 0.05), hornM, -0.48, 1.24, -0.98, -0.5);
-    put(g, geoBox(0.05, 0.34, 0.05), hornM, 0.48, 1.24, -0.98, 0.5);
-    put(g, geoBox(0.1, 0.42, 0.1), dark, 0, 0.62, 0.82);
+    put(g, geoBox(0.84, 0.28, 0.72), dark, 0, 1.35, 0.28);
+    put(g, geoBox(0.64, 0.12, 0.72), skin(0x8a5228), 0, 1.53, 0.05);
+    put(g, geoBox(0.98, 0.14, 0.14), dark, 0, 0.95, -0.35, 0, true); // Iron harness chains
+    const head = new THREE.Group();
+    head.position.set(0, 1.02, -0.76);
+    g.add(head);
+    g.userData.head = head;
+    block(head, hide, 0.72, 0.62, 0.56, 0, 0, -0.22, 3, 2);
+    put(head, geoBox(0.76, 0.16, 0.22), dark, 0, 0.26, -0.38, 0, true);
+    const ravEye = transTile(0xff4228, 0x991808);
+    put(head, geoBox(0.08, 0.07, 0.03), ravEye, -0.20, 0.06, -0.51, 0, true);
+    put(head, geoBox(0.08, 0.07, 0.03), ravEye, 0.20, 0.06, -0.51, 0, true);
+    put(head, geoBox(0.14, 0.12, 0.04), goldM, 0, -0.16, -0.52, 0, true); // Golden nose ring
+    put(head, geoBox(0.08, 0.36, 0.08), hornM, -0.44, 0.20, -0.24, -0.5, true);
+    put(head, geoBox(0.08, 0.36, 0.08), hornM, 0.44, 0.20, -0.24, -0.5, true);
     const legs: THREE.Object3D[] = [];
     for (const sx of [-1, 1])
       for (const sz of [-0.52, 0.55]) {
-        const leg = legBox(g, dark, 0.2, 0.62, 0.2, sx * 0.34, 0.62, sz);
+        const leg = legBox(g, dark, 0.22, 0.62, 0.22, sx * 0.34, 0.62, sz);
         legs.push(leg);
       }
     return { group: g, legs, bodyMat: hide };
   }
   if (kind === "wither") {
-    // Three skulls on a ribbed spine — it used to fall through to the
-    // white-cube fallback, a boss rendered as a blank brick.
     const bone = skin(0x1c1c24);
-    const rib = skin(0x3d3d4a);
+    const rib = skin(0x363644);
     const body = block(g, bone, 0.26, 0.9, 0.26, 0, 0.95, 0, 1, 1);
     body.userData.skin = "body";
-    for (const ry of [0.72, 0.98, 1.24]) put(g, geoBox(0.62, 0.09, 0.3), rib, 0, ry, 0);
-    put(g, geoBox(0.16, 0.55, 0.16), bone, 0, 0.32, 0.1);
-    block(g, bone, 0.4, 0.36, 0.36, 0, 1.66, 0, 2, 2);
-    block(g, bone, 0.28, 0.26, 0.26, -0.44, 1.5, 0, 1, 1);
-    block(g, bone, 0.28, 0.26, 0.26, 0.44, 1.5, 0, 1, 1);
-    const eyeW = skin(0xf4f1ea);
-    put(g, geoBox(0.09, 0.03, 0.02), eyeW, -0.09, 1.7, -0.19);
-    put(g, geoBox(0.09, 0.03, 0.02), eyeW, 0.09, 1.7, -0.19);
-    put(g, geoBox(0.16, 0.04, 0.02), black, 0, 1.56, -0.19);
-    put(g, geoBox(0.07, 0.03, 0.02), eyeW, -0.44, 1.54, -0.14);
-    put(g, geoBox(0.07, 0.03, 0.02), eyeW, 0.44, 1.54, -0.14);
+    for (const ry of [0.72, 0.98, 1.24]) put(g, geoBox(0.64, 0.09, 0.32), rib, 0, ry, 0);
+    put(g, geoBox(0.76, 0.10, 0.22), rib, 0, 1.44, 0); // Shoulder crossbar
+    put(g, geoBox(0.16, 0.55, 0.16), bone, 0, 0.32, 0.1, 0.25);
+    const eyeW = transTile(0x88f0ff, 0x2488a8);
+    const head = new THREE.Group();
+    head.position.set(0, 1.48, 0);
+    g.add(head);
+    g.userData.head = head;
+    block(head, bone, 0.40, 0.36, 0.36, 0, 0.18, 0, 2, 2);
+    put(head, geoBox(0.09, 0.05, 0.025), eyeW, -0.09, 0.22, -0.185, 0, true);
+    put(head, geoBox(0.09, 0.05, 0.025), eyeW, 0.09, 0.22, -0.185, 0, true);
+    put(head, geoBox(0.18, 0.05, 0.025), black, 0, 0.08, -0.185, 0, true);
+    block(g, bone, 0.28, 0.26, 0.26, -0.44, 1.54, 0, 1, 1);
+    block(g, bone, 0.28, 0.26, 0.26, 0.44, 1.54, 0, 1, 1);
+    put(g, geoBox(0.07, 0.04, 0.025), eyeW, -0.44, 1.58, -0.135, 0, true);
+    put(g, geoBox(0.07, 0.04, 0.025), eyeW, 0.44, 1.58, -0.135, 0, true);
     return { group: g, legs: [], bodyMat: bone };
   }
   const fallback = skin(0xf4f1ea);
@@ -9186,39 +11647,193 @@ function beast(kind: string): LegoBody {
   return { group: g, legs: [], bodyMat: fallback };
 }
 
+// Attach 3D LEGO Role Hats, Aprons, Packs, Spectacles & Held Tools to Hamlet NPC Villagers ("PNJ")
+function decorateVillagerRole(group: THREE.Group, role?: TraderRole) {
+  if (!role || group.userData.roleDecorated) return;
+  group.userData.roleDecorated = true;
+  const head = (group.userData.head as THREE.Object3D | undefined) ?? group;
+  const hy = head === group ? 0 : -1.0;
+  const goldM = skin(0xf5c518);
+  const darkM = skin(0x231c16);
+  const woodM = skin(0x7c522b);
+  const ironM = skin(0xa7aeb4);
+  if (role === "grocer") {
+    // Farmer Straw Hat + Green Bib Overalls + Held Golden Wheat Sheaf
+    put(head, geoCyl(0.27, 0.032, 14), skin(0xe8c455), 0, 1.27 + hy, 0, 0, true);
+    put(head, geoCyl(0.165, 0.11, 12), skin(0xd9b244), 0, 1.33 + hy, 0, 0, true);
+    put(head, geoCyl(0.17, 0.028, 12), skin(0xc83228), 0, 1.29 + hy, 0, 0, true);
+    put(group, geoBox(0.28, 0.26, 0.245), skin(0x2f7d38), 0, 0.68, 0, 0, true);
+    put(group, geoBox(0.06, 0.24, 0.06), skin(0xf0c43a), 0.28, 0.50, -0.14, 0.45, true);
+  } else if (role === "smith") {
+    // Blacksmith Iron Forging Helmet + Visor + Leather Apron + Held 3D LEGO Hammer
+    put(head, geoCyl(0.175, 0.14, 12), skin(0x3a3e46), 0, 1.28 + hy, 0, 0, true);
+    put(head, geoBox(0.26, 0.06, 0.06), ironM, 0, 1.25 + hy, -0.15, 0, true);
+    put(group, geoBox(0.32, 0.32, 0.245), skin(0x3b2618), 0, 0.67, 0, 0, true);
+    put(group, geoCyl(0.018, 0.26, 8), woodM, 0.28, 0.50, -0.15, 0.4, true);
+    put(group, geoBox(0.08, 0.055, 0.13), ironM, 0.28, 0.58, -0.22, 0, true);
+  } else if (role === "mason") {
+    // Red LEGO Construction Hard-Hat + Stone Belt + Held Bricklayer Chisel
+    put(head, geoCyl(0.18, 0.11, 12), skin(0xe23b2f), 0, 1.29 + hy, 0, 0, true);
+    put(head, geoBox(0.22, 0.03, 0.12), skin(0xe23b2f), 0, 1.25 + hy, -0.14, 0, true);
+    put(group, geoBox(0.42, 0.07, 0.25), skin(0x5c3818), 0, 0.55, 0, 0, true);
+    put(group, geoBox(0.07, 0.07, 0.04), goldM, 0, 0.55, -0.13, 0, true);
+    put(group, geoCyl(0.018, 0.22, 8), ironM, 0.28, 0.50, -0.14, 0.45, true);
+  } else if (role === "herder") {
+    // Wide-Brimmed Rancher Hat + Wool Mantle + Tall Shepherd Crook Staff
+    put(head, geoCyl(0.25, 0.034, 12), skin(0x5c3818), 0, 1.27 + hy, 0, 0, true);
+    put(head, geoBox(0.26, 0.10, 0.26), skin(0x6b3e22), 0, 1.33 + hy, 0, 0, true);
+    put(group, geoBox(0.46, 0.10, 0.26), skin(0xf4f1ea), 0, 0.89, 0, 0, true);
+    put(group, geoCyl(0.02, 0.85, 8), woodM, 0.29, 0.56, -0.12, 0.12, true);
+    put(group, geoBox(0.08, 0.06, 0.04), goldM, 0.29, 0.98, -0.16, 0, true);
+  } else if (role === "clerk") {
+    // Scholarly Gold Spectacles + Blue Tunic Medallion + Held Red LEGO Tome
+    put(head, geoBox(0.068, 0.056, 0.024), goldM, -0.058, 1.16 + hy, -0.158, 0, true);
+    put(head, geoBox(0.068, 0.056, 0.024), goldM, 0.058, 1.16 + hy, -0.158, 0, true);
+    put(head, geoBox(0.04, 0.018, 0.026), goldM, 0, 1.16 + hy, -0.16, 0, true);
+    put(head, geoCyl(0.17, 0.08, 12), skin(0x1f4e9e), 0, 1.28 + hy, 0, 0, true);
+    put(group, geoBox(0.07, 0.07, 0.03), goldM, 0, 0.78, -0.125, 0, true);
+    put(group, geoBox(0.09, 0.14, 0.12), skin(0xb82820), -0.28, 0.50, -0.12, 0.3, true);
+  } else if (role === "mage") {
+    // Tall Pointed Purple Wizard Hat + Mystic Cape + Glowing Crystal Staff
+    put(head, geoBox(0.48, 0.04, 0.48), skin(0x4b1d8c), 0, 1.27 + hy, 0, 0, true);
+    put(head, geoCyl(0.15, 0.18, 10), skin(0x5e2ca5), 0, 1.37 + hy, 0, 0, true);
+    put(head, geoCyl(0.08, 0.18, 8), skin(0x5e2ca5), 0, 1.54 + hy, 0, 0, true);
+    put(head, geoBox(0.05, 0.05, 0.03), goldM, 0, 1.36 + hy, -0.15, 0, true);
+    put(group, geoBox(0.40, 0.52, 0.04), skin(0x3a1468), 0, 0.66, 0.135, 0, true);
+    put(group, geoCyl(0.02, 0.88, 8), woodM, 0.29, 0.56, -0.13, 0.15, true);
+    const orb = transTile(0x64f5e8, 0x24b8a8);
+    put(group, geoBox(0.09, 0.09, 0.09), orb, 0.29, 1.01, -0.19, 0, true);
+  } else if (role === "ranger") {
+    // Forest Hood with Red Feather Plume + Back Quiver + Held 3D LEGO Bow
+    put(head, geoBox(0.34, 0.12, 0.28), skin(0x1d5526), 0, 1.28 + hy, 0, 0, true);
+    put(head, geoBox(0.03, 0.14, 0.06), skin(0xe23b2f), 0.14, 1.38 + hy, -0.04, -0.25, true);
+    put(group, geoCyl(0.055, 0.28, 8), skin(0x6b3e22), 0.08, 0.76, 0.15, 0.15, true);
+    put(group, geoBox(0.03, 0.30, 0.12), woodM, 0.28, 0.50, -0.16, 0.3, true);
+  } else {
+    put(head, geoBox(0.34, 0.06, 0.26), darkM, 0, 1.27 + hy, 0, 0, true);
+  }
+}
+
 function buildLego(kind: string, scale: number): LegoBody {
   const figKind =
     kind === "villager"
       ? makeFig(0x8d5a34, 0x6b3e22, 0x4a3424, "nose")
       : kind === "walker"
-        ? makeFig(0x3d5c38, 0x243028, 0x1a120c, "mad", 0x6a8a52)
+        ? makeFig(0x286e78, 0x283268, 0x1e3c20, "mad", 0x5ea252)
         : kind === "skelly"
           ? makeFig(0xe8e0d0, 0xd4cbb8, 0xf7f4ee, "skull", 0xf4f1ea)
           : kind === "piglin"
-            ? makeFig(0xf0c43a, 0x8d5a34, 0xf2a2c0, "snout", 0xf2a2c0)
+            ? makeFig(0x7a4222, 0x4a2a18, 0xf2a2c0, "snout", 0xf2a2c0)
             : kind === "witch"
-              ? makeFig(0x4a2a6a, 0x2a1a3a, 0x14101c, "nose", 0xd8b088)
+              ? makeFig(0x4a2a6a, 0x223824, 0x14101c, "nose", 0xd8b088)
               : kind === "drowned"
-                ? makeFig(0x2a6a6a, 0x1a3a4a, 0x0a2a2a, "mad", 0x7ac0a8)
+                ? makeFig(0x2a6a6a, 0x1a3a4a, 0x164a3a, "mad", 0x6ac0a8)
                 : kind === "husk"
-                  ? makeFig(0x8a6a42, 0x6a5136, 0x3a2c1c, "mad", 0xb08a5a)
+                  ? makeFig(0xc8ad78, 0x9e8252, 0x1d4ed8, "mad", 0x8a6438)
                   : kind === "stray"
-                    ? makeFig(0x7a8a94, 0x4a565e, 0xc8d8e2, "skull", 0xdfe9ee)
+                    ? makeFig(0x627c8c, 0x3e505c, 0xc8e4f0, "skull", 0xdff0f7)
                     : kind === "pillager"
-                      ? makeFig(0x4a4a55, 0x35353f, 0x23232a, "mad", 0x8a8a92)
+                      ? makeFig(0x483224, 0x2c3038, 0x23232a, "nose", 0x90969e)
                       : kind === "vindicator"
-                        ? makeFig(0x3d4a42, 0x2c362f, 0x1e2620, "mad", 0x8a8a92)
+                        ? makeFig(0x2e3840, 0x22282e, 0x1e2620, "nose", 0x90969e)
                         : kind === "evoker"
-                          ? makeFig(0x23202e, 0x8a6a2c, 0x14101c, "mad", 0x8a8a92)
+                          ? makeFig(0x1e1a2b, 0x161420, 0x14101c, "nose", 0x90969e)
                           : null;
   const built = figKind ?? beast(kind);
-  if (kind === "witch") {
-    // Pointed hat: brim + two stacked drums taper to the tip.
-    put(built.group, geoBox(0.52, 0.05, 0.52), skin(0x1a1226), 0, 1.28, 0);
-    put(built.group, geoCyl(0.15, 0.2, 10), skin(0x241536), 0, 1.4, 0);
-    put(built.group, geoCyl(0.08, 0.18, 10), skin(0x241536), 0, 1.58, 0);
-    put(built.group, geoBox(0.3, 0.06, 0.3), skin(0xf0c43a), 0, 1.33, 0);
+  const g = built.group;
+  const head = (g.userData.head as THREE.Object3D | undefined) ?? g;
+  const hy = head === g ? 0 : -1.0;
+  const goldM = skin(0xf5c518);
+  const ironM = skin(0xb0b8c2);
+  const darkIron = skin(0x424750);
+  const woodM = skin(0x7c522b);
+
+  if (kind === "walker") {
+    // Zombie: tattered chest armor plate, asymmetric torn pauldron & glowing green eyes
+    const zEye = transTile(0x52ff68, 0x146e20);
+    put(head, geoBox(0.05, 0.045, 0.024), zEye, -0.056, 1.155 + hy, -0.155, 0, true);
+    put(head, geoBox(0.05, 0.045, 0.024), zEye, 0.056, 1.155 + hy, -0.155, 0, true);
+    put(g, geoBox(0.16, 0.10, 0.24), skin(0x425238), -0.16, 0.89, 0, 0, true);
+    put(g, geoBox(0.32, 0.08, 0.245), skin(0x3a2818), 0, 0.56, 0, 0, true);
+  } else if (kind === "skelly" || kind === "stray") {
+    // Skeleton / Frost Stray: 3D LEGO Bow gripped in right hand + back arrow quiver (+ Ice Crown on Stray)
+    const bowCol = kind === "stray" ? skin(0x7ae2ff) : woodM;
+    put(g, geoBox(0.032, 0.34, 0.14), bowCol, 0.28, 0.52, -0.18, 0.25, true);
+    put(g, geoCyl(0.008, 0.34, 6), skin(0xf4f1ea), 0.28, 0.52, -0.11, 0.25, true);
+    put(g, geoCyl(0.05, 0.26, 8), skin(0x6b3e22), -0.09, 0.78, 0.15, -0.2, true);
+    if (kind === "stray") {
+      const iceM = transTile(0x7cf0ff, 0x1e88a8);
+      put(head, geoBox(0.36, 0.10, 0.30), skin(0x4a6a7c), 0, 1.28 + hy, 0, 0, true);
+      put(head, geoBox(0.05, 0.12, 0.05), iceM, -0.11, 1.36 + hy, -0.08, 0, true);
+      put(head, geoBox(0.05, 0.14, 0.05), iceM, 0, 1.38 + hy, -0.10, 0, true);
+      put(head, geoBox(0.05, 0.12, 0.05), iceM, 0.11, 1.36 + hy, -0.08, 0, true);
+    }
+  } else if (kind === "husk") {
+    // Pharaoh Mummy: Egyptian Royal Blue & Gold Nemes Headdress + Uraeus Cobra + Linen Bandages + Golden Scepter
+    put(head, geoBox(0.40, 0.12, 0.32), skin(0x1d4ed8), 0, 1.28 + hy, 0.02, 0, true);
+    put(head, geoBox(0.42, 0.045, 0.33), goldM, 0, 1.25 + hy, 0.02, 0, true);
+    put(head, geoBox(0.10, 0.22, 0.10), skin(0x1d4ed8), -0.17, 1.08 + hy, -0.04, 0, true);
+    put(head, geoBox(0.10, 0.22, 0.10), skin(0x1d4ed8), 0.17, 1.08 + hy, -0.04, 0, true);
+    put(head, geoBox(0.11, 0.04, 0.11), goldM, -0.17, 1.06 + hy, -0.04, 0, true);
+    put(head, geoBox(0.11, 0.04, 0.11), goldM, 0.17, 1.06 + hy, -0.04, 0, true);
+    put(head, geoBox(0.055, 0.10, 0.05), goldM, 0, 1.34 + hy, -0.15, 0, true); // Golden cobra uraeus
+    put(g, geoBox(0.38, 0.05, 0.245), skin(0xe8dec2), 0, 0.78, 0, 0, true);
+    put(g, geoBox(0.38, 0.05, 0.245), skin(0xd8cca8), 0, 0.64, 0, 0, true);
+    put(g, geoCyl(0.02, 0.44, 8), goldM, 0.28, 0.54, -0.16, 0.35, true);
+    put(g, geoBox(0.08, 0.08, 0.08), transTile(0xffd84a, 0xd88800), 0.28, 0.74, -0.24, 0, true);
+  } else if (kind === "drowned") {
+    // Drowned: Glowing Cyan Eyes + Seaweed Shoulder Wraps + Held 3-Pronged 3D LEGO Trident!
+    const seaEye = transTile(0x4ef2f7, 0x128898);
+    put(head, geoBox(0.05, 0.048, 0.024), seaEye, -0.056, 1.155 + hy, -0.155, 0, true);
+    put(head, geoBox(0.05, 0.048, 0.024), seaEye, 0.056, 1.155 + hy, -0.155, 0, true);
+    put(g, geoBox(0.16, 0.12, 0.25), skin(0x1f5c38), -0.15, 0.88, 0, 0, true);
+    put(g, geoCyl(0.02, 0.52, 8), skin(0x2a8478), 0.28, 0.54, -0.16, 0.35, true);
+    put(g, geoBox(0.14, 0.04, 0.04), skin(0x66e8dc), 0.28, 0.76, -0.25, 0, true);
+    for (const px of [-0.05, 0, 0.05]) {
+      put(g, geoCyl(0.008, 0.11, 6), skin(0xe8ffff), 0.28 + px, 0.83, -0.28, 0.35, true);
+    }
+  } else if (kind === "piglin") {
+    // Piglin: Golden Horned Helmet + Flopped Ears + Ivory Tusks + Gold Belt + Held Golden LEGO Sword!
+    put(head, geoCyl(0.175, 0.12, 12), goldM, 0, 1.28 + hy, 0, 0, true);
+    put(head, geoBox(0.04, 0.10, 0.04), skin(0xf7f4ee), -0.18, 1.32 + hy, -0.02, 0, true);
+    put(head, geoBox(0.04, 0.10, 0.04), skin(0xf7f4ee), 0.18, 1.32 + hy, -0.02, 0, true);
+    put(head, geoBox(0.06, 0.16, 0.10), skin(0xf2a2c0), -0.19, 1.12 + hy, 0, 0.1, true);
+    put(head, geoBox(0.06, 0.16, 0.10), skin(0xf2a2c0), 0.19, 1.12 + hy, 0, -0.1, true);
+    put(head, geoBox(0.026, 0.06, 0.026), skin(0xf7f4ee), -0.055, 1.07 + hy, -0.21, 0, true);
+    put(head, geoBox(0.026, 0.06, 0.026), skin(0xf7f4ee), 0.055, 1.07 + hy, -0.21, 0, true);
+    put(g, geoBox(0.42, 0.07, 0.245), goldM, 0, 0.56, 0, 0, true);
+    put(g, geoBox(0.06, 0.34, 0.025), goldM, 0.28, 0.58, -0.18, 0.45, true);
+    put(g, geoBox(0.13, 0.035, 0.04), skin(0xc99812), 0.28, 0.45, -0.12, 0, true);
+  } else if (kind === "witch") {
+    // Pointed hat: brim + two stacked drums taper to the tip + nose wart + glowing potion bottle in hand
+    put(head, geoBox(0.52, 0.05, 0.52), skin(0x1a1226), 0, 1.28 + hy, 0, 0, true);
+    put(head, geoCyl(0.15, 0.2, 10), skin(0x241536), 0, 1.4 + hy, 0, 0, true);
+    put(head, geoCyl(0.08, 0.18, 8), skin(0x241536), 0, 1.58 + hy, 0, 0, true);
+    put(head, geoBox(0.3, 0.06, 0.3), skin(0x3aaa4c), 0, 1.33 + hy, 0, 0, true);
+    put(head, geoBox(0.08, 0.07, 0.03), goldM, 0, 1.33 + hy, -0.16, 0, true);
+    put(head, geoCyl(0.022, 0.022, 8), skin(0x52a842), 0.02, 1.09 + hy, -0.26, Math.PI / 2, true);
+    const potM = transTile(0xba6eff, 0x732ab5);
+    put(g, geoCyl(0.06, 0.12, 8), potM, 0.28, 0.48, -0.16, 0, true);
+  } else if (kind === "pillager") {
+    // Pillager: Dark Iron Shoulder Pauldrons + Silver Belt Buckle + Held 3D LEGO Crossbow
+    put(g, geoBox(0.48, 0.09, 0.26), darkIron, 0, 0.89, 0, 0, true);
+    put(g, geoBox(0.42, 0.065, 0.245), skin(0x231a12), 0, 0.56, 0, 0, true);
+    put(g, geoBox(0.07, 0.07, 0.03), ironM, 0, 0.56, -0.13, 0, true);
+    put(g, geoBox(0.05, 0.06, 0.28), woodM, 0.28, 0.50, -0.18, 0, true);
+    put(g, geoBox(0.26, 0.035, 0.04), darkIron, 0.28, 0.52, -0.30, 0, true);
+  } else if (kind === "vindicator") {
+    // Vindicator: Silver-Trimmed Vest + Held 3D LEGO Iron Battle-Axe
+    put(g, geoBox(0.10, 0.36, 0.245), ironM, 0, 0.72, 0, 0, true);
+    put(g, geoCyl(0.02, 0.42, 8), woodM, 0.28, 0.55, -0.16, 0.38, true);
+    put(g, geoBox(0.13, 0.14, 0.035), ironM, 0.28, 0.72, -0.25, 0, true);
+  } else if (kind === "evoker") {
+    // Evoker: Gold-Trimmed Robe + Golden Mantle + Held Glowing Totem of Undying
+    put(g, geoBox(0.46, 0.10, 0.26), goldM, 0, 0.89, 0, 0, true);
+    put(g, geoBox(0.12, 0.40, 0.245), goldM, 0, 0.72, 0, 0, true);
+    put(g, geoBox(0.10, 0.16, 0.08), goldM, 0.28, 0.52, -0.16, 0, true);
+    put(g, geoBox(0.18, 0.05, 0.06), transTile(0x36e868, 0x148834), 0.28, 0.54, -0.17, 0, true);
   }
+
   if (scale !== 1) built.group.scale.multiplyScalar(scale);
   return built;
 }

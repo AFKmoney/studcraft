@@ -1162,6 +1162,69 @@ function TimeGlyph({ label, weather }: { label: string; weather: string }) {
   return label === "Night" || label === "Dusk" || label === "Midnight" ? <MoonIcon size={16} /> : <SunIcon size={16} />;
 }
 
+function ClockWidget({ hud }: { hud: GameApi["hud"] }) {
+  // Rotate celestial dial so Sun is at top (12 o'clock) at noon (0.25).
+  // Formula: (timeProgress - 0.25) * 360 degrees
+  const dialRotation = (((hud.timeProgress ?? 0) - 0.25) * 360).toFixed(1);
+  const phaseClass = (hud.timeLabel || "day").toLowerCase().replace(/\s+/g, "-");
+
+  return (
+    <div className="sc-clock-card" title={`Time: ${hud.timeClock} · Day ${hud.dayCount}`}>
+      <div className="sc-clock-dial-bezel">
+        <div className="sc-clock-dial" style={{ transform: `rotate(${dialRotation}deg)` }}>
+          <svg viewBox="0 0 64 64" className="sc-clock-svg" aria-hidden="true">
+            <defs>
+              <linearGradient id="scSkyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#2c7be5" />
+                <stop offset="48%" stopColor="#70b5f9" />
+                <stop offset="52%" stopColor="#141c2e" />
+                <stop offset="100%" stopColor="#040814" />
+              </linearGradient>
+            </defs>
+            {/* Celestial Sky Disc */}
+            <circle cx="32" cy="32" r="30" fill="url(#scSkyGrad)" />
+            {/* Day: 3D LEGO Sun with golden studs */}
+            <g transform="translate(32, 11)">
+              <circle cx="0" cy="0" r="7.5" fill="#ffd13b" stroke="#e89812" strokeWidth="1.2" />
+              <circle cx="-2" cy="-2" r="2.8" fill="#fff9d6" opacity="0.65" />
+              <circle cx="0" cy="-9" r="1.6" fill="#f5aa18" />
+              <circle cx="0" cy="9" r="1.6" fill="#f5aa18" />
+              <circle cx="-9" cy="0" r="1.6" fill="#f5aa18" />
+              <circle cx="9" cy="0" r="1.6" fill="#f5aa18" />
+            </g>
+            {/* Night: Crescent LEGO Moon with micro-craters */}
+            <g transform="translate(32, 53)">
+              <circle cx="0" cy="0" r="7" fill="#dce6f4" stroke="#889bb8" strokeWidth="1" />
+              <circle cx="3" cy="-1.5" r="5.8" fill="#141c2e" />
+              <circle cx="-2.5" cy="1.5" r="1.2" fill="#9db1ce" opacity="0.8" />
+              <circle cx="-1" cy="-3" r="0.9" fill="#9db1ce" opacity="0.7" />
+              <circle cx="16" cy="3" r="0.8" fill="#ffffff" opacity="0.85" />
+              <circle cx="-15" cy="-2" r="0.8" fill="#ffffff" opacity="0.85" />
+              <circle cx="12" cy="-10" r="0.6" fill="#ffffff" opacity="0.7" />
+            </g>
+          </svg>
+        </div>
+        {/* LEGO Stud Accents on Gold Bezel */}
+        <div className="sc-clock-stud stud-t" />
+        <div className="sc-clock-stud stud-r" />
+        <div className="sc-clock-stud stud-b" />
+        <div className="sc-clock-stud stud-l" />
+      </div>
+      <div className="sc-clock-meta">
+        <div className="sc-clock-top">
+          <span className="sc-clock-time">{hud.timeClock || "07:00 AM"}</span>
+          <span className={`sc-clock-phase phase-${phaseClass}`}>{hud.timeLabel || "Day"}</span>
+        </div>
+        <div className="sc-clock-sub">
+          <span className="sc-clock-day">Day {hud.dayCount || 1}</span>
+          <span className="sc-clock-divider">·</span>
+          <span className="sc-clock-ticks">{((hud.timeTicks ?? 0).toLocaleString())} ticks</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Hud({ game, touchUI }: { game: GameApi; touchUI: boolean }) {
   const hud = game.hud;
   const s = game.settings;
@@ -1174,6 +1237,7 @@ function Hud({ game, touchUI }: { game: GameApi; touchUI: boolean }) {
   return (
     <div className={"sc-hud" + (touchUI ? " is-touch" : "")}>
       <div className="sc-hud-tl">
+        <ClockWidget hud={hud} />
         <div className="sc-info">
           <span className="sc-info-ic">
             <TimeGlyph label={hud.timeLabel} weather={hud.weather} />
@@ -1181,8 +1245,8 @@ function Hud({ game, touchUI }: { game: GameApi; touchUI: boolean }) {
           <span>
             <strong>{hud.biome}</strong>
             <small>
-              {hud.timeLabel}
-              {hud.realm !== "Overworld" ? " · " + hud.realm : ""}
+              {hud.weather !== "clear" ? `${hud.weather.toUpperCase()} · ` : ""}
+              {hud.realm !== "Overworld" ? hud.realm : "Overworld"}
               {hud.flying ? " · flying" : ""}
               {hud.hammer ? " · hammer" : ""}
             </small>
@@ -1548,21 +1612,43 @@ function Inventory({ game }: { game: GameApi }) {
   );
 }
 
-function BinGrid({ game, filter = "" }: { game: GameApi; filter?: string }) {
+type BinCategory = "all" | "bricks" | "tools" | "food" | "materials";
+
+function itemBinCategory(id: number): BinCategory {
+  const d = def(id);
+  if (d.tool || d.armor > 0 || d.armorSlot || d.maxUse > 0 || id === ID.Shield || id === ID.Elytra || id === ID.Bow || id === ID.Crossbow || id === ID.Trident || id === ID.Arrow || id === ID.Totem) {
+    return "tools";
+  }
+  if (d.food > 0 || id === ID.Bottle || id === ID.PotionHeal || id === ID.PotionSpeed || id === ID.PotionStr || id === ID.PotionRegen || id === ID.PotionFire || id === ID.PotionLeap || id === ID.PotionGill || id === ID.PotionVeil || id === ID.PotionVenom || id === ID.PotionTar || id === ID.SplashVenom || id === ID.SplashTar || id === ID.Focus || id === ID.Milk || id === ID.BaseBrew) {
+    return "food";
+  }
+  if (d.placeable) return "bricks";
+  return "materials";
+}
+
+function BinGrid({ game, filter = "", cat = "all" }: { game: GameApi; filter?: string; cat?: BinCategory }) {
   const hud = game.hud;
   const q = filter.trim().toLowerCase();
-  const ids = CATALOG.filter((id) => (hud.creative || (hud.inv[id] ?? 0) > 0) && (!q || def(id).name.toLowerCase().includes(q)));
-  if (ids.length === 0) return <p className="sc-empty">{q ? "Nothing matches." : "Your bag is empty. Go punch a tree."}</p>;
+  const ids = CATALOG.filter((id) => {
+    if (!hud.creative && (hud.inv[id] ?? 0) <= 0) return false;
+    if (cat !== "all" && itemBinCategory(id) !== cat) return false;
+    if (q && !def(id).name.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  if (ids.length === 0) return <p className="sc-empty">{q || cat !== "all" ? "No matching bricks or items." : "Your bag is empty. Go punch a tree."}</p>;
   return (
     <div className="sc-grid">
       {ids.map((id) => {
+        const d = def(id);
         const count = hud.creative ? -1 : (hud.inv[id] ?? 0);
+        const hbIndex = hud.hotbar.findIndex((h) => h.id === id);
+        const durPct = d.maxUse > 0 && count > 0 ? Math.max(0, Math.min(100, Math.round((count / d.maxUse) * 100))) : -1;
         return (
           <button
             key={id}
-            className={"sc-cell" + (hud.cursor === id ? " held" : "")}
-            title={def(id).name}
-            aria-label={def(id).name + (count >= 0 ? `, ${count}` : "")}
+            className={"sc-cell" + (hud.cursor === id ? " held" : "") + (hbIndex >= 0 ? " in-hb" : "")}
+            title={`${d.name}${d.maxUse > 0 && count > 0 ? ` (${count}/${d.maxUse} durability)` : count > 0 ? ` (×${count})` : ""}`}
+            aria-label={d.name + (count >= 0 ? `, ${count}` : "")}
             onClick={(e) => {
               if (e.shiftKey) {
                 game.shiftStack(id);
@@ -1584,8 +1670,15 @@ function BinGrid({ game, filter = "" }: { game: GameApi; filter?: string }) {
               game.shiftStack(id);
             }}
           >
+            {hbIndex >= 0 && <span className="sc-cell-hb">{hbIndex + 1}</span>}
             <ItemIcon id={id} />
-            {count > 1 && <em>{count > 999 ? "999+" : count}</em>}
+            {d.maxUse > 0 && durPct >= 0 ? (
+              <span className="sc-dur-bar">
+                <i style={{ width: `${durPct}%`, background: durPct > 55 ? "#5bd16a" : durPct > 25 ? "#f5c518" : "#e23b2f" }} />
+              </span>
+            ) : (
+              count > 1 && <em>{count > 999 ? "999+" : count}</em>
+            )}
           </button>
         );
       })}
@@ -1596,36 +1689,64 @@ function BinGrid({ game, filter = "" }: { game: GameApi; filter?: string }) {
 function BinPage({ game }: { game: GameApi }) {
   const hud = game.hud;
   const [filter, setFilter] = useState("");
+  const [cat, setCat] = useState<BinCategory>("all");
+  const armorPts = useMemo(() => {
+    let sum = 0;
+    for (const id of hud.armor) if (id > 0) sum += def(id).armor;
+    return Math.max(0, Math.min(20, Math.round(sum / 0.024)));
+  }, [hud.armor]);
   return (
     <div className="sc-bin">
       <div className="sc-bin-side">
-        <p className="sc-label">Armor</p>
+        <div className="sc-bin-head-row">
+          <p className="sc-label">Equipment</p>
+          <span className="sc-armor-badge" title="Armor Defense Rating">
+            <ShieldIcon size={13} /> {armorPts}/20
+          </span>
+        </div>
         <div className="sc-armor">
           {hud.armor.map((id, i) => (
-            <button key={i} className="sc-cell" onClick={() => game.armorTap(i)} aria-label={["Helmet", "Chestplate", "Leggings", "Boots"][i]}>
+            <button key={i} className={"sc-cell" + (id > 0 ? " equipped" : "")} onClick={() => game.armorTap(i)} aria-label={["Helmet", "Chestplate", "Leggings", "Boots"][i]} title={id > 0 ? `${def(id).name} (click to unequip)` : ["Head", "Body", "Legs", "Feet"][i]}>
               {id > 0 ? <ItemIcon id={id} /> : <small>{["Head", "Body", "Legs", "Feet"][i]}</small>}
             </button>
           ))}
-          <div className="sc-cell offhand" role="img" aria-label="Off hand" title="Off hand (F swaps)">
-            {hud.offhand > 0 ? <ItemIcon id={hud.offhand} /> : <small>Off</small>}
+          <div className="sc-cell offhand" role="img" aria-label="Off hand" title="Off hand (press F in-game to swap)">
+            {hud.offhand > 0 ? <ItemIcon id={hud.offhand} /> : <small>Off-hand (F)</small>}
           </div>
         </div>
-        <p className="sc-hint">Hold a piece, then tap a slot to wear it. F swaps the off hand.</p>
-        <p className="sc-label">Color press</p>
+        <p className="sc-hint">Tap armor to unequip · press F in-game to swap off-hand.</p>
+        <p className="sc-label">LEGO Color Press</p>
         <div className="sc-colors">
           {COLORS.map((id) => (
-            <button key={id} style={{ background: def(id).color }} aria-label={"Press " + def(id).name} onClick={(e) => (e.shiftKey ? game.shiftStack(id) : game.press(id))} />
+            <button key={id} style={{ background: def(id).color }} title={`Mold ${def(id).name}`} aria-label={"Press " + def(id).name} onClick={(e) => (e.shiftKey ? game.shiftStack(id) : game.press(id))} />
           ))}
         </div>
-        <p className="sc-hint">Spends one spare brick.</p>
+        <p className="sc-hint">Molds 1 spare brick into any classic LEGO color.</p>
       </div>
       <div className="sc-bin-main">
         <div className="sc-search">
-          <input type="search" placeholder="Search items" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Search items" />
-          <span className="sc-held">Holding: {hud.cursor ? def(hud.cursor).name : "—"}</span>
+          <input type="search" placeholder="Search bricks, tools, food, ores…" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Search items" />
+          <span className="sc-held">
+            Held: <strong>{hud.cursor ? def(hud.cursor).name : "None"}</strong>
+          </span>
         </div>
-        <BinGrid game={game} filter={filter} />
-        <p className="sc-hint">Tap to put in the selected hotbar slot · double-tap, long-press or Shift-click moves a stack.</p>
+        <div className="sc-chips sc-bin-chips">
+          {(
+            [
+              ["all", "All"],
+              ["bricks", "Bricks"],
+              ["tools", "Tools & Gear"],
+              ["food", "Food & Brews"],
+              ["materials", "Materials"],
+            ] as const
+          ).map(([id, label]) => (
+            <button key={id} className={cat === id ? "sc-chip-btn on" : "sc-chip-btn"} onClick={() => setCat(id)}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <BinGrid game={game} filter={filter} cat={cat} />
+        <p className="sc-hint">Click to assign to active hotbar slot ({hud.slot + 1}) · Shift-click or double-tap to move stack.</p>
       </div>
     </div>
   );
@@ -1634,119 +1755,296 @@ function BinPage({ game }: { game: GameApi }) {
 function CraftPage({ game }: { game: GameApi }) {
   const hud = game.hud;
   const bench = hud.panel === "bench";
-  const [book, setBook] = useState<"all" | "build" | "tools" | "magic" | "gear" | "food">("all");
+  const [book, setBook] = useState<"all" | "build" | "tools" | "magic" | "gear" | "food" | "redstone">("all");
+  const [search, setSearch] = useState("");
   const [sel, setSel] = useState("");
   const [onlyCan, setOnlyCan] = useState(false);
-  const [showGrid, setShowGrid] = useState(false);
-  const afford = (entry: Recipe, times = 1) => hud.creative || entry.need.every(([id, n]) => (hud.inv[id] ?? 0) >= n * times);
-  const list = RECIPES.filter((r) => (book === "all" || r.cat === book) && (!onlyCan || afford(r)));
+  const [showGrid, setShowGrid] = useState(bench);
+
+  const maxBatches = (entry: Recipe) => {
+    if (entry.special === "hammer" && hud.hammer) return 0;
+    if (entry.lvl && !hud.creative && hud.level < entry.lvl) return 0;
+    if (entry.skill && !hud.creative && !hud.skills.includes(entry.skill)) return 0;
+    if (hud.creative) return 64;
+    let m = 64;
+    for (const [id, n] of entry.need) {
+      if (n <= 0) continue;
+      const have = hud.inv[id] ?? 0;
+      m = Math.min(m, Math.floor(have / n));
+    }
+    return Math.max(0, m);
+  };
+
+  const afford = (entry: Recipe, times = 1) => maxBatches(entry) >= times;
+  const q = search.trim().toLowerCase();
+
+  const catCounts: Record<string, number> = { all: 0, build: 0, tools: 0, gear: 0, food: 0, magic: 0 };
+  for (const r of RECIPES) {
+    if (onlyCan && !afford(r)) continue;
+    if (q && !r.name.toLowerCase().includes(q) && !r.detail.toLowerCase().includes(q)) continue;
+    catCounts.all++;
+    if (r.cat) catCounts[r.cat] = (catCounts[r.cat] ?? 0) + 1;
+  }
+
+  const list = RECIPES.filter((r) => {
+    if (book !== "all" && r.cat !== book) return false;
+    if (onlyCan && !afford(r)) return false;
+    if (q && !r.name.toLowerCase().includes(q) && !r.detail.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
   const recipe = list.find((e) => e.id === sel) ?? list[0];
+  const recipeMax = recipe ? maxBatches(recipe) : 0;
+  const isSingleOut = recipe ? Boolean(recipe.special || def(recipe.out).maxUse || def(recipe.out).armorSlot) : false;
+
+  // Build a 3x3 padded preview matrix for the selected recipe
+  const preview3x3 = useMemo(() => {
+    const cells = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    if (!recipe) return cells;
+    if (recipe.shape && recipe.w && recipe.h) {
+      const ox = recipe.w === 1 ? 1 : 0;
+      const oy = recipe.h === 1 ? 1 : 0;
+      for (let y = 0; y < recipe.h && y + oy < 3; y++) {
+        for (let x = 0; x < recipe.w && x + ox < 3; x++) {
+          cells[(x + ox) + (y + oy) * 3] = recipe.shape[x + y * recipe.w] || 0;
+        }
+      }
+      return cells;
+    }
+    // Fallback arrangement from `need` list
+    let idx = 0;
+    for (const [id, count] of recipe.need) {
+      for (let k = 0; k < Math.min(count, 9 - idx); k++) {
+        cells[idx++] = id;
+      }
+    }
+    return cells;
+  }, [recipe]);
+
   return (
     <div className="sc-craft">
-      <div className="sc-chips">
-        {(["all", "build", "tools", "gear", "food", "magic"] as const).map((cat) => (
-          <button key={cat} className={book === cat ? "sc-chip-btn on" : "sc-chip-btn"} onClick={() => setBook(cat)}>
-            {cat === "all" ? "All" : cat[0].toUpperCase() + cat.slice(1)}
+      <div className="sc-craft-top">
+        <div className="sc-search sc-craft-search">
+          <input
+            type="search"
+            placeholder="Search 125+ LEGO recipes (pickaxe, torch, redstone, armor, food…)"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search recipes"
+          />
+          <button
+            type="button"
+            className={showGrid ? "sc-chip-btn on" : "sc-chip-btn"}
+            onClick={() => setShowGrid(!showGrid)}
+            title="Toggle manual 3×3 / 2×2 crafting table"
+          >
+            <HammerIcon size={14} /> {bench ? "3×3 Bench Grid" : "2×2 Pocket Grid"}
           </button>
-        ))}
-        <button className={onlyCan ? "sc-chip-btn on" : "sc-chip-btn"} onClick={() => setOnlyCan(!onlyCan)}>
-          <CheckIcon size={14} /> Craftable
-        </button>
-      </div>
-      <div className="sc-craft-body">
-        <div className="sc-recipes">
-          {list.map((entry) => (
-            <button key={entry.id + "-" + entry.name} className={"sc-recipe" + (recipe && entry.id === recipe.id ? " on" : "") + (afford(entry) ? "" : " dim")} onClick={() => setSel(entry.id)}>
-              <span className="sc-recipe-ic">
-                <ItemIcon id={entry.out > 0 ? entry.out : ID.AxeW} />
-              </span>
-              <span className="sc-recipe-tx">
-                <strong>{entry.name}</strong>
-                <small>{entry.detail}</small>
-              </span>
-              {afford(entry) && <i className="sc-ok-dot" aria-label="Craftable" />}
+        </div>
+        <div className="sc-chips">
+          {(
+            [
+              ["all", "All"],
+              ["build", "Build"],
+              ["tools", "Tools"],
+              ["gear", "Armor & Gear"],
+              ["food", "Food"],
+              ["magic", "Arcane"],
+              ["redstone", "Redstone"],
+            ] as const
+          ).map(([cat, label]) => (
+            <button key={cat} className={book === cat ? "sc-chip-btn on" : "sc-chip-btn"} onClick={() => setBook(cat)}>
+              <span>{label}</span>
+              <small className="sc-chip-count">{catCounts[cat] ?? 0}</small>
             </button>
           ))}
-          {list.length === 0 && <p className="sc-empty">Nothing craftable yet.</p>}
+          <button className={onlyCan ? "sc-chip-btn on craftable-toggle" : "sc-chip-btn craftable-toggle"} onClick={() => setOnlyCan(!onlyCan)}>
+            <CheckIcon size={14} /> Craftable only
+          </button>
         </div>
+      </div>
+
+      <div className="sc-craft-body">
+        <div className="sc-recipes">
+          {list.map((entry) => {
+            const batches = maxBatches(entry);
+            const can = batches > 0;
+            return (
+              <button
+                key={entry.id + "-" + entry.name}
+                className={"sc-recipe" + (recipe && entry.id === recipe.id ? " on" : "") + (can ? "" : " dim")}
+                onClick={() => setSel(entry.id)}
+                onDoubleClick={() => can && game.craft(entry.id, 1)}
+              >
+                <span className="sc-recipe-ic">
+                  <ItemIcon id={entry.out > 0 ? entry.out : ID.AxeW} />
+                  {entry.n > 1 && <em className="sc-recipe-qty">×{entry.n}</em>}
+                </span>
+                <span className="sc-recipe-tx">
+                  <strong>{entry.name}</strong>
+                  <small>{entry.detail}</small>
+                </span>
+                {can ? (
+                  <span className="sc-recipe-ready" title={`Can craft ${batches}×`}>
+                    <i className="sc-ok-dot" aria-label="Craftable" />
+                    {!hud.creative && batches > 1 && <small>×{batches > 99 ? "99+" : batches}</small>}
+                  </span>
+                ) : entry.lvl && hud.level < entry.lvl ? (
+                  <span className="sc-recipe-lock">Lv {entry.lvl}</span>
+                ) : null}
+              </button>
+            );
+          })}
+          {list.length === 0 && <p className="sc-empty">No recipes match this filter.</p>}
+        </div>
+
         {recipe && (
           <div className="sc-recipe-detail">
             <div className="sc-rd-head">
               <span className="sc-rd-ic">
                 <ItemIcon id={recipe.out > 0 ? recipe.out : ID.AxeW} />
+                {recipe.n > 1 && <em>×{recipe.n}</em>}
               </span>
-              <div>
+              <div className="sc-rd-title">
+                <div className="sc-rd-badges">
+                  {recipe.cat && <span className="sc-rd-tag">{recipe.cat}</span>}
+                  {recipe.lvl ? <span className={"sc-rd-tag" + (hud.level < recipe.lvl && !hud.creative ? " locked" : "")}>Rank {recipe.lvl}</span> : null}
+                  {recipe.skill ? <span className="sc-rd-tag">{recipe.skill} skill</span> : null}
+                </div>
                 <strong>{recipe.name}</strong>
                 <small>
-                  Makes {recipe.n}
-                  {recipe.lvl ? ` · rank ${recipe.lvl}` : ""}
-                  {recipe.skill ? ` · ${recipe.skill} skill` : ""}
+                  Output: {recipe.n} {recipe.out > 0 ? def(recipe.out).name : "Brick Hammer"}
+                  {!hud.creative && recipe.out > 0 ? ` · In bag: ${hud.inv[recipe.out] ?? 0}` : ""}
                 </small>
               </div>
             </div>
-            <p className="sc-muted">{recipe.detail}</p>
-            {recipe.shape && recipe.w && recipe.h ? (
-              <div className="sc-shape" style={{ gridTemplateColumns: `repeat(${recipe.w}, 40px)` }}>
-                {recipe.shape.map((id, i) => (
-                  <span key={i} className={id > 0 ? "sc-shape-cell" : "sc-shape-cell empty"}>
-                    {id > 0 && <ItemIcon id={id} />}
-                  </span>
-                ))}
+
+            <div className="sc-rd-blueprint">
+              <div className="sc-rd-grid-wrap">
+                <span className="sc-rd-sub">3×3 Assembly Pattern</span>
+                <div className="sc-shape sc-shape-3x3">
+                  {preview3x3.map((id, i) => {
+                    const have = id > 0 ? (hud.creative || (hud.inv[id] ?? 0) > 0) : false;
+                    return (
+                      <span
+                        key={i}
+                        className={"sc-shape-cell" + (id > 0 ? (have ? " filled" : " missing") : " empty")}
+                        title={id > 0 ? def(id).name : "Empty slot"}
+                      >
+                        {id > 0 && <ItemIcon id={id} />}
+                      </span>
+                    );
+                  })}
+                </div>
               </div>
-            ) : null}
-            <div className="sc-needs">
-              {recipe.need.map(([id, n]) => {
-                const have = hud.creative ? n : (hud.inv[id] ?? 0);
-                return (
-                  <span key={id} className={have >= n ? "sc-need ok" : "sc-need miss"}>
-                    <span className="sc-need-ic">
-                      <ItemIcon id={id} />
-                    </span>
-                    <span>{def(id).name}</span>
-                    <b>
-                      {have}/{n}
-                    </b>
-                  </span>
-                );
-              })}
+
+              <div className="sc-rd-needs-wrap">
+                <span className="sc-rd-sub">Required Bricks</span>
+                <div className="sc-needs">
+                  {recipe.need.map(([id, n]) => {
+                    const have = hud.creative ? n : (hud.inv[id] ?? 0);
+                    return (
+                      <span key={id} className={have >= n ? "sc-need ok" : "sc-need miss"}>
+                        <span className="sc-need-ic">
+                          <ItemIcon id={id} />
+                        </span>
+                        <span>{def(id).name}</span>
+                        <b>
+                          {hud.creative ? "∞" : have}/{n}
+                        </b>
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
+
             <div className="sc-craft-actions">
-              <button className="sc-btn sc-btn-primary" disabled={!afford(recipe)} onClick={() => game.craft(recipe.id)}>
-                <HammerIcon size={18} /> Craft
+              <button className="sc-btn sc-btn-primary" disabled={recipeMax < 1} onClick={() => game.craft(recipe.id, 1)}>
+                <HammerIcon size={18} /> Craft ×{recipe.n}
               </button>
-              {!recipe.special && (
+              {!isSingleOut && (
+                <>
+                  <button
+                    className="sc-btn sc-btn-sm"
+                    disabled={recipeMax < 4}
+                    onClick={() => game.craft(recipe.id, 4)}
+                    title={`Craft 4 batches (${recipe.n * 4} total)`}
+                  >
+                    ×{recipe.n * 4}
+                  </button>
+                  <button
+                    className="sc-btn sc-btn-gold sc-btn-sm"
+                    disabled={recipeMax < 2}
+                    onClick={() => game.craft(recipe.id, Math.min(64, recipeMax))}
+                    title={`Craft maximum possible (${Math.min(64, recipeMax)} batches)`}
+                  >
+                    Max ({Math.min(64, recipeMax) * recipe.n})
+                  </button>
+                </>
+              )}
+              {recipe.shape && (
                 <button
-                  className="sc-btn"
-                  disabled={!afford(recipe, 5)}
+                  type="button"
+                  className="sc-btn sc-btn-ghost sc-btn-sm"
                   onClick={() => {
-                    for (let i = 0; i < 5; i++) game.craft(recipe.id);
+                    setShowGrid(true);
+                    game.fillGrid(recipe.id);
                   }}
+                  title="Place ingredients onto the manual crafting grid"
                 >
-                  ×5
+                  Place on Grid
                 </button>
               )}
             </div>
           </div>
         )}
       </div>
-      <button className="sc-link" onClick={() => setShowGrid(!showGrid)}>
-        {showGrid ? "Hide the manual grid" : "Manual grid — place bricks into the pattern yourself"}
-      </button>
+
       {showGrid && (
-        <div className="sc-manual">
-          <div className="sc-craft-grid">
-            {hud.grid.map((id, i) => (
-              <button key={i} className="sc-cell" onClick={() => game.gridTap(i)} disabled={!bench && i % 3 === 2}>
-                {id > 0 && <ItemIcon id={id} />}
+        <div className="sc-manual-card">
+          <div className="sc-manual-head">
+            <div>
+              <strong>{bench ? "3×3 Master Workbench Grid" : "2×2 Pocket Assembly Grid"}</strong>
+              <small>
+                {bench ? "All 9 LEGO stud slots unlocked." : "2×2 pocket grid active — use a Workbench for 3×3 patterns."} Hold a brick in Bag or click "Place on Grid".
+              </small>
+            </div>
+            {hud.grid.some((x) => x > 0) && (
+              <button type="button" className="sc-btn sc-btn-ghost sc-btn-sm" onClick={() => game.clearGrid()}>
+                Clear Grid
               </button>
-            ))}
+            )}
           </div>
-          <span className="sc-arrow">→</span>
-          <button className="sc-cell out" onClick={() => game.craftTake()}>
-            {hud.craftOut ? <ItemIcon id={hud.craftOut.id} /> : <small>Out</small>}
-            {hud.craftOut && hud.craftOut.n > 1 ? <em>{hud.craftOut.n}</em> : null}
-          </button>
-          <p className="sc-hint">{bench ? "Workbench: all nine cells." : "Pocket grid: 2×2. A workbench unlocks 3×3."} Hold a brick in the Bag tab, tap cells, then take the output.</p>
+          <div className="sc-manual">
+            <div className="sc-craft-grid">
+              {hud.grid.map((id, i) => {
+                const lockedSlot = !bench && (i % 3 === 2 || i >= 6);
+                return (
+                  <button
+                    key={i}
+                    className={"sc-cell" + (lockedSlot ? " locked-cell" : "")}
+                    onClick={() => game.gridTap(i)}
+                    disabled={lockedSlot}
+                    title={id > 0 ? `${def(id).name} (click to return to bag)` : lockedSlot ? "Requires 3×3 Workbench" : "Click to place held brick"}
+                  >
+                    {id > 0 && <ItemIcon id={id} />}
+                  </button>
+                );
+              })}
+            </div>
+            <span className="sc-arrow">→</span>
+            <button className={"sc-cell big out" + (hud.craftOut ? " ready" : "")} onClick={() => game.craftTake()} title={hud.craftOut ? `Take ${def(hud.craftOut.id).name} ×${hud.craftOut.n}` : "Pattern output"}>
+              {hud.craftOut ? <ItemIcon id={hud.craftOut.id} /> : <small>Result</small>}
+              {hud.craftOut && hud.craftOut.n > 1 ? <em>{hud.craftOut.n}</em> : null}
+            </button>
+            {hud.craftOut && (
+              <div className="sc-manual-out-label">
+                <strong>{def(hud.craftOut.id).name}</strong>
+                <small>Click output slot to craft ×{hud.craftOut.n}</small>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -1843,13 +2141,36 @@ function StationScreen({ game }: { game: GameApi }) {
             )}
             {hud.panel === "enchant" && (
               <div className="sc-station-body">
-                <button className="sc-btn sc-btn-primary sc-btn-wide" onClick={() => game.enchant()}>
-                  <StarIcon size={18} /> Enchant the held item · 3 levels
-                </button>
+                <p className="sc-status">
+                  ✦ Arcane Power: {hud.bookshelves ?? 0}/15 Bookshelves · Your XP: Lv.{hud.level}
+                </p>
+                <MenuButton
+                  variant="primary"
+                  icon={<StarIcon size={20} />}
+                  onClick={() => game.enchant(1)}
+                  hint="Cost: 1 XP Level · Base Rune I (No bookshelves required)"
+                >
+                   Bind Tier I LEGO Rune · 1 Level
+                </MenuButton>
+                <MenuButton
+                  variant="primary"
+                  icon={<StarIcon size={20} />}
+                  onClick={() => game.enchant(2)}
+                  hint={`Cost: 2 XP Levels · Stronger Rune II (${(hud.bookshelves ?? 0) >= 6 ? "Bookshelf bonus active!" : "Place 6+ Bookshelves nearby for full power"})`}
+                >
+                  ✦ Bind Tier II LEGO Rune · 2 Levels
+                </MenuButton>
+                <MenuButton
+                  variant="primary"
+                  icon={<StarIcon size={20} />}
+                  onClick={() => game.enchant(3)}
+                  hint={`Cost: 3 XP Levels · Master Rune III–V + Bonus Rune (${(hud.bookshelves ?? 0) >= 12 ? "Max Bookshelf power active!" : "Place 12–15 Bookshelves within 2 blocks for max tier"})`}
+                >
+                  ✦✦ Bind Tier III Master Rune · 3 Levels
+                </MenuButton>
                 {hud.heldEnch && <p className="sc-status">Held: ✦ {hud.heldEnch}</p>}
                 <p className="sc-muted">
-                  Blades take Sharpness, Smite, Bane, Fire Aspect, Knockback, Looting. Picks take Efficiency, Fortune or Silk Touch. Bows take Power, Flame, Punch, Infinity. Armor takes Protection and Thorns; boots can learn Feather
-                  Fall, Depth Strider or Frost Walker. Anything sturdy learns Unbreaking and Mending. Hold a plain book to bind runes into an enchanted book instead.
+                  Surround the Enchanting Table with up to 15 LEGO Bookshelves (within 2 blocks) to unlock higher rune levels and multi-enchant rolls. Blades & Boss Weapons take Sharpness, Smite, Bane, Fire Aspect, Knockback, Looting. Tridents & Crossbows take Power/Sharpness & Unbreaking. Picks take Efficiency, Fortune or Silk Touch. Armor takes Protection & Thorns; Boots learn Feather Fall, Depth Strider or Frost Walker. Hold a plain Book to bind an Enchanted Book.
                 </p>
               </div>
             )}

@@ -32,9 +32,17 @@ export function paintEndCrystals(set: (x: number, y: number, z: number, id: numb
 
 export type HamletSite = { x: number; z: number; y: number };
 
-export type LandmarkKind = "monument" | "mansion" | "fortress" | "bastion";
+export type LandmarkKind =
+  | "monument"
+  | "mansion"
+  | "pyramid"
+  | "temple"
+  | "witch_hut"
+  | "castle"
+  | "fortress"
+  | "bastion";
 export type Landmark = { x: number; z: number; y: number; kind: LandmarkKind };
-export const LM_STEP = 384;
+export const LM_STEP = 256;
 
 export function hamletOrigin(seed: number, rx: number, rz: number): { x: number; z: number } | null {
   const forced = rx === 0 && rz === 0;
@@ -326,9 +334,10 @@ export class World {
           const biome = this.biomeAt(x, z);
           if (!slope && (t < 0.012 || (biome === "Jungle" && t < 0.03))) {
             if (biome === "Ash ridge" || biome === "Desert" || biome === "Mesa") {
-              const rate = biome === "Desert" ? 0.008 : 0.004;
+              const rate = biome === "Desert" ? 0.010 : 0.005;
               if (t < rate) {
-                const tall = 1 + (hash2(x, z, this.seed + 6) > 0.5 ? 1 : 0);
+                const rH = hash2(x, z, this.seed + 6);
+                const tall = rH > 0.72 ? 4 : rH > 0.28 ? 3 : 2;
                 for (let i = 1; i <= tall; i++) this.paint(data, baseX, baseZ, x, h + i, z, ID.Cactus);
               }
             } else if (biome === "Mushroom") {
@@ -801,41 +810,37 @@ export class World {
   // its slice deterministically.
   landmarkAt(gx: number, gz: number): Landmark | null {
     if (this.flat) return null;
-    if (hash2(gx, gz, this.seed + 2400) < 0.5) return null;
-    const x = gx * LM_STEP + 120 + Math.floor(hash2(gx, gz, this.seed + 2401) * (LM_STEP - 240));
-    const z = gz * LM_STEP + 120 + Math.floor(hash2(gx, gz, this.seed + 2402) * (LM_STEP - 240));
+    if (hash2(gx, gz, this.seed + 2400) < 0.28) return null;
+    const x = gx * LM_STEP + 64 + Math.floor(hash2(gx, gz, this.seed + 2401) * (LM_STEP - 128));
+    const z = gz * LM_STEP + 64 + Math.floor(hash2(gx, gz, this.seed + 2402) * (LM_STEP - 128));
     if (inNether(x)) return null;
     const rx = Math.floor(x / REGION);
     const rz = Math.floor(z / REGION);
     for (let dz = -1; dz <= 1; dz++) {
       for (let dx = -1; dx <= 1; dx++) {
         const ham = this.hamletAt(rx + dx, rz + dz);
-        if (ham && Math.abs(ham.x + 15 - x) < 78 && Math.abs(ham.z + 14 - z) < 78) return null;
+        if (ham && Math.abs(ham.x + 15 - x) < 68 && Math.abs(ham.z + 14 - z) < 68) return null;
       }
     }
     const h = this.heightAt(x, z);
     const biome = this.biomeOf(x, z, h);
-    if (biome === "Ocean" && h <= SEA - 3) {
-      if (hash2(gx, gz, this.seed + 2403) > 0.45) return null;
+    if (biome === "Ocean" && h <= SEA - 2) {
       return { x, z, y: h, kind: "monument" };
     }
-    if ((biome === "Grove" || biome === "Flower grove" || biome === "Brick plains") && h > SEA + 1) {
-      if (hash2(gx, gz, this.seed + 2403) > 0.18) return null;
-      let min = 999;
-      let max = 0;
-      for (const [sx, sz] of [
-        [-9, -7],
-        [9, -7],
-        [-9, 7],
-        [9, 7],
-        [0, 0],
-      ] as const) {
-        const s = this.heightAt(x + sx, z + sz);
-        if (s < min) min = s;
-        if (s > max) max = s;
-      }
-      if (max - min > 4) return null;
-      return { x, z, y: max, kind: "mansion" };
+    if ((biome === "Desert" || biome === "Sand flats" || biome === "Mesa") && h >= SEA) {
+      return { x, z, y: h, kind: "pyramid" };
+    }
+    if (biome === "Jungle" && h >= SEA) {
+      return { x, z, y: h, kind: "temple" };
+    }
+    if ((biome === "Fen" || biome === "Deep fen" || biome === "Mushroom") && h >= SEA - 1) {
+      return { x, z, y: Math.max(h, SEA), kind: "witch_hut" };
+    }
+    if ((biome === "Grove" || biome === "Flower grove") && h > SEA + 1) {
+      return { x, z, y: h, kind: "mansion" };
+    }
+    if ((biome === "Brick plains" || biome === "Snow cap" || biome === "Ash ridge") && h > SEA + 1) {
+      return { x, z, y: h, kind: hash2(gx, gz, this.seed + 2409) < 0.68 ? "castle" : "mansion" };
     }
     return null;
   }
@@ -843,8 +848,8 @@ export class World {
   netherLandmarkAt(gx: number, gz: number): Landmark | null {
     if (this.flat) return null;
     if (hash2(gx, gz, this.seed + 2500) < 0.78) return null;
-    const x = gx * LM_STEP + 120 + Math.floor(hash2(gx, gz, this.seed + 2501) * (LM_STEP - 240));
-    const z = gz * LM_STEP + 120 + Math.floor(hash2(gx, gz, this.seed + 2502) * (LM_STEP - 240));
+    const x = gx * LM_STEP + 64 + Math.floor(hash2(gx, gz, this.seed + 2501) * (LM_STEP - 128));
+    const z = gz * LM_STEP + 64 + Math.floor(hash2(gx, gz, this.seed + 2502) * (LM_STEP - 128));
     if (!inNether(x)) return null;
     const kind = hash2(gx, gz, this.seed + 2503) < 0.5 ? "fortress" : "bastion";
     if (kind === "bastion") return { x, z, y: this.netherFloor(x, z), kind };
@@ -883,25 +888,332 @@ export class World {
 
   private landmarkBlock(lm: Landmark, dx: number, dy: number, dz: number): number {
     if (lm.kind === "monument") {
+      // Marine Labyrinth & Ocean Monument: stepped Prismarine temple with underwater maze corridors & gold core
       const r = Math.max(Math.abs(dx), Math.abs(dz));
       if (r > 18 || dy < -3 || dy > 13) return -1;
-      const spire = Math.abs(dx) === 10 && Math.abs(dz) === 10;
-      if (spire && dy >= 6 && dy <= 12) return dy === 12 ? ID.Lamp : ID.Prism;
-      const stepH = r <= 4 ? 9 : r <= 8 ? 7 : r <= 12 ? 5 : r <= 15 ? 3 : 1;
-      if (dy > stepH) return r <= 4 && dy === 10 ? ID.Prism : -1;
-      if (dz === 0 && Math.abs(dx) >= 4 && Math.abs(dx) <= 8 && (dy === 4 || dy === 5)) return ID.Air;
-      const inCore = Math.abs(dx) <= 3 && Math.abs(dz) <= 3;
-      if (inCore && dy >= 4 && dy <= 7) {
-        if (Math.abs(dx) <= 1 && Math.abs(dz) <= 1) return dy <= 5 ? ID.Gold : ID.Air;
-        if (dx === 2 && dz === 2 && dy === 4) return ID.Chest;
-        if (Math.abs(dx) === 3 || Math.abs(dz) === 3) {
-          if ((Math.abs(dx) === 3 && dz === 0 && dy <= 5) || (Math.abs(dz) === 3 && dx === 0 && dy <= 5)) return ID.Air;
-          return ID.Prism;
+      const spire = Math.abs(dx) === 12 && Math.abs(dz) === 12;
+      if (spire && dy >= 4 && dy <= 12) return dy === 12 ? ID.LampOn : ID.Prism;
+      const archPillar = Math.abs(dx) === 16 && Math.abs(dz) === 16;
+      if (archPillar && dy >= -3 && dy <= 4) return dy === 4 ? ID.LampOn : ID.Prism;
+      const stepH = r <= 4 ? 10 : r <= 8 ? 8 : r <= 12 ? 6 : r <= 15 ? 4 : 2;
+      if (dy > stepH) return r <= 2 && dy === 11 ? ID.LampOn : -1;
+      if (dy <= 0) return ID.Prism;
+      // Front entrance archway
+      if (dz >= 12 && Math.abs(dx) <= 1 && (dy === 1 || dy === 2 || dy === 3)) return ID.Water;
+      // Outer Labyrinth ring (r between 5 and 13, dy 1..3)
+      if (r >= 5 && r <= 13 && dy >= 1 && dy <= 3) {
+        if (r === 13 || r === 9) {
+          // Maze gates on cardinal and diagonal axes
+          const gate =
+            (Math.abs(dx) <= 1 && dz > 0) ||
+            (Math.abs(dz) <= 1 && r === 9) ||
+            (Math.abs(Math.abs(dx) - 6) <= 1 && r === 13);
+          if (gate && dy <= 2) return ID.Air;
+          return dy === 3 && (dx + dz) % 4 === 0 ? ID.LampOn : ID.Prism;
         }
+        // Radial labyrinth partitions
+        if ((dx === 0 && dz < -5) || (Math.abs(dx) === 6 && Math.abs(dz) >= 6 && Math.abs(dz) <= 8)) {
+          return dy <= 2 && Math.abs(dz) === 7 ? ID.Air : ID.Prism;
+        }
+        if (dy === 1 && Math.abs(dx) === 10 && dz === -10) return ID.Chest;
+        return ID.Air;
+      }
+      // Inner Gold & Sponge Sanctuary (r <= 4, dy 1..7)
+      if (r <= 4 && dy >= 1 && dy <= 7) {
+        if (r === 4) {
+          if (dz === 4 && Math.abs(dx) <= 1 && dy <= 3) return ID.Air;
+          return dy === 4 && (dx === 0 || dz === 0) ? ID.LampOn : ID.Prism;
+        }
+        if (Math.abs(dx) <= 1 && Math.abs(dz) <= 1 && dy >= 2 && dy <= 4) return ID.Gold;
+        if (dx === 0 && dz === 0 && dy === 5) return ID.Core;
+        if ((dx === -2 || dx === 2) && dz === -2 && dy === 1) return ID.Chest;
+        if (Math.abs(dx) === 3 && Math.abs(dz) === 3 && dy === 6) return ID.LampOn;
         return ID.Air;
       }
       return ID.Prism;
     }
+
+    if (lm.kind === "pyramid") {
+      // Desert Pyramid: stepped sandstone pyramid + twin entrance pylons + underground TNT trap & 4 treasure chests
+      if (Math.abs(dx) > 12 || Math.abs(dz) > 13 || dy < -11 || dy > 12) return -1;
+      // Underground tomb shaft & treasure vault (dy < 0)
+      if (dy < 0) {
+        if (Math.abs(dx) <= 4 && Math.abs(dz) <= 4) {
+          const wall = Math.abs(dx) === 4 || Math.abs(dz) === 4;
+          if (dy === -11) return ID.Sand;
+          if (dy === -10) {
+            if (wall) return ID.Hard;
+            if (Math.abs(dx) <= 1 && Math.abs(dz) <= 1) return ID.TNT;
+            return ID.Sand;
+          }
+          if (dy === -9) {
+            if (wall) return ID.Hard;
+            if (dx === 0 && dz === 0) return ID.Plate;
+            return ID.Sand;
+          }
+          if (dy === -8) {
+            if (wall) return ID.Hard;
+            if ((Math.abs(dx) === 2 && dz === 0) || (Math.abs(dz) === 2 && dx === 0)) return ID.Chest;
+            if (Math.abs(dx) === 3 && Math.abs(dz) === 3) return ID.Torch;
+            return ID.Air;
+          }
+          if (dy >= -7 && dy <= -5) {
+            if (wall) return dy === -6 ? ID.Orange : ID.Yellow;
+            return ID.Air;
+          }
+          // Vertical drop shaft (3x3) from pyramid floor to tomb
+          if (Math.abs(dx) <= 1 && Math.abs(dz) <= 1) return ID.Air;
+          if (Math.abs(dx) === 2 || Math.abs(dz) === 2) return ID.Yellow;
+        }
+        return dy >= -3 && Math.abs(dx) <= 10 && Math.abs(dz) <= 10 ? ID.Sand : -1;
+      }
+      // Twin Front Pylon Towers (dz between 8 and 12, |dx| between 4 and 8)
+      const inTower = dz >= 8 && dz <= 12 && Math.abs(dx) >= 4 && Math.abs(dx) <= 8;
+      if (inTower && dy <= 9) {
+        const tWall = dz === 8 || dz === 12 || Math.abs(dx) === 4 || Math.abs(dx) === 8;
+        if (dy === 0) return ID.Yellow;
+        if (dy === 9) return tWall ? ID.Orange : ID.Yellow;
+        if (tWall) {
+          // Orange & Blue Egyptian Ankh hieroglyph pattern on front of towers
+          if (dz === 12 && Math.abs(dx) === 6 && (dy === 3 || dy === 5 || dy === 6)) return ID.Orange;
+          if (dz === 12 && (Math.abs(dx) === 5 || Math.abs(dx) === 7) && dy === 5) return ID.Orange;
+          if (dz === 12 && Math.abs(dx) === 6 && dy === 4) return ID.Blue;
+          return dy === 7 ? ID.Orange : ID.Yellow;
+        }
+        return ID.Air;
+      }
+      // Front Entrance Vestibule (dz 9..11, |dx| <= 3, dy <= 4)
+      if (dz >= 9 && dz <= 11 && Math.abs(dx) <= 3 && dy <= 4) {
+        if (dy === 0) return ID.Yellow;
+        if (dy === 4) return ID.Orange;
+        if (Math.abs(dx) === 3 || (dz === 11 && Math.abs(dx) >= 2)) return ID.Yellow;
+        return ID.Air;
+      }
+      // Stepped Pyramid Body
+      const r = Math.max(Math.abs(dx), Math.abs(dz));
+      const maxR = 11 - dy;
+      if (r > maxR) return -1;
+      if (dy === 0) {
+        if (dx === 0 && dz === 0) return ID.Blue;
+        if (Math.abs(dx) + Math.abs(dz) === 2 || (Math.abs(dx) === 2 && Math.abs(dz) === 2)) return ID.Orange;
+        return ID.Yellow;
+      }
+      if (r === maxR) {
+        if (dz === maxR && Math.abs(dx) <= 1 && dy <= 2) return ID.Air;
+        if (dy === 10 && r === 1) return ID.Gold;
+        return dy % 3 === 2 ? ID.Orange : ID.Yellow;
+      }
+      // Interior sandstone pillars & torches
+      if (Math.abs(dx) === 4 && Math.abs(dz) === 4 && dy <= 5) return dy === 3 ? ID.Orange : ID.Yellow;
+      if (Math.abs(dx) === 4 && Math.abs(dz) === 3 && dy === 2) return ID.Torch;
+      if (dy === 1 && dx === 0 && dz === -6) return ID.PharaohGold ? ID.Gold : ID.Yellow;
+      return ID.Air;
+    }
+
+    if (lm.kind === "temple") {
+      // Jungle Temple: mossy cobblestone stepped sanctuary with lever puzzle & underground treasure room
+      if (Math.abs(dx) > 7 || Math.abs(dz) > 9 || dy < -4 || dy > 9) return -1;
+      const pickStone = (salt: number) =>
+        hash3(lm.x + dx, dy + salt, lm.z + dz, this.seed + 2710) < 0.44 ? ID.Moss : ID.Cobble;
+      // Underground lever & trap basement (dy -4..-1)
+      if (dy < 0) {
+        if (Math.abs(dx) > 5 || Math.abs(dz) > 7) return -1;
+        const bWall = Math.abs(dx) === 5 || Math.abs(dz) === 7;
+        if (dy === -4) return pickStone(1);
+        if (bWall) return pickStone(2);
+        // Puzzle wall with 3 levers on the west side
+        if (dx === -4 && (dz === -2 || dz === 0 || dz === 2) && dy === -2) return ID.Lever;
+        // Secret treasure alcove at back (dz === -6)
+        if (dz === -5 && dx !== 0) return pickStone(3);
+        if (dy === -3 && dx === -3 && dz === -6) return ID.Chest;
+        if (dy === -3 && dx === 3 && dz === 4) return ID.Chest;
+        if (dy === -3 && dx === 0 && dz === 2) return ID.Plate;
+        if (dy === -2 && dx === 4 && dz === 2) return ID.Dispenser;
+        if (dy === -2 && Math.abs(dx) === 4 && dz === -4) return ID.Torch;
+        if (dx === 0 && dz === -2 && dy >= -3) return ID.Ladder;
+        return ID.Air;
+      }
+      const inGround = Math.abs(dx) <= 6 && Math.abs(dz) <= 8;
+      if (!inGround) {
+        // Front entrance steps
+        if (dz === 9 && Math.abs(dx) <= 2 && dy === 0) return ID.StairsCobble0;
+        return -1;
+      }
+      if (dy === 0) {
+        if (dx === 0 && dz === -2) return ID.Ladder;
+        return pickStone(4);
+      }
+      // First tier (dy 1..4)
+      if (dy <= 4) {
+        const wall1 = Math.abs(dx) === 6 || Math.abs(dz) === 8;
+        if (wall1) {
+          if (dz === 8 && Math.abs(dx) <= 1 && dy <= 2) return ID.Air;
+          if (dy === 2 && Math.abs(dz) % 3 === 0) return ID.Air;
+          return pickStone(5);
+        }
+        if (dy === 4) {
+          if (Math.abs(dx) <= 1 && Math.abs(dz) <= 1) return ID.Air;
+          return pickStone(6);
+        }
+        if (dx === 0 && dz === -2) return ID.Ladder;
+        if (dy === 1 && dx === 0 && dz === -6) return ID.Chest;
+        if (dy === 2 && Math.abs(dx) === 5 && dz === 0) return ID.Torch;
+        return ID.Air;
+      }
+      // Second stepped tier (dy 5..8, |dx| <= 4, |dz| <= 5)
+      if (Math.abs(dx) <= 4 && Math.abs(dz) <= 5) {
+        const wall2 = Math.abs(dx) === 4 || Math.abs(dz) === 5;
+        if (dy === 8) return Math.abs(dx) <= 2 && Math.abs(dz) <= 3 ? ID.Moss : pickStone(7);
+        if (wall2) {
+          if (dy === 6 && (dx === 0 || dz === 0)) return ID.Air;
+          return pickStone(8);
+        }
+        if (dy === 5 && dx === 0 && dz === 0) return ID.Gold;
+        if (dy === 6 && dx === 0 && dz === 0) return ID.LampOn;
+        return ID.Air;
+      }
+      // Overgrown jungle vines/leaves on outer roof ledge
+      if (dy === 5 && Math.abs(dx) === 6 && Math.abs(dz) <= 4) return ID.Leaves;
+      return -1;
+    }
+
+    if (lm.kind === "witch_hut") {
+      // Swamp Witch Hut on 4 wooden log stilts with overhanging dark roof, brewing stand, enchanter & chest
+      if (Math.abs(dx) > 5 || Math.abs(dz) > 6 || dy < -6 || dy > 8) return -1;
+      const stilt = Math.abs(dx) === 3 && (dz === -3 || dz === 3);
+      if (dy <= 0) {
+        if (stilt) return ID.Log;
+        if (dx === 0 && dz === 5 && dy === 0) return ID.Log;
+        return -1;
+      }
+      // Front ladder/steps up to porch (dz === 4..5, dx === 0)
+      if (dx === 0 && dz === 5 && dy >= 1 && dy <= 2) return ID.Ladder;
+      if (dy === 1) {
+        if (stilt) return ID.Log;
+        if (Math.abs(dx) <= 3 && dz >= -3 && dz <= 4) return ID.Planks;
+        return -1;
+      }
+      // Cabin walls & porch (dy 2..4)
+      if (dy >= 2 && dy <= 4) {
+        // Front porch railing at dz === 4
+        if (dz === 4 && Math.abs(dx) <= 3) {
+          if (dy === 2 && Math.abs(dx) >= 1) return ID.Fence;
+          if (Math.abs(dx) === 3) return ID.Log;
+          return ID.Air;
+        }
+        if (Math.abs(dx) > 3 || Math.abs(dz) > 3) return -1;
+        if (stilt) return ID.Log;
+        const hutWall = Math.abs(dx) === 3 || Math.abs(dz) === 3;
+        if (hutWall) {
+          if (dz === 3 && dx === 0 && (dy === 2 || dy === 3)) return ID.Air;
+          if (dy === 3 && ((Math.abs(dx) === 3 && dz === 0) || (dz === -3 && dx === 0))) return ID.Fence;
+          return ID.Planks;
+        }
+        // Witch Hut interior furniture
+        if (dy === 2) {
+          if (dx === -2 && dz === -2) return ID.Brew;
+          if (dx === 2 && dz === -2) return ID.Chest;
+          if (dx === 0 && dz === -2) return ID.Enchanter;
+          if (dx === -2 && dz === 1) return ID.MushroomRed;
+          if (dx === 2 && dz === 2) return ID.Lantern;
+        }
+        return ID.Air;
+      }
+      // Overhanging dark swamp roof (dy 5..7)
+      const roofW = dy === 5 ? 4 : dy === 6 ? 3 : dy === 7 ? 1 : -1;
+      if (roofW >= 0 && Math.abs(dx) <= roofW && dz >= -4 && dz <= 4) {
+        if (dy === 5 && Math.abs(dx) < roofW && Math.abs(dz) < 3) return ID.Air;
+        return ID.Ash;
+      }
+      return -1;
+    }
+
+    if (lm.kind === "castle") {
+      // Grand Medieval LEGO Castle: 4 corner watchtowers, crenellated battlements, gatehouse, courtyard & royal throne room
+      if (Math.abs(dx) > 13 || Math.abs(dz) > 13 || dy < -2 || dy > 13) return -1;
+      if (dy < 0) return ID.Cobble;
+      const inCornerTower = Math.abs(dx) >= 9 && Math.abs(dx) <= 13 && Math.abs(dz) >= 9 && Math.abs(dz) <= 13;
+      if (inCornerTower) {
+        const tEdge =
+          Math.abs(dx) === 9 || Math.abs(dx) === 13 || Math.abs(dz) === 9 || Math.abs(dz) === 13;
+        if (dy === 0 || dy === 5 || dy === 10) return ID.Stone;
+        if (dy === 11) {
+          return tEdge && (dx + dz) % 2 === 0 ? ID.Cobble : ID.Air;
+        }
+        if (dy === 12 || dy === 13) {
+          if (Math.abs(dx) === 11 && Math.abs(dz) === 11) return dy === 13 ? ID.Red : ID.Yellow;
+          return -1;
+        }
+        if (tEdge) {
+          // Inner door into courtyard on ground & wall walk
+          if ((dy === 1 || dy === 2 || dy === 6 || dy === 7) && Math.abs(dx) === 9 && Math.abs(dz) === 11) return ID.Air;
+          if ((dy === 3 || dy === 8) && (Math.abs(dx) === 11 || Math.abs(dz) === 11)) return ID.Glass;
+          return (dy + dx + dz) % 3 === 0 ? ID.Cobble : ID.Stone;
+        }
+        if (Math.abs(dx) === 10 && Math.abs(dz) === 10 && dy <= 10) return ID.Ladder;
+        if (dy === 6 && Math.abs(dx) === 11 && Math.abs(dz) === 11) return ID.Torch;
+        return ID.Air;
+      }
+      // Outer Curtain Walls (|dx| === 11 or |dz| === 11, dy <= 6)
+      const onCurtain =
+        (Math.abs(dx) >= 10 && Math.abs(dx) <= 11 && Math.abs(dz) <= 9) ||
+        (Math.abs(dz) >= 10 && Math.abs(dz) <= 11 && Math.abs(dx) <= 9);
+      if (onCurtain && dy <= 6) {
+        // Front Gatehouse Archway (dz >= 10, |dx| <= 2)
+        if (dz >= 10 && Math.abs(dx) <= 1 && dy >= 1 && dy <= 3) return ID.Air;
+        if (dz >= 10 && Math.abs(dx) <= 1 && dy === 4) return ID.Fence; // LEGO Portcullis
+        if (dy === 0 || dy === 5) return ID.Cobble;
+        if (dy === 6) {
+          const outerEdge = Math.abs(dx) === 11 || Math.abs(dz) === 11;
+          return outerEdge && (dx + dz) % 2 === 0 ? ID.Stone : ID.Air;
+        }
+        return Math.abs(dx) === 11 || Math.abs(dz) === 11 ? ID.Stone : ID.Cobble;
+      }
+      // Central Royal Keep & Throne Room (|dx| <= 6, dz between -8 and 2, dy <= 9)
+      const inKeep = Math.abs(dx) <= 6 && dz >= -8 && dz <= 2;
+      if (inKeep && dy <= 9) {
+        const kWall = Math.abs(dx) === 6 || dz === -8 || dz === 2;
+        if (dy === 0) {
+          if (Math.abs(dx) <= 1 && dz >= -6 && dz <= 2) return ID.Red; // Royal red carpet
+          return ID.Stone;
+        }
+        if (dy === 8) return ID.Stone;
+        if (dy === 9) return kWall && (dx + dz) % 2 === 0 ? ID.Cobble : ID.Air;
+        if (kWall) {
+          if (dz === 2 && Math.abs(dx) <= 1 && dy <= 3) return ID.Air;
+          if ((dy === 3 || dy === 6) && (Math.abs(dx) === 6 && dz % 3 === 0)) return ID.Glass;
+          if (dy >= 4 && dy <= 6 && dz === 2 && Math.abs(dx) === 3) return ID.Red; // Castle banners
+          return Math.abs(dx) === 6 && (dz === -8 || dz === 2) ? ID.Cobble : ID.Stone;
+        }
+        // Keep interior: Golden Throne, Royal Chests, Enchanting Study & Bookshelves
+        if (dy === 1) {
+          if (dx === 0 && dz === -6) return ID.Gold;
+          if (Math.abs(dx) === 1 && dz === -6) return ID.StairsStone0;
+          if (Math.abs(dx) === 4 && dz === -6) return ID.Chest;
+          if (dx === -4 && dz === -2) return ID.Enchanter;
+          if (dx === -5 && (dz === -3 || dz === -2 || dz === -1)) return ID.Bookshelf;
+          if (dx === 4 && dz === -2) return ID.Anvil;
+          if (dx === 4 && dz === 0) return ID.Bench;
+        }
+        if (dy === 2 && dx === 0 && dz === -6) return ID.Gold;
+        if (dy === 2 && dx === -5 && (dz === -3 || dz === -2 || dz === -1)) return ID.Bookshelf;
+        if (dy === 3 && Math.abs(dx) === 5 && (dz === -5 || dz === -1)) return ID.Torch;
+        return ID.Air;
+      }
+      // Courtyard Floor & Forge (|dx| <= 9, |dz| <= 9)
+      if (Math.abs(dx) <= 9 && Math.abs(dz) <= 9) {
+        if (dy === 0) {
+          if (Math.abs(dx) <= 1 && dz >= 2 && dz <= 11) return ID.Cobble;
+          return (dx + dz) % 5 === 0 ? ID.Cobble : ID.Stone;
+        }
+        if (dy === 1 && dx === -7 && dz === 6) return ID.Furnace;
+        if (dy === 1 && dx === 7 && dz === 6) return ID.Barrel;
+        if (dy === 1 && Math.abs(dx) === 2 && dz === 9) return ID.Lantern;
+        return ID.Air;
+      }
+      return -1;
+    }
+
     if (lm.kind === "mansion") {
       if (Math.abs(dx) > 10 || Math.abs(dz) > 8 || dy < -2 || dy > 11) return -1;
       const inX = Math.abs(dx) <= 9;
@@ -909,7 +1221,11 @@ export class World {
       if (!inX || !inZ) return dy >= 1 && dy <= 9 ? ID.Air : -1;
       const wall = Math.abs(dx) === 9 || Math.abs(dz) === 7;
       if (dy < 0) return ID.Cobble;
-      if (dy === 0) return wall ? ID.Cobble : ID.Planks;
+      if (dy === 0) {
+        if (wall) return ID.Cobble;
+        if (Math.abs(dx) <= 1 && dz >= -5 && dz <= 6) return ID.Red; // Mansion red carpet hall
+        return ID.Planks;
+      }
       const corner = Math.abs(dx) === 9 && Math.abs(dz) === 7;
       if (dy === 8 || dy === 9 || dy === 10 || dy === 11) {
         const roofY = Math.abs(dz) >= 5 ? 8 : Math.abs(dz) >= 3 ? 9 : Math.abs(dz) >= 1 ? 10 : 11;
@@ -925,17 +1241,21 @@ export class World {
       }
       if (wall) {
         if (corner) return ID.Log;
-        if (dz === 7 && dx === 0 && dy <= 2) return ID.Air;
+        if (dz === 7 && Math.abs(dx) <= 1 && dy <= 2) return ID.Air;
         if ((dy === 2 || dy === 6) && ((Math.abs(dx) === 9 && Math.abs(dz) % 3 === 0) || (Math.abs(dz) === 7 && Math.abs(dx) % 3 === 0))) return ID.Glass;
         return ID.Planks;
       }
-      // Interior furniture.
+      // Interior furniture: Grand Enchanting Library + Chests + Brewing Study
       if (dy === 1 && dx === -7 && dz === -5) return ID.Chest;
-      if ((dy === 1 || dy === 2) && dz === 6 && dx >= -7 && dx <= -5) return ID.Bookshelf;
+      if (dy === 1 && dx === -6 && dz === 4) return ID.Enchanter;
+      if ((dy === 1 || dy === 2) && dz === 6 && dx >= -8 && dx <= -4) return ID.Bookshelf;
+      if ((dy === 1 || dy === 2) && dx === -8 && dz >= 2 && dz <= 5) return ID.Bookshelf;
       if (dy === 1 && dx === 0 && dz === -3) return ID.Bench;
+      if (dy === 1 && dx === 6 && dz === -5) return ID.Brew;
       if (dy === 2 && (dx === -8 || dx === 8) && dz === 0) return ID.Torch;
       if (dy === 5 && dx === 7 && dz === -5) return ID.Bed;
       if (dy === 5 && dx === -7 && dz === 5) return ID.Chest;
+      if (dy === 5 && dx === 0 && dz === 0) return ID.Gold;
       if (dy === 6 && (dx === -8 || dx === 8) && dz === 0) return ID.Torch;
       if ((dx === 8 || dx === 7) && dz === -6 && dy >= 1 && dy <= 7) return ID.Ladder;
       return ID.Air;
@@ -1011,10 +1331,54 @@ export class World {
       for (let gx = g0x; gx <= g1x; gx++) {
         const lm = nether ? this.netherLandmarkAt(gx, gz) : this.landmarkAt(gx, gz);
         if (!lm) continue;
-        const rx = lm.kind === "fortress" ? 23 : lm.kind === "monument" ? 19 : 13;
-        const rz = lm.kind === "fortress" ? 7 : lm.kind === "monument" ? 19 : 13;
-        const dyMin = lm.kind === "fortress" ? -18 : lm.kind === "monument" ? -3 : -2;
-        const dyMax = lm.kind === "monument" ? 13 : lm.kind === "mansion" ? 11 : lm.kind === "fortress" ? 8 : 9;
+        const rx =
+          lm.kind === "fortress"
+            ? 23
+            : lm.kind === "monument"
+              ? 19
+              : lm.kind === "castle"
+                ? 14
+                : lm.kind === "pyramid"
+                  ? 13
+                  : lm.kind === "temple"
+                    ? 8
+                    : lm.kind === "witch_hut"
+                      ? 6
+                      : 13;
+        const rz =
+          lm.kind === "fortress"
+            ? 7
+            : lm.kind === "monument"
+              ? 19
+              : lm.kind === "castle" || lm.kind === "pyramid"
+                ? 14
+                : lm.kind === "temple"
+                  ? 10
+                  : lm.kind === "witch_hut"
+                    ? 7
+                    : 13;
+        const dyMin =
+          lm.kind === "fortress"
+            ? -18
+            : lm.kind === "pyramid"
+              ? -11
+              : lm.kind === "witch_hut"
+                ? -6
+                : lm.kind === "temple"
+                  ? -4
+                  : lm.kind === "monument"
+                    ? -3
+                    : -2;
+        const dyMax =
+          lm.kind === "monument" || lm.kind === "castle"
+            ? 13
+            : lm.kind === "pyramid"
+              ? 12
+              : lm.kind === "mansion"
+                ? 11
+                : lm.kind === "temple" || lm.kind === "bastion"
+                  ? 9
+                  : 8;
         const x0 = Math.max(baseX, lm.x - rx);
         const x1 = Math.min(baseX + CS, lm.x + rx + 1);
         const z0 = Math.max(baseZ, lm.z - rz);

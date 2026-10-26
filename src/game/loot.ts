@@ -132,14 +132,97 @@ const TABLES: Record<string, Stack[]> = {
     [ID.PotionHeal, 1],
     [ID.Wart, 2],
   ],
+  pyramid: [
+    [ID.Gold, 4],
+    [ID.Emerald, 3],
+    [ID.PharaohGold, 1],
+    [ID.Bone, 5],
+    [ID.Diamond, 1],
+    [ID.Gapple, 1],
+    [ID.Saddle, 1],
+    [ID.TNT, 2],
+    [ID.Book, 2],
+  ],
+  temple: [
+    [ID.Emerald, 3],
+    [ID.Gold, 3],
+    [ID.Diamond, 1],
+    [ID.Arrow, 10],
+    [ID.Bone, 4],
+    [ID.Moss, 6],
+    [ID.Fang, 2],
+    [ID.Book, 2],
+  ],
+  witch_hut: [
+    [ID.WitchVenom, 1],
+    [ID.PotionHeal, 1],
+    [ID.PotionRegen, 1],
+    [ID.SplashVenom, 1],
+    [ID.Wisp, 2],
+    [ID.Wart, 3],
+    [ID.Bottle, 3],
+    [ID.MushroomRed, 3],
+    [ID.Eye, 1],
+  ],
+  castle: [
+    [ID.Ingot, 5],
+    [ID.Gold, 3],
+    [ID.Emerald, 3],
+    [ID.IllagerBadge, 1],
+    [ID.Shield, 1],
+    [ID.Crossbow, 1],
+    [ID.Arrow, 12],
+    [ID.Bread, 4],
+    [ID.Gapple, 1],
+    [ID.Book, 2],
+  ],
+  mansion: [
+    [ID.Emerald, 4],
+    [ID.IllagerBadge, 1],
+    [ID.Book, 3],
+    [ID.Diamond, 1],
+    [ID.Totem, 1],
+    [ID.Gold, 3],
+    [ID.AxeI, 1],
+    [ID.Crossbow, 1],
+    [ID.Lantern, 2],
+  ],
+  monument: [
+    [ID.Prism, 3],
+    [ID.GuardianSpike, 2],
+    [ID.Gold, 4],
+    [ID.Scale, 3],
+    [ID.Shell, 3],
+    [ID.Core, 1],
+    [ID.CookedFish, 4],
+    [ID.PotionGill, 1],
+  ],
 };
 
-export type LootKind = SiteKind | "wild" | "hamlet" | "deep" | "nether";
+export type LootKind =
+  | SiteKind
+  | "wild"
+  | "hamlet"
+  | "deep"
+  | "nether"
+  | "pyramid"
+  | "temple"
+  | "witch_hut"
+  | "castle"
+  | "mansion"
+  | "monument";
 
 export function stockChest(bin: { ids: number[]; ns: number[] }, x: number, y: number, z: number, seed: number, kind: LootKind) {
   if (bin.ids.some((id) => id > 0)) return;
   const table = TABLES[kind] ?? TABLES.wild;
-  const n = 3 + Math.floor(hash2(x, z, seed + y + 17) * 3);
+  const isMajor =
+    kind === "pyramid" ||
+    kind === "temple" ||
+    kind === "witch_hut" ||
+    kind === "castle" ||
+    kind === "mansion" ||
+    kind === "monument";
+  const n = (isMajor ? 5 : 3) + Math.floor(hash2(x, z, seed + y + 17) * 3);
   for (let i = 0; i < n; i++) {
     const roll = hash3(x, y + i * 5, z, seed + 90 + i);
     const stack = table[Math.floor(roll * table.length) % table.length];
@@ -153,10 +236,21 @@ export function stockChest(bin: { ids: number[]; ns: number[] }, x: number, y: n
     bin.ids[slot] = stack[0];
     bin.ns[slot] = stack[1];
   }
-  if ((kind === "deep" || kind === "mine" || kind === "shrine") && hash3(x, y, z, seed + 333) > 0.84) {
+  if ((kind === "deep" || kind === "mine" || kind === "shrine" || isMajor) && hash3(x, y, z, seed + 333) > 0.72) {
     const slot = bin.ids.findIndex((id) => !id);
     if (slot >= 0) {
-      bin.ids[slot] = kind === "shrine" ? ID.Eye : ID.Diamond;
+      bin.ids[slot] =
+        kind === "shrine"
+          ? ID.Eye
+          : kind === "pyramid"
+            ? ID.PharaohGold
+            : kind === "witch_hut"
+              ? ID.WitchVenom
+              : kind === "monument"
+                ? ID.GuardianSpike
+                : kind === "castle" || kind === "mansion"
+                  ? ID.IllagerBadge
+                  : ID.Diamond;
       bin.ns[slot] = 1;
     }
   }

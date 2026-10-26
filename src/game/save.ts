@@ -57,6 +57,8 @@ export type SaveV1 = {
   won?: boolean;
   pets?: { x: number; z: number }[];
   fluids?: [number, number, number, number][];
+  worldTime?: number;
+  worldDays?: number;
 };
 
 export type SettingsSave = {

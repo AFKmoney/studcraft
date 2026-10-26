@@ -5,6 +5,32 @@ import appCss from "../styles.css?url";
 
 const APP_NAME = "Studcraft";
 
+const EXTENSION_ERROR_GUARD_SCRIPT = `(function(){
+  function isExtensionError(msg, stack, filename) {
+    var s = String(msg || '') + ' ' + String(stack || '') + ' ' + String(filename || '');
+    return s.indexOf('chrome-extension://') !== -1 ||
+           s.indexOf('moz-extension://') !== -1 ||
+           s.indexOf('safari-web-extension://') !== -1 ||
+           s.indexOf('Failed to connect to MetaMask') !== -1;
+  }
+  window.addEventListener('error', function(e) {
+    var err = e && e.error;
+    if (isExtensionError(e && e.message, err && err.stack, e && e.filename)) {
+      e.stopImmediatePropagation();
+      e.preventDefault();
+    }
+  }, true);
+  window.addEventListener('unhandledrejection', function(e) {
+    var r = e && e.reason;
+    var msg = r && (r.message || String(r));
+    var stack = r && r.stack;
+    if (isExtensionError(msg, stack, '')) {
+      e.stopImmediatePropagation();
+      e.preventDefault();
+    }
+  }, true);
+})();`;
+
 export const Route = createRootRoute({
   head: () => ({
     meta: [
@@ -28,6 +54,7 @@ export const Route = createRootRoute({
   component: () => (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: EXTENSION_ERROR_GUARD_SCRIPT }} />
         <HeadContent />
       </head>
       <body>

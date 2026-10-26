@@ -9,77 +9,121 @@ function shade(hex: string, amt: number): string {
   return `rgb(${r | 0},${g | 0},${b | 0})`;
 }
 
+const STUD_UV = [
+  [0.26, 0.26],
+  [0.74, 0.26],
+  [0.26, 0.74],
+  [0.74, 0.74],
+] as const;
+
 function paintTop(ctx: CanvasRenderingContext2D, ox: number, oy: number, base: string, rings = false) {
-  // Icon recipe (icons.tsx Stud / the reference photo): FLAT color field.
-  // The only drawing is the soft contact ring where the geometry stud sits
-  // (stud radius = 0.30 of the tile) and, for logs, the growth rings.
-  // Seams/bevel come from the atlas seam pass + normal map, not the tile.
+  // 2×2 LEGO brick top field: pure injection-molded ABS base color + smooth radial
+  // contact ambient occlusion collars around the 4 stud bases (radius ~0.148).
+  // No artificial white arcs are painted so real 3D PBR lighting and shadows drive all highlights.
   const S = TILE;
   ctx.fillStyle = base;
   ctx.fillRect(ox, oy, S, S);
-  ctx.strokeStyle = "rgba(0,0,0,0.20)";
-  ctx.lineWidth = S * 0.028;
-  ctx.beginPath();
-  ctx.arc(ox + S / 2, oy + S / 2, S * 0.335, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.strokeStyle = "rgba(255,255,255,0.20)";
-  ctx.lineWidth = S * 0.014;
-  ctx.beginPath();
-  ctx.arc(ox + S / 2, oy + S / 2, S * 0.315, Math.PI * 1.05, Math.PI * 1.55);
-  ctx.stroke();
   if (rings) {
-    ctx.strokeStyle = shade(base, -26);
-    ctx.lineWidth = Math.max(2, S * 0.02);
+    ctx.strokeStyle = shade(base, -22);
+    ctx.lineWidth = Math.max(2, S * 0.022);
     ctx.beginPath();
-    ctx.arc(ox + S / 2, oy + S / 2, S * 0.22, 0, Math.PI * 2);
+    ctx.arc(ox + S / 2, oy + S / 2, S * 0.36, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(ox + S / 2, oy + S / 2, S * 0.18, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  for (const [ux, uy] of STUD_UV) {
+    const cx = ox + S * ux;
+    const cy = oy + S * uy;
+    const grad = ctx.createRadialGradient(cx, cy, S * 0.125, cx, cy, S * 0.205);
+    grad.addColorStop(0, "rgba(0,0,0,0)");
+    grad.addColorStop(0.35, "rgba(0,0,0,0.20)");
+    grad.addColorStop(0.7, "rgba(0,0,0,0.09)");
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, S * 0.205, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
 function paintSide(ctx: CanvasRenderingContext2D, ox: number, oy: number, base: string, cap?: string) {
-  // Icon recipe, 1:1 with icons.tsx <Stud/>: flat fill, a white top band
-  // (13%, alpha 0.28) and a black bottom band (13%, alpha 0.22). No washes,
-  // no scratch lines, no edge strips — the atlas seam pass + the normal-map
-  // bevel supply the molded relief, exactly like the reference photo.
+  // Modular sub-brick LEGO assembly: each 1×1×1 block side is composed of 3 stacked
+  // horizontal courses (top 2×2 plate y∈[0, 0.28], middle 1×2 running-bond course y∈[0.28, 0.64],
+  // bottom 2×1 course y∈[0.64, 1.0]) with subtle factory ABS tint tolerance and deep cavity seams.
   const S = TILE;
-  ctx.fillStyle = base;
-  ctx.fillRect(ox, oy, S, S);
-  ctx.fillStyle = "rgba(255,255,255,0.28)";
-  ctx.fillRect(ox, oy, S, S * 0.13);
+  const y1 = Math.round(S * 0.28);
+  const y2 = Math.round(S * 0.64);
+  const midX = Math.round(S * 0.5);
+
+  // Course 1 (middle y1..y2): two 1×2 bricks side-by-side with subtle factory ABS batch tolerance
+  ctx.fillStyle = shade(base, 4);
+  ctx.fillRect(ox, oy + y1, midX, y2 - y1);
+  ctx.fillStyle = shade(base, -5);
+  ctx.fillRect(ox + midX, oy + y1, S - midX, y2 - y1);
+
+  // Course 0 (bottom y2..S): staggered running-bond (quinconce) 2×1 brick + corner 1×1 plates
+  const q1 = Math.round(S * 0.25);
+  const q3 = Math.round(S * 0.75);
+  ctx.fillStyle = shade(base, -3);
+  ctx.fillRect(ox, oy + y2, q1, S - y2);
+  ctx.fillStyle = shade(base, 3);
+  ctx.fillRect(ox + q1, oy + y2, q3 - q1, S - y2);
+  ctx.fillStyle = shade(base, -6);
+  ctx.fillRect(ox + q3, oy + y2, S - q3, S - y2);
+
+  // Course 2 (top 0..y1): either the green 2×2 Grass plate (cap) or a top modular plate course
+  ctx.fillStyle = cap ? cap : shade(base, 2);
+  ctx.fillRect(ox, oy, S, y1);
+
+  // Sub-brick top bevel highlights & deep horizontal/vertical cavity seams (0.1mm mechanical gap)
+  ctx.fillStyle = "rgba(255,255,255,0.09)";
+  ctx.fillRect(ox, oy, S, 2);
+  ctx.fillStyle = "rgba(255,255,255,0.06)";
+  ctx.fillRect(ox, oy + y1 + 1, S, 1);
+  ctx.fillRect(ox, oy + y2 + 1, S, 1);
+
+  // Deep horizontal course cavity seams
+  ctx.fillStyle = cap ? "rgba(0,0,0,0.32)" : "rgba(0,0,0,0.22)";
+  ctx.fillRect(ox, oy + y1 - 1, S, 2);
   ctx.fillStyle = "rgba(0,0,0,0.22)";
-  ctx.fillRect(ox, oy + S * 0.87, S, S * 0.13);
-  if (cap) {
-    ctx.fillStyle = cap;
-    ctx.fillRect(ox, oy, S, S * 0.26);
-    ctx.fillStyle = "rgba(255,255,255,0.22)";
-    ctx.fillRect(ox, oy, S, Math.max(2, S * 0.04));
-  }
+  ctx.fillRect(ox, oy + y2 - 1, S, 2);
+  ctx.fillStyle = "rgba(0,0,0,0.20)";
+  ctx.fillRect(ox, oy + S - 2, S, 2);
+
+  // Running-bond vertical sub-brick seams
+  ctx.fillStyle = "rgba(0,0,0,0.20)";
+  ctx.fillRect(ox + midX - 1, oy + y1, 2, y2 - y1);
+  ctx.fillRect(ox + q1 - 1, oy + y2, 2, S - y2);
+  ctx.fillRect(ox + q3 - 1, oy + y2, 2, S - y2);
 }
 
 function paintBottom(ctx: CanvasRenderingContext2D, ox: number, oy: number, base: string) {
-  // Underside: flat darker field + the socket ring (kept — it is the brick's
-  // underside identity). No painted frame; the seam pass handles borders.
+  // Underside of a 2×2 LEGO brick: recessed cavity + center anti-stud tube + 4 stud sockets.
   const S = TILE;
-  ctx.fillStyle = shade(base, -8);
+  ctx.fillStyle = shade(base, -10);
   ctx.fillRect(ox, oy, S, S);
-  ctx.fillStyle = shade(base, -48);
+  ctx.fillStyle = shade(base, -40);
+  for (const [ux, uy] of STUD_UV) {
+    ctx.beginPath();
+    ctx.arc(ox + S * ux, oy + S * uy, S * 0.14, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.strokeStyle = shade(base, 14);
+  ctx.lineWidth = S * 0.055;
   ctx.beginPath();
-  ctx.arc(ox + S / 2, oy + S / 2, S * 0.34, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = shade(base, 18);
-  ctx.lineWidth = S * 0.07;
-  ctx.beginPath();
-  ctx.arc(ox + S / 2, oy + S / 2, S * 0.3, 0, Math.PI * 2);
+  ctx.arc(ox + S / 2, oy + S / 2, S * 0.22, 0, Math.PI * 2);
   ctx.stroke();
 }
 
 function paintGlass(ctx: CanvasRenderingContext2D, ox: number, oy: number) {
   const S = TILE;
   ctx.clearRect(ox, oy, S, S);
-  ctx.fillStyle = "rgba(214,244,248,0.28)";
+  ctx.fillStyle = "rgba(214,244,248,0.24)";
   ctx.fillRect(ox, oy, S, S);
-  ctx.fillStyle = "rgba(240,252,255,0.92)";
-  const t = S * 0.14;
+  ctx.fillStyle = "rgba(240,252,255,0.88)";
+  const t = S * 0.12;
   ctx.fillRect(ox, oy, S, t);
   ctx.fillRect(ox, oy + S - t, S, t);
   ctx.fillRect(ox, oy, t, S);
@@ -121,8 +165,398 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
     paintGlass(ctx, ox, oy);
     return;
   }
+  if (block.id === ID.Cactus) {
+    if (face === 0) {
+      paintTop(ctx, ox, oy, "#2f8e3c", false);
+      // Inner lighter-green vascular ring
+      ctx.strokeStyle = "#5ad266";
+      ctx.lineWidth = Math.max(2, S * 0.03);
+      ctx.beginPath();
+      ctx.arc(ox + S / 2, oy + S / 2, S * 0.28, 0, Math.PI * 2);
+      ctx.stroke();
+      // Deep dark-green radial Saguaro rib notches around perimeter
+      ctx.fillStyle = "#164e1f";
+      for (const pos of [0.22, 0.5, 0.78]) {
+        ctx.fillRect(ox + S * pos - 2, oy, 4, S * 0.08);
+        ctx.fillRect(ox + S * pos - 2, oy + S * 0.92, 4, S * 0.08);
+        ctx.fillRect(ox, oy + S * pos - 2, S * 0.08, 4);
+        ctx.fillRect(ox + S * 0.92, oy + S * pos - 2, S * 0.08, 4);
+      }
+      // Corner cream LEGO spine tips
+      ctx.fillStyle = "#f4ebd0";
+      for (const [sx, sy] of [
+        [0.09, 0.09],
+        [0.91, 0.09],
+        [0.09, 0.91],
+        [0.91, 0.91],
+      ]) {
+        ctx.beginPath();
+        ctx.arc(ox + S * sx, oy + S * sy, S * 0.035, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      return;
+    }
+    if (face === 2) {
+      paintBottom(ctx, ox, oy, block.bottom);
+      return;
+    }
+    // Side face: 3-course modular LEGO green brick + deep fluted vertical cactus ribs + SNOT cream spine studs
+    paintSide(ctx, ox, oy, "#287e34", "#369e44");
+    // Vertical dark-green recessed flutes & bright-green raised LEGO cactus ribs
+    for (const rx of [0.14, 0.38, 0.62, 0.86]) {
+      ctx.fillStyle = "rgba(12, 46, 18, 0.55)";
+      ctx.fillRect(ox + S * rx - 4, oy + 2, 4, S - 4);
+      ctx.fillStyle = "rgba(98, 218, 110, 0.38)";
+      ctx.fillRect(ox + S * rx, oy + 2, 4, S - 4);
+    }
+    // Protruding cream/tan LEGO spine needles at each of the 3 brick courses
+    for (const cy of [0.15, 0.46, 0.82]) {
+      for (const cx of [0.16, 0.50, 0.84]) {
+        const px = ox + S * cx;
+        const py = oy + S * cy;
+        // Contact shadow under spine stud
+        ctx.fillStyle = "rgba(10, 32, 14, 0.65)";
+        ctx.fillRect(px - 4, py - 1, 8, 5);
+        // Tan SNOT clip base + ivory spine bar
+        ctx.fillStyle = "#c8b482";
+        ctx.fillRect(px - 3, py - 3, 6, 5);
+        ctx.fillStyle = "#f7f2e2";
+        ctx.fillRect(px - 2, py - 2, 4, 3);
+      }
+    }
+    return;
+  }
   if (block.plant) {
     paintPlant(ctx, ox, oy, block.top, block.id === ID.TallGrass || block.id === ID.Reed ? "grass" : "flower");
+    return;
+  }
+  if (block.id === ID.Furnace) {
+    if (face === 0) {
+      paintTop(ctx, ox, oy, block.top, false);
+      // Central circular LEGO chimney exhaust grille on top plate
+      ctx.fillStyle = "#26211e";
+      ctx.beginPath();
+      ctx.arc(ox + S / 2, oy + S / 2, S * 0.16, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#ff6a18";
+      ctx.beginPath();
+      ctx.arc(ox + S / 2, oy + S / 2, S * 0.07, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+    if (face === 2) {
+      paintBottom(ctx, ox, oy, block.bottom);
+      return;
+    }
+    paintSide(ctx, ox, oy, block.side, "#7e746b");
+    // Upper stone lintel 1x2 LEGO bricks & vent grille slots
+    ctx.fillStyle = "#453e39";
+    ctx.fillRect(ox + S * 0.16, oy + S * 0.08, S * 0.68, S * 0.14);
+    ctx.fillStyle = "#221d1a";
+    for (let i = 0; i < 4; i++) {
+      ctx.fillRect(ox + S * (0.21 + i * 0.16), oy + S * 0.11, S * 0.09, S * 0.08);
+    }
+    // Arched LEGO kiln hearth opening
+    ctx.fillStyle = "#342e2a";
+    ctx.fillRect(ox + S * 0.16, oy + S * 0.30, S * 0.68, S * 0.60);
+    ctx.fillStyle = "#16110e";
+    ctx.fillRect(ox + S * 0.22, oy + S * 0.36, S * 0.56, S * 0.50);
+    ctx.beginPath();
+    ctx.arc(ox + S * 0.5, oy + S * 0.42, S * 0.28, Math.PI, 0);
+    ctx.fill();
+    // Glowing red-orange 1x1 LEGO coal studs at the bottom of the hearth
+    for (let i = 0; i < 3; i++) {
+      const cx = ox + S * (0.31 + i * 0.19);
+      ctx.fillStyle = i === 1 ? "#ff4e14" : "#b82810";
+      ctx.fillRect(cx - S * 0.07, oy + S * 0.74, S * 0.14, S * 0.10);
+      ctx.fillStyle = "#ff9824";
+      ctx.beginPath();
+      ctx.arc(cx, oy + S * 0.74, S * 0.045, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Molded Trans-Orange & Trans-Yellow LEGO Flame plumes inside the furnace
+    ctx.fillStyle = "#ff5a10";
+    ctx.beginPath();
+    ctx.moveTo(ox + S * 0.27, oy + S * 0.76);
+    ctx.quadraticCurveTo(ox + S * 0.26, oy + S * 0.52, ox + S * 0.38, oy + S * 0.42);
+    ctx.quadraticCurveTo(ox + S * 0.44, oy + S * 0.54, ox + S * 0.50, oy + S * 0.35);
+    ctx.quadraticCurveTo(ox + S * 0.58, oy + S * 0.54, ox + S * 0.63, oy + S * 0.44);
+    ctx.quadraticCurveTo(ox + S * 0.74, oy + S * 0.54, ox + S * 0.73, oy + S * 0.76);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#ffd838";
+    ctx.beginPath();
+    ctx.moveTo(ox + S * 0.34, oy + S * 0.76);
+    ctx.quadraticCurveTo(ox + S * 0.38, oy + S * 0.58, ox + S * 0.44, oy + S * 0.50);
+    ctx.quadraticCurveTo(ox + S * 0.50, oy + S * 0.42, ox + S * 0.55, oy + S * 0.50);
+    ctx.quadraticCurveTo(ox + S * 0.62, oy + S * 0.58, ox + S * 0.66, oy + S * 0.76);
+    ctx.closePath();
+    ctx.fill();
+    // Iron grate bars across the lower hearth
+    ctx.fillStyle = "#2c2623";
+    ctx.fillRect(ox + S * 0.20, oy + S * 0.80, S * 0.60, S * 0.05);
+    return;
+  }
+  if (block.id === ID.Bench) {
+    if (face === 0) {
+      paintTop(ctx, ox, oy, block.top, false);
+      // 3x3 LEGO Crafting Grid plate recessed on top of the Workbench
+      const pad = S * 0.13;
+      const span = S - pad * 2;
+      ctx.fillStyle = "#6b3e22";
+      ctx.fillRect(ox + pad - 2, oy + pad - 2, span + 4, span + 4);
+      const cell = (span - 6) / 3;
+      for (let r = 0; r < 3; r++) {
+        for (let c = 0; c < 3; c++) {
+          const cx = ox + pad + c * (cell + 3);
+          const cy = oy + pad + r * (cell + 3);
+          ctx.fillStyle = (r + c) % 2 === 0 ? "#c4883c" : "#b07630";
+          ctx.fillRect(cx, cy, cell, cell);
+          // Miniature LEGO stud socket inside each crafting cell
+          ctx.strokeStyle = "rgba(50, 26, 10, 0.55)";
+          ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          ctx.arc(cx + cell / 2, cy + cell / 2, cell * 0.28, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+      return;
+    }
+    if (face === 1) {
+      paintSide(ctx, ox, oy, block.side, "#8d5228");
+      // Reddish-brown LEGO corner timber pillars
+      ctx.fillStyle = "#5c341a";
+      ctx.fillRect(ox, oy, S * 0.13, S);
+      ctx.fillRect(ox + S * 0.87, oy, S * 0.13, S);
+      // SNOT Grey tool-holder clips
+      ctx.fillStyle = "#8e959c";
+      ctx.fillRect(ox + S * 0.24, oy + S * 0.30, S * 0.14, S * 0.07);
+      ctx.fillRect(ox + S * 0.60, oy + S * 0.30, S * 0.14, S * 0.07);
+      // Hanging LEGO Hammer (left)
+      ctx.fillStyle = "#6b3e22";
+      ctx.fillRect(ox + S * 0.29, oy + S * 0.36, S * 0.05, S * 0.42);
+      ctx.fillStyle = "#d0d6dc";
+      ctx.fillRect(ox + S * 0.20, oy + S * 0.34, S * 0.22, S * 0.11);
+      // Hanging LEGO Hand-Saw (right)
+      ctx.fillStyle = "#c43228";
+      ctx.fillRect(ox + S * 0.61, oy + S * 0.33, S * 0.13, S * 0.10);
+      ctx.fillStyle = "#d9dde2";
+      ctx.beginPath();
+      ctx.moveTo(ox + S * 0.62, oy + S * 0.43);
+      ctx.lineTo(ox + S * 0.74, oy + S * 0.43);
+      ctx.lineTo(ox + S * 0.70, oy + S * 0.78);
+      ctx.lineTo(ox + S * 0.62, oy + S * 0.74);
+      ctx.closePath();
+      ctx.fill();
+      return;
+    }
+  }
+  if (block.id === ID.Chest || block.id === ID.ShulkerBox) {
+    const isShulk = block.id === ID.ShulkerBox;
+    if (face === 0) {
+      paintTop(ctx, ox, oy, block.top, false);
+      ctx.strokeStyle = isShulk ? "#4a3264" : "#5c3a1a";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(ox + 5, oy + 5, S - 10, S - 10);
+      return;
+    }
+    if (face === 1) {
+      paintSide(ctx, ox, oy, block.side, block.top);
+      // Deep horizontal hinged lid seam
+      const lidY = Math.round(S * 0.36);
+      ctx.fillStyle = "#18100a";
+      ctx.fillRect(ox, oy + lidY - 2, S, 4);
+      // Dark corner reinforcement brackets
+      ctx.fillStyle = isShulk ? "#4a3264" : "#5c3a1a";
+      ctx.fillRect(ox, oy, S * 0.11, S);
+      ctx.fillRect(ox + S * 0.89, oy, S * 0.11, S);
+      // Metallic Gold 1x1 LEGO Latch Plate with central stud
+      ctx.fillStyle = "#b88418";
+      ctx.fillRect(ox + S * 0.40, oy + lidY - S * 0.10, S * 0.20, S * 0.24);
+      ctx.fillStyle = "#ffd84a";
+      ctx.fillRect(ox + S * 0.42, oy + lidY - S * 0.08, S * 0.16, S * 0.20);
+      ctx.fillStyle = "#22180a";
+      ctx.beginPath();
+      ctx.arc(ox + S * 0.5, oy + lidY + S * 0.02, S * 0.038, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+  }
+  if (block.id === ID.Barrel) {
+    if (face === 0) {
+      paintTop(ctx, ox, oy, block.top, true);
+      ctx.fillStyle = "#2a2018";
+      ctx.beginPath();
+      ctx.arc(ox + S * 0.5, oy + S * 0.5, S * 0.09, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+    if (face === 1) {
+      paintSide(ctx, ox, oy, block.side);
+      // Iron barrel hoops
+      ctx.fillStyle = "#3e4248";
+      ctx.fillRect(ox, oy + S * 0.20, S, S * 0.09);
+      ctx.fillRect(ox, oy + S * 0.72, S, S * 0.09);
+      ctx.fillStyle = "#9aa1a8";
+      for (const rx of [0.22, 0.5, 0.78]) {
+        ctx.fillRect(ox + S * rx - 2, oy + S * 0.22, 4, 4);
+        ctx.fillRect(ox + S * rx - 2, oy + S * 0.74, 4, 4);
+      }
+      return;
+    }
+  }
+  if (block.id === ID.Bookshelf && face === 1) {
+    paintSide(ctx, ox, oy, block.side, block.top);
+    const colors = ["#d43228", "#1f5fbf", "#2f7d3a", "#e6b40e", "#7a4ad4", "#c45a10"];
+    for (const [sy, sh] of [[0.14, 0.32], [0.54, 0.34]] as const) {
+      ctx.fillStyle = "#2a180c";
+      ctx.fillRect(ox + S * 0.08, oy + S * sy, S * 0.84, S * sh);
+      for (let i = 0; i < 6; i++) {
+        const bx = ox + S * (0.10 + i * 0.135);
+        const bw = S * 0.12;
+        const bh = S * (sh - 0.04);
+        ctx.fillStyle = colors[(i + (sy > 0.5 ? 2 : 0)) % colors.length];
+        ctx.fillRect(bx, oy + S * (sy + 0.03), bw, bh);
+        // White LEGO book spine title tile
+        ctx.fillStyle = "rgba(255,255,255,0.78)";
+        ctx.fillRect(bx + 2, oy + S * (sy + 0.09), bw - 4, 4);
+      }
+    }
+    return;
+  }
+  if (block.id === ID.TNT) {
+    if (face === 0) {
+      paintTop(ctx, ox, oy, "#d43228", false);
+      ctx.fillStyle = "#2a2a2a";
+      for (const [ux, uy] of STUD_UV) {
+        ctx.beginPath();
+        ctx.arc(ox + S * ux, oy + S * uy, S * 0.08, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      return;
+    }
+    if (face === 1) {
+      paintSide(ctx, ox, oy, "#d43228");
+      // Vertical dynamite stick grooves
+      ctx.fillStyle = "rgba(0,0,0,0.28)";
+      for (const vx of [0.25, 0.5, 0.75]) ctx.fillRect(ox + S * vx - 1, oy, 2, S);
+      // Crisp white central label band
+      ctx.fillStyle = "#f4f1ea";
+      ctx.fillRect(ox, oy + S * 0.34, S, S * 0.32);
+      // Bold black LEGO "TNT" lettering
+      ctx.fillStyle = "#1c1816";
+      // T
+      ctx.fillRect(ox + S * 0.14, oy + S * 0.40, S * 0.18, S * 0.05);
+      ctx.fillRect(ox + S * 0.205, oy + S * 0.40, S * 0.05, S * 0.20);
+      // N
+      ctx.fillRect(ox + S * 0.38, oy + S * 0.40, S * 0.05, S * 0.20);
+      ctx.fillRect(ox + S * 0.43, oy + S * 0.46, S * 0.06, S * 0.06);
+      ctx.fillRect(ox + S * 0.49, oy + S * 0.40, S * 0.05, S * 0.20);
+      // T
+      ctx.fillRect(ox + S * 0.62, oy + S * 0.40, S * 0.18, S * 0.05);
+      ctx.fillRect(ox + S * 0.685, oy + S * 0.40, S * 0.05, S * 0.20);
+      return;
+    }
+  }
+  if (block.id === ID.Enchanter) {
+    if (face === 0) {
+      paintTop(ctx, ox, oy, "#24163c", false);
+      // Red LEGO diamond velvet cloth on top
+      ctx.fillStyle = "#c42828";
+      ctx.beginPath();
+      ctx.moveTo(ox + S * 0.5, oy + S * 0.08);
+      ctx.lineTo(ox + S * 0.92, oy + S * 0.5);
+      ctx.lineTo(ox + S * 0.5, oy + S * 0.92);
+      ctx.lineTo(ox + S * 0.08, oy + S * 0.5);
+      ctx.closePath();
+      ctx.fill();
+      // 4 Glowing Cyan Aqua-Gem corner studs
+      ctx.fillStyle = "#5ef2f2";
+      for (const [ux, uy] of STUD_UV) {
+        ctx.beginPath();
+        ctx.arc(ox + S * ux, oy + S * uy, S * 0.10, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      return;
+    }
+    if (face === 1) {
+      paintSide(ctx, ox, oy, "#24163c", "#c42828");
+      // Draped red cloth triangle & gold rune trim
+      ctx.fillStyle = "#c42828";
+      ctx.beginPath();
+      ctx.moveTo(ox + S * 0.18, oy + S * 0.28);
+      ctx.lineTo(ox + S * 0.82, oy + S * 0.28);
+      ctx.lineTo(ox + S * 0.50, oy + S * 0.72);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#ffd84a";
+      ctx.fillRect(ox + S * 0.12, oy + S * 0.24, S * 0.76, S * 0.05);
+      ctx.fillStyle = "#5ef2f2";
+      ctx.fillRect(ox + S * 0.12, oy + S * 0.56, S * 0.10, S * 0.10);
+      ctx.fillRect(ox + S * 0.78, oy + S * 0.56, S * 0.10, S * 0.10);
+      return;
+    }
+  }
+  if (block.id === ID.Brew && face === 1) {
+    paintSide(ctx, ox, oy, block.side);
+    // Blaze rod column & 2 glowing LEGO potion flasks
+    ctx.fillStyle = "#ffb820";
+    ctx.fillRect(ox + S * 0.45, oy + S * 0.12, S * 0.10, S * 0.62);
+    ctx.fillStyle = "#e23b2f";
+    ctx.fillRect(ox + S * 0.18, oy + S * 0.44, S * 0.20, S * 0.28);
+    ctx.fillStyle = "#3ec8c8";
+    ctx.fillRect(ox + S * 0.62, oy + S * 0.44, S * 0.20, S * 0.28);
+    return;
+  }
+  if ((block.id === ID.Jukebox || block.id === ID.Note) && face !== 2) {
+    if (face === 0 && block.id === ID.Jukebox) {
+      paintTop(ctx, ox, oy, block.top, false);
+      ctx.fillStyle = "#181412";
+      ctx.fillRect(ox + S * 0.20, oy + S * 0.43, S * 0.60, S * 0.14);
+      ctx.fillStyle = "#ffd84a";
+      ctx.fillRect(ox + S * 0.44, oy + S * 0.46, S * 0.12, S * 0.08);
+      return;
+    }
+    if (face === 1) {
+      paintSide(ctx, ox, oy, block.side);
+      ctx.strokeStyle = "#3a2412";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(ox + S * 0.16, oy + S * 0.16, S * 0.68, S * 0.68);
+      ctx.fillStyle = block.id === ID.Jukebox ? "#ffd84a" : "#2a180c";
+      ctx.beginPath();
+      ctx.arc(ox + S * 0.5, oy + S * 0.5, S * 0.14, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+  }
+  if (block.id === ID.Dispenser && face === 1) {
+    paintSide(ctx, ox, oy, block.side);
+    ctx.fillStyle = "#221e1c";
+    ctx.beginPath();
+    ctx.arc(ox + S * 0.5, oy + S * 0.54, S * 0.20, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#e23b2f";
+    ctx.fillRect(ox + S * 0.42, oy + S * 0.16, S * 0.16, S * 0.08);
+    return;
+  }
+  if (block.id === ID.Pumpkin && face === 1) {
+    paintSide(ctx, ox, oy, block.side);
+    // Carved LEGO Jack-o'-Lantern style ribs & face
+    ctx.fillStyle = "rgba(110, 42, 6, 0.38)";
+    for (const rx of [0.22, 0.5, 0.78]) ctx.fillRect(ox + S * rx - 1, oy, 3, S);
+    return;
+  }
+  if (block.id === ID.Melon && face === 1) {
+    paintSide(ctx, ox, oy, "#3aaa4c");
+    ctx.fillStyle = "#1d5526";
+    for (const rx of [0.16, 0.38, 0.62, 0.84]) ctx.fillRect(ox + S * rx - 2, oy, 4, S);
+    return;
+  }
+  if (block.id === ID.Hay && face === 1) {
+    paintSide(ctx, ox, oy, block.side);
+    ctx.fillStyle = "#c43228";
+    ctx.fillRect(ox, oy + S * 0.28, S, S * 0.08);
+    ctx.fillRect(ox, oy + S * 0.64, S, S * 0.08);
     return;
   }
   if (block.id === ID.Moss && face === 0) {
@@ -189,14 +623,46 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
     ctx.stroke();
     return;
   }
+  if (block.id === ID.Target && face !== 2) {
+    if (face === 0) paintTop(ctx, ox, oy, block.side, false);
+    else paintSide(ctx, ox, oy, block.side);
+    ctx.strokeStyle = "#e23b2f";
+    ctx.lineWidth = Math.max(4, S * 0.075);
+    ctx.beginPath();
+    ctx.arc(ox + S / 2, oy + S / 2, S * 0.36, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(ox + S / 2, oy + S / 2, S * 0.2, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "#e23b2f";
+    ctx.beginPath();
+    ctx.arc(ox + S / 2, oy + S / 2, S * 0.08, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+  if ((block.id === ID.Daylight || block.id === ID.DaylightInv) && face === 0) {
+    paintTop(ctx, ox, oy, block.top, false);
+    ctx.fillStyle = block.id === ID.Daylight ? "rgba(218, 165, 32, 0.45)" : "rgba(30, 64, 145, 0.55)";
+    const pad = S * 0.14;
+    const cell = (S - pad * 2 - 8) / 3;
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) {
+        ctx.fillRect(ox + pad + c * (cell + 4), oy + pad + r * (cell + 4), cell, cell);
+      }
+    }
+    return;
+  }
+  if ((block.id === ID.Observer || block.id === ID.ObserverOn) && face === 1) {
+    paintSide(ctx, ox, oy, block.side);
+    ctx.fillStyle = block.id === ID.ObserverOn ? "#ff4a3a" : "#b02620";
+    ctx.beginPath();
+    ctx.arc(ox + S / 2, oy + S / 2, S * 0.14, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
   if (face === 0) paintTop(ctx, ox, oy, block.top, block.id === ID.Log);
   else if (face === 2) paintBottom(ctx, ox, oy, block.bottom);
   else paintSide(ctx, ox, oy, block.side, block.id === ID.Grass ? block.top : undefined);
-}
-
-function hash01(n: number) {
-  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
-  return x - Math.floor(x);
 }
 
 function finish(canvas: HTMLCanvasElement, colorSpace: THREE.ColorSpace) {
@@ -236,15 +702,13 @@ export function buildAtlas(): BrickAtlases {
     }
   }
 
-  // Brick seams + bevel (reference look): darken each solid tile's border so
-  // every brick reads as a separate piece with a shadow gap, and catch a
-  // light line just inside the top edge like a molded bevel. Per-pixel
-  // multiply, so hue survives; transparent pixels (cutout art) are skipped,
-  // and fluid/plant tiles are excluded entirely.
+  // Clean brick perimeter contact seam: darken each solid tile's outer 3px border
+  // smoothly (multiply only, no white inner ring) so adjacent LEGO bricks have a
+  // crisp physical gap without artificial white outlines on dark blocks.
   {
     const skip = new Set<number>();
     for (const block of BLOCKS) {
-      if (!block || (!block.fluid && !block.plant)) continue;
+      if (!block || (!block.fluid && (!block.plant || block.cactus))) continue;
       for (const face of [0, 1, 2, 3] as const) {
         const t = faceTile(block.id, face);
         if (t) skip.add(t);
@@ -266,13 +730,13 @@ export function buildAtlas(): BrickAtlases {
         for (let py = 0; py < TILE; py++) {
           for (let px = 0; px < TILE; px++) {
             const edge = Math.min(px, py, TILE - 1 - px, TILE - 1 - py);
-            if (edge > 4) continue;
+            if (edge > 2) continue;
             const i = ((oy + py) * W + (ox + px)) * 4;
             if (d[i + 3] < 200) continue;
-            let m = edge < 2 ? 0.78 : edge < 4 ? 0.92 : 1;
-            d[i] *= m;
-            d[i + 1] *= m;
-            d[i + 2] *= m;
+            const m = edge === 0 ? 0.80 : edge === 1 ? 0.91 : 0.96;
+            d[i] = Math.min(255, d[i] * m);
+            d[i + 1] = Math.min(255, d[i + 1] * m);
+            d[i + 2] = Math.min(255, d[i + 2] * m);
           }
         }
       }
@@ -280,9 +744,8 @@ export function buildAtlas(): BrickAtlases {
     ctx.putImageData(img, 0, 0);
   }
 
-  // Glow atlas (small, like rough/normal): black everywhere except the tiles
-  // of light-emitting blocks (light > 0: torches, magma, lit lamps, lanterns),
-  // which copy their painted color tile. Wired as emissiveMap in game.ts.
+  // Glow atlas: black everywhere except tiles of light-emitting blocks
+  // (torches, magma, lit lamps, lanterns, beacons, conduits), wired as emissiveMap.
   const GT = 32;
   const glowCanvas = document.createElement("canvas");
   glowCanvas.width = ATLAS_COLS * GT;
@@ -293,7 +756,21 @@ export function buildAtlas(): BrickAtlases {
     gtx.fillRect(0, 0, glowCanvas.width, glowCanvas.height);
     const done = new Set<number>();
     for (const block of BLOCKS) {
-      if (!block || !(block.light > 0)) continue;
+      if (!block) continue;
+      if (block.id === ID.Furnace) {
+        const tile = faceTile(ID.Furnace, 1);
+        if (tile && !done.has(tile)) {
+          done.add(tile);
+          const gx = (tile % ATLAS_COLS) * GT;
+          const gy = Math.floor(tile / ATLAS_COLS) * GT;
+          gtx.fillStyle = "#ff6a14";
+          gtx.fillRect(gx + GT * 0.28, gy + GT * 0.42, GT * 0.44, GT * 0.38);
+          gtx.fillStyle = "#ffe048";
+          gtx.fillRect(gx + GT * 0.35, gy + GT * 0.48, GT * 0.30, GT * 0.28);
+        }
+        continue;
+      }
+      if (!(block.light > 0)) continue;
       for (const face of [0, 1, 2, 3] as const) {
         const tile = faceTile(block.id, face);
         if (!tile || done.has(tile)) continue;
@@ -306,7 +783,10 @@ export function buildAtlas(): BrickAtlases {
     }
   }
 
-  const T = 32;
+  // High-resolution (64×64 per tile) noise-free normal & roughness maps:
+  // Smooth C2-continuous molded edge chamfers and 2×2 stud base fillets with
+  // zero random per-pixel hash noise, preventing specular firefly aliasing.
+  const T = 64;
   const rw = ATLAS_COLS * T;
   const rh = ATLAS_ROWS * T;
   const roughCanvas = document.createElement("canvas");
@@ -320,53 +800,96 @@ export function buildAtlas(): BrickAtlases {
   if (!rctx || !nctx) throw new Error("Could not build brick maps");
   const roughPx = rctx.createImageData(rw, rh);
   const normalPx = nctx.createImageData(rw, rh);
+  const doneMaps = new Set<number>();
   for (const block of BLOCKS) {
     if (!block) continue;
     for (const face of [0, 1, 2, 3] as const) {
       const tile = faceTile(block.id, face);
-      if (!tile) continue;
+      if (!tile || doneMaps.has(tile)) continue;
+      doneMaps.add(tile);
       const col = tile % ATLAS_COLS;
       const row = Math.floor(tile / ATLAS_COLS);
       if (row >= ATLAS_ROWS) continue;
       const ox = col * T;
       const oy = row * T;
+      const isGlossy =
+        block.id === ID.ChromeBrick ||
+        block.id === ID.MasterBrick ||
+        block.id === ID.IronBlock ||
+        block.id === ID.Gold ||
+        block.id === ID.Diamond ||
+        block.id === ID.Ice ||
+        block.id === ID.IceSheet;
+      const baseRough = isGlossy ? 0.20 : 0.30;
       for (let py = 0; py < T; py++) {
         for (let px = 0; px < T; px++) {
           const i = ((oy + py) * rw + (ox + px)) * 4;
-          const nse = hash01(block.id * 17 + face * 131 + px * 13 + py * 29);
-          const seam = px < 2 || py < 2 || px > T - 3 || py > T - 3;
-          let rough = 0.46 + (nse - 0.5) * 0.1;
-          if (seam) rough += 0.14;
           const dx = (px + 0.5) / T - 0.5;
           const dy = (py + 0.5) / T - 0.5;
-          const dist = Math.hypot(dx, dy);
-          if (face === 0 && dist > 0.28 && dist < 0.4) rough -= 0.08;
+          const ax = Math.abs(dx);
+          const ay = Math.abs(dy);
+          const edgeDist = Math.max(ax, ay);
+          const u = (px + 0.5) / T;
+          const v = (py + 0.5) / T;
+          let rough = baseRough;
+          if (edgeDist > 0.44) {
+            const et = Math.min(1, (edgeDist - 0.44) / 0.06);
+            rough += et * et * 0.24;
+          }
+          // Sub-brick course seam roughness for side faces
+          if (face === 1 && !block.fluid && (!block.plant || block.cactus) && block.id !== ID.Glass) {
+            const dH1 = Math.abs(v - 0.28);
+            const dH2 = Math.abs(v - 0.64);
+            const dV1 = v > 0.28 && v < 0.64 ? Math.abs(u - 0.5) : 1;
+            const dV2 = v >= 0.64 ? Math.min(Math.abs(u - 0.25), Math.abs(u - 0.75)) : 1;
+            const seamD = Math.min(dH1, dH2, dV1, dV2);
+            if (seamD < 0.032) {
+              rough += (1 - seamD / 0.032) * 0.16;
+            }
+          }
+          // Nearest of the 4 studs in the 2×2 LEGO grid (±0.24, ±0.24 in -0.5..0.5 space)
+          const qx = dx < 0 ? -0.24 : 0.24;
+          const qy = dy < 0 ? -0.24 : 0.24;
+          const sdx = dx - qx;
+          const sdy = dy - qy;
+          const sDist = Math.hypot(sdx, sdy);
+          if (face === 0 && sDist > 0.13 && sDist < 0.19) {
+            rough += 0.06;
+          }
           const g = Math.max(0, Math.min(255, rough * 255));
           roughPx.data[i] = g;
           roughPx.data[i + 1] = g;
           roughPx.data[i + 2] = g;
           roughPx.data[i + 3] = 255;
-          let nx = (nse - 0.5) * 0.05;
-          let ny = (hash01(nse * 91.3) - 0.5) * 0.05;
-          let nz = 1;
+
+          let nx = 0;
+          let ny = 0;
+          const nz = 1;
           if (face === 0) {
-            const groove = Math.exp(-((dist - 0.34) * (dist - 0.34)) / 0.0011);
-            nx += dx * groove * 0.55;
-            ny += -dy * groove * 0.55;
-          }
-          // Molded edge bevel: normals tilt outward near the tile rim, so
-          // light rounds every brick edge like the reference render's
-          // chamfered plastic. dx/dy are centered tile coords (-0.5..0.5).
-          {
-            const ax = Math.abs(dx);
-            const ay = Math.abs(dy);
-            const m = Math.max(ax, ay);
-            if (m > 0.33) {
-              const t = Math.min(1, (m - 0.33) / 0.17);
-              const s = t * t * 0.7;
-              nx += Math.sign(dx) * s * (ax >= ay ? 1 : 0.3);
-              ny += -Math.sign(dy) * s * (ay >= ax ? 1 : 0.3);
+            // Smooth 4-stud base fillet for distant LOD chunks (Note: 3D studs sample tile center (0,0) where nx=ny=0)
+            const groove = Math.exp(-((sDist - 0.154) * (sDist - 0.154)) / 0.0011);
+            nx += (sdx / (sDist || 1)) * groove * 0.36;
+            ny += -(sdy / (sDist || 1)) * groove * 0.36;
+          } else if (face === 1 && !block.fluid && (!block.plant || block.cactus) && block.id !== ID.Glass) {
+            // Smooth C2-continuous bevels at horizontal plate/brick course seams (v=0.28, v=0.64)
+            const sH1 = v - 0.28;
+            const sH2 = v - 0.64;
+            if (Math.abs(sH1) < 0.045) ny += -Math.sin((sH1 / 0.045) * Math.PI) * 0.32;
+            if (Math.abs(sH2) < 0.045) ny += -Math.sin((sH2 / 0.045) * Math.PI) * 0.28;
+            // Running-bond vertical sub-brick bevels
+            if (v > 0.28 && v < 0.64 && Math.abs(u - 0.5) < 0.04) {
+              nx += Math.sin(((u - 0.5) / 0.04) * Math.PI) * 0.26;
+            } else if (v >= 0.64) {
+              const sV = Math.abs(u - 0.25) < Math.abs(u - 0.75) ? u - 0.25 : u - 0.75;
+              if (Math.abs(sV) < 0.04) nx += Math.sin((sV / 0.04) * Math.PI) * 0.24;
             }
+          }
+          // Smooth molded brick perimeter chamfer
+          if (edgeDist > 0.39) {
+            const t = Math.min(1, (edgeDist - 0.39) / 0.11);
+            const s = t * t * (3 - 2 * t) * 0.46;
+            nx += Math.sign(dx) * s * (ax >= ay ? 1 : 0.35);
+            ny += -Math.sign(dy) * s * (ay >= ax ? 1 : 0.35);
           }
           const len = Math.hypot(nx, ny, nz) || 1;
           normalPx.data[i] = Math.max(0, Math.min(255, (nx / len) * 127 + 128));

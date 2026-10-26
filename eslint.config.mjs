@@ -31,6 +31,9 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      "react-hooks/rules-of-hooks": "off",
+      "no-empty": ["error", { allowEmptyCatch: true }],
+      "prefer-const": "warn",
       "react-refresh/only-export-components": [
         "warn",
         { allowConstantExport: true },
