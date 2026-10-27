@@ -227,6 +227,7 @@ declare global {
       burn?: (x: number, y: number, z: number) => boolean;
       meltOf?: (x: number, y: number, z: number) => number;
       setMelt?: (x: number, y: number, z: number, m: number) => boolean;
+      clearMobs?: (radius: number) => number;
       fireCount?: () => number;
       auditFire?: () => { melt: string[]; burn: string[] };
       hasTuft?: (x: number, y: number, z: number) => boolean;
@@ -983,6 +984,21 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let glassMat: THREE.Material = settings.realistic ? glassStd : glassLam;
   let waterMat: THREE.Material = settings.realistic ? waterStd : waterLam;
   let plantMat: THREE.Material = settings.realistic ? plantStd : plantLam;
+  // v4.16.1 realism pass 2 (Claude): molten plastic gets its OWN material —
+  // no SRN sub-brick seams, no stud/normal/roughness atlas maps (the mesher
+  // samples one texel of the source brick's colour), low roughness + strong
+  // env reflection so the smooth-normal liquid geometry catches real wet
+  // highlights. Only drawn where something is melting (empty surface = no
+  // mesh = zero cost).
+  const moltenStd = new THREE.MeshStandardMaterial({
+    map: atlas,
+    roughness: 0.22,
+    metalness: 0.0,
+    vertexColors: true,
+    envMapIntensity: 1.25,
+  });
+  const moltenLam = new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true });
+  let moltenMat: THREE.Material = settings.realistic ? moltenStd : moltenLam;
 
   const chunkRoot = new THREE.Group();
   scene.add(chunkRoot);
@@ -2624,14 +2640,16 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     glassMat = settings.realistic ? glassStd : glassLam;
     waterMat = settings.realistic ? waterStd : waterLam;
     plantMat = settings.realistic ? plantStd : plantLam;
+    moltenMat = settings.realistic ? moltenStd : moltenLam;
     for (const [k, list] of meshes.entries()) {
       const tier = chunkTier.get(k) ?? 0;
       for (const mesh of list) {
         if (mesh.renderOrder === 2) mesh.material = glassMat;
         else if (mesh.renderOrder === 1) mesh.material = waterMat;
         else if (mesh.renderOrder === 3) mesh.material = plantMat;
+        else if (mesh.renderOrder === 4) mesh.material = moltenMat;
         else mesh.material = opaqueMat;
-        mesh.castShadow = settings.realistic && tier === 0 && mesh.renderOrder === 0;
+        mesh.castShadow = settings.realistic && tier === 0 && (mesh.renderOrder === 0 || mesh.renderOrder === 4);
         mesh.receiveShadow = settings.realistic;
       }
     }
@@ -3304,7 +3322,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (surf.col.length === surf.pos.length) geo.setAttribute("color", new THREE.Float32BufferAttribute(surf.col, 3));
     if (surf.tan.length * 3 === surf.pos.length * 4) geo.setAttribute("tangent", new THREE.Float32BufferAttribute(surf.tan, 4));
     const mesh = new THREE.Mesh(geo, material);
-    mesh.castShadow = settings.realistic && tier === 0 && order === 0;
+    mesh.castShadow = settings.realistic && tier === 0 && (order === 0 || order === 4);
     mesh.receiveShadow = settings.realistic;
     mesh.renderOrder = order;
     return mesh;
@@ -3333,6 +3351,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       surfaceToMesh(built.glass, glassMat, 2, tier),
       surfaceToMesh(built.water, waterMat, 1, tier),
       surfaceToMesh(built.plant, plantMat, 3, tier),
+      surfaceToMesh(built.molten, moltenMat, 4, tier),
     ]) {
       if (!mesh) continue;
       chunkRoot.add(mesh);
@@ -9882,6 +9901,18 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       saveDirty = true;
       return true;
     },
+    // v4.16.1 pass 2 QA hook (Claude): clear the mobs around the player so
+    // melt photos are not blocked by a wandering cow. Inert in normal play.
+    clearMobs: (radius: number) => {
+      let n = 0;
+      for (const m of mobs) {
+        if (m.dead || Math.hypot(m.x - player.x, m.z - player.z) > radius) continue;
+        m.dead = true;
+        scene.remove(m.mesh);
+        n++;
+      }
+      return n;
+    },
     fireCount: () => FS.fireCells.size + FS.burningMap.size,
     auditFire: () => {
       const melt: string[] = [], burn: string[] = [];
@@ -10872,6 +10903,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       glassMat.dispose();
       waterMat.dispose();
       plantMat.dispose();
+      moltenStd.dispose();
+      moltenLam.dispose();
       mobBatchRenderer.dispose();
       renderer.dispose();
       if (window.__controlsTest) delete window.__controlsTest;

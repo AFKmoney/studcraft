@@ -138,6 +138,89 @@ function addBoxT(s: Surface, x0: number, y0: number, z0: number, x1: number, y1:
 // black warm charcoal pool, only a whisper of the original hue surviving.
 const PUDDLE_CHAR: readonly number[] = [0.05, 0.04, 0.035];
 
+// ---------------------------------------------------------------------------
+// v4.16.1 realism pass 2 (Claude) — MOLTEN SURFACE.
+// Everything that is actually liquid plastic (a block past MOLTEN_MIN melt,
+// and every Melted puddle) is meshed into its own `molten` surface: smooth
+// per-vertex normals over subdivided faces, rendered by a seamless glossy
+// material (game.ts) — no sub-brick seams, no stud texture, real specular
+// and env reflections that follow the curvature. Zero idle cost: when
+// nothing melts the surface is empty and no mesh is created. All of it is
+// computed at meshing time; the per-frame cost is only the triangles of
+// geometry that already existed.
+// ---------------------------------------------------------------------------
+const MOLTEN_MIN = 0.125; // = melt stage 1 (fireState remeshes on stage change)
+
+// UV of a tile's centre: molten plastic samples ONE texel of its source
+// block's top tile (between the studs = the brick's plain colour), so the
+// atlas detail (seams, studs, bevel) never prints onto the liquid.
+function tileCentreUV(tile: number): [number, number] {
+  const c = tile % ATLAS_COLS;
+  const r = Math.floor(tile / ATLAS_COLS);
+  return [(c + 0.5) / ATLAS_COLS, 1 - (r + 0.5) / ATLAS_ROWS];
+}
+
+// Quad with PER-VERTEX normals (smooth shading) and a single UV point.
+function pushQuadN(s: Surface, v: number[][], nrm: number[][], uv: readonly number[], shade: readonly number[], tint: readonly number[]) {
+  const order = shade[0] + shade[2] < shade[1] + shade[3] ? QUAD_ORDER_1 : QUAD_ORDER_0;
+  const tx = v[1][0] - v[0][0], ty = v[1][1] - v[0][1], tz = v[1][2] - v[0][2];
+  const inv = 1 / (Math.hypot(tx, ty, tz) || 1);
+  for (let k = 0; k < 6; k++) {
+    const i = order[k];
+    const vi = v[i], ni = nrm[i];
+    s.pos.push(vi[0], vi[1], vi[2]);
+    s.nor.push(ni[0], ni[1], ni[2]);
+    s.uv.push(uv[0], uv[1]);
+    const c = shade[i];
+    s.col.push(c * tint[0], c * tint[1], c * tint[2]);
+    s.tan.push(tx * inv, ty * inv, tz * inv, 1);
+  }
+}
+
+function norm3(a: number[]) {
+  const l = Math.hypot(a[0], a[1], a[2]) || 1;
+  a[0] /= l; a[1] /= l; a[2] /= l;
+  return a;
+}
+
+// Radial profile of a molten pool (rho 0 = centre, 1 = rim): a thick viscous
+// body that rolls over a rounded meniscus edge and feathers onto the ground.
+const BLOB_RHO = [0, 0.38, 0.68, 0.86, 0.96, 1.04];
+const BLOB_H = [1, 0.97, 0.87, 0.64, 0.3, 0.02];
+
+// A smooth molten blob: centre (cx, cz), base y, rim radius R(theta), peak
+// thickness H. Smooth normals from the radial slope. Top-facing only (it
+// always sits on a surface). K = angular segments.
+function emitBlob(s: Surface, cx: number, baseY: number, cz: number, R: (t: number) => number, H: number, K: number, uv: readonly number[], tint: readonly number[]) {
+  const rings = BLOB_RHO.length;
+  const P: number[][][] = [];
+  const N: number[][][] = [];
+  for (let k = 0; k <= K; k++) {
+    const th = (k / K) * Math.PI * 2;
+    const c = Math.cos(th), sn = Math.sin(th);
+    const rad = R(th);
+    const pr: number[][] = [], nr: number[][] = [];
+    for (let r = 0; r < rings; r++) {
+      const rho = BLOB_RHO[r];
+      pr.push([cx + c * rad * rho, baseY + H * BLOB_H[r], cz + sn * rad * rho]);
+      // radial slope dy/dr from the neighbouring rings
+      const r0 = Math.max(0, r - 1), r1 = Math.min(rings - 1, r + 1);
+      const dy = H * (BLOB_H[r1] - BLOB_H[r0]);
+      const dr = rad * (BLOB_RHO[r1] - BLOB_RHO[r0]) || 1;
+      const sl = dy / dr;
+      nr.push(norm3([-sl * c, 1, -sl * sn]));
+    }
+    P.push(pr); N.push(nr);
+  }
+  const shade = [1, 1, 1, 1];
+  for (let k = 0; k < K; k++) {
+    for (let r = 0; r < rings - 1; r++) {
+      // clockwise in (x, z) seen from above = front face (see FACES top)
+      pushQuadN(s, [P[k + 1][r], P[k + 1][r + 1], P[k][r + 1], P[k][r]], [N[k + 1][r], N[k + 1][r + 1], N[k][r + 1], N[k][r]], uv, shade, tint);
+    }
+  }
+}
+
 // v4.16.1 FUSION: how far the block at (bx,by,bz) SETTLES because its
 // support liquefied — the drop of the top surface of whatever is below
 // it. A puddle's surface sits ~0.19 above the bottom of the melted
@@ -284,6 +367,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
   const glass = empty();
   const water = empty();
   const plant = empty();
+  const molten = empty(); // v4.16.1 pass 2: liquid plastic (own glossy, seamless material)
   // v4.15: heat emitters seen in this chunk (campfires; lava with air above) —
   // game.ts registers them in fireState so the fire tick never scans the world.
   const emitters: string[] = [];
@@ -349,6 +433,171 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
     const corner = s1 && s2 ? 1 : occludes(world.get(bx + ax + dx, by + ay + dy, bz + az + dz));
     const level = s1 && s2 ? 0 : 3 - (s1 + s2 + corner);
     return AO[level];
+  }
+
+  // ---- v4.16.1 realism pass 2 (Claude): a block past MOLTEN_MIN is meshed
+  // as a smooth liquid body instead of a deformed cube. Same corner model as
+  // the FUSION pass (cTop / cBot / cShared / cDrip computed from the cells
+  // sharing each vertical edge), so neighbours still weld watertight; on top
+  // of it: subdivided faces, a domed top (surface tension), shoulders whose
+  // normals roll into the sides, a sagging belly, a spread foot and drip
+  // lobes — all with smooth normals for the glossy molten material.
+  const MG = detail ? 4 : 2;
+  const occ = (nid: number) => {
+    const n = def(nid);
+    return n.solid && !n.glass && !isPartialLego(nid, n);
+  };
+  const cross = (a: number[], b: number[]) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const sub = (a: number[], b: number[]) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const SIDES = [
+    { fi: 0, n: [1, 0, 0], d: [1, 0, 0], a: 3, b: 1 },
+    { fi: 1, n: [-1, 0, 0], d: [-1, 0, 0], a: 0, b: 2 },
+    { fi: 4, n: [0, 0, 1], d: [0, 0, 1], a: 2, b: 3 },
+    { fi: 5, n: [0, 0, -1], d: [0, 0, -1], a: 1, b: 0 },
+  ];
+  function sideEdge(si: number, k: number) {
+    // top-grid index of point k along side si, in that face's vertex order
+    const G = MG + 1;
+    if (si === 0) return (MG - k) * G + MG; // +x: z from 1 to 0
+    if (si === 1) return k * G; // -x: z from 0 to 1
+    if (si === 2) return MG * G + k; // +z: x from 0 to 1
+    return MG - k; // -z: x from 1 to 0
+  }
+  function emitMoltenBlock(
+    x: number, y: number, z: number, id: number, melt: number, studSink: number, h0: number, jit: number,
+    cTop: number[], cBot: number[], cShared: boolean[], cDrip: number[], tint: number[],
+  ) {
+    const uv = tileCentreUV(faceTile(id, 0));
+    const G = MG + 1;
+    const topHidden = occ(world.get(x, y + 1, z));
+    const fs = melt * 0.13; // foot spread
+    const TX: number[] = [], TZ: number[] = [], TY: number[] = [], BX: number[] = [], BZ: number[] = [], BY: number[] = [];
+    for (let ci = 0; ci < 4; ci++) {
+      const cx = ci & 1, cz = ci >> 1;
+      const pa = cShared[ci] ? 0 : melt * 0.3; // free shoulders pull in; fused corners stay wide
+      TX[ci] = x + cx + (0.5 - cx) * pa;
+      TZ[ci] = z + cz + (0.5 - cz) * pa;
+      TY[ci] = y + 1 - cTop[ci];
+      const f = cShared[ci] ? 0 : fs;
+      BX[ci] = x + cx + (cx ? f : -f);
+      BZ[ci] = z + cz + (cz ? f : -f);
+      BY[ci] = y - cBot[ci];
+    }
+    // Top grid: bilinear over the 4 corners (identical along shared edges =
+    // watertight) + a dome and lumps that vanish on the edges.
+    const domeAmp = topHidden ? 0 : 0.42 * melt * (1 - 0.75 * melt);
+    const lumpAmp = topHidden ? 0 : 0.05 * melt;
+    const tp: number[][] = new Array(G * G);
+    for (let j = 0; j <= MG; j++) {
+      for (let i = 0; i <= MG; i++) {
+        const s = i / MG, t = j / MG;
+        const w0 = (1 - s) * (1 - t), w1 = s * (1 - t), w2 = (1 - s) * t, w3 = s * t;
+        const px = w0 * TX[0] + w1 * TX[1] + w2 * TX[2] + w3 * TX[3];
+        const pz = w0 * TZ[0] + w1 * TZ[1] + w2 * TZ[2] + w3 * TZ[3];
+        const bump = 16 * s * (1 - s) * t * (1 - t);
+        const lumps = 0.6 * Math.sin(px * 5.3 + pz * 2.1 + h0 * 6.283) + 0.4 * Math.sin(pz * 4.7 - px * 3.1);
+        const py = w0 * TY[0] + w1 * TY[1] + w2 * TY[2] + w3 * TY[3] + bump * (domeAmp + lumpAmp * lumps);
+        tp[j * G + i] = [px, py, pz];
+      }
+    }
+    const tn: number[][] = new Array(G * G);
+    for (let j = 0; j <= MG; j++) {
+      for (let i = 0; i <= MG; i++) {
+        const ds = sub(tp[j * G + Math.min(MG, i + 1)], tp[j * G + Math.max(0, i - 1)]);
+        const dt = sub(tp[Math.min(MG, j + 1) * G + i], tp[Math.max(0, j - 1) * G + i]);
+        tn[j * G + i] = norm3(cross(dt, ds));
+      }
+    }
+    // Rounded shoulders: on every exposed side, the top rim normal rolls
+    // over toward the side normal — the edge shades round, not creased.
+    const exposed = SIDES.map((sd) => !occ(world.get(x + sd.d[0], y, z + sd.d[2])));
+    const roll = 0.35 + 0.9 * melt;
+    for (let si = 0; si < 4; si++) {
+      if (!exposed[si]) continue;
+      for (let k = 0; k <= MG; k++) {
+        const v = tn[sideEdge(si, k)];
+        const sn = SIDES[si].n;
+        tn[sideEdge(si, k)] = norm3([v[0] + sn[0] * roll, v[1], v[2] + sn[2] * roll]);
+      }
+    }
+    const tintAt = (f: number) => [tint[0] * f, tint[1] * f, tint[2] * f];
+    // ---- top
+    if (!topHidden) {
+      const fv = FACES[2].v; // (x0,z1) (x1,z1) (x1,z0) (x0,z0)
+      const S01 = shadeAt(x, y, z, 0, 1, 0, fv[0][0], fv[0][1], fv[0][2]);
+      const S11 = shadeAt(x, y, z, 0, 1, 0, fv[1][0], fv[1][1], fv[1][2]);
+      const S10 = shadeAt(x, y, z, 0, 1, 0, fv[2][0], fv[2][1], fv[2][2]);
+      const S00 = shadeAt(x, y, z, 0, 1, 0, fv[3][0], fv[3][1], fv[3][2]);
+      const sh = (s: number, t: number) => jit * ((1 - s) * (1 - t) * S00 + s * (1 - t) * S10 + (1 - s) * t * S01 + s * t * S11);
+      const tt = tintAt(1);
+      for (let j = 0; j < MG; j++) {
+        for (let i = 0; i < MG; i++) {
+          const a = j * G + i, b = j * G + i + 1, c = (j + 1) * G + i + 1, d = (j + 1) * G + i;
+          const s0 = i / MG, s1 = (i + 1) / MG, t0 = j / MG, t1 = (j + 1) / MG;
+          pushQuadN(molten, [tp[d], tp[c], tp[b], tp[a]], [tn[d], tn[c], tn[b], tn[a]], uv, [sh(s0, t1), sh(s1, t1), sh(s1, t0), sh(s0, t0)], tt);
+        }
+      }
+      if (fancy && melt < 0.7) addStud(opaque, x, y, z, faceTile(id, 0), jit, studSink, 1 - melt * 0.9);
+    }
+    // ---- sides: rows from the (dripping, spread) foot to the top rim
+    const RR = 3;
+    for (let si = 0; si < 4; si++) {
+      if (!exposed[si]) continue;
+      const sd = SIDES[si];
+      const fv = FACES[sd.fi].v;
+      const sv = [0, 1, 2, 3].map((q) => shadeAt(x, y, z, sd.n[0], sd.n[1], sd.n[2], fv[q][0], fv[q][1], fv[q][2]));
+      const phase = h0 * 6.283 + si * 1.7;
+      const P: number[][][] = [];
+      for (let k = 0; k <= MG; k++) {
+        const u = k / MG;
+        const su = Math.sin(Math.PI * u);
+        const lobe = Math.max(0, Math.sin(u * 3 * Math.PI + phase));
+        const drip = (cDrip[sd.a] + (cDrip[sd.b] - cDrip[sd.a]) * u) * (1 + 1.4 * lobe * lobe * su);
+        const B = [
+          BX[sd.a] + (BX[sd.b] - BX[sd.a]) * u + sd.n[0] * fs * 0.5 * su,
+          BY[sd.a] + (BY[sd.b] - BY[sd.a]) * u - drip,
+          BZ[sd.a] + (BZ[sd.b] - BZ[sd.a]) * u + sd.n[2] * fs * 0.5 * su,
+        ];
+        const T = tp[sideEdge(si, k)];
+        const col: number[][] = [];
+        for (let r = 0; r <= RR; r++) {
+          const rr = r / RR;
+          const belly = melt * 0.11 * Math.sin(Math.PI * rr) * (1 - 0.3 * rr) * su;
+          col.push([
+            B[0] + (T[0] - B[0]) * rr + sd.n[0] * belly,
+            B[1] + (T[1] - B[1]) * rr,
+            B[2] + (T[2] - B[2]) * rr + sd.n[2] * belly,
+          ]);
+        }
+        P.push(col);
+      }
+      const N: number[][][] = [];
+      for (let k = 0; k <= MG; k++) {
+        const nc: number[][] = [];
+        for (let r = 0; r <= RR; r++) {
+          if (r === RR) { nc.push(tn[sideEdge(si, k)]); continue; } // weld to the rolled shoulder
+          const dU = sub(P[Math.min(MG, k + 1)][r], P[Math.max(0, k - 1)][r]);
+          const dR = sub(P[k][Math.min(RR, r + 1)], P[k][Math.max(0, r - 1)]);
+          nc.push(norm3(cross(dU, dR)));
+        }
+        N.push(nc);
+      }
+      const sh = (u: number, rr: number) => jit * ((sv[0] + (sv[1] - sv[0]) * u) * (1 - rr) + (sv[3] + (sv[2] - sv[3]) * u) * rr);
+      for (let k = 0; k < MG; k++) {
+        for (let r = 0; r < RR; r++) {
+          const u0 = k / MG, u1 = (k + 1) / MG, r0 = r / RR, r1 = (r + 1) / RR;
+          // char pools low: the foot of the mass is a touch darker
+          const tt = tintAt(1 - 0.12 * (1 - (r0 + r1) / 2) * melt);
+          pushQuadN(molten, [P[k][r], P[k + 1][r], P[k + 1][r + 1], P[k][r + 1]], [N[k][r], N[k + 1][r], N[k + 1][r + 1], N[k][r + 1]], uv, [sh(u0, r0), sh(u1, r0), sh(u1, r1), sh(u0, r1)], tt);
+        }
+      }
+    }
+    // ---- bottom (only when it can be seen)
+    if (!occ(world.get(x, y - 1, z))) {
+      const dn = [0, -1, 0];
+      const q = [0, 1, 3, 2].map((ci) => [BX[ci], BY[ci], BZ[ci]]);
+      pushQuadN(molten, q, [dn, dn, dn, dn], uv, [jit, jit, jit, jit], tintAt(0.85));
+    }
   }
 
   for (let lz = 0; lz < CS; lz++) {
@@ -422,7 +671,6 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
             // thin drip tongue that ran off one side.
             const ph = hashBlock(x, y, z);
             const ox = (ph - 0.5) * 0.12, oz = ((ph * 7.3) % 1 - 0.5) * 0.12;
-            const hBase = 0.08 + ph * 0.05;
             // v4.16.1 FUSION (Philippe's law — no stacked plates, no
             // voids): a puddle with puddles BELOW it is the same pool,
             // not a separate plate floating in its own cell — the whole
@@ -430,36 +678,44 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
             let pudSink = 0;
             while (pudSink < 3 && world.get(x, y - 1 - pudSink, z) === ID.Melted) pudSink++;
             const py = y - pudSink * 0.8;
-            addBoxT(opaque, x - 0.14 + ox, py, z - 0.14 + oz, x + 1.14 + ox, py + hBase, z + 1.14 + oz, pSide, pTop, pSide, PUDDLE_CHAR);
-            addBoxT(opaque, x - 0.03 - ox, py + hBase, z - 0.03 - oz, x + 1.03 - ox, py + hBase + 0.05, z + 1.03 - oz, pSide, pTop, pSide, PUDDLE_CHAR);
-            addBoxT(opaque, x + 0.1 + oz, py + hBase + 0.05, z + 0.2 - ox, x + 0.84 + oz, py + hBase + 0.1, z + 0.88 - ox, pSide, pTop, pSide, PUDDLE_CHAR);
-            // FUSION, horizontal: neighbouring puddles are ONE pool —
-            // a bridge sheet crosses each shared boundary at this
-            // cell's sheet height (the neighbour draws its own from its
-            // side; the tiny height delta reads as liquid thickness,
-            // never as a seam or a gap between two pools).
-            const hBridge = hBase + 0.05;
-            if (world.get(x + 1, y, z) === ID.Melted) addBoxT(opaque, x + 0.45, py, z + 0.22 + oz, x + 1.55, py + hBridge, z + 0.78 + oz, pSide, pTop, pSide, PUDDLE_CHAR);
-            if (world.get(x - 1, y, z) === ID.Melted) addBoxT(opaque, x - 0.55, py, z + 0.22 + oz, x + 0.55, py + hBridge, z + 0.78 + oz, pSide, pTop, pSide, PUDDLE_CHAR);
-            if (world.get(x, y, z + 1) === ID.Melted) addBoxT(opaque, x + 0.22 + ox, py, z + 0.45, x + 0.78 + ox, py + hBridge, z + 1.55, pSide, pTop, pSide, PUDDLE_CHAR);
-            if (world.get(x, y, z - 1) === ID.Melted) addBoxT(opaque, x + 0.22 + ox, py, z - 0.55, x + 0.78 + ox, py + hBridge, z + 0.45, pSide, pTop, pSide, PUDDLE_CHAR);
+            // v4.16.1 realism pass 2 (Claude): the pool is a smooth
+            // viscous BLOB, not stacked boxes — organic rim (3 hashed
+            // harmonics), thick rounded body, meniscus edge feathering
+            // onto the ground, smooth normals for a real wet highlight.
+            // FUSION, horizontal: toward each Melted neighbour the rim
+            // swells past the shared boundary, so neighbouring blobs
+            // overlap into ONE continuous pool (no bridges, no seams).
+            void pTop; void pSide;
+            const uv = tileCentreUV(faceTile(src, 0));
+            const nE = world.get(x + 1, y, z) === ID.Melted, nW = world.get(x - 1, y, z) === ID.Melted;
+            const nS = world.get(x, y, z + 1) === ID.Melted, nN = world.get(x, y, z - 1) === ID.Melted;
+            const p1 = ph * 6.283, p2 = ((ph * 13.7) % 1) * 6.283, p3 = ((ph * 29.3) % 1) * 6.283;
+            const lobe = (th: number, a: number) => { const c = Math.cos(th - a); return c > 0 ? c * c * c * c : 0; };
+            const R = (th: number) =>
+              0.7 + 0.08 * Math.sin(2 * th + p1) + 0.05 * Math.sin(3 * th + p2) + 0.03 * Math.sin(5 * th + p3) +
+              (nE ? 0.42 * lobe(th, 0) : 0) + (nS ? 0.42 * lobe(th, Math.PI / 2) : 0) +
+              (nW ? 0.42 * lobe(th, Math.PI) : 0) + (nN ? 0.42 * lobe(th, -Math.PI / 2) : 0);
+            const K = detail ? 18 : 10;
+            emitBlob(molten, x + 0.5 + ox, py, z + 0.5 + oz, R, 0.12 + ph * 0.06, K, uv, PUDDLE_CHAR);
             // Satellites + drip tongue live only on the pool's outer
             // perimeter (ground layer, toward a non-puddle cell) —
             // inside a merged pool they would read as separate plates.
             if (pudSink === 0) {
               // A detached splat droplet beside the pool — liquid throws
-              // satellites; perfect rectangles read as plates, splats don't.
-              if (world.get(ph > 0.5 ? x + 1 : x - 1, y, z) !== ID.Melted) {
-                const sx = x + (ph > 0.5 ? 1.22 : -0.3) + ox, sz = z + ((ph * 3.1) % 1) * 0.5 + oz;
-                addBoxT(opaque, sx, y, sz, sx + 0.24, y + 0.045, sz + 0.2, pSide, pTop, pSide, PUDDLE_CHAR);
+              // satellites.
+              if (!(ph > 0.5 ? nE : nW)) {
+                const sx = x + (ph > 0.5 ? 1.28 : -0.28) + ox, sz = z + 0.25 + ((ph * 3.1) % 1) * 0.5 + oz;
+                const r0 = 0.1 + ((ph * 5.9) % 1) * 0.06;
+                emitBlob(molten, sx, y, sz, (th) => r0 * (1 + 0.18 * Math.sin(3 * th + p2)), 0.045, 8, uv, PUDDLE_CHAR);
               }
+              // A tongue that ran off one side: an elongated blob
+              // reaching out from the rim.
               const dir = Math.floor(ph * 4) % 4;
-              const tongueCell = dir === 0 ? world.get(x, y, z - 1) : dir === 1 ? world.get(x + 1, y, z) : dir === 2 ? world.get(x, y, z + 1) : world.get(x - 1, y, z);
-              if (tongueCell !== ID.Melted) {
-                if (dir === 0) addBoxT(opaque, x + 0.3, y, z - 0.48, x + 0.7, y + 0.045, z + 0.1, pSide, pTop, pSide, PUDDLE_CHAR);
-                else if (dir === 1) addBoxT(opaque, x + 0.9, y, z + 0.3, x + 1.48, y + 0.045, z + 0.7, pSide, pTop, pSide, PUDDLE_CHAR);
-                else if (dir === 2) addBoxT(opaque, x + 0.3, y, z + 0.9, x + 0.7, y + 0.045, z + 1.48, pSide, pTop, pSide, PUDDLE_CHAR);
-                else addBoxT(opaque, x - 0.48, y, z + 0.3, x + 0.1, y + 0.045, z + 0.7, pSide, pTop, pSide, PUDDLE_CHAR);
+              const open = dir === 0 ? !nN : dir === 1 ? !nE : dir === 2 ? !nS : !nW;
+              if (open) {
+                const a = dir === 0 ? -Math.PI / 2 : dir === 1 ? 0 : dir === 2 ? Math.PI / 2 : Math.PI;
+                const tx = x + 0.5 + ox + Math.cos(a) * 0.62, tz = z + 0.5 + oz + Math.sin(a) * 0.62;
+                emitBlob(molten, tx, y, tz, (th) => 0.14 + 0.3 * lobe(th, a) * (1 + 0.15 * Math.sin(th * 4 + p3)), 0.055, 12, uv, PUDDLE_CHAR);
               }
             }
           } else if (self.slab) {
@@ -784,6 +1040,10 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
           scratchTint[1] *= dk * (1 - ch * 0.96);
           scratchTint[2] *= dk * (1 - ch * 0.97);
         }
+        if (fused && melt >= MOLTEN_MIN) {
+          emitMoltenBlock(x, y, z, id, melt, sinkSelf + sag + 0.16 * melt * melt, h0, jit, cTop!, cBot!, cShared!, cDrip!, scratchTint);
+          continue;
+        }
 
         for (let fi = 0; fi < 6; fi++) {
           const face = FACES[fi];
@@ -856,5 +1116,5 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
     }
   }
 
-  return { opaque, glass, water, plant, emitters };
+  return { opaque, glass, water, plant, molten, emitters };
 }
