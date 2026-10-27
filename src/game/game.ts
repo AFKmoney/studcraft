@@ -997,10 +997,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     map: atlas,
     roughness: 0.42,
     metalness: 0.0,
-    clearcoat: 0.85,
-    clearcoatRoughness: 0.1,
+    clearcoat: 0.6,
+    clearcoatRoughness: 0.14,
     vertexColors: true,
-    envMapIntensity: 1.0,
+    // tuned down: at grazing angles a full-strength sky reflection turned
+    // the charcoal pools grey — char must read BLACK (Philippe's law)
+    envMapIntensity: 0.55,
   });
   const moltenLam = new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true });
   let moltenMat: THREE.Material = settings.realistic ? moltenStd : moltenLam;
