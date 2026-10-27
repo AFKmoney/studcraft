@@ -1018,35 +1018,116 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   const moltenize = (mat: THREE.Material, key: string) => {
     mat.onBeforeCompile = (shader) => {
       shader.vertexShader = shader.vertexShader
-        .replace("#include <common>", "#include <common>\n#ifndef USE_TANGENT\nattribute vec4 tangent;\n#endif\nvarying vec4 vMolB;\nvarying float vMolC;")
-        .replace("#include <begin_vertex>", "#include <begin_vertex>\nvMolB = tangent;\nvMolC = uv.x;");
+        .replace("#include <common>", "#include <common>\n#ifndef USE_TANGENT\nattribute vec4 tangent;\n#endif\nvarying vec4 vMolB;\nvarying vec2 vMolU;\nvarying vec3 vMolW;")
+        .replace("#include <begin_vertex>", "#include <begin_vertex>\nvMolB = tangent;\nvMolU = uv;\nvMolW = (modelMatrix * vec4(transformed, 1.0)).xyz;");
       shader.fragmentShader = shader.fragmentShader
         .replace(
           "#include <common>",
           `#include <common>
 varying vec4 vMolB;
-varying float vMolC;
+varying vec2 vMolU;
+varying vec3 vMolW;
 vec3 molChar(vec3 base, float c) {
   float k = clamp(c, 0.0, 1.0);
   float brown = max(0.0, 1.0 - abs(k - 0.45) / 0.35) * 0.65;
   float blk = k * k * (3.0 - 2.0 * k);
   vec3 col = base * (1.0 - brown) + base * vec3(0.42, 0.26, 0.15) * 1.6 * brown;
   return col * (1.0 - k * 0.3) * (1.0 - blk * vec3(0.94, 0.955, 0.97));
-}`,
+}
+// SRN micro-relief of hot plastic (world space, per pixel — independent of
+// the mesh resolution): irregular sag wrinkles across the faces, warped flow
+// streaks, and sparse blisters; all grow with the melt.
+// hash without sine (stable at large world coordinates — sin-based hashes
+// lose precision there and turn into pixel snow): lattice wrapped mod 289
+float molHash(vec3 p) {
+  p = mod(p, 289.0);
+  p = fract(p * 0.1031);
+  p += dot(p, p.zyx + 31.32);
+  return fract((p.x + p.y) * p.z);
+}
+float molNoise(vec3 p) {
+  vec3 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(molHash(i), molHash(i + vec3(1, 0, 0)), f.x), mix(molHash(i + vec3(0, 1, 0)), molHash(i + vec3(1, 1, 0)), f.x), f.y),
+             mix(mix(molHash(i + vec3(0, 0, 1)), molHash(i + vec3(1, 0, 1)), f.x), mix(molHash(i + vec3(0, 1, 1)), molHash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+}
+float molFolds(vec3 w) {
+  float n = molNoise(w * 2.7);
+  float a = molNoise(w * 4.1 + 17.0);
+  return sin(w.y * (24.0 + 16.0 * n) + 7.0 * a) * smoothstep(0.25, 0.75, molNoise(w * 1.9 + 5.0));
+}
+float molFlow(vec3 w) { return sin((w.x * 0.8 + w.z * 0.6) * 31.0 + 5.0 * molNoise(w * vec3(3.0, 1.2, 3.0))) * molNoise(w * 4.0 + 3.0); }
+float molPits(vec3 w) { return smoothstep(0.68, 0.88, molNoise(w * 7.0)); }
+// band-limited (SRN Nyquist rule): each term fades out before its features
+// get smaller than ~3 pixels, so distance or a low render scale never turns
+// the relief into pixel snow. px = world size of one pixel here.
+float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength * 0.12, wavelength * 0.33, px); }`,
         )
         .replace(
           "#include <color_fragment>",
           `#if defined( USE_COLOR ) || defined( USE_COLOR_ALPHA )
   float molS = vMolB.a;
   float molW = max(fwidth(molS), 1e-4);
-  diffuseColor.rgb *= molChar(mix(vMolB.rgb, vColor.rgb, smoothstep(-molW, molW, molS)), vMolC);
+  vec3 molBase = mix(vMolB.rgb, vColor.rgb, smoothstep(-molW, molW, molS));
+  float molM = clamp(vMolU.x / 0.9, 0.0, 1.0);
+  // the brick is still a LEGO brick while it softens: course seams (at 1/3
+  // and 2/3 of its slumped height, so they droop with it) and staggered
+  // vertical joints, crisp per pixel, fading out as it liquefies
+  vec3 molWN = normalize((vec4(vNormal, 0.0) * viewMatrix).xyz);
+  float molSeamA = (1.0 - smoothstep(0.12, 0.6, molM)) * (1.0 - smoothstep(0.55, 0.85, abs(molWN.y)));
+  float molFy = vMolU.y * 3.0;
+  float molLy = 1.0 - smoothstep(0.6, 1.6, abs(fract(molFy + 0.5) - 0.5) / max(fwidth(molFy), 1e-4));
+  float molOff = mod(floor(molFy), 2.0) * 0.5;
+  float molUx = vMolW.x * 2.0 + molOff, molUz = vMolW.z * 2.0 + molOff;
+  float molJx = 1.0 - smoothstep(0.6, 1.6, abs(fract(molUx + 0.5) - 0.5) / max(fwidth(molUx), 1e-4));
+  float molJz = 1.0 - smoothstep(0.6, 1.6, abs(fract(molUz + 0.5) - 0.5) / max(fwidth(molUz), 1e-4));
+  // joints follow the face's dominant horizontal axis only (no diamond grid on slopes)
+  float molJ = abs(molWN.z) > abs(molWN.x) ? molJx * smoothstep(0.35, 0.6, abs(molWN.z)) : molJz * smoothstep(0.35, 0.6, abs(molWN.x));
+  float molSeam = molSeamA * max(molLy, molJ * step(0.02, vMolU.y) * step(vMolU.y, 0.98));
+  // creases of the folds hold soot, pits are dark, char comes in speckles
+  float molPx = length(fwidth(vMolW));
+  float molF = molFolds(vMolW) * molBand(0.24, molPx);
+  float molCrease = molM * smoothstep(0.3, 0.95, -molF) * 0.12;
+  float molSpeck = smoothstep(0.35, 0.8, molM) * molPits(vMolW * 0.7 + 11.0) * 0.6 * molBand(0.2, molPx);
+  float molCh = clamp(vMolU.x + molSpeck * 0.35 + molCrease * 0.6, 0.0, 1.0);
+  diffuseColor.rgb *= molChar(molBase, molCh) * (1.0 - 0.42 * molSeam) * (1.0 - molCrease);
 #endif`,
+        )
+        .replace(
+          "#include <roughnessmap_fragment>",
+          `#include <roughnessmap_fragment>
+  // hot plastic is wetter (sharper highlights) than the cold brick, with
+  // streaks of gloss along the flow
+  roughnessFactor *= mix(1.0, 0.55 + 0.25 * (0.5 + 0.5 * molFlow(vMolW) * molBand(0.2, length(fwidth(vMolW)))), clamp(vMolU.x / 0.9, 0.0, 1.0));`,
+        )
+        .replace(
+          "#include <normal_fragment_maps>",
+          `#include <normal_fragment_maps>
+  {
+    // relief normals from the ANALYTIC world-space gradient of the wrinkle
+    // and flow waves (the slow noise that warps them is treated as locally
+    // constant): continuous per pixel — screen-space derivative bumps step
+    // in 2×2 blocks and read as a checkerboard
+    float molM2 = clamp(vMolU.x / 0.9, 0.0, 1.0);
+    float molPx2 = length(fwidth(vMolW));
+    vec3 w = vMolW;
+    float kf = 24.0 + 16.0 * molNoise(w * 2.7);
+    float pf = w.y * kf + 7.0 * molNoise(w * 4.1 + 17.0);
+    float ef = smoothstep(0.25, 0.75, molNoise(w * 1.9 + 5.0)) * molBand(0.24, molPx2);
+    vec3 g = vec3(0.0, cos(pf) * ef * 0.6, 0.0);
+    float pl = (w.x * 0.8 + w.z * 0.6) * 31.0 + 5.0 * molNoise(w * vec3(3.0, 1.2, 3.0));
+    float el = molNoise(w * 4.0 + 3.0) * molBand(0.2, molPx2) * 0.35;
+    g += vec3(0.8, 0.0, 0.6) * cos(pl) * el;
+    // slope up to ~0.6 at full melt: visible wrinkles, still a liquid surface
+    vec3 gv = (viewMatrix * vec4(g * (0.2 + 0.4 * molM2) * molM2, 0.0)).xyz;
+    normal = normalize(normal - (gv - dot(gv, normal) * normal));
+  }`,
         );
     };
     mat.customProgramCacheKey = () => key;
   };
-  moltenize(moltenStd, "molten-v417-std");
-  moltenize(moltenLam, "molten-v417-lam");
+  moltenize(moltenStd, "molten-v417g-std");
+  moltenize(moltenLam, "molten-v417g-lam");
   let moltenMat: THREE.Material = settings.realistic ? moltenStd : moltenLam;
 
   const chunkRoot = new THREE.Group();

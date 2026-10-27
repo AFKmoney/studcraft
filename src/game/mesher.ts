@@ -573,6 +573,15 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
     }
     return d;
   }
+  /** Height of a point inside brick p's slumped body, 0 (foot) .. 1 (top):
+   *  the brick's LEGO courses are drawn at 1/3 and 2/3 of it in the shader,
+   *  so the seams stretch and droop with the sag instead of staying put. */
+  const matFrac = (p: Prim, px: number, py: number, pz: number) => {
+    if (p.k !== 1) return 0;
+    const ox = px - (p.x + 0.5), oz = pz - (p.z + 0.5);
+    const top = Math.min(p.y + 1, Math.max(p.ly + 0.06, p.top - p.tx * ox - p.tz * oz - p.ed * (ox * ox + oz * oz) * 4));
+    return Math.min(1, Math.max(0, (py - p.y) / Math.max(0.05, top - p.y)));
+  };
   /** distance to a molten prim's surface + the colour-marbling wobble */
   const mdist = (p: Prim, px: number, py: number, pz: number) =>
     primDist(p, px, py, pz) + 0.035 * Math.sin(9.1 * px + 5.3 * py + p.x * 1.7 + p.z * 2.3) * Math.sin(7.7 * pz - 4.1 * py + p.y * 1.3);
@@ -768,10 +777,10 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
         molten.pos.push(VP[i * 3], VP[i * 3 + 1], VP[i * 3 + 2]);
         molten.nor.push(VN[i * 3], VN[i * 3 + 1], VN[i * 3 + 2]);
         // molten vertex layout (read by game.ts moltenize): color = brick A,
-        // tangent = (brick B, dB − dA), uv.x = char amount
+        // tangent = (brick B, dB − dA), uv = (char amount, brick A's material height)
         molten.col.push(cA[0], cA[1], cA[2]);
         molten.tan.push(cB[0], cB[1], cB[2], pA && pB ? dAt(i, pB) - dAt(i, pA) : 1);
-        molten.uv.push(VC[i], 0);
+        molten.uv.push(VC[i], pA ? matFrac(pA, VP[i * 3], VP[i * 3 + 1], VP[i * 3 + 2]) : 0);
       }
     };
     for (const key of domain) {
