@@ -139,7 +139,7 @@ function addBoxT(s: Surface, x0: number, y0: number, z0: number, x1: number, y1:
 const PUDDLE_CHAR: readonly number[] = [0.05, 0.04, 0.035];
 // v4.16.1 pass 2: the thin cooling rim of a pool stays scorched brown with a
 // trace of the source colour (multiplied by the brick's own texel).
-const PUDDLE_RIM: readonly number[] = [0.2, 0.12, 0.07];
+const PUDDLE_RIM: readonly number[] = [0.12, 0.075, 0.045];
 
 // ---------------------------------------------------------------------------
 // v4.16.1 realism pass 2 (Claude) — MOLTEN SURFACE.
@@ -242,7 +242,7 @@ function emitBlob(s: Surface, cx: number, baseY: number, cz: number, R: (t: numb
   const shade = [1, 1, 1, 1];
   // charred black body, the thin rim cooler: a scorched-brown edge
   const ringTint = BLOB_RHO.map((rho) => {
-    const w = Math.max(0, Math.min(1, (rho - 0.7) / 0.3));
+    const w = Math.max(0, Math.min(1, (rho - 0.9) / 0.14)); // a thin cooling edge only
     return [tint[0] + (rim[0] - tint[0]) * w, tint[1] + (rim[1] - tint[1]) * w, tint[2] + (rim[2] - tint[2]) * w];
   });
   for (let k = 0; k < K; k++) {
