@@ -2030,6 +2030,12 @@ Covered in their own sections above: the Gemini rescue push (`b8df1b7`, registry
 
 ---
 
+### v4.15 follow-up — fire scope law + registry audit (same evening)
+- **Philippe's scope law:** melting applies ONLY to blocks that would really melt/burn in a real fire — never sand, rocks, stone, dirt, metal or glass. The v4.15 design already hard-excludes those (`NEVER_HEAT`); to prove no intruder slipped in, an `auditFire` QA hook (this push) runs the real `isPlastic`/`flamOf` code over the whole block registry. Audit results + any fixes land here before the builds.
+- **Visual QA status (honest):** the mechanics are proven numerically (qa75b: ignition ok, 2 sustained fires, melt 0 → 0.35 monotonic through two remesh stages, 0 page errors). The photo runs keep dying on Muse's test rig itself, not in the game — Playwright screenshots time out under VM load and the renderer crashed twice right after a canvas readback (qa75c/qa75d). Method v3 (qa75e: full chunk plateau before any mutation, no canvas readback, long-timeout screenshots) is in flight. Philippe's A54/PC remains the visual verdict, as always.
+
+---
+
 ## NEXT MOVE CLAIMED (Muse) — finish v4.15, then the physics layer
 
 1. **v4.15 close-out:** QA verdict → builds (APK vc37/4.15, Windows Setup 4.15.0, portable, folder zip, web zip, bundle — Drive, MD5-verified) → GitHub Release v4.15 → delivery message WITH the Unblock step.

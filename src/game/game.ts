@@ -226,6 +226,7 @@ declare global {
       burn?: (x: number, y: number, z: number) => boolean;
       meltOf?: (x: number, y: number, z: number) => number;
       fireCount?: () => number;
+      auditFire?: () => { melt: string[]; burn: string[] };
       getTarget?: () => string;
       spawnMob?: (kind: string, dx?: number, dz?: number) => boolean;
       getPeers?: () => { name: string; x: number; y: number; z: number }[];
@@ -9788,6 +9789,16 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     burn: (x: number, y: number, z: number) => startBurning(Math.floor(x), Math.floor(y), Math.floor(z)),
     meltOf: (x: number, y: number, z: number) => FS.meltAt(Math.floor(x), Math.floor(y), Math.floor(z)),
     fireCount: () => FS.fireCells.size + FS.burningMap.size,
+    auditFire: () => {
+      const melt: string[] = [], burn: string[] = [];
+      for (let id = 1; id < 512; id++) {
+        const d = def(id);
+        if (!d || !d.solid) continue;
+        if (isPlastic(id)) melt.push(id + ":" + (d.name || "?"));
+        else if (flamOf(id) > 0) burn.push(id + ":" + (d.name || "?"));
+      }
+      return { melt, burn };
+    },
     getTarget: () => hud.targetName,
     getHamlet: () => {
       const site = world.nearestHamlet(player.x, player.z, 4);
