@@ -475,9 +475,22 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
   // normals roll into the sides, a sagging belly, a spread foot and drip
   // lobes — all with smooth normals for the glossy molten material.
   const MG = detail ? 4 : 2;
+  // A puddle (Melted) is a low liquid sheet, NOT a full cube: it never
+  // hides a neighbour's face (v4.16.1 see-through fix).
   const occ = (nid: number) => {
+    if (nid === ID.Melted) return false;
     const n = def(nid);
     return n.solid && !n.glass && !isPartialLego(nid, n);
+  };
+  // v4.16.1 see-through fix (Philippe: « bugs de briques transparentes sur
+  // les côtés »): a neighbour that is melting, settling onto a melt, or is a
+  // puddle no longer fills its cube — it must not cull this block's face,
+  // or the gap it leaves shows straight through the wall.
+  const meltActive = heatMap.size > 0 || puddleSrc.size > 0;
+  const deformsAt = (x: number, y: number, z: number, nid: number) => {
+    if (nid === ID.Melted) return true;
+    if (!meltActive) return false;
+    return meltAt(x, y, z) > 0 || sinkOf(world, x, y, z) > 0;
   };
   const cross = (a: number[], b: number[]) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
   const sub = (a: number[], b: number[]) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -502,11 +515,17 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
     const uv = tileCentreUV(faceTile(id, 0));
     const G = MG + 1;
     const topHidden = occ(world.get(x, y + 1, z));
-    const fs = melt * 0.13; // foot spread
+    // Liquid behaviour: on solid ground the foot runs out wide; sitting on
+    // a melt below, it sinks into it instead of overhanging (no mushroom).
+    const belowId = world.get(x, y - 1, z);
+    const belowMolten = belowId === ID.Melted || meltAt(x, y - 1, z) >= MOLTEN_MIN;
+    const fs = melt * (belowMolten ? 0.06 : 0.24); // foot spread
     const TX: number[] = [], TZ: number[] = [], TY: number[] = [], BX: number[] = [], BZ: number[] = [], BY: number[] = [];
     for (let ci = 0; ci < 4; ci++) {
       const cx = ci & 1, cz = ci >> 1;
-      const pa = cShared[ci] ? 0 : melt * 0.3; // free shoulders pull in; fused corners stay wide
+      // free shoulders pull in; fused corners stay wide; a block that CARRIES
+      // something keeps its full top (otherwise the load overhangs it)
+      const pa = cShared[ci] || topHidden ? 0 : melt * 0.3;
       TX[ci] = x + cx + (0.5 - cx) * pa;
       TZ[ci] = z + cz + (0.5 - cz) * pa;
       TY[ci] = y + 1 - cTop[ci];
@@ -581,6 +600,18 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
         }
       }
       if (fancy && melt < 0.7) addStud(opaque, x, y, z, faceTile(id, 0), jit, studSink, 1 - melt * 0.9);
+      // Blisters: burning plastic boils — a few glossy bubbles swell on the
+      // molten surface (sit ON it, sampled from the same top grid).
+      if (detail && melt > 0.25 && melt < 0.93) {
+        const nb = 2 + Math.floor(h0 * 2.99);
+        for (let bi = 0; bi < nb; bi++) {
+          const hb = hashBlock(x * 3 + bi, y * 7 + bi * 13, z * 5 - bi);
+          const fi = 1 + Math.floor(hb * (MG - 1) * 0.999), fj = 1 + Math.floor(((hb * 7.7) % 1) * (MG - 1) * 0.999);
+          const pc = tp[fj * G + fi];
+          const r0 = 0.045 + ((hb * 3.3) % 1) * 0.05;
+          emitBlob(molten, pc[0], pc[1] - 0.012, pc[2], (th) => r0 * (1 + 0.15 * Math.sin(3 * th + hb * 6.28)), r0 * 0.75, 8, uv, charAt(pc));
+        }
+      }
     }
     // ---- sides: rows from the (dripping, spread) foot to the top rim
     const RR = 3;
@@ -595,7 +626,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
         const u = k / MG;
         const su = Math.sin(Math.PI * u);
         const lobe = Math.max(0, Math.sin(u * 3 * Math.PI + phase));
-        const drip = (cDrip[sd.a] + (cDrip[sd.b] - cDrip[sd.a]) * u) * (1 + 1.4 * lobe * lobe * su);
+        const drip = Math.min(0.6, (cDrip[sd.a] + (cDrip[sd.b] - cDrip[sd.a]) * u) * 1.5 * (1 + 1.6 * lobe * lobe * su));
         const B = [
           BX[sd.a] + (BX[sd.b] - BX[sd.a]) * u + sd.n[0] * fs * 0.5 * su,
           BY[sd.a] + (BY[sd.b] - BY[sd.a]) * u - drip,
@@ -639,6 +670,20 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
       const dn = [0, -1, 0];
       const q = [0, 1, 3, 2].map((ci) => [BX[ci], BY[ci], BZ[ci]]);
       pushQuadN(molten, q, [dn, dn, dn, dn], uv, [jit, jit, jit, jit], q.map(charAt));
+    }
+    // ---- liquid apron: as it melts, plastic runs out and pools on the
+    // ground around the foot (it does not wait for the whole block to turn
+    // into a puddle). Overlaps the neighbours' aprons into one sheet.
+    if (melt > 0.3 && !belowMolten && def(belowId).solid) {
+      const by = y - (cBot[0] + cBot[1] + cBot[2] + cBot[3]) / 4;
+      const hA = h0 * 6.283;
+      const rA = 0.6 + 0.55 * melt;
+      emitBlob(
+        molten, x + 0.5, by, z + 0.5,
+        (th) => rA * (1 + 0.1 * Math.sin(2 * th + hA) + 0.06 * Math.sin(5 * th + hA * 1.7)),
+        0.02 + 0.07 * melt, detail ? 16 : 8, uv,
+        charTint(base, Math.min(1, mChar * 1.2 + 0.1)), charTint(base, Math.min(1, mChar * 0.8)),
+      );
     }
   }
 
@@ -1104,7 +1149,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
             if (n.solid && !n.glass) continue;
           } else if (self.glass) {
             if (nid === id) continue;
-          } else if (n.solid && !n.glass && !isPartialLego(nid, n)) {
+          } else if (n.solid && !n.glass && !isPartialLego(nid, n) && !deformsAt(x + nx, y + ny, z + nz, nid)) {
             continue;
           }
 

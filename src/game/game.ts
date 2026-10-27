@@ -990,12 +990,17 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   // env reflection so the smooth-normal liquid geometry catches real wet
   // highlights. Only drawn where something is melting (empty surface = no
   // mesh = zero cost).
-  const moltenStd = new THREE.MeshStandardMaterial({
+  // pass 4: physically based molten plastic — a satin plastic body under a
+  // thin wet CLEARCOAT (sharp highlight + Fresnel sky reflection on top of
+  // the colour), the way real hot ABS reads. Only molten fragments pay it.
+  const moltenStd = new THREE.MeshPhysicalMaterial({
     map: atlas,
-    roughness: 0.22,
+    roughness: 0.42,
     metalness: 0.0,
+    clearcoat: 0.85,
+    clearcoatRoughness: 0.1,
     vertexColors: true,
-    envMapIntensity: 1.25,
+    envMapIntensity: 1.0,
   });
   const moltenLam = new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true });
   let moltenMat: THREE.Material = settings.realistic ? moltenStd : moltenLam;
