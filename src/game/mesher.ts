@@ -137,6 +137,9 @@ function addBoxT(s: Surface, x0: number, y0: number, z0: number, x1: number, y1:
 // Charred tint for a finished melt puddle: burnt plastic ends as a near-
 // black warm charcoal pool, only a whisper of the original hue surviving.
 const PUDDLE_CHAR: readonly number[] = [0.05, 0.04, 0.035];
+// v4.16.1 pass 2: the thin cooling rim of a pool stays scorched brown with a
+// trace of the source colour (multiplied by the brick's own texel).
+const PUDDLE_RIM: readonly number[] = [0.2, 0.12, 0.07];
 
 // ---------------------------------------------------------------------------
 // v4.16.1 realism pass 2 (Claude) — MOLTEN SURFACE.
@@ -161,7 +164,7 @@ function tileCentreUV(tile: number): [number, number] {
 }
 
 // Quad with PER-VERTEX normals (smooth shading) and a single UV point.
-function pushQuadN(s: Surface, v: number[][], nrm: number[][], uv: readonly number[], shade: readonly number[], tint: readonly number[]) {
+function pushQuadN(s: Surface, v: number[][], nrm: number[][], uv: readonly number[], shade: readonly number[], tints: readonly (readonly number[])[]) {
   const order = shade[0] + shade[2] < shade[1] + shade[3] ? QUAD_ORDER_1 : QUAD_ORDER_0;
   const tx = v[1][0] - v[0][0], ty = v[1][1] - v[0][1], tz = v[1][2] - v[0][2];
   const inv = 1 / (Math.hypot(tx, ty, tz) || 1);
@@ -172,6 +175,7 @@ function pushQuadN(s: Surface, v: number[][], nrm: number[][], uv: readonly numb
     s.nor.push(ni[0], ni[1], ni[2]);
     s.uv.push(uv[0], uv[1]);
     const c = shade[i];
+    const tint = tints[i];
     s.col.push(c * tint[0], c * tint[1], c * tint[2]);
     s.tan.push(tx * inv, ty * inv, tz * inv, 1);
   }
@@ -183,6 +187,29 @@ function norm3(a: number[]) {
   return a;
 }
 
+// v4.16.1 pass 2 — burnt plastic colour. Real burning ABS does not darken
+// as one flat tint: it goes from its colour through a scorched brown to
+// glossy black char, in irregular patches, hottest (darkest) low down where
+// the fire licks. `charAmt` = local char 0..1 → colour multiplier applied
+// on top of the brick's base tint. The patch noise is a smooth function of
+// WORLD position, so the pattern runs continuously across fused neighbours.
+const SCORCH = [0.42, 0.26, 0.15];
+function charPatch(px: number, py: number, pz: number) {
+  return 0.5 + 0.5 * Math.sin(px * 7.3 + pz * 3.1 + py * 5.7) * Math.sin(pz * 6.1 - px * 2.3 + py * 4.1);
+}
+function charTint(base: readonly number[], c: number): number[] {
+  const k = Math.max(0, Math.min(1, c));
+  const brown = Math.max(0, 1 - Math.abs(k - 0.45) / 0.35) * 0.65; // scorched-brown band mid-way
+  const blk = k * k * (3 - 2 * k);
+  const dk = 1 - k * 0.3;
+  const out = [0, 0, 0];
+  for (let i = 0; i < 3; i++) {
+    const col = base[i] * (1 - brown) + base[i] * SCORCH[i] * 1.6 * brown;
+    out[i] = col * dk * (1 - blk * (0.94 + i * 0.015));
+  }
+  return out;
+}
+
 // Radial profile of a molten pool (rho 0 = centre, 1 = rim): a thick viscous
 // body that rolls over a rounded meniscus edge and feathers onto the ground.
 const BLOB_RHO = [0, 0.38, 0.68, 0.86, 0.96, 1.04];
@@ -191,7 +218,7 @@ const BLOB_H = [1, 0.97, 0.87, 0.64, 0.3, 0.02];
 // A smooth molten blob: centre (cx, cz), base y, rim radius R(theta), peak
 // thickness H. Smooth normals from the radial slope. Top-facing only (it
 // always sits on a surface). K = angular segments.
-function emitBlob(s: Surface, cx: number, baseY: number, cz: number, R: (t: number) => number, H: number, K: number, uv: readonly number[], tint: readonly number[]) {
+function emitBlob(s: Surface, cx: number, baseY: number, cz: number, R: (t: number) => number, H: number, K: number, uv: readonly number[], tint: readonly number[], rim: readonly number[] = tint) {
   const rings = BLOB_RHO.length;
   const P: number[][][] = [];
   const N: number[][][] = [];
@@ -213,10 +240,15 @@ function emitBlob(s: Surface, cx: number, baseY: number, cz: number, R: (t: numb
     P.push(pr); N.push(nr);
   }
   const shade = [1, 1, 1, 1];
+  // charred black body, the thin rim cooler: a scorched-brown edge
+  const ringTint = BLOB_RHO.map((rho) => {
+    const w = Math.max(0, Math.min(1, (rho - 0.7) / 0.3));
+    return [tint[0] + (rim[0] - tint[0]) * w, tint[1] + (rim[1] - tint[1]) * w, tint[2] + (rim[2] - tint[2]) * w];
+  });
   for (let k = 0; k < K; k++) {
     for (let r = 0; r < rings - 1; r++) {
       // clockwise in (x, z) seen from above = front face (see FACES top)
-      pushQuadN(s, [P[k + 1][r], P[k + 1][r + 1], P[k][r + 1], P[k][r]], [N[k + 1][r], N[k + 1][r + 1], N[k][r + 1], N[k][r]], uv, shade, tint);
+      pushQuadN(s, [P[k + 1][r], P[k + 1][r + 1], P[k][r + 1], P[k][r]], [N[k + 1][r], N[k + 1][r + 1], N[k][r + 1], N[k][r]], uv, shade, [ringTint[r], ringTint[r + 1], ringTint[r + 1], ringTint[r]]);
     }
   }
 }
@@ -465,7 +497,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
   }
   function emitMoltenBlock(
     x: number, y: number, z: number, id: number, melt: number, studSink: number, h0: number, jit: number,
-    cTop: number[], cBot: number[], cShared: boolean[], cDrip: number[], tint: number[],
+    cTop: number[], cBot: number[], cShared: boolean[], cDrip: number[], base: number[], mChar: number,
   ) {
     const uv = tileCentreUV(faceTile(id, 0));
     const G = MG + 1;
@@ -485,7 +517,12 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
     }
     // Top grid: bilinear over the 4 corners (identical along shared edges =
     // watertight) + a dome and lumps that vanish on the edges.
-    const domeAmp = topHidden ? 0 : 0.42 * melt * (1 - 0.75 * melt);
+    // The dome flattens where the block is welded to melting neighbours: a
+    // fused wall slumps as ONE continuous mass, not a row of cushions; a
+    // free-standing block keeps its rounded surface-tension top.
+    let sharedN = 0;
+    for (let ci = 0; ci < 4; ci++) if (cShared[ci]) sharedN++;
+    const domeAmp = topHidden ? 0 : 0.42 * melt * (1 - 0.75 * melt) * (1 - 0.75 * (sharedN / 4));
     const lumpAmp = topHidden ? 0 : 0.05 * melt;
     const tp: number[][] = new Array(G * G);
     for (let j = 0; j <= MG; j++) {
@@ -520,7 +557,13 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
         tn[sideEdge(si, k)] = norm3([v[0] + sn[0] * roll, v[1], v[2] + sn[2] * roll]);
       }
     }
-    const tintAt = (f: number) => [tint[0] * f, tint[1] * f, tint[2] * f];
+    // Per-vertex char: block char level ± irregular patches, darker low
+    // down (the flames lick the foot).
+    const yBase = y - 0.6;
+    const charAt = (p: number[]) => {
+      const low = 1 - Math.max(0, Math.min(1, (p[1] - yBase) / 1.6));
+      return charTint(base, mChar + (charPatch(p[0], p[1], p[2]) - 0.5) * 0.55 * mChar + low * 0.22 * mChar);
+    };
     // ---- top
     if (!topHidden) {
       const fv = FACES[2].v; // (x0,z1) (x1,z1) (x1,z0) (x0,z0)
@@ -529,12 +572,12 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
       const S10 = shadeAt(x, y, z, 0, 1, 0, fv[2][0], fv[2][1], fv[2][2]);
       const S00 = shadeAt(x, y, z, 0, 1, 0, fv[3][0], fv[3][1], fv[3][2]);
       const sh = (s: number, t: number) => jit * ((1 - s) * (1 - t) * S00 + s * (1 - t) * S10 + (1 - s) * t * S01 + s * t * S11);
-      const tt = tintAt(1);
+      const tc = tp.map(charAt);
       for (let j = 0; j < MG; j++) {
         for (let i = 0; i < MG; i++) {
           const a = j * G + i, b = j * G + i + 1, c = (j + 1) * G + i + 1, d = (j + 1) * G + i;
           const s0 = i / MG, s1 = (i + 1) / MG, t0 = j / MG, t1 = (j + 1) / MG;
-          pushQuadN(molten, [tp[d], tp[c], tp[b], tp[a]], [tn[d], tn[c], tn[b], tn[a]], uv, [sh(s0, t1), sh(s1, t1), sh(s1, t0), sh(s0, t0)], tt);
+          pushQuadN(molten, [tp[d], tp[c], tp[b], tp[a]], [tn[d], tn[c], tn[b], tn[a]], uv, [sh(s0, t1), sh(s1, t1), sh(s1, t0), sh(s0, t0)], [tc[d], tc[c], tc[b], tc[a]]);
         }
       }
       if (fancy && melt < 0.7) addStud(opaque, x, y, z, faceTile(id, 0), jit, studSink, 1 - melt * 0.9);
@@ -586,9 +629,8 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
       for (let k = 0; k < MG; k++) {
         for (let r = 0; r < RR; r++) {
           const u0 = k / MG, u1 = (k + 1) / MG, r0 = r / RR, r1 = (r + 1) / RR;
-          // char pools low: the foot of the mass is a touch darker
-          const tt = tintAt(1 - 0.12 * (1 - (r0 + r1) / 2) * melt);
-          pushQuadN(molten, [P[k][r], P[k + 1][r], P[k + 1][r + 1], P[k][r + 1]], [N[k][r], N[k + 1][r], N[k + 1][r + 1], N[k][r + 1]], uv, [sh(u0, r0), sh(u1, r0), sh(u1, r1), sh(u0, r1)], tt);
+          const q = [P[k][r], P[k + 1][r], P[k + 1][r + 1], P[k][r + 1]];
+          pushQuadN(molten, q, [N[k][r], N[k + 1][r], N[k + 1][r + 1], N[k][r + 1]], uv, [sh(u0, r0), sh(u1, r0), sh(u1, r1), sh(u0, r1)], q.map(charAt));
         }
       }
     }
@@ -596,7 +638,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
     if (!occ(world.get(x, y - 1, z))) {
       const dn = [0, -1, 0];
       const q = [0, 1, 3, 2].map((ci) => [BX[ci], BY[ci], BZ[ci]]);
-      pushQuadN(molten, q, [dn, dn, dn, dn], uv, [jit, jit, jit, jit], tintAt(0.85));
+      pushQuadN(molten, q, [dn, dn, dn, dn], uv, [jit, jit, jit, jit], q.map(charAt));
     }
   }
 
@@ -696,7 +738,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
               (nE ? 0.42 * lobe(th, 0) : 0) + (nS ? 0.42 * lobe(th, Math.PI / 2) : 0) +
               (nW ? 0.42 * lobe(th, Math.PI) : 0) + (nN ? 0.42 * lobe(th, -Math.PI / 2) : 0);
             const K = detail ? 18 : 10;
-            emitBlob(molten, x + 0.5 + ox, py, z + 0.5 + oz, R, 0.12 + ph * 0.06, K, uv, PUDDLE_CHAR);
+            emitBlob(molten, x + 0.5 + ox, py, z + 0.5 + oz, R, 0.12 + ph * 0.06, K, uv, PUDDLE_CHAR, PUDDLE_RIM);
             // Satellites + drip tongue live only on the pool's outer
             // perimeter (ground layer, toward a non-puddle cell) —
             // inside a merged pool they would read as separate plates.
@@ -1028,21 +1070,26 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
             }
           }
         }
+        let mTint = 0;
+        if (fused && melt >= MOLTEN_MIN) {
+          // pass 2: the molten body chars per vertex (charTint), from the
+          // un-charred base tint + the cluster char level
+          const nMax = Math.max(meltAt(x + 1, y, z), meltAt(x - 1, y, z), meltAt(x, y, z + 1), meltAt(x, y, z - 1), meltAt(x, y - 1, z));
+          mTint = Math.max(melt, 0.65 * nMax);
+          emitMoltenBlock(x, y, z, id, melt, sinkSelf + sag + 0.16 * melt * melt, h0, jit, cTop!, cBot!, cShared!, cDrip!, scratchTint, mTint);
+          continue;
+        }
         if (melt > 0) {
           // Char blends across the cluster: a block beside a fully
           // molten neighbour blackens toward it — no per-block tint
           // steps across a fusing wall.
           const nMax = Math.max(meltAt(x + 1, y, z), meltAt(x - 1, y, z), meltAt(x, y, z + 1), meltAt(x, y, z - 1), meltAt(x, y - 1, z));
-          const mTint = Math.max(melt, 0.65 * nMax);
+          mTint = Math.max(melt, 0.65 * nMax);
           const dk = 1 - mTint * 0.3;
           const ch = mTint * mTint * (3 - 2 * mTint);
           scratchTint[0] *= dk * (1 - ch * 0.94);
           scratchTint[1] *= dk * (1 - ch * 0.96);
           scratchTint[2] *= dk * (1 - ch * 0.97);
-        }
-        if (fused && melt >= MOLTEN_MIN) {
-          emitMoltenBlock(x, y, z, id, melt, sinkSelf + sag + 0.16 * melt * melt, h0, jit, cTop!, cBot!, cShared!, cDrip!, scratchTint);
-          continue;
         }
 
         for (let fi = 0; fi < 6; fi++) {

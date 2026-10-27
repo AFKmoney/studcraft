@@ -4224,11 +4224,24 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     return 0;
   }
   const fireAge = new Map<string, number>();
-  function igniteAt(x: number, y: number, z: number) {
+  // v4.16.1 Minecraft-style fire (Claude, Philippe: « comme dans Minecraft
+  // pis réaliste, pas du feu flottant dans le vide — les façades doivent
+  // brûler »): a fire cell may only exist where it has something to hold
+  // on to — solid ground under it, or a flammable block on one of its 6
+  // faces. That second rule is what lets fire CLIMB a wooden façade or run
+  // along a hedge, and it is also the rule that forbids floating fire.
+  function fuelAround(x: number, y: number, z: number) {
+    let best = 0;
+    for (const [ox, oy, oz] of NEIGHBORS6) best = Math.max(best, flamOf(world.get(x + ox, y + oy, z + oz)));
+    return best;
+  }
+  function canHoldFire(x: number, y: number, z: number) {
     const here = world.get(x, y, z);
     if (here !== ID.Air && !def(here).plant) return false;
-    const belowId = world.get(x, y - 1, z);
-    if (!def(belowId).solid && !flamOf(belowId)) return false;
+    return def(world.get(x, y - 1, z)).solid || fuelAround(x, y, z) > 0;
+  }
+  function igniteAt(x: number, y: number, z: number) {
+    if (!canHoldFire(x, y, z)) return false;
     if (!world.set(x, y, z, ID.Fire)) return false;
     const k = FS.fkey(x, y, z);
     FS.fireCells.add(k);
@@ -4297,7 +4310,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         world.get(x, y, z + 1) === ID.Lava || world.get(x, y, z - 1) === ID.Lava;
       const age = (fireAge.get(k) ?? 0) + step;
       fireAge.set(k, age);
-      const limit = eternal ? Infinity : flamOf(below) ? 14 : def(below).solid ? 6 : 1.2;
+      // Fuel decides how long a fire cell lives (Minecraft): beside or on
+      // a flammable block it burns as long as there is wood to eat; on bare
+      // solid ground it flickers out; with neither it is gone at once — the
+      // fuel just burnt away, and fire never hangs in the air.
+      const fuel = fuelAround(x, y, z);
+      const grounded = def(below).solid;
+      const limit = eternal ? Infinity : fuel > 0 ? 14 : grounded ? 6 : 0;
       if (wet || age > limit) {
         world.set(x, y, z, ID.Air);
         FS.fireCells.delete(k);
@@ -4355,7 +4374,32 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         world.set(x, y, z, ID.Air);
         markDirtyAt(x, z);
         saveDirty = true;
-        if (def(world.get(x, y - 1, z)).solid) igniteAt(x, y, z); // ground fire lingers
+        igniteAt(x, y, z); // the fire carries on in the freed cell if it has ground or fuel next to it
+      }
+    }
+    // -- Minecraft-style spread: each fire cell eats its flammable faces
+    //    and throws new fire into nearby air that touches fuel — strongest
+    //    upward, so a burning façade goes up the wall and across the roof.
+    //    Bounded: one spread attempt per fire cell per 0.25 s tick.
+    if (FS.fireCells.size) {
+      const kf = step / 0.25;
+      for (const k of [...FS.fireCells]) {
+        const [x, y, z] = FS.funkey(k);
+        for (const [ox, oy, oz] of NEIGHBORS6) {
+          const nid = world.get(x + ox, y + oy, z + oz);
+          const f = flamOf(nid);
+          if (f && Math.random() < f * 0.09 * kf) startBurning(x + ox, y + oy, z + oz);
+        }
+        if (FS.fireCells.size >= 360) continue; // keep the blaze within the flame pool
+        const dx = Math.floor(Math.random() * 3) - 1;
+        const dz = Math.floor(Math.random() * 3) - 1;
+        const r = Math.random();
+        const dy = r < 0.45 ? 1 : r < 0.6 ? 2 : r < 0.8 ? 0 : -1; // fire climbs
+        if (!dx && !dy && !dz) continue;
+        const tx = x + dx, ty = y + dy, tz = z + dz;
+        if (world.get(tx, ty, tz) !== ID.Air) continue;
+        const enc = fuelAround(tx, ty, tz); // only air that touches fuel catches
+        if (enc && Math.random() < enc * 0.35 * kf * (dy > 0 ? 1.4 : 1)) igniteAt(tx, ty, tz);
       }
     }
     // -- sources radiate heat + ignition.
@@ -6302,17 +6346,19 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   // mesh each: the animation (flicker, tongues, rise, dissipation) is pure
   // sine-field math in the shaders (zero textures, zero per-frame CPU) —
   // game.ts only rewrites the instance lists when the fire set changes.
-  const FIRE_MAX = 384;
+  const FIRE_MAX = 512;
   const SMOKE_PER = 4;
   const SMOKE_MAX = FIRE_MAX * SMOKE_PER;
   const fireFxVert = `
-    attribute vec3 aPos; attribute float aPhase; attribute float aScale;
+    attribute vec3 aPos; attribute float aPhase; attribute float aScale; attribute vec3 aDir;
     uniform float uTime; varying vec2 vUv; varying float vPhase;
     void main(){
       vUv = uv; vPhase = aPhase;
       float ly = position.y + 0.5;
       vec3 toCam = cameraPosition - aPos; toCam.y = 0.0;
-      vec3 fwd = normalize(toCam + vec3(0.001, 0.0, 0.0));
+      // aDir != 0: a FACE SHEET lying flat on a burning façade (Minecraft
+      // side fire); aDir == 0: a free flame turning to the camera.
+      vec3 fwd = dot(aDir, aDir) > 0.0 ? aDir : normalize(toCam + vec3(0.001, 0.0, 0.0));
       vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), fwd));
       float sway = sin(uTime * 3.1 + aPhase * 23.0 + ly * 2.6) * 0.07 * ly;
       vec3 wp = aPos + right * (position.x * aScale + sway) + vec3(0.0, ly * 1.05 * aScale, 0.0);
@@ -6395,6 +6441,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const pos = new Float32Array(max * 3);
     const phase = new Float32Array(max);
     const scale = new Float32Array(max);
+    const dir = new Float32Array(max * 3);
+    geo.setAttribute("aDir", new THREE.InstancedBufferAttribute(dir, 3).setUsage(THREE.DynamicDrawUsage));
     geo.setAttribute("aPos", new THREE.InstancedBufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
     geo.setAttribute("aPhase", new THREE.InstancedBufferAttribute(phase, 1).setUsage(THREE.DynamicDrawUsage));
     geo.setAttribute("aScale", new THREE.InstancedBufferAttribute(scale, 1).setUsage(THREE.DynamicDrawUsage));
@@ -6412,7 +6460,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     mesh.frustumCulled = false;
     mesh.renderOrder = additive ? 7 : 8;
     scene.add(mesh);
-    return { geo, mat, pos, phase, scale, count: 0 };
+    return { geo, mat, pos, phase, scale, dir, count: 0 };
   }
   const flameFx = makeFxMesh(FIRE_MAX, fireFxVert, fireFxFrag, true);
   const smokeFx = makeFxMesh(SMOKE_MAX, smokeVert, smokeFrag, false);
@@ -6421,7 +6469,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     for (let i = 0; i < k.length; i++) h = Math.imul(h ^ k.charCodeAt(i), 16777619);
     return ((h >>> 0) % 1000) / 1000;
   }
-  function fxPush(fx: typeof flameFx, x: number, y: number, z: number, phase: number, scale: number) {
+  function fxPush(fx: typeof flameFx, x: number, y: number, z: number, phase: number, scale: number, dx = 0, dz = 0) {
     if (fx.count >= fx.pos.length / 3) return;
     const i = fx.count++;
     fx.pos[i * 3] = x;
@@ -6429,30 +6477,65 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     fx.pos[i * 3 + 2] = z;
     fx.phase[i] = phase;
     fx.scale[i] = scale;
+    fx.dir[i * 3] = dx;
+    fx.dir[i * 3 + 1] = 0;
+    fx.dir[i * 3 + 2] = dz;
   }
   function fxCommit(fx: typeof flameFx) {
     fx.geo.instanceCount = fx.count;
     (fx.geo.getAttribute("aPos") as THREE.BufferAttribute).needsUpdate = true;
     (fx.geo.getAttribute("aPhase") as THREE.BufferAttribute).needsUpdate = true;
     (fx.geo.getAttribute("aScale") as THREE.BufferAttribute).needsUpdate = true;
+    (fx.geo.getAttribute("aDir") as THREE.BufferAttribute).needsUpdate = true;
     fx.count = 0;
   }
   let fireFxDirty = true;
   function syncFireFx() {
-    // Flames: free Fire cells burn tall; burning blocks lick from their top.
+    // v4.16.1 Minecraft-style flames (Claude): every flame is ANCHORED to
+    // a surface — nothing floats. A fire cell on solid ground burns tall
+    // from the ground; a fire cell beside fuel lays a flat sheet on each
+    // flammable face it touches; a burning block wears sheets on its own
+    // exposed faces (the façade burns) and a crown on an open top.
+    const SIDE4 = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
+    const fuelAt = (x: number, y: number, z: number) => flamOf(world.get(x, y, z)) > 0;
+    const openAt = (x: number, y: number, z: number) => {
+      const id = world.get(x, y, z);
+      return id === ID.Air || id === ID.Fire || def(id).plant;
+    };
     for (const k of FS.fireCells) {
       const [x, y, z] = FS.funkey(k);
-      fxPush(flameFx, x + 0.5, y + 0.02, z + 0.5, fxHash(k), 1);
+      const h = fxHash(k);
+      if (def(world.get(x, y - 1, z)).solid) fxPush(flameFx, x + 0.5, y + 0.02, z + 0.5, h, 1);
+      for (const [ox, oz] of SIDE4) {
+        // a flammable block on this side: the sheet lies on ITS face,
+        // turned outward into this fire cell
+        if (fuelAt(x + ox, y, z + oz)) fxPush(flameFx, x + 0.5 + ox * 0.46, y - 0.02, z + 0.5 + oz * 0.46, h + 0.13 * (ox + 2 * oz), 0.95, -ox, -oz);
+      }
     }
     for (const k of FS.burningMap.keys()) {
       const [x, y, z] = FS.funkey(k);
-      fxPush(flameFx, x + 0.5, y + 0.55, z + 0.5, fxHash(k) + 0.37, 0.8);
+      const h = fxHash(k) + 0.37;
+      for (const [ox, oz] of SIDE4) {
+        if (!openAt(x + ox, y, z + oz)) continue;
+        if (FS.fireCells.has(FS.fkey(x + ox, y, z + oz))) continue; // that fire cell already dresses this face
+        fxPush(flameFx, x + 0.5 + ox * 0.54, y - 0.02, z + 0.5 + oz * 0.54, h + 0.21 * (ox + 2 * oz), 0.85, ox, oz);
+      }
+      if (openAt(x, y + 1, z)) fxPush(flameFx, x + 0.5, y + 0.98, z + 0.5, h + 0.5, 0.8);
     }
-    // Melting plastic BURNS as it liquefies (Philippe: "que ça brûle plus").
+    // Melting plastic BURNS as it liquefies (Philippe: "que ça brûle plus"):
+    // low flames hugging the exposed foot of the slumping mass and a small
+    // crown on its (lowered) top — on the surface, never inside the block.
     for (const [k, st] of FS.heatMap) {
       if (st.m < 0.5) continue;
       const [x, y, z] = FS.funkey(k);
-      fxPush(flameFx, x + 0.5, y + 0.55, z + 0.5, fxHash(k) + 0.61, 0.5);
+      const h = fxHash(k) + 0.61;
+      let n = 0;
+      for (const [ox, oz] of SIDE4) {
+        if (n >= 2 || !openAt(x + ox, y, z + oz)) continue;
+        fxPush(flameFx, x + 0.5 + ox * 0.6, y - 0.02, z + 0.5 + oz * 0.6, h + 0.19 * (ox + 2 * oz), 0.55, ox, oz);
+        n++;
+      }
+      if (openAt(x, y + 1, z)) fxPush(flameFx, x + 0.5, y + 1 - 0.8 * st.m, z + 0.5, h + 0.4, 0.45);
     }
     fxCommit(flameFx);
     // Smoke: fires, burning blocks, campfires, exposed lava.
