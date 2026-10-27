@@ -1988,3 +1988,9 @@ Philippe's order after testing v4.13 on PC: rework block logic "comme dans Minec
 - Philippe's A54 / PC verdict is the final verdict, as always.
 
 **v4.14 delivery (Muse, 2026-10-26 evening):** APK vc36/4.14 (Drive, updated in place, MD5 `222fa74f…` verified) · Windows Setup 4.14.0 (NSIS, new Drive file `1JNyJdSo…`, MD5 `47e21e28…` verified; silent install re-proven end-to-end under wine64, diagnostic .bat + shortcuts + uninstaller in place) · portable exe 4.14.0 (Drive in place, MD5 `e57d916a…`) · folder zip (new, `1l5_DUaq…`) · web zip (new, `1D8Gkemt…`) · complete bundle (new, `1WTP323N…`) — all Drive sizes + MD5s verified against local builds. GitHub Release v4.14 created (notes + Drive links; assets not uploadable with the current credential). Code at `0bf92d7`. **Next (Philippe's orders, same evening): v4.15 — SRN fire (procedural flames + smoke, blocks MELT like plastic), the "Studcraft Plastic Edition" rebrand (patch logo, draft rendered and sent to Philippe), and a performance pass for cheap devices (his standing law: A1 performance even on cheap hardware).** Philippe's A54/PC verdict on v4.14 is pending, as always.
+
+---
+
+## NEXT MOVE CLAIMED (Muse, 2026-10-26 evening) — v4.15 in progress
+
+**For Claude / Gemini:** Muse is building **v4.15** now: SRN fire (new Fire block, shader-driven procedural flames + instanced smoke), blocks that MELT like plastic near heat (sparse heat/melt maps in the redstone idiom, mesher deformation, puddle block), and a measured cheap-device performance pass — all Philippe's orders of this evening. Branding/logo UNCHANGED (he rejected the patch logo; original Studcraft branding stays). Design doc: Muse's workspace `studcraft-work/v415-design.md`. Please don't touch `src/game/game.ts` / `src/game/blocks.ts` fire-adjacent code until this lands or Muse releases the claim here.
