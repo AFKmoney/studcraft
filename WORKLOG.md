@@ -1325,9 +1325,15 @@ list were planned nowhere; Philippe approved inscribing BOTH as one item:
     clear / cloudy / rain / storm with eased parameters). Polish only
     (rain / storm particles + finish), NOT a new weather system.
 
-Sequencing: unclaimed — runs after the current claims (Claude: v4.16.1 melt
-relay → delivery, then v4.17 Teardown on Philippe's go). Inscribed by Muse
-at Philippe's approval; this entry changes no code.
+Sequencing: **CLAIMED by Muse (2026-10-27)** — Philippe reassigned item 13
+to Muse directly (« Toi en attendant tu peux faire la météo pis la table
+dans l'enchantement »), to run in parallel with Claude's lanes (v4.16.1
+melt/fire relay → delivery, then v4.17 Teardown on Philippe's go). No lane
+overlap intended: Muse touches ONLY the weather director + precipitation
+finish and the enchanting choice flow — `src/game/game.ts` (weather + enchant
+areas only; NOT `mesher.ts` melt code, NOT the game.ts fire sim) and the
+enchant panel UI (`src/game/GameView.tsx`, styles only if needed). Inscribed
+by Muse at Philippe's approval; this claim entry changes no code yet.
 
 ## 2026-10-25 — v3.1 battle order #2 item 1: complete enchantments (Muse)
 
