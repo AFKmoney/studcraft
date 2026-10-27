@@ -138,6 +138,48 @@ function addBoxT(s: Surface, x0: number, y0: number, z0: number, x1: number, y1:
 // black warm charcoal pool, only a whisper of the original hue surviving.
 const PUDDLE_CHAR: readonly number[] = [0.05, 0.04, 0.035];
 
+// v4.16.1 FUSION: how far the block at (bx,by,bz) SETTLES because its
+// support liquefied — the drop of the top surface of whatever is below
+// it. A puddle's surface sits ~0.19 above the bottom of the melted
+// stack; a melting block's top drops by its own sink plus its slump.
+// This is what stops blocks hovering over empty holes (Philippe: a
+// burning wall melts as ONE mass, nothing floats over a void).
+function sinkOf(world: World, bx: number, by: number, bz: number): number {
+  const belowId = world.get(bx, by - 1, bz);
+  if (belowId === ID.Melted) {
+    let d = 1;
+    while (d < 4 && world.get(bx, by - 1 - d, bz) === ID.Melted) d++;
+    return d - 0.24;
+  }
+  if (!def(belowId).solid) return 0; // floating over air/fluid: no contact, no settle
+  // Solid support: this block settles by the drop of the support's top
+  // surface = the support's own sink + its slump. Walk the solid chain
+  // down (bounded: 6 cells — deeper pure-sink chains do not occur, a
+  // burning column melts bottom-up) and fold the drops back up. The
+  // first version recursed unconditionally and descended forever under
+  // ordinary solid ground — that froze world loading (qa81b BOOT
+  // FAILED); this iterative form always terminates.
+  let drop = 0;
+  const chain: number[] = [];
+  let cy = by - 1;
+  while (chain.length < 6) {
+    const idc = world.get(bx, cy, bz);
+    if (idc === ID.Melted) {
+      let d = 1;
+      while (d < 4 && world.get(bx, cy - d, bz) === ID.Melted) d++;
+      drop = d - 0.24;
+      break;
+    }
+    if (!def(idc).solid) { drop = 0; break; }
+    chain.push(cy);
+    cy--;
+  }
+  for (let i = chain.length - 1; i >= 0; i--) {
+    drop = Math.min(2.5, drop + 0.78 * meltAt(bx, chain[i], bz));
+  }
+  return drop;
+}
+
 // Horizontal/vertical tube between two points (axis-aligned runs only) —
 // the ROUND rungs of the v4.16 ladder. 7 flat-shaded facets read as a
 // molded plastic cylinder at game distance; rung ends bury into the rails,
@@ -380,19 +422,46 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
             // thin drip tongue that ran off one side.
             const ph = hashBlock(x, y, z);
             const ox = (ph - 0.5) * 0.12, oz = ((ph * 7.3) % 1 - 0.5) * 0.12;
-            const hBase = 0.09 + ph * 0.02;
-            addBoxT(opaque, x - 0.14 + ox, y, z - 0.14 + oz, x + 1.14 + ox, y + hBase, z + 1.14 + oz, pSide, pTop, pSide, PUDDLE_CHAR);
-            addBoxT(opaque, x - 0.03 - ox, y + hBase, z - 0.03 - oz, x + 1.03 - ox, y + hBase + 0.05, z + 1.03 - oz, pSide, pTop, pSide, PUDDLE_CHAR);
-            addBoxT(opaque, x + 0.16 + oz, y + hBase + 0.05, z + 0.28 - ox, x + 0.74 + oz, y + hBase + 0.09, z + 0.8 - ox, pSide, pTop, pSide, PUDDLE_CHAR);
-            // A detached splat droplet beside the pool — liquid throws
-            // satellites; perfect rectangles read as plates, splats don't.
-            const sx = x + (ph > 0.5 ? 1.22 : -0.3) + ox, sz = z + ((ph * 3.1) % 1) * 0.5 + oz;
-            addBoxT(opaque, sx, y, sz, sx + 0.24, y + 0.045, sz + 0.2, pSide, pTop, pSide, PUDDLE_CHAR);
-            const dir = Math.floor(ph * 4) % 4;
-            if (dir === 0) addBoxT(opaque, x + 0.3, y, z - 0.48, x + 0.7, y + 0.045, z + 0.1, pSide, pTop, pSide, PUDDLE_CHAR);
-            else if (dir === 1) addBoxT(opaque, x + 0.9, y, z + 0.3, x + 1.48, y + 0.045, z + 0.7, pSide, pTop, pSide, PUDDLE_CHAR);
-            else if (dir === 2) addBoxT(opaque, x + 0.3, y, z + 0.9, x + 0.7, y + 0.045, z + 1.48, pSide, pTop, pSide, PUDDLE_CHAR);
-            else addBoxT(opaque, x - 0.48, y, z + 0.3, x + 0.1, y + 0.045, z + 0.7, pSide, pTop, pSide, PUDDLE_CHAR);
+            const hBase = 0.08 + ph * 0.05;
+            // v4.16.1 FUSION (Philippe's law — no stacked plates, no
+            // voids): a puddle with puddles BELOW it is the same pool,
+            // not a separate plate floating in its own cell — the whole
+            // sheet drops onto the pool beneath (0.8 per melted level).
+            let pudSink = 0;
+            while (pudSink < 3 && world.get(x, y - 1 - pudSink, z) === ID.Melted) pudSink++;
+            const py = y - pudSink * 0.8;
+            addBoxT(opaque, x - 0.14 + ox, py, z - 0.14 + oz, x + 1.14 + ox, py + hBase, z + 1.14 + oz, pSide, pTop, pSide, PUDDLE_CHAR);
+            addBoxT(opaque, x - 0.03 - ox, py + hBase, z - 0.03 - oz, x + 1.03 - ox, py + hBase + 0.05, z + 1.03 - oz, pSide, pTop, pSide, PUDDLE_CHAR);
+            addBoxT(opaque, x + 0.1 + oz, py + hBase + 0.05, z + 0.2 - ox, x + 0.84 + oz, py + hBase + 0.1, z + 0.88 - ox, pSide, pTop, pSide, PUDDLE_CHAR);
+            // FUSION, horizontal: neighbouring puddles are ONE pool —
+            // a bridge sheet crosses each shared boundary at this
+            // cell's sheet height (the neighbour draws its own from its
+            // side; the tiny height delta reads as liquid thickness,
+            // never as a seam or a gap between two pools).
+            const hBridge = hBase + 0.05;
+            if (world.get(x + 1, y, z) === ID.Melted) addBoxT(opaque, x + 0.45, py, z + 0.22 + oz, x + 1.55, py + hBridge, z + 0.78 + oz, pSide, pTop, pSide, PUDDLE_CHAR);
+            if (world.get(x - 1, y, z) === ID.Melted) addBoxT(opaque, x - 0.55, py, z + 0.22 + oz, x + 0.55, py + hBridge, z + 0.78 + oz, pSide, pTop, pSide, PUDDLE_CHAR);
+            if (world.get(x, y, z + 1) === ID.Melted) addBoxT(opaque, x + 0.22 + ox, py, z + 0.45, x + 0.78 + ox, py + hBridge, z + 1.55, pSide, pTop, pSide, PUDDLE_CHAR);
+            if (world.get(x, y, z - 1) === ID.Melted) addBoxT(opaque, x + 0.22 + ox, py, z - 0.55, x + 0.78 + ox, py + hBridge, z + 0.45, pSide, pTop, pSide, PUDDLE_CHAR);
+            // Satellites + drip tongue live only on the pool's outer
+            // perimeter (ground layer, toward a non-puddle cell) —
+            // inside a merged pool they would read as separate plates.
+            if (pudSink === 0) {
+              // A detached splat droplet beside the pool — liquid throws
+              // satellites; perfect rectangles read as plates, splats don't.
+              if (world.get(ph > 0.5 ? x + 1 : x - 1, y, z) !== ID.Melted) {
+                const sx = x + (ph > 0.5 ? 1.22 : -0.3) + ox, sz = z + ((ph * 3.1) % 1) * 0.5 + oz;
+                addBoxT(opaque, sx, y, sz, sx + 0.24, y + 0.045, sz + 0.2, pSide, pTop, pSide, PUDDLE_CHAR);
+              }
+              const dir = Math.floor(ph * 4) % 4;
+              const tongueCell = dir === 0 ? world.get(x, y, z - 1) : dir === 1 ? world.get(x + 1, y, z) : dir === 2 ? world.get(x, y, z + 1) : world.get(x - 1, y, z);
+              if (tongueCell !== ID.Melted) {
+                if (dir === 0) addBoxT(opaque, x + 0.3, y, z - 0.48, x + 0.7, y + 0.045, z + 0.1, pSide, pTop, pSide, PUDDLE_CHAR);
+                else if (dir === 1) addBoxT(opaque, x + 0.9, y, z + 0.3, x + 1.48, y + 0.045, z + 0.7, pSide, pTop, pSide, PUDDLE_CHAR);
+                else if (dir === 2) addBoxT(opaque, x + 0.3, y, z + 0.9, x + 0.7, y + 0.045, z + 1.48, pSide, pTop, pSide, PUDDLE_CHAR);
+                else addBoxT(opaque, x - 0.48, y, z + 0.3, x + 0.1, y + 0.045, z + 0.7, pSide, pTop, pSide, PUDDLE_CHAR);
+              }
+            }
           } else if (self.slab) {
             addBoxT(opaque, x, y, z, x + 1, y + 0.5, z + 1, tile, top, bot);
             if (fancy) addStud(opaque, x, y - 0.5, z, top);
@@ -656,9 +725,61 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
         // charcoal-black as the melt completes.
         const melt = heatMap.size ? meltAt(x, y, z) : 0;
         const sag = melt * 0.78;
+        // v4.16.1 FUSION (Philippe's law): melt is a property of the
+        // MASS, not of the single block. sinkSelf = this block settling
+        // because its support liquefied (persists after the fire is out
+        // — puddles are permanent). The corner drops are computed from
+        // the cells SHARING each vertical edge, identically for every
+        // block touching that edge: watertight slump, neighbours fuse
+        // into one continuous mass, no V-notches, no voids.
+        const sinkSelf = heatMap.size || puddleSrc.size ? sinkOf(world, x, y, z) : 0;
+        const fused = melt > 0 || sinkSelf > 0;
+        let cTop: number[] | null = null, cBot: number[] | null = null, cShared: boolean[] | null = null, cDrip: number[] | null = null;
+        if (fused) {
+          cTop = [0, 0, 0, 0]; cBot = [0, 0, 0, 0]; cShared = [false, false, false, false]; cDrip = [0, 0, 0, 0];
+          for (let ci = 0; ci < 4; ci++) {
+            const cx = ci & 1, cz = (ci >> 1) & 1;
+            let tSum = 0, bSum = 0, dSum = 0, mSum = 0, n = 0, sh = false;
+            for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
+              const px = x + cx - 1 + i, pz = z + cz - 1 + j;
+              const pm = meltAt(px, y, pz);
+              const psk = sinkOf(world, px, y, pz);
+              if (pm > 0 || psk > 0) {
+                // Top drop = sink + linear slump + a pm^2 ROUNDING term:
+                // the shoulders of a melting block curl down faster
+                // than its centre — real molten plastic rounds over,
+                // it does not stay a flat slanted slab.
+                tSum += psk + 0.78 * pm + 0.16 * pm * pm;
+                bSum += psk; mSum += pm; n++;
+                if (px !== x || pz !== z) sh = true;
+                // DRIP: past ~30% melt, plastic runs DOWN an exposed
+                // face — but only where it can actually flow (the cell
+                // below this participant is a puddle, itself melting,
+                // or open air).
+                if (pm > 0.3) {
+                  const bp = world.get(px, y - 1, pz);
+                  if (bp === ID.Melted || meltAt(px, y - 1, pz) > 0.2 || !def(bp).solid) dSum += Math.min(0.38, (pm - 0.3) * 0.55);
+                }
+              }
+            }
+            if (n) {
+              // Organic unevenness: hashed from the CORNER's own
+              // coordinates, so every block sharing this edge computes
+              // the identical surface — lumpy like real melt, still
+              // watertight between neighbours.
+              cTop[ci] = tSum / n + (hashBlock(x + cx, y, z + cz) - 0.5) * 0.07 * (mSum / n);
+              cBot[ci] = bSum / n; cShared[ci] = sh; cDrip[ci] = dSum / n;
+            }
+          }
+        }
         if (melt > 0) {
-          const dk = 1 - melt * 0.3;
-          const ch = melt * melt * (3 - 2 * melt);
+          // Char blends across the cluster: a block beside a fully
+          // molten neighbour blackens toward it — no per-block tint
+          // steps across a fusing wall.
+          const nMax = Math.max(meltAt(x + 1, y, z), meltAt(x - 1, y, z), meltAt(x, y, z + 1), meltAt(x, y, z - 1), meltAt(x, y - 1, z));
+          const mTint = Math.max(melt, 0.65 * nMax);
+          const dk = 1 - mTint * 0.3;
+          const ch = mTint * mTint * (3 - 2 * mTint);
           scratchTint[0] *= dk * (1 - ch * 0.94);
           scratchTint[1] *= dk * (1 - ch * 0.96);
           scratchTint[2] *= dk * (1 - ch * 0.97);
@@ -690,29 +811,46 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
             sv[0] = x + v[0] - nx * pull;
             sv[1] = y + v[1] - ny * pull;
             sv[2] = z + v[2] - nz * pull;
-            if (melt > 0 && v[1] === 1) {
-              // Slump: the top sinks hard + the shoulders pull in: a pure
-              // function of the local vertex, so shared edges deform
-              // identically (no cracks).
-              sv[1] -= sag;
-              sv[0] += (0.5 - v[0]) * melt * 0.22;
-              sv[2] += (0.5 - v[2]) * melt * 0.22;
-            } else if (melt > 0 && v[1] === 0 && ny === 0) {
-              // Base bulge (v4.15 rework): melting plastic SPREADS at the
-              // foot — the silhouette goes short + wide and reads as
-              // liquefying from far away, not as a tint change.
-              sv[0] += nx * melt * 0.13;
-              sv[2] += nz * melt * 0.13;
+            if (fused && v[1] === 1) {
+              // FUSION slump (v4.16.1): the top drops by the CORNER
+              // value — every block sharing this vertical edge computes
+              // the identical drop, so neighbours slump INTO each other
+              // as one continuous mass (no V-notch, no seam). Shoulders
+              // pull in less where the corner is shared with another
+              // melting/settling block: the mass stays wide where it
+              // fuses, narrow only at free edges.
+              const ci = (v[0] ? 1 : 0) + (v[2] ? 2 : 0);
+              sv[1] -= cTop![ci];
+              const pa = melt * 0.3 * (cShared![ci] ? 0.35 : 1);
+              sv[0] += (0.5 - v[0]) * pa;
+              sv[2] += (0.5 - v[2]) * pa;
+            } else if (fused && v[1] === 0) {
+              // The base follows the corner sink: when the support
+              // below has liquefied, the block settles INTO the melt —
+              // no floating slab, no empty hole beneath it. Side faces
+              // keep the foot bulge (plastic spreading at the base).
+              const ci = (v[0] ? 1 : 0) + (v[2] ? 2 : 0);
+              sv[1] -= cBot![ci];
+              if (ny === 0 && melt > 0) {
+                sv[0] += nx * melt * 0.13;
+                sv[2] += nz * melt * 0.13;
+                // Viscous run: the bottom edge of the face stretches
+                // DOWN toward the melt below — plastic sheeting over
+                // the edge, not a clean cube bottom.
+                sv[1] -= cDrip![ci];
+              }
             }
             scratchShade[vi] = shadeAt(x, y, z, nx, ny, nz, v[0], v[1], v[2]) * jit;
           }
-          // Wet sheen on a liquefying top face (brightens instead of
-          // fading — melted plastic is glossy, never transparent).
-          const sheen = melt > 0.4 && ny > 0 ? 1 + (melt - 0.4) * 0.3 : 1;
-          if (sheen !== 1) { scratchTint[0] *= sheen; scratchTint[1] *= sheen; scratchTint[2] *= sheen; }
+          // Molten finish (Philippe: "plus réaliste, comme du vrai
+          // plastique fondu"): the top goes GLOSSY early and strong —
+          // a wet sheen — while the sides darken a touch. Wet molten
+          // plastic reads darker + shinier, never matte, never faded.
+          const ft = ny > 0 ? (melt > 0.25 ? 1 + (melt - 0.25) * 0.45 : 1) : ny === 0 && melt > 0 ? 1 - melt * 0.13 : 1;
+          if (ft !== 1) { scratchTint[0] *= ft; scratchTint[1] *= ft; scratchTint[2] *= ft; }
           pushQuad(surf, scratchVerts, face.n, tile, scratchShade, scratchTint);
-          if (sheen !== 1) { scratchTint[0] /= sheen; scratchTint[1] /= sheen; scratchTint[2] /= sheen; }
-          if (fancy && ny > 0 && !self.fluid && self.solid && !n.plant && melt < 0.85) addStud(surf, x, y, z, faceTile(id, 0), jit, sag, 1 - melt * 0.8);
+          if (ft !== 1) { scratchTint[0] /= ft; scratchTint[1] /= ft; scratchTint[2] /= ft; }
+          if (fancy && ny > 0 && !self.fluid && self.solid && !n.plant && melt < 0.7) addStud(surf, x, y, z, faceTile(id, 0), jit, sinkSelf + sag + 0.16 * melt * melt, 1 - melt * 0.9);
         }
       }
     }

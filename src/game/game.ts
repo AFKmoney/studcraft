@@ -226,6 +226,7 @@ declare global {
       ignite?: (x: number, y: number, z: number) => boolean;
       burn?: (x: number, y: number, z: number) => boolean;
       meltOf?: (x: number, y: number, z: number) => number;
+      setMelt?: (x: number, y: number, z: number, m: number) => boolean;
       fireCount?: () => number;
       auditFire?: () => { melt: string[]; burn: string[] };
       hasTuft?: (x: number, y: number, z: number) => boolean;
@@ -9869,6 +9870,18 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     ignite: (x: number, y: number, z: number) => igniteAt(Math.floor(x), Math.floor(y), Math.floor(z)),
     burn: (x: number, y: number, z: number) => startBurning(Math.floor(x), Math.floor(y), Math.floor(z)),
     meltOf: (x: number, y: number, z: number) => FS.meltAt(Math.floor(x), Math.floor(y), Math.floor(z)),
+    // v4.16.1 fusion QA hook: stage a melt value directly (the mesher's
+    // fusion geometry reads meltAt + world state only, so QA can stage
+    // slump / support-sink / merged-pool scenes deterministically
+    // without tending live fires in the crash-prone SwiftShader rig).
+    setMelt: (x: number, y: number, z: number, m: number) => {
+      const fx = Math.floor(x), fy = Math.floor(y), fz = Math.floor(z);
+      const cm = Math.max(0, Math.min(1, m));
+      FS.heatMap.set(FS.fkey(fx, fy, fz), { h: 0, m: cm, stage: Math.floor(cm * 8) });
+      markDirtyAt(fx, fz);
+      saveDirty = true;
+      return true;
+    },
     fireCount: () => FS.fireCells.size + FS.burningMap.size,
     auditFire: () => {
       const melt: string[] = [], burn: string[] = [];
