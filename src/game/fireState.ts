@@ -38,7 +38,34 @@ export function allEmitters(): string[] {
  * m = melt 0..1 (permanent deformation), stage = floor(m * 8) — the mesher
  * remeshes a cell's chunk only when its stage changes (<= 8 remeshes/melt).
  */
-export const heatMap = new Map<string, { h: number; m: number; stage: number }>();
+export const heatMap = new Map<string, { h: number; m: number; stage: number; sx?: number; sy?: number; sz?: number }>();
+
+/**
+ * v4.17 melt = Teardown LEGO: a heated block melts PIECE BY PIECE (its 12
+ * LEGO pieces, see chipState), starting with the pieces that face the heat.
+ * One remesh per piece: stage = floor(m · MELT_STAGES).
+ * (sx, sy, sz) = accumulated direction from the block toward its heat
+ * sources (written by the fire tick) — where the flames lick from.
+ */
+export const MELT_STAGES = 12;
+
+export function heatDirAt(x: number, y: number, z: number): [number, number, number] {
+  const e = heatMap.get(fkey(x, y, z));
+  const dx = e?.sx ?? 0, dy = e?.sy ?? -1, dz = e?.sz ?? 0;
+  const l = Math.hypot(dx, dy, dz) || 1;
+  return [dx / l, dy / l, dz / l];
+}
+
+/** The order in which a block's 12 pieces melt: the ones facing the heat first (a bit lower first: flames lick upward from below). */
+export function meltOrder(dx: number, dy: number, dz: number): number[] {
+  const score: number[] = [];
+  for (let p = 0; p < 12; p++) {
+    const ix = p & 1, iz = (p >> 1) & 1, iy = p >> 2;
+    const cx = ix * 0.5 - 0.25, cy = (iy + 0.5) / 3 - 0.5, cz = iz * 0.5 - 0.25;
+    score.push(cx * dx + cy * dy + cz * dz - 0.12 * cy + ((p * 37) % 11) * 0.002);
+  }
+  return [...Array(12).keys()].sort((a, b) => score[b] - score[a]);
+}
 
 /** Melted puddle cell -> the block id it melted from (its tile/colors). */
 export const puddleSrc = new Map<string, number>();
