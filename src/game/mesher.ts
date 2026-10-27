@@ -1,4 +1,5 @@
 import { ATLAS_COLS, ATLAS_ROWS, ID, def, faceTile } from "./blocks";
+import { fkey, heatMap, meltAt, puddleSrc } from "./fireState";
 import { CS, HEIGHT, type World } from "./world";
 
 export type Surface = { pos: number[]; nor: number[]; uv: number[]; col: number[]; tan: number[] };
@@ -154,9 +155,9 @@ function pushStudVert(
   s.tan.push(tx, ty, tz, 1);
 }
 
-function addStud(s: Surface, x: number, y: number, z: number, tile: number, jit = 1) {
-  const y0 = y + 1.001;
-  const y1 = y0 + STUD_H;
+function addStud(s: Surface, x: number, y: number, z: number, tile: number, jit = 1, sink = 0, flat = 1) {
+  const y0 = y + 1.001 - sink;
+  const y1 = y0 + STUD_H * flat;
   const [u0, v0, u1, v1] = uvs(tile);
   const cu = (u0 + u1) * 0.5;
   const cv = (v0 + v1) * 0.5;
@@ -212,6 +213,9 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
   const glass = empty();
   const water = empty();
   const plant = empty();
+  // v4.15: heat emitters seen in this chunk (campfires; lava with air above) —
+  // game.ts registers them in fireState so the fire tick never scans the world.
+  const emitters: string[] = [];
   const x0 = cx * CS;
   const z0 = cz * CS;
   const AO = [0.56, 0.74, 0.89, 1];
@@ -280,6 +284,9 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
         const z = z0 + lz;
         const id = world.get(x, y, z);
         if (id === 0) continue;
+        if (id === ID.Fire) continue; // v4.15: flames are shader instances (game.ts), not world geometry
+        if (id === ID.Campfire) emitters.push(fkey(x, y, z));
+        else if (id === ID.Lava && world.get(x, y + 1, z) === 0) emitters.push(fkey(x, y, z));
         const self = def(id);
         if (
           self.torch ||
@@ -300,12 +307,21 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
           id === ID.Brew ||
           id === ID.Campfire ||
           id === ID.Bed ||
-          id === ID.Fence
+          id === ID.Fence ||
+          id === ID.Melted
         ) {
           const tile = faceTile(id, 1);
           const top = faceTile(id, 0);
           const bot = faceTile(id, 2);
-          if (self.slab) {
+          if (id === ID.Melted) {
+            // v4.15: glossy puddle of the block that melted — two low slabs
+            // carrying the SOURCE block's tiles (fireState.puddleSrc).
+            const src = puddleSrc.get(fkey(x, y, z)) ?? ID.Melted;
+            const pTop = faceTile(src, 0);
+            const pSide = faceTile(src, 1);
+            addBoxT(opaque, x + 0.02, y, z + 0.02, x + 0.98, y + 0.15, z + 0.98, pSide, pTop, pSide);
+            addBoxT(opaque, x + 0.14, y + 0.15, z + 0.14, x + 0.86, y + 0.23, z + 0.86, pSide, pTop, pSide);
+          } else if (self.slab) {
             addBoxT(opaque, x, y, z, x + 1, y + 0.5, z + 1, tile, top, bot);
             if (fancy) addStud(opaque, x, y - 0.5, z, top);
           } else if (self.stairs) {
@@ -507,6 +523,17 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
         scratchTint[1] = 1;
         scratchTint[2] = 0.986 + ((h0 * 43.7) % 1) * 0.028;
 
+        // v4.15 melt: sparse lookup (free when nothing melts). Scorch tint:
+        // darker + warmer as the plastic cooks.
+        const melt = heatMap.size ? meltAt(x, y, z) : 0;
+        const sag = melt * 0.5;
+        if (melt > 0) {
+          const dk = 1 - melt * 0.3;
+          scratchTint[0] *= dk * (1 - melt * 0.05);
+          scratchTint[1] *= dk * (1 - melt * 0.22);
+          scratchTint[2] *= dk * (1 - melt * 0.3);
+        }
+
         for (let fi = 0; fi < 6; fi++) {
           const face = FACES[fi];
           const nx = face.n[0];
@@ -533,14 +560,21 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
             sv[0] = x + v[0] - nx * pull;
             sv[1] = y + v[1] - ny * pull;
             sv[2] = z + v[2] - nz * pull;
+            if (melt > 0 && v[1] === 1) {
+              // Sag the top + pull the shoulders in: a pure function of the
+              // local vertex, so shared edges deform identically (no cracks).
+              sv[1] -= sag;
+              sv[0] += (0.5 - v[0]) * melt * 0.16;
+              sv[2] += (0.5 - v[2]) * melt * 0.16;
+            }
             scratchShade[vi] = shadeAt(x, y, z, nx, ny, nz, v[0], v[1], v[2]) * jit;
           }
           pushQuad(surf, scratchVerts, face.n, tile, scratchShade, scratchTint);
-          if (fancy && ny > 0 && !self.fluid && self.solid && !n.plant) addStud(surf, x, y, z, faceTile(id, 0), jit);
+          if (fancy && ny > 0 && !self.fluid && self.solid && !n.plant && melt < 0.85) addStud(surf, x, y, z, faceTile(id, 0), jit, sag, 1 - melt * 0.8);
         }
       }
     }
   }
 
-  return { opaque, glass, water, plant };
+  return { opaque, glass, water, plant, emitters };
 }

@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-26 (v4.12 — Muse engine & animal fixes on Philippe's A54 report: mob judder, floating mob parts, engine performance).
+**Last update:** 2026-10-26 (v4.15 code landed — SRN fire + plastic melt; full day journal at the end of this file).
 
 ## 2026-10-26 — v4.12: Engine performance, mob judder & floating animal parts (Muse, ordered by Philippe after his A54 test of v4.11)
 
@@ -1990,7 +1990,50 @@ Philippe's order after testing v4.13 on PC: rework block logic "comme dans Minec
 **v4.14 delivery (Muse, 2026-10-26 evening):** APK vc36/4.14 (Drive, updated in place, MD5 `222fa74f…` verified) · Windows Setup 4.14.0 (NSIS, new Drive file `1JNyJdSo…`, MD5 `47e21e28…` verified; silent install re-proven end-to-end under wine64, diagnostic .bat + shortcuts + uninstaller in place) · portable exe 4.14.0 (Drive in place, MD5 `e57d916a…`) · folder zip (new, `1l5_DUaq…`) · web zip (new, `1D8Gkemt…`) · complete bundle (new, `1WTP323N…`) — all Drive sizes + MD5s verified against local builds. GitHub Release v4.14 created (notes + Drive links; assets not uploadable with the current credential). Code at `0bf92d7`. **Next (Philippe's orders, same evening): v4.15 — SRN fire (procedural flames + smoke, blocks MELT like plastic), the "Studcraft Plastic Edition" rebrand (patch logo, draft rendered and sent to Philippe), and a performance pass for cheap devices (his standing law: A1 performance even on cheap hardware).** Philippe's A54/PC verdict on v4.14 is pending, as always.
 
 ---
+---
 
-## NEXT MOVE CLAIMED (Muse, 2026-10-26 evening) — v4.15 in progress
+## 2026-10-26 — Full day journal (Muse, at Philippe's request: everything done today, in one place)
 
-**For Claude / Gemini:** Muse is building **v4.15** now: SRN fire (new Fire block, shader-driven procedural flames + instanced smoke), blocks that MELT like plastic near heat (sparse heat/melt maps in the redstone idiom, mesher deformation, puddle block), and a measured cheap-device performance pass — all Philippe's orders of this evening. Branding/logo UNCHANGED (he rejected the patch logo; original Studcraft branding stays). Design doc: Muse's workspace `studcraft-work/v415-design.md`. Please don't touch `src/game/game.ts` / `src/game/blocks.ts` fire-adjacent code until this lands or Muse releases the claim here.
+### Morning / midday — v4.11 rescue, v4.12, v4.13
+Covered in their own sections above: the Gemini rescue push (`b8df1b7`, registry repair ids 313–342), v4.12 engine/perf + delivery, v4.13 (Claude's hand/anatomy/shadow work) repackage + delivery.
+
+### The PC saga (the "it won't even open" day)
+- Philippe's PC silently refused every unsigned portable exe (NeonForge Studio v13, then the Studcraft v4.13 portable in the Drive bundle): double-click, nothing at all. Both binaries were proven healthy under wine64 on Muse's VM (process starts, stays alive, AppData profile created; Studcraft v4.13 MD5 local == Drive `d1a9541a…`).
+- First workaround shipped: folder-zips of the win-unpacked build (extract, double-click the exe inside — no self-extractor).
+- **NSIS installer built at Philippe's request ("il faut créer un InstallShield"):** native Linux `makensis` (electron-builder's own NSIS/wine step is broken on this VM), amd64-unicode stub, per-user install into `%LOCALAPPDATA%\Programs\Studcraft` (no admin), Desktop + Start Menu shortcuts, uninstaller, `.onInit` guards that show a clear message instead of dying silently (Windows <10 or 32-bit).
+- **Smart launcher (Philippe's spec: "détecter mon GPU AMD ou tout autre GPU, sinon CPU"):** Chromium uses the GPU when healthy; a boot-state guard (`boot-state.json`, booting → stable after 6 s alive) plus a `child-process-gone` watch — if the GPU process dies twice, the app relaunches itself in CPU rendering (SwiftShader) and CPU mode sticks. Full log at `%APPDATA%\studcraft-pc\studcraft-launch.log` (detected GPU vendor/device/driver included). Proven end-to-end under wine64: silent install → shortcuts created → installed copy boots and stabilizes; and Philippe's exact failure scenario reproduced — GPU killed twice → automatic CPU relaunch → stable.
+- **ROOT CAUSE FOUND (Philippe, 21:12): Windows Mark of the Web.** His PC blocks downloaded unsigned exes IN SILENCE (no SmartScreen prompt at all) until the file is manually unblocked (right-click → Properties → Unblock). The Setup then launched immediately — "Bon c'était ça, ça marche, wtf windows". The game was never broken.
+- **PC DELIVERY LAW (standing): every PC delivery message includes the Unblock step from the start. Deliver PC builds as an installer or a folder-zip, never a bare portable exe.**
+- **Language law (Philippe, 21:06): UI in English OR system-language detection — installer AND game.** Audit: the game was already 100% English (menus, quests, traders, ranks — no French strings in src/game), nothing to change. The installer was rebuilt English-first with NSIS system-language detection (French on a French Windows, English otherwise/fallback), bilingual guard messages; Setup recompiled (122,260,517 bytes, MD5 `1bc2f627…`) and updated in place on Drive (same file/link). His existing install (original French build) stays valid. Coverage honesty: Windows 10/11 64-bit only — Electron 33/Chromium no longer runs on Win 7/8 and no installer changes that.
+
+### App-store pricing (decision record)
+- Anchors checked: Minecraft $6.99, Survivalcraft 2 $3.99, Terraria / Stardew Valley $4.99. Recommendation given to Philippe: **$4.99 US permanent (≈ $6.99 CA)**, **$1.79 as a 2-week launch promo**, regional pricing for TR/BR/IN. Philippe's pitch: "notre jeu a l'air de vrai LEGO, c'est ça qui est vendeur."
+- IP care for the store listing: never the word LEGO in title/description/keywords; no minifigure in the icon or feature graphic. Play Console $25 one-time; Apple $99/yr. Store screenshot set + launch plan offered — pending Philippe's go.
+
+### Rebrand episode — closed
+- "Studcraft Plastic Edition" was ordered with a patch-style logo; Muse drafted and rendered the patch logo and sent it. **Philippe rejected it ("Non le logo est pas bon — Garde le studcraft actuelle qui avait de base").** Patch abandoned; the original Studcraft branding stays everywhere. Do not re-propose the patch.
+
+### Philippe's evening directives (the fidelity + physics program, in his order)
+1. **Voxel physics must stay super light thanks to SRN** — instanced pools + analytic collisions + math-computed effects; no physics engine. (Standing law, reminded during the v4.14 builds.)
+2. **Fire must melt blocks like plastic, and the fire must look fairly realistic, with smoke — also SRN.** → v4.15, below.
+3. **Performance law:** A1 performance even on a cheap device; there is always a way to optimize until it is ultra fast. Every feature ships with a measured perf pass; Philippe's A54 FPS counter is the final verdict.
+4. **Teardown-style voxel explosions & demolition:** explosions eat PARTS of blocks, and the ejected matter is **broken LEGO pieces** (cracked plates, snapped sub-bricks, torn-off studs) — never generic cubes.
+5. **Structural collapse:** walls and structures standing on almost nothing must collapse when their support is cut (mining, explosion, fire) — analytic support checks, no physics engine.
+6. **Block identity rework:** every block must LOOK like what it is — pumpkins must look like pumpkins (a sculpted form, not an orange cube), wood must read as LEGO wood.
+7. **Grass/hay tufts between the studs:** a tuft layer grows between the studs on grass blocks, independent of the block underneath (the block is not affected), and it can be **torn out by hand, like Minecraft tall grass**.
+
+### v4.15 — SRN fire + plastic melt (code landed with this push)
+- **Files:** NEW `src/game/fireState.ts` (sparse fire/heat/melt state, imports nothing — no cycles); `src/game/blocks.ts` (Fire 343, Melted 344; Fire placeable:false + light, Melted placeable:false); `src/game/mesher.ts` (heat-driven deformation of standard cubes — top-vertex sag + inward pull as a pure function of the local vertex, studs sink/flatten/disappear with melt, scorch tint; Melted renders as two low glossy slabs wearing the source block's tiles via `puddleSrc`; Fire cells emit no geometry, flames are FX; campfire/lava emitter registry per chunk); `src/game/game.ts` (`tickFire` on a 0.25 s accumulator — spread, burn-down, heat radiation, melt collapse into puddles, rain dousing; ignition via the Spark item and fireball impacts; player burn hazard beside lava; two instanced ShaderMeshes — SIREN sine-noise flame tongues, cylindrical billboards, and smoke puffs whose whole life cycle runs in the vertex shader; fire state in save/load); `src/game/save.ts` (optional `fire` arrays — heat, puddles, cells, burning).
+- **Cost by construction:** when nothing burns, every fire map is empty, `tickFire` early-outs and the mesher skips melt work (`heatMap.size` guard) — zero idle cost, per the performance law.
+- **Deliberate v1 scope cuts:** partial/prop blocks do not deform (standard cubes only); mobs do not catch fire from cells (player hazard only); no charcoal drops; campfires keep their sculpted LEGO mesh flames (they emit shader smoke + heat).
+- **Verification at push time: tsc 0 errors.** Runtime QA (Playwright scene: red plastic wall beside a log fire — ignition, melt progression, puddle collapse, flame/smoke screenshots) is IN PROGRESS as this lands; APK vc37 / PC 4.15 builds follow the QA result. Philippe's A54/PC verdict is the final word, as always.
+
+---
+
+## NEXT MOVE CLAIMED (Muse) — finish v4.15, then the physics layer
+
+1. **v4.15 close-out:** QA verdict → builds (APK vc37/4.15, Windows Setup 4.15.0, portable, folder zip, web zip, bundle — Drive, MD5-verified) → GitHub Release v4.15 → delivery message WITH the Unblock step.
+2. **Phase Teardown** (Philippe's sequence): voxel explosions + demolition with broken-LEGO debris + structural collapse — SRN-light, analytic.
+3. **Block identity pass:** sculpted pumpkins, LEGO-wood read, grass tufts between the studs (harvestable layer).
+
+**For Claude / Gemini:** please don't touch `game.ts` / `blocks.ts` / `mesher.ts` fire-adjacent code until v4.15 is delivered or Muse releases this claim here.

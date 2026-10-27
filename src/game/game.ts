@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { BLOCKS, CREATIVE_BAR, ID, def, stairsVariant } from "./blocks";
 import { createAudio } from "./audio";
 import { STUD_H, STUD_OFFSETS, STUD_R, buildChunk, type Surface } from "./mesher";
+import * as FS from "./fireState";
 import { NEIGHBORS, RECIPES, SMELT, fuelTime, matchGrid } from "./recipes";
 import { DISCOVER, MOB_XP, ORE_HEAR, ORE_XP, nextPerk, rankTitle, xpNeed } from "./ranks";
 import { manaMaxFor, skillById, spellsFor } from "./skills";
@@ -220,6 +221,11 @@ declare global {
       setLook?: (yaw: number, pitch: number) => void;
       setDig?: (mine: boolean, place: boolean) => void;
       getBlock?: (x: number, y: number, z: number) => number;
+      put?: (x: number, y: number, z: number, id: number) => boolean;
+      ignite?: (x: number, y: number, z: number) => boolean;
+      burn?: (x: number, y: number, z: number) => boolean;
+      meltOf?: (x: number, y: number, z: number) => number;
+      fireCount?: () => number;
       getTarget?: () => string;
       spawnMob?: (kind: string, dx?: number, dz?: number) => boolean;
       getPeers?: () => { name: string; x: number; y: number; z: number }[];
@@ -3068,6 +3074,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     beamMeshes.clear();
     comps.clear();
     signs.clear();
+    FS.clearFireState(); // v4.15
+    fireAge.clear();
+    fireFxDirty = true;
     ench.clear();
     power.clear();
     repOut.clear();
@@ -3219,6 +3228,19 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     for (const c of data.comps ?? []) comps.set(c.x + "," + c.y + "," + c.z, { dir: c.dir, delay: c.delay });
     signs.clear();
     for (const s of data.signs ?? []) signs.set(s.x + "," + s.y + "," + s.z, s.t);
+    // v4.15: restore fire state (cells are validated by tickFire on load).
+    FS.clearFireState();
+    for (const [x, y, z, h, m] of data.fire?.heat ?? []) {
+      FS.heatMap.set(FS.fkey(x, y, z), { h, m, stage: Math.floor(m * 8) });
+    }
+    for (const [x, y, z, src] of data.fire?.puddles ?? []) FS.puddleSrc.set(FS.fkey(x, y, z), src);
+    for (const [x, y, z] of data.fire?.cells ?? []) {
+      const k = FS.fkey(x, y, z);
+      FS.fireCells.add(k);
+      fireAge.set(k, 0);
+    }
+    for (const [x, y, z, t] of data.fire?.burning ?? []) FS.burningMap.set(FS.fkey(x, y, z), t);
+    fireFxDirty = true;
     ench.clear();
     for (const [id, list] of data.ench ?? []) ench.set(id, Object.fromEntries(list));
     tradeXp = data.tradeXp ?? {};
@@ -3283,6 +3305,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   function dropChunk(key: string) {
     const list = meshes.get(key);
     chunkTier.delete(key);
+    FS.emitters.delete(key); // v4.15: forget the chunk's heat emitters
     if (!list) return;
     for (const mesh of list) {
       chunkRoot.remove(mesh);
@@ -3294,6 +3317,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   function rebuild(cx: number, cz: number, key: string, tier: number) {
     dropChunk(key);
     const built = buildChunk(world, cx, cz, tier === 0 ? settings.studs : false, tier < 2);
+    FS.emitters.set(key, built.emitters); // v4.15: campfires / exposed lava for the fire tick
     chunkTier.set(key, tier);
     const list: THREE.Mesh[] = [];
     for (const mesh of [
@@ -4144,6 +4168,179 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   // flip their latched output after their configured delay; Observers
   // watch the cell in front of them and emit a 2-tick pulse when it changes;
   // Daylight sensors refresh when solar power shifts; Hoppers transfer items.
+  // ================= v4.15: fire simulation (ignite, spread, melt) =====
+  // 0.25 s steps over SPARSE state only (fireCells / burningMap / heatMap /
+  // emitters): with nothing burning, this is a no-op — Philippe's law (A1
+  // performance even on cheap devices) holds by construction. Plastic MELTS
+  // (heat -> sag in the mesher -> glossy puddle); wood BURNS and spreads.
+  const NEVER_HEAT = new Set<number>([ID.Bedrock, ID.Stone, ID.Cobble, ID.Obsidian, ID.Glass, ID.Dirt, ID.Grass, ID.Sand, ID.Gravel, ID.Soul, ID.Farmland, ID.IronBlock, ID.Gold, ID.Diamond, ID.Hard, ID.Lava, ID.Water, ID.Fire, ID.Melted]);
+  const NEIGHBORS6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]] as const;
+  function isPlastic(id: number) {
+    if (!id || NEVER_HEAT.has(id)) return false;
+    const d = def(id);
+    if (!d.solid || d.glass || d.fluid || d.plant) return false;
+    if (d.slab || d.stairs || d.sign || d.flat || d.door || d.gate || d.torch || d.dust || d.lever || d.plate || d.rail || d.cactus) return false;
+    if (AXE_OK(id)) return false; // wood burns instead of melting
+    return true;
+  }
+  function flamOf(id: number) {
+    if (id === ID.Leaves) return 1;
+    if (id === ID.Log) return 0.35;
+    if (id === ID.Bookshelf) return 0.7;
+    if (AXE_OK(id)) return 0.5;
+    return 0;
+  }
+  const fireAge = new Map<string, number>();
+  function igniteAt(x: number, y: number, z: number) {
+    const here = world.get(x, y, z);
+    if (here !== ID.Air && !def(here).plant) return false;
+    const belowId = world.get(x, y - 1, z);
+    if (!def(belowId).solid && !flamOf(belowId)) return false;
+    if (!world.set(x, y, z, ID.Fire)) return false;
+    const k = FS.fkey(x, y, z);
+    FS.fireCells.add(k);
+    fireAge.set(k, 0);
+    fireFxDirty = true;
+    markDirtyAt(x, z);
+    saveDirty = true;
+    return true;
+  }
+  function startBurning(x: number, y: number, z: number) {
+    const f = flamOf(world.get(x, y, z));
+    if (!f || FS.burningMap.has(FS.fkey(x, y, z))) return false;
+    FS.burningMap.set(FS.fkey(x, y, z), (2.5 + Math.random() * 3.5) / f);
+    fireFxDirty = true;
+    saveDirty = true;
+    return true;
+  }
+  let fireAcc = 0;
+  function tickFire(dt: number) {
+    fireAcc += dt;
+    if (fireAcc < 0.25) return;
+    const step = fireAcc;
+    fireAcc = 0;
+    if (!FS.fireCells.size && !FS.burningMap.size && !FS.heatMap.size && !FS.emitters.size) return;
+    // -- fire cells: validate, age, douse.
+    for (const k of [...FS.fireCells]) {
+      const [x, y, z] = FS.funkey(k);
+      if (world.get(x, y, z) !== ID.Fire) {
+        FS.fireCells.delete(k);
+        fireAge.delete(k);
+        fireFxDirty = true;
+        continue;
+      }
+      let wet = raining && world.heightAt(x, z) <= y + 1;
+      if (!wet) {
+        for (const [ox, oy, oz] of NEIGHBORS6) {
+          if (world.get(x + ox, y + oy, z + oz) === ID.Water) { wet = true; break; }
+        }
+      }
+      const below = world.get(x, y - 1, z);
+      const eternal =
+        below === ID.Lava ||
+        world.get(x + 1, y, z) === ID.Lava || world.get(x - 1, y, z) === ID.Lava ||
+        world.get(x, y, z + 1) === ID.Lava || world.get(x, y, z - 1) === ID.Lava;
+      const age = (fireAge.get(k) ?? 0) + step;
+      fireAge.set(k, age);
+      const limit = eternal ? Infinity : flamOf(below) ? 14 : def(below).solid ? 6 : 1.2;
+      if (wet || age > limit) {
+        world.set(x, y, z, ID.Air);
+        FS.fireCells.delete(k);
+        fireAge.delete(k);
+        markDirtyAt(x, z);
+        fireFxDirty = true;
+        saveDirty = true;
+      }
+    }
+    // -- heat: cool everything a touch, then melt from stored heat.
+    for (const [k, e] of [...FS.heatMap]) {
+      const [x, y, z] = FS.funkey(k);
+      if (!isPlastic(world.get(x, y, z))) {
+        FS.heatMap.delete(k);
+        continue;
+      }
+      e.h = Math.max(0, e.h - 0.045);
+      if (e.h > 0.5) e.m = Math.min(1, e.m + (e.h - 0.5) * 0.11);
+      const st = Math.floor(e.m * 8);
+      if (st !== e.stage) {
+        e.stage = st;
+        markDirtyAt(x, z);
+      }
+      if (e.m >= 1) {
+        const srcId = world.get(x, y, z);
+        FS.puddleSrc.set(k, srcId);
+        world.set(x, y, z, ID.Melted);
+        burst(x + 0.5, y + 0.7, z + 0.5, def(srcId).side, 5);
+        FS.heatMap.delete(k);
+        markDirtyAt(x, z);
+        saveDirty = true;
+      } else if (e.h <= 0 && e.m <= 0) {
+        FS.heatMap.delete(k);
+      }
+    }
+    // -- burning cells count down and are consumed.
+    for (const [k, t0] of [...FS.burningMap]) {
+      const t = t0 - step;
+      if (t > 0) {
+        FS.burningMap.set(k, t);
+        continue;
+      }
+      FS.burningMap.delete(k);
+      fireFxDirty = true;
+      const [x, y, z] = FS.funkey(k);
+      if (flamOf(world.get(x, y, z))) {
+        world.set(x, y, z, ID.Air);
+        markDirtyAt(x, z);
+        saveDirty = true;
+        if (def(world.get(x, y - 1, z)).solid) igniteAt(x, y, z); // ground fire lingers
+      }
+    }
+    // -- sources radiate heat + ignition.
+    const radiate = (sx: number, sy: number, sz: number, strength: number, canIgnite: boolean, radius: number) => {
+      for (let dx = -radius; dx <= radius; dx++) {
+        for (let dy = -radius; dy <= radius; dy++) {
+          for (let dz = -radius; dz <= radius; dz++) {
+            if (!dx && !dy && !dz) continue;
+            const nx = sx + dx;
+            const ny = sy + dy;
+            const nz = sz + dz;
+            const id = world.get(nx, ny, nz);
+            if (!id || id === ID.Fire) continue;
+            const dist = Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz));
+            const fall = 1 - (dist / (radius + 1)) * 0.55;
+            if (isPlastic(id)) {
+              const k2 = FS.fkey(nx, ny, nz);
+              let e = FS.heatMap.get(k2);
+              if (!e) {
+                if (FS.heatMap.size > 4000) continue;
+                e = { h: 0, m: 0, stage: 0 };
+                FS.heatMap.set(k2, e);
+              }
+              e.h = Math.min(1, e.h + 0.16 * strength * fall);
+            } else if (canIgnite && flamOf(id)) {
+              if (Math.random() < flamOf(id) * 0.055 * strength * fall) startBurning(nx, ny, nz);
+            }
+          }
+        }
+      }
+    };
+    for (const k of FS.fireCells) {
+      const [x, y, z] = FS.funkey(k);
+      radiate(x, y, z, 1, true, 2);
+    }
+    for (const k of FS.burningMap.keys()) {
+      const [x, y, z] = FS.funkey(k);
+      radiate(x, y, z, 0.8, true, 1);
+    }
+    for (const k of FS.allEmitters()) {
+      const [x, y, z] = FS.funkey(k);
+      const id = world.get(x, y, z);
+      if (id === ID.Campfire) radiate(x, y, z, 0.34, false, 1);
+      else if (id === ID.Lava) radiate(x, y, z, 1.25, true, 2);
+    }
+  }
+  // ================= end v4.15 fire simulation =================
+
   function tickRedstone(dt: number) {
     rsAcc += dt;
     hopperAcc += dt;
@@ -4533,6 +4730,18 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         addInv(ID.Bucket, 1);
         audio.place();
         saveDirty = true;
+      }
+      return;
+    }
+    if (held === ID.Spark) {
+      // v4.15: strike a Spark — a flammable block catches; anything else
+      // gets a ground fire on the struck face.
+      if (startBurning(hit.x, hit.y, hit.z)) {
+        spend(ID.Spark, 1);
+        audio.place();
+      } else if (igniteAt(hit.x + hit.nx, hit.y + hit.ny, hit.z + hit.nz)) {
+        spend(ID.Spark, 1);
+        audio.place();
       }
       return;
     }
@@ -5559,6 +5768,14 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       fireT = Math.max(fireT, 4);
       hurt(2);
     }
+    if (
+      feet === ID.Fire ||
+      world.get(gx, gy + 1, gz) === ID.Fire ||
+      FS.burningMap.has(FS.fkey(gx, gy, gz)) ||
+      FS.burningMap.has(FS.fkey(gx, gy + 1, gz))
+    ) {
+      fireT = Math.max(fireT, 2.5);
+    }
     let w = 0;
     for (const s of shots) {
       s.life -= dt;
@@ -5574,6 +5791,15 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       const hitBlockId = world.get(bx, by, bz);
       if (def(hitBlockId).solid) {
         dead = true;
+        if (s.fire) {
+          // v4.15: a fireball sets the world alight — the struck block
+          // catches, or a ground fire starts on one of its faces.
+          if (!startBurning(bx, by, bz)) {
+            for (const [ox, oy, oz] of NEIGHBORS6) {
+              if (igniteAt(bx + ox, by + oy, bz + oz)) break;
+            }
+          }
+        }
         if (hitBlockId === ID.Target) {
           obsPulse.set(rsKey(bx, by, bz), 8);
           recompute(bx, by, bz);
@@ -5996,6 +6222,184 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (pmesh.instanceColor) pmesh.instanceColor.needsUpdate = true;
     if (plateMesh.instanceColor) plateMesh.instanceColor.needsUpdate = true;
   }
+
+  // ================= v4.15: SRN fire FX (flames + smoke) =================
+  // Every flame and every smoke puff in the world is ONE instanced shader
+  // mesh each: the animation (flicker, tongues, rise, dissipation) is pure
+  // sine-field math in the shaders (zero textures, zero per-frame CPU) —
+  // game.ts only rewrites the instance lists when the fire set changes.
+  const FIRE_MAX = 384;
+  const SMOKE_PER = 4;
+  const SMOKE_MAX = FIRE_MAX * SMOKE_PER;
+  const fireFxVert = `
+    attribute vec3 aPos; attribute float aPhase; attribute float aScale;
+    uniform float uTime; varying vec2 vUv; varying float vPhase;
+    void main(){
+      vUv = uv; vPhase = aPhase;
+      float ly = position.y + 0.5;
+      vec3 toCam = cameraPosition - aPos; toCam.y = 0.0;
+      vec3 fwd = normalize(toCam + vec3(0.001, 0.0, 0.0));
+      vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), fwd));
+      float sway = sin(uTime * 3.1 + aPhase * 23.0 + ly * 2.6) * 0.07 * ly;
+      vec3 wp = aPos + right * (position.x * aScale + sway) + vec3(0.0, ly * 1.2 * aScale, 0.0);
+      gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
+    }`;
+  const fireFxFrag = `
+    precision highp float;
+    varying vec2 vUv; varying float vPhase;
+    uniform float uTime;
+    float sn(vec2 p){ return sin(p.x) * sin(p.y); }
+    float snoise(vec2 p){
+      float v = 0.0; float a = 0.55;
+      for(int i = 0; i < 4; i++){ v += a * sn(p); p = vec2(p.y * 1.7 + p.x * 0.6, p.x * 1.3 - p.y * 0.4) * 1.6; a *= 0.55; }
+      return v;
+    }
+    void main(){
+      float t = uTime;
+      vec2 uv = vUv;
+      float rise = uv.y;
+      vec2 fp = vec2(uv.x * 5.0 + vPhase * 31.0, uv.y * 7.0 - t * 2.6 + vPhase * 17.0);
+      float n = snoise(fp) * 0.5 + 0.5;
+      float n2 = snoise(fp * 2.3 + vec2(3.7, 1.3) - vec2(0.0, t * 1.7)) * 0.5 + 0.5;
+      float w = mix(0.46, 0.05, pow(rise, 1.25)) * (0.85 + 0.3 * sin(t * 9.0 + vPhase * 41.0));
+      float d = abs(uv.x - 0.5 + (n - 0.5) * 0.34 * rise);
+      float body = smoothstep(w, w - 0.30, d);
+      float lick = smoothstep(0.35, 0.9, n2 + (1.0 - rise) * 0.55);
+      float a = clamp(body * (0.35 + lick), 0.0, 1.0);
+      a *= 1.0 - smoothstep(0.72, 1.0, rise) * 0.9;
+      if (a < 0.012) discard;
+      float heat = clamp((1.0 - rise) * 0.75 + n * 0.38, 0.0, 1.0);
+      vec3 col = mix(vec3(0.85, 0.16, 0.02), vec3(1.0, 0.45, 0.05), smoothstep(0.05, 0.45, heat));
+      col = mix(col, vec3(1.0, 0.83, 0.25), smoothstep(0.45, 0.75, heat));
+      col = mix(col, vec3(1.0, 0.98, 0.88), smoothstep(0.75, 0.97, heat));
+      gl_FragColor = vec4(col * (1.35 + heat), a * 0.92);
+    }`;
+  const smokeVert = `
+    attribute vec3 aPos; attribute float aPhase; attribute float aScale;
+    uniform float uTime; varying vec2 vUv; varying float vPhase; varying float vLife;
+    void main(){
+      vUv = uv; vPhase = aPhase;
+      float lt = fract(uTime / 4.2 + aPhase);
+      vLife = lt;
+      vec3 center = aPos + vec3(
+        sin(aPhase * 40.0 + uTime * 0.7 + lt * 2.2) * 0.38 * (0.4 + lt),
+        lt * 3.4 * aScale,
+        cos(aPhase * 31.0 + lt * 1.9) * 0.32 * (0.4 + lt));
+      float sz = aScale * mix(0.55, 1.9, lt);
+      vec3 right = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
+      vec3 up = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
+      vec3 wp = center + right * position.x * sz + up * position.y * sz;
+      gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
+    }`;
+  const smokeFrag = `
+    precision highp float;
+    varying vec2 vUv; varying float vPhase; varying float vLife;
+    uniform float uTime;
+    float sn(vec2 p){ return sin(p.x) * sin(p.y); }
+    float snoise(vec2 p){
+      float v = 0.0; float a = 0.55;
+      for(int i = 0; i < 4; i++){ v += a * sn(p); p = vec2(p.y * 1.7 + p.x * 0.6, p.x * 1.3 - p.y * 0.4) * 1.6; a *= 0.55; }
+      return v;
+    }
+    void main(){
+      float d = length(vUv - 0.5) * 2.0;
+      float n = snoise(vUv * 6.0 + vPhase * 19.0 + vec2(0.0, -uTime * 0.15)) * 0.5 + 0.5;
+      float a = smoothstep(1.0, 0.25, d + n * 0.45) * sin(3.14159 * vLife) * 0.17;
+      if (a < 0.004) discard;
+      gl_FragColor = vec4(mix(vec3(0.13, 0.13, 0.14), vec3(0.33, 0.33, 0.35), n), a);
+    }`;
+  function makeFxMesh(max: number, vert: string, frag: string, additive: boolean) {
+    const plane = new THREE.PlaneGeometry(1, 1);
+    const geo = new THREE.InstancedBufferGeometry();
+    geo.index = plane.index;
+    geo.setAttribute("position", plane.getAttribute("position"));
+    geo.setAttribute("uv", plane.getAttribute("uv"));
+    const pos = new Float32Array(max * 3);
+    const phase = new Float32Array(max);
+    const scale = new Float32Array(max);
+    geo.setAttribute("aPos", new THREE.InstancedBufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute("aPhase", new THREE.InstancedBufferAttribute(phase, 1).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute("aScale", new THREE.InstancedBufferAttribute(scale, 1).setUsage(THREE.DynamicDrawUsage));
+    geo.instanceCount = 0;
+    const mat = new THREE.ShaderMaterial({
+      vertexShader: vert,
+      fragmentShader: frag,
+      uniforms: { uTime: { value: 0 } },
+      transparent: true,
+      depthWrite: false,
+      blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+      side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.frustumCulled = false;
+    mesh.renderOrder = additive ? 7 : 8;
+    scene.add(mesh);
+    return { geo, mat, pos, phase, scale, count: 0 };
+  }
+  const flameFx = makeFxMesh(FIRE_MAX, fireFxVert, fireFxFrag, true);
+  const smokeFx = makeFxMesh(SMOKE_MAX, smokeVert, smokeFrag, false);
+  function fxHash(k: string) {
+    let h = 2166136261;
+    for (let i = 0; i < k.length; i++) h = Math.imul(h ^ k.charCodeAt(i), 16777619);
+    return ((h >>> 0) % 1000) / 1000;
+  }
+  function fxPush(fx: typeof flameFx, x: number, y: number, z: number, phase: number, scale: number) {
+    if (fx.count >= fx.pos.length / 3) return;
+    const i = fx.count++;
+    fx.pos[i * 3] = x;
+    fx.pos[i * 3 + 1] = y;
+    fx.pos[i * 3 + 2] = z;
+    fx.phase[i] = phase;
+    fx.scale[i] = scale;
+  }
+  function fxCommit(fx: typeof flameFx) {
+    fx.geo.instanceCount = fx.count;
+    (fx.geo.getAttribute("aPos") as THREE.BufferAttribute).needsUpdate = true;
+    (fx.geo.getAttribute("aPhase") as THREE.BufferAttribute).needsUpdate = true;
+    (fx.geo.getAttribute("aScale") as THREE.BufferAttribute).needsUpdate = true;
+    fx.count = 0;
+  }
+  let fireFxDirty = true;
+  function syncFireFx() {
+    // Flames: free Fire cells burn tall; burning blocks lick from their top.
+    for (const k of FS.fireCells) {
+      const [x, y, z] = FS.funkey(k);
+      fxPush(flameFx, x + 0.5, y + 0.02, z + 0.5, fxHash(k), 1);
+    }
+    for (const k of FS.burningMap.keys()) {
+      const [x, y, z] = FS.funkey(k);
+      fxPush(flameFx, x + 0.5, y + 0.55, z + 0.5, fxHash(k) + 0.37, 0.8);
+    }
+    fxCommit(flameFx);
+    // Smoke: fires, burning blocks, campfires, exposed lava.
+    const puff = (x: number, y: number, z: number, k: string, s: number) => {
+      const h = fxHash(k);
+      for (let i = 0; i < SMOKE_PER; i++) fxPush(smokeFx, x, y, z, (h + i / SMOKE_PER) % 1, s);
+    };
+    for (const k of FS.fireCells) {
+      const [x, y, z] = FS.funkey(k);
+      puff(x + 0.5, y + 1.15, z + 0.5, k, 1);
+    }
+    for (const k of FS.burningMap.keys()) {
+      const [x, y, z] = FS.funkey(k);
+      puff(x + 0.5, y + 1.25, z + 0.5, k, 0.9);
+    }
+    for (const k of FS.allEmitters()) {
+      const [x, y, z] = FS.funkey(k);
+      const id = world.get(x, y, z);
+      if (id === ID.Campfire) puff(x + 0.5, y + 1.0, z + 0.5, k, 0.8);
+      else if (id === ID.Lava) puff(x + 0.5, y + 1.05, z + 0.5, k, 1.1);
+    }
+    fxCommit(smokeFx);
+    fireFxDirty = false;
+  }
+  function updateFireFx() {
+    const t = performance.now() / 1000;
+    flameFx.mat.uniforms.uTime.value = t;
+    smokeFx.mat.uniforms.uTime.value = t;
+    if (fireFxDirty) syncFireFx();
+  }
+  // ================= end v4.15 fire FX =================
 
   function groundY(x: number, z: number) {
     const ix = Math.floor(x);
@@ -7761,6 +8165,21 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         const [x, y, z] = key.split(",").map(Number);
         return { x, y, z, t };
       }),
+      fire: {
+        heat: [...FS.heatMap.entries()].map(([key, e]) => {
+          const [x, y, z] = key.split(",").map(Number);
+          return [x, y, z, e.h, e.m] as [number, number, number, number, number];
+        }),
+        puddles: [...FS.puddleSrc.entries()].map(([key, src]) => {
+          const [x, y, z] = key.split(",").map(Number);
+          return [x, y, z, src] as [number, number, number, number];
+        }),
+        cells: [...FS.fireCells].map((key) => key.split(",").map(Number) as [number, number, number]),
+        burning: [...FS.burningMap.entries()].map(([key, t]) => {
+          const [x, y, z] = key.split(",").map(Number);
+          return [x, y, z, t] as [number, number, number, number];
+        }),
+      },
       beacons: [...beaconBuffs.entries()].map(([key, buff]) => {
         const [x, y, z] = key.split(",").map(Number);
         return { x, y, z, buff };
@@ -9012,6 +9431,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         }
       }
       tickRedstone(dt);
+      tickFire(dt);
       for (const f of furnaces.values()) {
         if (Math.hypot(f.x - player.x, f.z - player.z) > 20) continue;
         if (f.burn > 0) f.burn -= dt;
@@ -9082,6 +9502,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
     // Touch jump/mine are level-triggered by the DOM; don't clear them here.
     updateParticles(dt);
+    updateFireFx();
     renderCamera(dt);
     stream(phase === "title" ? 3 : 2);
     // Behind a pause/inventory panel the world barely moves: redraw at a quarter
@@ -9357,6 +9778,16 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       mousePlace = place;
     },
     getBlock: (x: number, y: number, z: number) => world.get(Math.floor(x), Math.floor(y), Math.floor(z)),
+    // v4.15 fire QA hooks
+    put: (x: number, y: number, z: number, id: number) => {
+      const ok = world.set(Math.floor(x), Math.floor(y), Math.floor(z), id);
+      markDirtyAt(Math.floor(x), Math.floor(z));
+      return ok;
+    },
+    ignite: (x: number, y: number, z: number) => igniteAt(Math.floor(x), Math.floor(y), Math.floor(z)),
+    burn: (x: number, y: number, z: number) => startBurning(Math.floor(x), Math.floor(y), Math.floor(z)),
+    meltOf: (x: number, y: number, z: number) => FS.meltAt(Math.floor(x), Math.floor(y), Math.floor(z)),
+    fireCount: () => FS.fireCells.size + FS.burningMap.size,
     getTarget: () => hud.targetName,
     getHamlet: () => {
       const site = world.nearestHamlet(player.x, player.z, 4);

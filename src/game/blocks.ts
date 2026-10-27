@@ -346,6 +346,8 @@ export const ID = {
   EyeOfEnder: 340,
   Steak: 341,
   Spark: 342,
+  Fire: 343,
+  Melted: 344,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -1166,6 +1168,11 @@ BLOCKS[ID.BootsNetherite].armor = 0.2;
 item(ID.EyeOfEnder, "Eye of ender", "#35b586");
 item(ID.Steak, "Steak", "#b45a32", { food: 8 });
 item(ID.Spark, "Spark", "#ffc46b");
+// v4.15 (SRN fire): Fire is a system block (placed by ignition/spread, never by hand);
+// Melted is the glossy puddle a plastic block collapses into (tile comes from the
+// source block via fireState.puddleSrc — the gray here is only a fallback).
+put(b(ID.Fire, "Fire", "#ff7a1a", "#ffd23e", "#ff7a1a", "#e83e0c", { hard: 0, solid: false, placeable: false, light: 1 }));
+put(b(ID.Melted, "Melted plastic", "#8a8f98", "#9aa0a8", "#83888f", "#757a82", { hard: 0.5, placeable: false }));
 
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];

@@ -58,6 +58,14 @@ export type SaveV1 = {
   pets?: { x: number; z: number }[];
   fluids?: [number, number, number, number][];
   worldTime?: number;
+  // v4.15 fire state: heat [x,y,z,h,m], puddles [x,y,z,srcId],
+  // fire cells [x,y,z], burning [x,y,z,secondsLeft].
+  fire?: {
+    heat: [number, number, number, number, number][];
+    puddles: [number, number, number, number][];
+    cells: [number, number, number][];
+    burning: [number, number, number, number][];
+  };
   worldDays?: number;
 };
 
