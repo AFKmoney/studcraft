@@ -66,6 +66,8 @@ export type SaveV1 = {
     cells: [number, number, number][];
     burning: [number, number, number, number][];
   };
+  // v4.16: torn grass tufts [x,y,z] (tuft presence itself is derived).
+  tufts?: [number, number, number][];
   worldDays?: number;
 };
 

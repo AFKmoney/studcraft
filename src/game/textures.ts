@@ -660,6 +660,176 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
     ctx.fill();
     return;
   }
+  // v4.16 wood identity: wood must READ as wood inside the LEGO-brick
+  // language — bark streaks on the log, plank seams + grain on planks
+  // (and their slab/stairs, which share the tiles' colors).
+  if (block.id === ID.Log && face === 1) {
+    paintSide(ctx, ox, oy, block.side);
+    ctx.lineWidth = Math.max(2, S * 0.02);
+    for (const [fx, ph] of [[0.15, 0.0], [0.37, 1.7], [0.6, 3.4], [0.84, 5.1]] as const) {
+      ctx.strokeStyle = "rgba(43, 24, 11, 0.55)";
+      ctx.beginPath();
+      for (let i = 0; i <= 8; i++) {
+        const yy = oy + (S * i) / 8;
+        const xx = ox + S * fx + Math.sin(ph + i * 1.05) * S * 0.018;
+        if (i === 0) ctx.moveTo(xx, yy); else ctx.lineTo(xx, yy);
+      }
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(226, 178, 120, 0.22)";
+      ctx.beginPath();
+      for (let i = 0; i <= 8; i++) {
+        const yy = oy + (S * i) / 8;
+        const xx = ox + S * fx + S * 0.045 + Math.sin(ph + 0.8 + i * 1.05) * S * 0.018;
+        if (i === 0) ctx.moveTo(xx, yy); else ctx.lineTo(xx, yy);
+      }
+      ctx.stroke();
+    }
+    return;
+  }
+  if (block.id === ID.Log && face === 0) {
+    paintTop(ctx, ox, oy, block.top, true);
+    ctx.strokeStyle = shade(block.top, -30);
+    ctx.lineWidth = Math.max(2, S * 0.02);
+    ctx.beginPath();
+    ctx.arc(ox + S / 2, oy + S / 2, S * 0.45, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = shade(block.top, -38);
+    ctx.beginPath();
+    ctx.arc(ox + S / 2, oy + S / 2, S * 0.05, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+  if ((block.id === ID.Planks || block.id === ID.SlabPlanks || (block.id >= ID.StairsPlanks0 && block.id <= ID.StairsPlanks0 + 3)) && face !== 2) {
+    if (face === 0) paintTop(ctx, ox, oy, block.top, false);
+    else paintSide(ctx, ox, oy, block.side);
+    ctx.fillStyle = "rgba(96, 58, 20, 0.6)";
+    for (const fy of [0.27, 0.52, 0.77]) ctx.fillRect(ox + 2, oy + S * fy, S - 4, Math.max(2, S * 0.016));
+    ctx.strokeStyle = "rgba(120, 76, 28, 0.35)";
+    ctx.lineWidth = Math.max(1.5, S * 0.012);
+    for (const [fx, fy, len] of [[0.08, 0.13, 0.3], [0.55, 0.39, 0.36], [0.18, 0.64, 0.42], [0.62, 0.88, 0.28]] as const) {
+      ctx.beginPath();
+      ctx.moveTo(ox + S * fx, oy + S * fy);
+      ctx.lineTo(ox + S * (fx + len), oy + S * fy + S * 0.012);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = "rgba(96, 58, 20, 0.55)";
+    ctx.lineWidth = Math.max(2, S * 0.016);
+    ctx.beginPath();
+    ctx.ellipse(ox + S * 0.78, oy + S * 0.14, S * 0.045, S * 0.028, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    return;
+  }
+  // v4.16 identity paints — blocks that stay cubes but must READ as what
+  // they are (audit: ores were flat-tinted bricks, spawner/beacon/etc.
+  // were anonymous). All deterministic, drawn over the house painters.
+  if (block.name.toLowerCase().endsWith(" ore") && face !== 2) {
+    // Stone body + nuggets in the ore's own accent color — the Minecraft
+    // read: you spot WHAT ore it is from across the cave.
+    if (face === 0) paintTop(ctx, ox, oy, "#9aa1a8", false);
+    else paintSide(ctx, ox, oy, "#8e959c");
+    for (const [fx, fy, s] of [[0.2, 0.25, 0.13], [0.62, 0.18, 0.1], [0.42, 0.52, 0.15], [0.74, 0.6, 0.12], [0.16, 0.74, 0.1], [0.6, 0.84, 0.09]] as const) {
+      ctx.fillStyle = block.color;
+      ctx.fillRect(ox + S * fx, oy + S * fy, S * s, S * s * 0.8);
+      ctx.fillStyle = shade(block.color, -30);
+      ctx.fillRect(ox + S * fx, oy + S * (fy + s * 0.8), S * s, S * s * 0.3);
+    }
+    return;
+  }
+  if (block.id === ID.Spawner && face !== 2) {
+    paintSide(ctx, ox, oy, "#3a3f45");
+    ctx.fillStyle = "#15181c";
+    for (const fx of [0.12, 0.46, 0.8]) ctx.fillRect(ox + S * fx, oy + 4, S * 0.08, S - 8);
+    ctx.fillRect(ox + 4, oy + S * 0.14, S - 8, S * 0.07);
+    ctx.fillRect(ox + 4, oy + S * 0.79, S - 8, S * 0.07);
+    ctx.fillStyle = "rgba(255, 120, 40, 0.75)";
+    ctx.beginPath();
+    ctx.arc(ox + S / 2, oy + S / 2, S * 0.07, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+  if (block.id === ID.Soul && face !== 2) {
+    paintSide(ctx, ox, oy, block.side);
+    ctx.fillStyle = "rgba(30, 20, 14, 0.4)";
+    for (const [fx, fy] of [[0.3, 0.34], [0.68, 0.3]] as const) {
+      ctx.beginPath();
+      ctx.ellipse(ox + S * fx, oy + S * fy, S * 0.07, S * 0.1, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.beginPath();
+    ctx.ellipse(ox + S * 0.5, oy + S * 0.68, S * 0.12, S * 0.06, 0, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+  if ((block.id === ID.EndFrame || block.id === ID.EndFrameEye) && face === 0) {
+    paintTop(ctx, ox, oy, block.top, false);
+    ctx.strokeStyle = "#2e4a34";
+    ctx.lineWidth = Math.max(3, S * 0.05);
+    ctx.beginPath();
+    ctx.arc(ox + S / 2, oy + S / 2, S * 0.3, 0, Math.PI * 2);
+    ctx.stroke();
+    if (block.id === ID.EndFrameEye) {
+      ctx.fillStyle = "#57d977";
+      ctx.beginPath();
+      ctx.arc(ox + S / 2, oy + S / 2, S * 0.17, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#12351c";
+      ctx.beginPath();
+      ctx.arc(ox + S / 2, oy + S / 2, S * 0.07, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return;
+  }
+  if (block.id === ID.Beacon && face !== 2) {
+    paintSide(ctx, ox, oy, "#2b2b33");
+    ctx.fillStyle = "rgba(150, 225, 255, 0.85)";
+    ctx.fillRect(ox + S * 0.3, oy + S * 0.3, S * 0.4, S * 0.4);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.fillRect(ox + S * 0.42, oy + S * 0.42, S * 0.16, S * 0.16);
+    return;
+  }
+  if (block.id === ID.Conduit && face !== 2) {
+    paintSide(ctx, ox, oy, block.side);
+    ctx.strokeStyle = "rgba(38, 80, 88, 0.8)";
+    ctx.lineWidth = Math.max(2, S * 0.03);
+    for (const r of [0.34, 0.22]) {
+      ctx.beginPath();
+      ctx.arc(ox + S / 2, oy + S / 2, S * r, 0.6, Math.PI * 1.7);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#e8f4f0";
+    ctx.beginPath();
+    ctx.arc(ox + S / 2, oy + S / 2, S * 0.08, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+  if (block.id === ID.Banner && face === 1) {
+    paintSide(ctx, ox, oy, block.side);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.28)";
+    ctx.fillRect(ox + S * 0.14, oy + 6, S * 0.16, S - 12);
+    ctx.fillRect(ox + S * 0.7, oy + 6, S * 0.16, S - 12);
+    ctx.fillStyle = shade(block.color, -25);
+    ctx.fillRect(ox + S * 0.38, oy + S * 0.36, S * 0.24, S * 0.28);
+    return;
+  }
+  if (block.id === ID.Piston) {
+    if (face === 0) {
+      paintTop(ctx, ox, oy, "#c8a878", false);
+      ctx.strokeStyle = "rgba(90, 60, 30, 0.7)";
+      ctx.lineWidth = Math.max(3, S * 0.045);
+      ctx.strokeRect(ox + S * 0.12, oy + S * 0.12, S * 0.76, S * 0.76);
+    } else if (face === 1) {
+      paintSide(ctx, ox, oy, block.side);
+      ctx.fillStyle = "rgba(40, 32, 26, 0.55)";
+      ctx.fillRect(ox + S * 0.1, oy + S * 0.42, S * 0.8, S * 0.16);
+    } else paintBottom(ctx, ox, oy, block.bottom);
+    return;
+  }
+  if (block.id === ID.Farmland && face === 0) {
+    paintTop(ctx, ox, oy, block.top, false);
+    ctx.fillStyle = "rgba(40, 22, 10, 0.55)";
+    for (const fy of [0.18, 0.42, 0.66, 0.9]) ctx.fillRect(ox + 3, oy + S * fy, S - 6, Math.max(2, S * 0.05));
+    return;
+  }
   if (face === 0) paintTop(ctx, ox, oy, block.top, block.id === ID.Log);
   else if (face === 2) paintBottom(ctx, ox, oy, block.bottom);
   else paintSide(ctx, ox, oy, block.side, block.id === ID.Grass ? block.top : undefined);

@@ -3,6 +3,7 @@ import { BLOCKS, CREATIVE_BAR, ID, def, stairsVariant } from "./blocks";
 import { createAudio } from "./audio";
 import { STUD_H, STUD_OFFSETS, STUD_R, buildChunk, type Surface } from "./mesher";
 import * as FS from "./fireState";
+import * as TS from "./tuftState";
 import { NEIGHBORS, RECIPES, SMELT, fuelTime, matchGrid } from "./recipes";
 import { DISCOVER, MOB_XP, ORE_HEAR, ORE_XP, nextPerk, rankTitle, xpNeed } from "./ranks";
 import { manaMaxFor, skillById, spellsFor } from "./skills";
@@ -227,6 +228,8 @@ declare global {
       meltOf?: (x: number, y: number, z: number) => number;
       fireCount?: () => number;
       auditFire?: () => { melt: string[]; burn: string[] };
+      hasTuft?: (x: number, y: number, z: number) => boolean;
+      tearTuft?: (x: number, y: number, z: number) => void;
       getTarget?: () => string;
       spawnMob?: (kind: string, dx?: number, dz?: number) => boolean;
       getPeers?: () => { name: string; x: number; y: number; z: number }[];
@@ -3242,6 +3245,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
     for (const [x, y, z, t] of data.fire?.burning ?? []) FS.burningMap.set(FS.fkey(x, y, z), t);
     fireFxDirty = true;
+    // v4.16: restore torn grass tufts (presence is derived; only tears persist).
+    TS.clearTufts();
+    for (const [x, y, z] of data.tufts ?? []) TS.tuftGone.add(TS.tkey(x, y, z));
     ench.clear();
     for (const [id, list] of data.ench ?? []) ench.set(id, Object.fromEntries(list));
     tradeXp = data.tradeXp ?? {};
@@ -8243,6 +8249,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
           return [x, y, z, t] as [number, number, number, number];
         }),
       },
+      tufts: [...TS.tuftGone].map((key) => key.split(",").map(Number) as [number, number, number]),
       beacons: [...beaconBuffs.entries()].map(([key, buff]) => {
         const [x, y, z] = key.split(",").map(Number);
         return { x, y, z, buff };
@@ -8650,7 +8657,19 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       highlight.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
       studOutline.visible = settings.studs && !def(world.get(hit.x, hit.y + 1, hit.z)).solid;
       const key = hit.x + "," + hit.y + "," + hit.z;
-      if (sample.mine && block.hard !== Infinity) {
+      // v4.16 — tufts tear FIRST: punching the top of a grass block strips
+      // the tuft growing between its studs — instant, by hand, like MC
+      // tall grass — and never touches the block underneath. The tear is
+      // remembered (and saved); the next punch digs the block itself.
+      if (sample.mine && hit.ny === 1 && hit.id === ID.Grass && TS.hasTuftAt(world, hit.x, hit.y + 1, hit.z)) {
+        TS.tearTuft(hit.x, hit.y + 1, hit.z);
+        markDirtyAt(hit.x, hit.z);
+        burst(hit.x + 0.5, hit.y + 1.2, hit.z + 0.5, "#3aaa4c", 6);
+        if (!creative && Math.random() < 0.3) dropItem(ID.Seeds, 1, hit.x + 0.5, hit.y + 1.35, hit.z + 0.5);
+        mineKey = "";
+        mineTime = 0;
+        hideCrack();
+      } else if (sample.mine && block.hard !== Infinity) {
         if (mineKey !== key) {
           mineKey = key;
           mineTime = 0;
@@ -9860,6 +9879,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         else if (flamOf(id) > 0) burn.push(id + ":" + (d.name || "?"));
       }
       return { melt, burn };
+    },
+    // v4.16 tuft QA hooks (coords = the AIR cell above the grass block)
+    hasTuft: (x: number, y: number, z: number) => TS.hasTuftAt(world, Math.floor(x), Math.floor(y), Math.floor(z)),
+    tearTuft: (x: number, y: number, z: number) => {
+      TS.tearTuft(Math.floor(x), Math.floor(y), Math.floor(z));
+      markDirtyAt(Math.floor(x), Math.floor(z));
     },
     getTarget: () => hud.targetName,
     getHamlet: () => {

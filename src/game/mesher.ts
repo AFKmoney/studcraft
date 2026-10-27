@@ -1,5 +1,6 @@
 import { ATLAS_COLS, ATLAS_ROWS, ID, def, faceTile } from "./blocks";
 import { fkey, heatMap, meltAt, puddleSrc } from "./fireState";
+import { hasTuftAt, tuftJitter } from "./tuftState";
 import { CS, HEIGHT, type World } from "./world";
 
 export type Surface = { pos: number[]; nor: number[]; uv: number[]; col: number[]; tan: number[] };
@@ -137,6 +138,30 @@ function addBoxT(s: Surface, x0: number, y0: number, z0: number, x1: number, y1:
 // black warm charcoal pool, only a whisper of the original hue surviving.
 const PUDDLE_CHAR: readonly number[] = [0.05, 0.04, 0.035];
 
+// Horizontal/vertical tube between two points (axis-aligned runs only) —
+// the ROUND rungs of the v4.16 ladder. 7 flat-shaded facets read as a
+// molded plastic cylinder at game distance; rung ends bury into the rails,
+// so no end caps are emitted.
+function addTube(s: Surface, ax: number, ay: number, az: number, bx: number, by: number, bz: number, r: number, tile: number) {
+  const SEG = 7;
+  const alongX = Math.abs(bx - ax) > Math.abs(bz - az);
+  for (let i = 0; i < SEG; i++) {
+    const t0 = (i / SEG) * Math.PI * 2;
+    const t1 = ((i + 1) / SEG) * Math.PI * 2;
+    const c0 = Math.cos(t0), s0 = Math.sin(t0), c1 = Math.cos(t1), s1 = Math.sin(t1);
+    const tm = (t0 + t1) / 2, cm = Math.cos(tm), sm = Math.sin(tm);
+    if (alongX) {
+      const p00 = [ax, ay + r * c0, az + r * s0], p01 = [ax, ay + r * c1, az + r * s1];
+      const p10 = [bx, by + r * c0, bz + r * s0], p11 = [bx, by + r * c1, bz + r * s1];
+      pushQuad(s, [p00, p01, p11, p10], [0, cm, sm], tile);
+    } else {
+      const p00 = [ax + r * s0, ay + r * c0, az], p01 = [ax + r * s1, ay + r * c1, az];
+      const p10 = [bx + r * s0, by + r * c0, bz], p11 = [bx + r * s1, by + r * c1, bz];
+      pushQuad(s, [p00, p10, p11, p01], [sm, cm, 0], tile);
+    }
+  }
+}
+
 function pushStudVert(
   s: Surface,
   px: number,
@@ -241,12 +266,15 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
       block.door ||
       block.gate ||
       block.cactus ||
+      block.fruit ||
       id === ID.Anvil ||
       id === ID.Grindstone ||
       id === ID.Brew ||
       id === ID.Campfire ||
       id === ID.Bed ||
-      id === ID.Fence
+      id === ID.Fence ||
+      id === ID.EndCrystal ||
+      id === ID.Hopper
     );
   }
 
@@ -287,7 +315,23 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
         const x = x0 + lx;
         const z = z0 + lz;
         const id = world.get(x, y, z);
-        if (id === 0) continue;
+        if (id === 0) {
+          // v4.16 tufts: derived decoration in the air cell above a grass
+          // block — two crossed blade quads sitting BETWEEN the studs (the
+          // studs stand at the quarter points; the tuft hugs the center).
+          if (hasTuftAt(world, x, y, z)) {
+            const j = tuftJitter(x, z);
+            const tile = faceTile(ID.TallGrass, 3);
+            const cx = x + 0.5 + (j - 0.5) * 0.14;
+            const cz = z + 0.5 + (tuftJitter(z, x) - 0.5) * 0.14;
+            const r = 0.19 + j * 0.06;
+            const y0 = y + 0.02;
+            const y1 = y + 0.34 + j * 0.22;
+            pushQuad(plant, [[cx - r, y0, cz - r], [cx + r, y0, cz + r], [cx + r, y1, cz + r], [cx - r, y1, cz - r]], [0, 0, 1], tile);
+            pushQuad(plant, [[cx + r, y0, cz - r], [cx - r, y0, cz + r], [cx - r, y1, cz + r], [cx + r, y1, cz - r]], [0, 0, 1], tile);
+          }
+          continue;
+        }
         if (id === ID.Fire) continue; // v4.15: flames are shader instances (game.ts), not world geometry
         if (id === ID.Campfire) emitters.push(fkey(x, y, z));
         else if (id === ID.Lava && world.get(x, y + 1, z) === 0) emitters.push(fkey(x, y, z));
@@ -302,6 +346,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
           self.plate ||
           self.rail ||
           self.cactus ||
+          self.fruit ||
           self.slab ||
           self.stairs ||
           self.sign ||
@@ -312,6 +357,8 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
           id === ID.Campfire ||
           id === ID.Bed ||
           id === ID.Fence ||
+          id === ID.EndCrystal ||
+          id === ID.Hopper ||
           id === ID.Melted
         ) {
           const tile = faceTile(id, 1);
@@ -393,6 +440,17 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
             addBoxT(opaque, x + 0.04, y + 0.32, z + 0.04, x + 0.96, y + 0.56, z + 0.96, top, top, bot);
             addBox(opaque, x + 0.08, y + 0.56, z + 0.08, x + 0.92, y + 0.68, z + 0.38, pilTile);
             if (fancy) addStud(opaque, x, y - 0.44, z, top);
+          } else if (id === ID.EndCrystal) {
+            // v4.16: a floating crystal, not a pink cube — three stacked
+            // shrinking boxes read as a voxel gem; it hovers over its cell.
+            addBoxT(opaque, x + 0.3, y + 0.12, z + 0.3, x + 0.7, y + 0.34, z + 0.7, tile, top, bot);
+            addBoxT(opaque, x + 0.22, y + 0.34, z + 0.22, x + 0.78, y + 0.68, z + 0.78, tile, top, bot);
+            addBoxT(opaque, x + 0.36, y + 0.68, z + 0.36, x + 0.64, y + 0.94, z + 0.64, tile, top, bot);
+          } else if (id === ID.Hopper) {
+            // v4.16: a hopper's funnel silhouette — wide mouth, narrow neck.
+            addBoxT(opaque, x + 0.04, y + 0.55, z + 0.04, x + 0.96, y + 1.0, z + 0.96, tile, top, bot);
+            addBoxT(opaque, x + 0.18, y + 0.3, z + 0.18, x + 0.82, y + 0.55, z + 0.82, tile, top, bot);
+            addBoxT(opaque, x + 0.34, y, z + 0.34, x + 0.66, y + 0.3, z + 0.66, tile, top, bot);
           } else if (id === ID.Fence) {
             // 3D LEGO Fence: central post + connecting rails to adjacent solid/fence blocks
             addBoxT(opaque, x + 0.34, y, z + 0.34, x + 0.66, y + 1.0, z + 0.66, tile, top, bot);
@@ -440,9 +498,52 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
           } else if (self.door || self.gate) {
             if (self.solid) addBox(opaque, x + 0.06, y, z, x + 0.94, y + 0.98, z + 0.16, tile);
             else addBox(opaque, x, y, z + 0.06, x + 0.16, y + 0.98, z + 0.94, tile);
+          } else if (self.fruit) {
+            // v4.16: sculpted fruit — a lobed body, not a colored cube
+            // (Philippe's law: a pumpkin must look like a pumpkin). Core box
+            // inset on all sides, four proud vertical ribs at the face
+            // centers and four corner posts carve the lobed silhouette; the
+            // melon reuses the skeleton with dark-tinted ribs for its
+            // stripes. Bent brown stem on top; no studs — fruit, not brick.
+            const ribTint: readonly number[] | undefined = id === ID.Melon ? [0.55, 0.72, 0.55] : undefined;
+            addBoxT(opaque, x + 0.07, y + 0.03, z + 0.07, x + 0.93, y + 0.95, z + 0.93, tile, top, bot);
+            const rib = (u0: number, w0: number, u1: number, w1: number) =>
+              addBoxT(opaque, x + u0, y + 0.05, z + w0, x + u1, y + 0.93, z + w1, tile, top, bot, ribTint);
+            rib(0.36, 0.0, 0.64, 0.09); rib(0.36, 0.91, 0.64, 1.0); rib(0.0, 0.36, 0.09, 0.64); rib(0.91, 0.36, 1.0, 0.64);
+            rib(0.03, 0.03, 0.17, 0.17); rib(0.83, 0.03, 0.97, 0.17); rib(0.03, 0.83, 0.17, 0.97); rib(0.83, 0.83, 0.97, 0.97);
+            const stemT = faceTile(ID.Log, 0);
+            addBox(opaque, x + 0.43, y + 0.95, z + 0.43, x + 0.57, y + 1.1, z + 0.57, stemT);
+            addBox(opaque, x + 0.47, y + 1.08, z + 0.43, x + 0.67, y + 1.17, z + 0.57, stemT);
           } else if (self.ladder) {
-            pushQuad(opaque, [[x, y, z + 0.08], [x + 1, y, z + 0.08], [x + 1, y + 1, z + 0.08], [x, y + 1, z + 0.08]], [0, 0, 1], tile);
-            pushQuad(opaque, [[x + 1, y, z + 0.08], [x, y, z + 0.08], [x, y + 1, z + 0.08], [x + 1, y + 1, z + 0.08]], [0, 0, -1], tile);
+            // v4.16: the classic LEGO ladder as a real 3D piece — two side
+            // rails and ROUND rungs (Philippe's law: a ladder is a sculpted
+            // piece, never a flat decal). It leans on its first solid
+            // neighbour; free-standing keeps the historic south face.
+            const wood = faceTile(ID.Log, 1);
+            let fx = 0, fz = 1;
+            if (def(world.get(x, y, z - 1)).solid) { fx = 0; fz = 1; }
+            else if (def(world.get(x, y, z + 1)).solid) { fx = 0; fz = -1; }
+            else if (def(world.get(x - 1, y, z)).solid) { fx = 1; fz = 0; }
+            else if (def(world.get(x + 1, y, z)).solid) { fx = -1; fz = 0; }
+            // Local frame: u along the wall, v up, w out from the wall.
+            // 90° rotations keep every box axis-aligned in world space, so
+            // mapping both corners and taking min/max is exact.
+            const P = (u: number, v: number, w: number): [number, number, number] => {
+              if (fz === 1) return [x + u, y + v, z + w];
+              if (fz === -1) return [x + 1 - u, y + v, z + 1 - w];
+              if (fx === 1) return [x + w, y + v, z + u];
+              return [x + 1 - w, y + v, z + 1 - u];
+            };
+            const lbox = (u0: number, v0: number, w0: number, u1: number, v1: number, w1: number) => {
+              const a = P(u0, v0, w0), b = P(u1, v1, w1);
+              addBox(opaque, Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.min(a[2], b[2]), Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.max(a[2], b[2]), wood);
+            };
+            lbox(0.09, 0, 0.03, 0.2, 1, 0.15); // left rail
+            lbox(0.8, 0, 0.03, 0.91, 1, 0.15); // right rail
+            for (const rv of [0.14, 0.32, 0.5, 0.68, 0.86]) {
+              const a = P(0.14, rv, 0.09), b = P(0.86, rv, 0.09);
+              addTube(opaque, a[0], a[1], a[2], b[0], b[1], b[2], 0.042, wood);
+            }
           } else if (self.dust) {
             addBox(opaque, x + 0.1, y, z + 0.1, x + 0.9, y + 0.1, z + 0.9, top);
           } else if (self.lever) {

@@ -391,6 +391,7 @@ export type BlockDef = {
   slip: boolean;
   fall: boolean;
   cactus: boolean;
+  fruit: boolean;
   sapling: boolean;
   cane: boolean;
   note: boolean;
@@ -449,6 +450,7 @@ function b(
     slip: false,
     fall: false,
     cactus: false,
+    fruit: false,
     sapling: false,
     cane: false,
     note: false,
@@ -1014,8 +1016,8 @@ put(
     drop: ID.Observer,
   }),
 );
-put(b(ID.Pumpkin, "Pumpkin", "#e07a20", "#f07820", "#c45a10", "#8d3e08", { hard: 0.45 }));
-put(b(ID.Melon, "Melon", "#3aaa4c", "#2f7d3a", "#c45a32", "#8d3e18", { hard: 0.5 }));
+put(b(ID.Pumpkin, "Pumpkin", "#e07a20", "#f07820", "#c45a10", "#8d3e08", { hard: 0.45, fruit: true }));
+put(b(ID.Melon, "Melon", "#3aaa4c", "#2f7d3a", "#c45a32", "#8d3e18", { hard: 0.5, fruit: true }));
 put(
   b(ID.Mushroom, "Mushroom", "#e8d8c8", "#f4f1ea", "#e23b2f", "#8d5a34", {
     solid: false,
