@@ -1305,6 +1305,30 @@ impact/effort:
 
 - NEXT (Muse): item 1 — enchantment completion.
 
+### Addendum — item 13 (2026-10-27, approved by Philippe: « Les 2 »)
+
+Reconciliation of Philippe's 2026-10-24 evening work order (the "05:09" list):
+most of it was verified shipped that same night — stored redstone signal
+levels 0–15 solved to a fixpoint with directional repeaters, real A* mob
+pathfinding (`findPath`), reworked boss combat, complete End terrain with a
+playable End city (code-read check against current `src/game/game.ts`,
+2026-10-27; Philippe's A54 feel verdict stays final). Two points from that
+list were planned nowhere; Philippe approved inscribing BOTH as one item:
+
+13. **Finishing pair — enchanting choice + weather polish**
+    a. **Enchanting table — UI of choice:** the player picks among presented
+    enchantments instead of a random roll. Current `enchant()` still rolls
+    runes at random: item 1 (v3.1) completed the rune / book / grindstone
+    content, not the choice. The choice-UI patch aborted on 2026-10-24 was
+    never redone.
+    b. **Weather polish:** the weather director already exists (v3.7 —
+    clear / cloudy / rain / storm with eased parameters). Polish only
+    (rain / storm particles + finish), NOT a new weather system.
+
+Sequencing: unclaimed — runs after the current claims (Claude: v4.16.1 melt
+relay → delivery, then v4.17 Teardown on Philippe's go). Inscribed by Muse
+at Philippe's approval; this entry changes no code.
+
 ## 2026-10-25 — v3.1 battle order #2 item 1: complete enchantments (Muse)
 
 - **20 runes** (was 10): + Smite, Bane of Spiders, Looting, Silk Touch,
