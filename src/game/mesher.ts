@@ -1,5 +1,6 @@
 import { ATLAS_COLS, ATLAS_ROWS, ID, def, faceTile } from "./blocks";
 import { fkey, heatMap, meltAt, puddleSrc } from "./fireState";
+import { FULL, chipMap, pieceIndex, removedAt } from "./chipState";
 import { hasTuftAt, tuftJitter } from "./tuftState";
 import { CS, HEIGHT, type World } from "./world";
 
@@ -341,7 +342,7 @@ function pushStudVert(
   s.tan.push(tx, ty, tz, 1);
 }
 
-function addStud(s: Surface, x: number, y: number, z: number, tile: number, jit = 1, sink = 0, flat = 1) {
+function addStud(s: Surface, x: number, y: number, z: number, tile: number, jit = 1, sink = 0, flat = 1, mask = 15) {
   const y0 = y + 1.001 - sink;
   const y1 = y0 + STUD_H * flat;
   const [u0, v0, u1, v1] = uvs(tile);
@@ -350,6 +351,7 @@ function addStud(s: Surface, x: number, y: number, z: number, tile: number, jit 
   const baseShade = 0.82 * jit;
   const topShade = 1.02 * jit;
   for (let sIdx = 0; sIdx < 4; sIdx++) {
+    if (!(mask & (1 << sIdx))) continue; // v4.17: studs of the pieces still standing only
     const off = STUD_OFFSETS[sIdx];
     const cx = x + off[0];
     const cz = z + off[1];
@@ -489,6 +491,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
   const meltActive = heatMap.size > 0 || puddleSrc.size > 0;
   const deformsAt = (x: number, y: number, z: number, nid: number) => {
     if (nid === ID.Melted) return true;
+    if (chipMap.size && removedAt(x, y, z, nid)) return true; // v4.17: a damaged block no longer fills its cube
     if (!meltActive) return false;
     return meltAt(x, y, z) > 0 || sinkOf(world, x, y, z) > 0;
   };
@@ -684,6 +687,72 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
         0.02 + 0.07 * melt, detail ? 16 : 8, uv,
         charTint(base, Math.min(1, mChar * 1.2 + 0.1)), charTint(base, Math.min(1, mChar * 0.8)),
       );
+    }
+  }
+
+  // ---- v4.17 Teardown LEGO: a damaged block is meshed piece by piece —
+  // only the 1×1 LEGO bricks still standing (2 × 2 × 3 grid), each face
+  // culled against its neighbour piece (inside this block or in the
+  // neighbouring block, damaged or not), a stud on every exposed top, and
+  // the block's own tiles mapped across the pieces so the brick reads
+  // continuous. Same opaque material: zero new draw calls.
+  const pieceSolid = (wx: number, wy: number, wz: number, ix: number, iy: number, iz: number) => {
+    const nid = world.get(wx, wy, wz);
+    if (!occ(nid)) return false;
+    const rm = removedAt(wx, wy, wz, nid);
+    return !rm || !(rm & (1 << pieceIndex(ix, iy, iz)));
+  };
+  const PIECE_FACES = [
+    { n: [1, 0, 0], fi: 0 }, { n: [-1, 0, 0], fi: 1 }, { n: [0, 1, 0], fi: 2 },
+    { n: [0, -1, 0], fi: 3 }, { n: [0, 0, 1], fi: 4 }, { n: [0, 0, -1], fi: 5 },
+  ] as const;
+  const pieceVerts = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  function emitChippedBlock(x: number, y: number, z: number, id: number, removed: number, jit: number, tint: readonly number[]) {
+    const H3 = 1 / 3;
+    const studMask = [0, 0, 0];
+    for (let p = 0; p < 12; p++) {
+      if (removed & (1 << p)) continue;
+      const ix = p & 1, iz = (p >> 1) & 1, iy = p >> 2;
+      const ox = ix * 0.5, oy = iy * H3, oz = iz * 0.5;
+      for (const pf of PIECE_FACES) {
+        const [nx, ny, nz] = pf.n;
+        // neighbour piece (same block or across the block boundary)
+        let jx = ix + nx, jy = iy + ny, jz = iz + nz, bx = x, by = y, bz = z;
+        if (jx < 0) { jx = 1; bx--; } else if (jx > 1) { jx = 0; bx++; }
+        if (jz < 0) { jz = 1; bz--; } else if (jz > 1) { jz = 0; bz++; }
+        if (jy < 0) { jy = 2; by--; } else if (jy > 2) { jy = 0; by++; }
+        if (bx === x && by === y && bz === z) {
+          if (!(removed & (1 << pieceIndex(jx, jy, jz)))) continue;
+        } else if (pieceSolid(bx, by, bz, jx, jy, jz)) continue;
+        if (ny > 0) studMask[iy] |= 1 << (ix + 2 * iz);
+        const fv = FACES[pf.fi].v;
+        const tile = faceTile(id, ny > 0 ? 0 : ny < 0 ? 2 : 1);
+        for (let vi = 0; vi < 4; vi++) {
+          const v = fv[vi];
+          pieceVerts[vi][0] = x + ox + v[0] * 0.5;
+          pieceVerts[vi][1] = y + oy + v[1] * H3;
+          pieceVerts[vi][2] = z + oz + v[2] * 0.5;
+        }
+        // map the tile across the block: this piece shows ITS part of the brick
+        const [u0, v0, u1, v1] = uvs(tile);
+        const fu = (a: number) => u0 + (u1 - u0) * a, fvv = (b: number) => v0 + (v1 - v0) * b;
+        const before = opaque.uv.length;
+        pushQuad(opaque, pieceVerts, pf.n as unknown as number[], tile, undefined, tint);
+        // re-map the 6 UVs just written to the piece's sub-rectangle
+        for (let k = before; k < opaque.uv.length; k += 2) {
+          const vi = (k - before) / 2;
+          const P = opaque.pos.length / 3 - 6 + vi;
+          const px = opaque.pos[P * 3] - x, py = opaque.pos[P * 3 + 1] - y, pz = opaque.pos[P * 3 + 2] - z;
+          const a = nx !== 0 ? (nx > 0 ? 1 - pz : pz) : ny !== 0 ? px : nz > 0 ? px : 1 - px;
+          const b = ny !== 0 ? (ny > 0 ? 1 - pz : pz) : py;
+          opaque.uv[k] = fu(Math.min(1, Math.max(0, a)));
+          opaque.uv[k + 1] = fvv(Math.min(1, Math.max(0, b)));
+        }
+      }
+    }
+    if (fancy) {
+      const top = faceTile(id, 0);
+      for (let iy = 0; iy < 3; iy++) if (studMask[iy]) addStud(opaque, x, y, z, top, jit, 1 - (iy + 1) * H3, 1, studMask[iy]);
     }
   }
 
@@ -1061,6 +1130,14 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
         scratchTint[1] = 1;
         scratchTint[2] = 0.986 + ((h0 * 43.7) % 1) * 0.028;
 
+        // v4.17 Teardown LEGO: a damaged full block is meshed piece by piece.
+        if (chipMap.size && self.solid && !self.fluid && !self.glass) {
+          const rm = removedAt(x, y, z, id);
+          if (rm && rm !== FULL) {
+            emitChippedBlock(x, y, z, id, rm, jit, scratchTint);
+            continue;
+          }
+        }
         // v4.15 melt: sparse lookup (free when nothing melts). CHAR tint
         // (Philippe's law: melting plastic BLACKENS, ultra realistic, and
         // stays fully OPAQUE — never a fade): a gentle warm pre-darken,

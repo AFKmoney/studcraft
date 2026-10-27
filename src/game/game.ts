@@ -4,6 +4,7 @@ import { createAudio } from "./audio";
 import { STUD_H, STUD_OFFSETS, STUD_R, buildChunk, type Surface } from "./mesher";
 import * as FS from "./fireState";
 import * as TS from "./tuftState";
+import * as CH from "./chipState";
 import { NEIGHBORS, RECIPES, SMELT, fuelTime, matchGrid } from "./recipes";
 import { DISCOVER, MOB_XP, ORE_HEAR, ORE_XP, nextPerk, rankTitle, xpNeed } from "./ranks";
 import { manaMaxFor, skillById, spellsFor } from "./skills";
@@ -3108,6 +3109,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     comps.clear();
     signs.clear();
     FS.clearFireState(); // v4.15
+    CH.clearChips(); // v4.17
     fireAge.clear();
     fireFxDirty = true;
     ench.clear();
@@ -3276,6 +3278,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     fireFxDirty = true;
     // v4.16: restore torn grass tufts (presence is derived; only tears persist).
     TS.clearTufts();
+    // v4.17: restore damaged (partially carved) blocks
+    CH.clearChips();
+    for (const [x, y, z, v] of data.chips ?? []) CH.chipMap.set(CH.ckey(x, y, z), v);
     for (const [x, y, z] of data.tufts ?? []) TS.tuftGone.add(TS.tkey(x, y, z));
     ench.clear();
     for (const [id, list] of data.ench ?? []) ench.set(id, Object.fromEntries(list));
@@ -3673,6 +3678,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const id = world.get(x, y, z);
     const block = def(id);
     if (id === ID.Air || id === ID.Bedrock || block.hard === Infinity) return;
+    const rmBefore = CH.removedAt(x, y, z, id); // v4.17: pieces already knocked out
+    CH.setRemoved(x, y, z, id, 0); // v4.17: the damaged block is gone entirely
     world.set(x, y, z, ID.Air);
     markDirtyAt(x, z);
     netSendEdit(x, y, z, ID.Air);
@@ -3751,7 +3758,16 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     // plants and glass just shatter into chips.
     if (block.plant || !block.solid) burst(x + 0.5, y + 0.5, z + 0.5, block.color, 7);
     else if (block.glass) burst(x + 0.5, y + 0.5, z + 0.5, "#dff2ff", 12);
-    else burstModularBlock(x + 0.5, y + 0.5, z + 0.5, block);
+    else if (chippable(id)) {
+      // v4.17 Teardown LEGO: the block comes apart into the 1×1 LEGO bricks
+      // it is made of — every piece still standing pops out, in place.
+      const col = block.side || block.color;
+      for (let p = 0; p < 12; p++) {
+        if (rmBefore & (1 << p)) continue;
+        const [cx, cy, cz] = CH.pieceCentre(p);
+        spawnPiece(x + cx, y + cy, z + cz, col, (cx - 0.5) * 3.4 + (Math.random() - 0.5) * 0.8, 1.2 + cy * 2.2 + Math.random() * 1.1, (cz - 0.5) * 3.4 + (Math.random() - 0.5) * 0.8);
+      }
+    } else burstModularBlock(x + 0.5, y + 0.5, z + 0.5, block);
     audio.break();
     swing = 1;
     saveDirty = true;
@@ -4894,6 +4910,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
     const placeId = held === ID.RedTorch ? ID.RedTorchOn : heldDef.stairs ? stairsVariant(held, facingDir()) : held;
     if (!world.set(px, py, pz, placeId)) return;
+    CH.setRemoved(px, py, pz, placeId, 0); // v4.17: a freshly placed block is whole
     markDirtyAt(px, pz);
     netSendEdit(px, py, pz, placeId);
     if (heldDef.sign) {
@@ -6062,6 +6079,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     scale: number;
     color: string;
     isPlate: boolean;
+    piece?: boolean; // v4.17: a 1×1 LEGO brick knocked out of a block (Teardown)
   };
   const particles: DebrisPiece[] = [];
 
@@ -6124,6 +6142,27 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   plateMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(240 * 3), 3);
   scene.add(plateMesh);
   const pdummy = new THREE.Object3D();
+  // v4.17 Teardown LEGO: the pieces knocked out of blocks are real 1×1 LEGO
+  // bricks (one stud), at the exact size they had inside the block — a
+  // block is 2 × 2 of them, 3 courses high.
+  const PIECE_MAX = 320;
+  const pgeoPiece = buildStuddedSubPieceGeo(0.47, 0.31, 0.47, 1, 1);
+  const pieceMesh = new THREE.InstancedMesh(pgeoPiece, pmat, PIECE_MAX);
+  pieceMesh.count = 0;
+  pieceMesh.castShadow = settings.realistic;
+  pieceMesh.receiveShadow = settings.realistic;
+  pieceMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(PIECE_MAX * 3), 3);
+  scene.add(pieceMesh);
+  function spawnPiece(x: number, y: number, z: number, color: string, vx: number, vy: number, vz: number) {
+    const life = 2.4 + Math.random() * 1.4; // they land and lie there a moment (Teardown rubble), then go
+    particles.push({
+      x, y, z, vx, vy, vz,
+      rx: (Math.random() - 0.5) * 0.4, ry: Math.random() * Math.PI * 2, rz: (Math.random() - 0.5) * 0.4,
+      vrx: (Math.random() - 0.5) * 9, vry: (Math.random() - 0.5) * 9, vrz: (Math.random() - 0.5) * 9,
+      life, maxLife: life, scale: 1, color, isPlate: false, piece: true,
+    });
+    if (particles.length > 520) particles.splice(0, particles.length - 520);
+  }
 
   function burst(x: number, y: number, z: number, color: string, n: number) {
     for (let i = 0; i < n; i++) {
@@ -6292,6 +6331,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     let w = 0;
     let bCount = 0;
     let pCount = 0;
+    let kCount = 0;
     for (let i = 0; i < particles.length; i++) {
       const p = particles[i];
       p.life -= dt;
@@ -6308,7 +6348,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       // rest debris ON the liquid, never floating at full-block height.
       const gBase = groundY(p.x, p.z);
       const onPuddle = world.get(Math.floor(p.x), Math.round(gBase - 1), Math.floor(p.z)) === ID.Melted;
-      const gy = onPuddle ? gBase - 0.7 : gBase + (settings.studs ? STUD_H : 0) + 0.05;
+      const gy = onPuddle ? gBase - 0.7 : gBase + (settings.studs ? STUD_H : 0) + (p.piece ? 0.155 : 0.05);
       if (p.y < gy && p.vy < 0) {
         p.y = gy;
         p.vy = -p.vy * 0.32;
@@ -6326,13 +6366,19 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         }
       }
       particles[w++] = p;
-      const fade = Math.min(1, p.life / Math.min(0.25, p.maxLife));
+      const fade = Math.min(1, p.life / Math.min(p.piece ? 0.45 : 0.25, p.maxLife));
       pdummy.position.set(p.x, p.y, p.z);
       pdummy.rotation.set(p.rx, p.ry, p.rz);
       pdummy.scale.setScalar(p.scale * fade);
       pdummy.updateMatrix();
       tmp.set(p.color);
-      if (p.isPlate && pCount < 240) {
+      if (p.piece) {
+        if (kCount < PIECE_MAX) {
+          pieceMesh.setMatrixAt(kCount, pdummy.matrix);
+          pieceMesh.setColorAt(kCount, tmp);
+          kCount++;
+        }
+      } else if (p.isPlate && pCount < 240) {
         plateMesh.setMatrixAt(pCount, pdummy.matrix);
         plateMesh.setColorAt(pCount, tmp);
         pCount++;
@@ -6345,6 +6391,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     particles.length = w;
     pmesh.count = bCount;
     plateMesh.count = pCount;
+    pieceMesh.count = kCount;
+    pieceMesh.instanceMatrix.needsUpdate = true;
+    if (pieceMesh.instanceColor) pieceMesh.instanceColor.needsUpdate = true;
     pmesh.instanceMatrix.needsUpdate = true;
     plateMesh.instanceMatrix.needsUpdate = true;
     if (pmesh.instanceColor) pmesh.instanceColor.needsUpdate = true;
@@ -7351,17 +7400,133 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     saveDirty = true;
   }
 
+  // ================= v4.17 Teardown LEGO =================
+  // A block can be eaten PIECE BY PIECE (12 × 1×1 LEGO bricks, see
+  // chipState). Explosions carve by distance, mining knocks pieces off the
+  // face being hit, and whatever is left hanging collapses. Bounded and
+  // event-driven only: nothing runs per frame except the debris pool.
+  function chippable(id: number) {
+    if (!id || id === ID.Bedrock || id === ID.Melted || id === ID.Fire) return false;
+    const d = def(id);
+    if (!d.solid || d.glass || d.fluid || d.plant || d.hard === Infinity) return false;
+    if (d.slab || d.stairs || d.sign || d.flat || d.door || d.gate || d.torch || d.dust || d.lever || d.plate || d.rail || d.cactus || d.fruit || d.ladder) return false;
+    return true;
+  }
+  /** Knock `pieces` out of the block at (x,y,z); returns true if nothing is left. */
+  function chipPieces(x: number, y: number, z: number, pieces: number[], push: (p: number) => [number, number, number], debrisBudget: { n: number }) {
+    const id = world.get(x, y, z);
+    if (!chippable(id) || !pieces.length) return false;
+    let rm = CH.removedAt(x, y, z, id);
+    const col = def(id).side || def(id).color;
+    for (const p of pieces) {
+      if (rm & (1 << p)) continue;
+      rm |= 1 << p;
+      if (debrisBudget.n > 0) {
+        debrisBudget.n--;
+        const [cx, cy, cz] = CH.pieceCentre(p);
+        const [vx, vy, vz] = push(p);
+        spawnPiece(x + cx, y + cy, z + cz, col, vx, vy, vz);
+      }
+    }
+    if (rm === CH.FULL) {
+      CH.setRemoved(x, y, z, id, 0);
+      world.set(x, y, z, ID.Air);
+      netSendEdit(x, y, z, ID.Air);
+    } else CH.setRemoved(x, y, z, id, rm);
+    markDirtyAt(x, z);
+    saveDirty = true;
+    return rm === CH.FULL;
+  }
+  // Structural collapse: after a blast, every solid cell in a bounded box
+  // that is no longer connected (face to face) to the box's walls/floor —
+  // i.e. to the rest of the world — falls as LEGO rubble. A flood fill over
+  // at most (2R+1)^3 cells, once per explosion.
+  function collapseAround(cx: number, cy: number, cz: number, R: number, debrisBudget: { n: number }) {
+    const S = 2 * R + 1;
+    const seen = new Uint8Array(S * S * S);
+    const idx = (x: number, y: number, z: number) => (x - cx + R) + S * ((z - cz + R) + S * (y - cy + R));
+    const solidAt = (x: number, y: number, z: number) => {
+      const id = world.get(x, y, z);
+      if (!id || !def(id).solid || def(id).fluid) return false;
+      const rm = CH.removedAt(x, y, z, id);
+      return rm !== CH.FULL;
+    };
+    const queue: number[] = [];
+    for (let y = cy - R; y <= cy + R; y++) for (let z = cz - R; z <= cz + R; z++) for (let x = cx - R; x <= cx + R; x++) {
+      const edge = x === cx - R || x === cx + R || z === cz - R || z === cz + R || y === cy - R || y === cy + R;
+      if (!edge || !solidAt(x, y, z)) continue;
+      seen[idx(x, y, z)] = 1;
+      queue.push(x, y, z);
+    }
+    for (let q = 0; q < queue.length; q += 3) {
+      const x = queue[q], y = queue[q + 1], z = queue[q + 2];
+      for (const [ox, oy, oz] of NEIGHBORS6) {
+        const nx = x + ox, ny = y + oy, nz = z + oz;
+        if (nx < cx - R || nx > cx + R || ny < cy - R || ny > cy + R || nz < cz - R || nz > cz + R) continue;
+        const i = idx(nx, ny, nz);
+        if (seen[i] || !solidAt(nx, ny, nz)) continue;
+        seen[i] = 1;
+        queue.push(nx, ny, nz);
+      }
+    }
+    let fell = 0;
+    for (let y = cy - R + 1; y < cy + R; y++) for (let z = cz - R + 1; z < cz + R; z++) for (let x = cx - R + 1; x < cx + R; x++) {
+      if (seen[idx(x, y, z)] || !solidAt(x, y, z)) continue;
+      const id = world.get(x, y, z);
+      if (id === ID.Bedrock || fell >= 160) continue;
+      fell++;
+      const col = def(id).side || def(id).color;
+      // the hanging block breaks into its pieces as it drops
+      for (let k = 0; k < 3 && debrisBudget.n > 0; k++) {
+        debrisBudget.n--;
+        const p = Math.floor(Math.random() * 12);
+        const [px, py, pz] = CH.pieceCentre(p);
+        spawnPiece(x + px, y + py, z + pz, col, (Math.random() - 0.5) * 1.6, -1 - Math.random() * 2, (Math.random() - 0.5) * 1.6);
+      }
+      CH.setRemoved(x, y, z, id, 0);
+      world.set(x, y, z, ID.Air);
+      netSendEdit(x, y, z, ID.Air);
+      markDirtyAt(x, z);
+    }
+    if (fell) saveDirty = true;
+    return fell;
+  }
+
   function explode(x: number, y: number, z: number, rad = 3) {
     const r = rad;
-    for (let dy = -r; dy <= r; dy++) {
-      for (let dz = -r; dz <= r; dz++) {
-        for (let dx = -r; dx <= r; dx++) {
-          if (dx * dx + dy * dy + dz * dz > r * r + 0.4) continue;
-          const id = world.get(x + dx, y + dy, z + dz);
-          if (id !== ID.Air && id !== ID.Bedrock) world.set(x + dx, y + dy, z + dz, ID.Air);
+    const ex = x + 0.5, ey = y + 0.5, ez = z + 0.5;
+    const budget = { n: 90 };
+    // Teardown carving: each LEGO piece goes if it is inside the (ragged)
+    // blast radius — blocks on the rim lose only the pieces facing the blast.
+    for (let dy = -r - 1; dy <= r + 1; dy++) {
+      for (let dz = -r - 1; dz <= r + 1; dz++) {
+        for (let dx = -r - 1; dx <= r + 1; dx++) {
+          const bx = x + dx, by = y + dy, bz = z + dz;
+          const id = world.get(bx, by, bz);
+          if (id === ID.Air || id === ID.Bedrock) continue;
+          if (!chippable(id)) {
+            // plants, glass, fluids-adjacent props: whole-block as before
+            if (dx * dx + dy * dy + dz * dz <= r * r + 0.4 && !def(id).fluid) world.set(bx, by, bz, ID.Air);
+            continue;
+          }
+          const gone: number[] = [];
+          for (let p = 0; p < 12; p++) {
+            const [cx, cy, cz] = CH.pieceCentre(p);
+            const d = Math.hypot(bx + cx - ex, by + cy - ey, bz + cz - ez);
+            if (d < r * (0.78 + 0.42 * Math.random())) gone.push(p);
+          }
+          if (!gone.length) continue;
+          chipPieces(bx, by, bz, gone, (p) => {
+            const [cx, cy, cz] = CH.pieceCentre(p);
+            const vx = bx + cx - ex, vy = by + cy - ey, vz = bz + cz - ez;
+            const d = Math.hypot(vx, vy, vz) || 1;
+            const k = 2 + 7 * Math.max(0, 1 - d / (r + 1));
+            return [(vx / d) * k, (vy / d) * k + 3.2, (vz / d) * k];
+          }, budget);
         }
       }
     }
+    collapseAround(x, y, z, r + 5, budget);
     const c0x = Math.floor((x - r) / CS);
     const c1x = Math.floor((x + r) / CS);
     const c0z = Math.floor((z - r) / CS);
@@ -7375,8 +7540,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       player.vz += ((player.z - z) / (d || 1)) * k;
       player.vy += 5;
     }
-    burst(x, y, z, "#f07820", 28);
-    burst(x, y, z, "#3aaa4c", 16);
+    burst(x, y, z, "#f07820", 22); // fireball sparks; the rubble is the real LEGO pieces above
     shake = 0.55;
     audio.explode();
     saveDirty = true;
@@ -8363,6 +8527,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         }),
       },
       tufts: [...TS.tuftGone].map((key) => key.split(",").map(Number) as [number, number, number]),
+      chips: [...CH.chipMap.entries()].map(([key, v]) => {
+        const [x, y, z] = key.split(",").map(Number);
+        return [x, y, z, v] as [number, number, number, number];
+      }),
       beacons: [...beaconBuffs.entries()].map(([key, buff]) => {
         const [x, y, z] = key.split(",").map(Number);
         return { x, y, z, buff };
@@ -8812,13 +8980,32 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         const dmgStage = Math.floor(hud.mine * 6);
         if (dmgStage > chipStage) {
           if (chipStage >= 0) {
-            burst(
-              hit.x + 0.5 + hit.nx * 0.55 + (Math.random() - 0.5) * 0.3,
-              hit.y + 0.5 + hit.ny * 0.55 + (Math.random() - 0.5) * 0.3,
-              hit.z + 0.5 + hit.nz * 0.55 + (Math.random() - 0.5) * 0.3,
-              block.side || block.color,
-              3,
-            );
+            if (chippable(hit.id)) {
+              // v4.17 Teardown LEGO: each damage stage knocks the two
+              // outermost LEGO pieces off the face being hit — the block
+              // visibly comes apart brick by brick as you mine it.
+              const rm = CH.removedAt(hit.x, hit.y, hit.z, hit.id);
+              const depth = (p: number) => {
+                const [ix, iy, iz] = CH.pieceCoords(p);
+                return hit.nx > 0 ? 1 - ix : hit.nx < 0 ? ix : hit.ny > 0 ? 2 - iy : hit.ny < 0 ? iy : hit.nz > 0 ? 1 - iz : iz;
+              };
+              const left: number[] = [];
+              for (let p = 0; p < 12; p++) if (!(rm & (1 << p))) left.push(p);
+              left.sort((a, b) => depth(a) - depth(b) || Math.random() - 0.5);
+              chipPieces(hit.x, hit.y, hit.z, left.slice(0, 2), () => [
+                hit.nx * 2.2 + (Math.random() - 0.5) * 1.4,
+                1.6 + hit.ny * 1.5 + Math.random() * 1.2,
+                hit.nz * 2.2 + (Math.random() - 0.5) * 1.4,
+              ], { n: 2 });
+            } else {
+              burst(
+                hit.x + 0.5 + hit.nx * 0.55 + (Math.random() - 0.5) * 0.3,
+                hit.y + 0.5 + hit.ny * 0.55 + (Math.random() - 0.5) * 0.3,
+                hit.z + 0.5 + hit.nz * 0.55 + (Math.random() - 0.5) * 0.3,
+                block.side || block.color,
+                3,
+              );
+            }
           }
           chipStage = dmgStage;
         }
