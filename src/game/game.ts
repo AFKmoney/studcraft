@@ -3266,7 +3266,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     // v4.15: restore fire state (cells are validated by tickFire on load).
     FS.clearFireState();
     for (const [x, y, z, h, m] of data.fire?.heat ?? []) {
-      FS.heatMap.set(FS.fkey(x, y, z), { h, m, stage: Math.floor(m * 8) });
+      FS.heatMap.set(FS.fkey(x, y, z), { h, m, stage: Math.floor(m * FS.MELT_STAGES) });
     }
     for (const [x, y, z, src] of data.fire?.puddles ?? []) FS.puddleSrc.set(FS.fkey(x, y, z), src);
     for (const [x, y, z] of data.fire?.cells ?? []) {
@@ -4363,7 +4363,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       // Calm, liquid slump (Philippe: "fondre tranquillement comme un
       // liquide") — a full melt takes ~8 s at full heat, not ~4.
       if (e.h > 0.5) e.m = Math.min(1, e.m + (e.h - 0.5) * 0.06);
-      const st = Math.floor(e.m * 8);
+      const st = Math.floor(e.m * FS.MELT_STAGES);
       if (st !== e.stage) {
         e.stage = st;
         markDirtyAt(x, z);
@@ -4374,8 +4374,21 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         if (srcId === ID.Ice || srcId === ID.Snow) {
           world.set(x, y, z, ID.Water); // ice + snow melt into water, not plastic
         } else {
-          FS.puddleSrc.set(k, srcId);
-          world.set(x, y, z, ID.Melted);
+          // v4.17 Teardown melt: the last piece is gone — the cell empties
+          // and the molten plastic RUNS DOWN to pool on the first support
+          // under it (inside a hole in a wall it pools on the brick below).
+          CH.setRemoved(x, y, z, srcId, 0);
+          let py = y;
+          while (py > 1 && y - py < 10 && world.get(x, py - 1, z) === ID.Air) py--;
+          const sup = world.get(x, py - 1, z);
+          world.set(x, y, z, ID.Air);
+          if (sup !== ID.Melted && def(sup).solid && world.get(x, py, z) === ID.Air) {
+            world.set(x, py, z, ID.Melted);
+            FS.puddleSrc.set(FS.fkey(x, py, z), srcId);
+          }
+          if (py !== y) markDirtyAt(x, z);
+          // whatever only hung on this block now falls (Teardown physics)
+          collapseAround(x, y, z, 4, { n: 24 });
         }
         // NO burst here (Philippe's law): melting plastic slumps quietly
         // into its puddle — it never pops debris onto itself.
@@ -4450,6 +4463,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
                 FS.heatMap.set(k2, e);
               }
               e.h = Math.min(1, e.h + 0.16 * strength * fall);
+              // v4.17: remember WHERE the heat comes from (block -> source),
+              // so the melt eats the side that faces the flames first.
+              const w = strength * fall;
+              e.sx = (e.sx ?? 0) * 0.92 - dx * w;
+              e.sy = (e.sy ?? 0) * 0.92 - dy * w;
+              e.sz = (e.sz ?? 0) * 0.92 - dz * w;
             } else if (canIgnite && flamOf(id)) {
               if (Math.random() < flamOf(id) * 0.055 * strength * fall) startBurning(nx, ny, nz);
             }
@@ -6130,6 +6149,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   const pmat = skin(0xffffff);
   const pmesh = new THREE.InstancedMesh(pgeoBrick1x2, pmat, 360);
   pmesh.count = 0;
+  pmesh.frustumCulled = false; // v4.17 fix: an empty InstancedMesh caches an empty bounding sphere and is culled forever
   pmesh.castShadow = settings.realistic;
   pmesh.receiveShadow = settings.realistic;
   pmesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(360 * 3), 3);
@@ -6137,6 +6157,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
 
   const plateMesh = new THREE.InstancedMesh(pgeoPlate2x2, pmat, 240);
   plateMesh.count = 0;
+  plateMesh.frustumCulled = false; // v4.17 fix: an empty InstancedMesh caches an empty bounding sphere and is culled forever
   plateMesh.castShadow = settings.realistic;
   plateMesh.receiveShadow = settings.realistic;
   plateMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(240 * 3), 3);
@@ -6149,6 +6170,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   const pgeoPiece = buildStuddedSubPieceGeo(0.47, 0.31, 0.47, 1, 1);
   const pieceMesh = new THREE.InstancedMesh(pgeoPiece, pmat, PIECE_MAX);
   pieceMesh.count = 0;
+  pieceMesh.frustumCulled = false; // v4.17 fix: an empty InstancedMesh caches an empty bounding sphere and is culled forever
   pieceMesh.castShadow = settings.realistic;
   pieceMesh.receiveShadow = settings.realistic;
   pieceMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(PIECE_MAX * 3), 3);
@@ -10176,7 +10198,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     setMelt: (x: number, y: number, z: number, m: number) => {
       const fx = Math.floor(x), fy = Math.floor(y), fz = Math.floor(z);
       const cm = Math.max(0, Math.min(1, m));
-      FS.heatMap.set(FS.fkey(fx, fy, fz), { h: 0, m: cm, stage: Math.floor(cm * 8) });
+      FS.heatMap.set(FS.fkey(fx, fy, fz), { h: 0, m: cm, stage: Math.floor(cm * FS.MELT_STAGES) });
       markDirtyAt(fx, fz);
       saveDirty = true;
       return true;
