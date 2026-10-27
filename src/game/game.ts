@@ -997,12 +997,15 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     map: atlas,
     roughness: 0.42,
     metalness: 0.0,
-    clearcoat: 0.35,
-    clearcoatRoughness: 0.18,
+    // Char must read BLACK (Philippe's law). Measured on the rig: a black
+    // dielectric seen at a grazing angle mirrors the sky (Fresnel) and the
+    // charcoal pools read grey (~90/255). The world env comes from
+    // scene.environment, so envMapIntensity has no effect here — the lever
+    // is the base specular strength (F0) and a thinner clearcoat.
+    specularIntensity: 0.35,
+    clearcoat: 0.25,
+    clearcoatRoughness: 0.2,
     vertexColors: true,
-    // tuned down: at grazing angles a full-strength sky reflection turned
-    // the charcoal pools grey — char must read BLACK (Philippe's law)
-    envMapIntensity: 0.32,
   });
   const moltenLam = new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true });
   let moltenMat: THREE.Material = settings.realistic ? moltenStd : moltenLam;
