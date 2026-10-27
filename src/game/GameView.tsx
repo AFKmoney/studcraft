@@ -2147,30 +2147,50 @@ function StationScreen({ game }: { game: GameApi }) {
                 <MenuButton
                   variant="primary"
                   icon={<StarIcon size={20} />}
-                  onClick={() => game.enchant(1)}
-                  hint="Cost: 1 XP Level · Base Rune I (No bookshelves required)"
+                  onClick={() => game.enchantOffer(1)}
+                  hint="Reveal 3 runes and choose 1 · Cost: 1 XP Level, paid when you pick (No bookshelves required) · A held Book binds instantly instead"
                 >
-                   Bind Tier I LEGO Rune · 1 Level
+                   Reveal Tier I Runes · 1 Level
                 </MenuButton>
                 <MenuButton
                   variant="primary"
                   icon={<StarIcon size={20} />}
-                  onClick={() => game.enchant(2)}
-                  hint={`Cost: 2 XP Levels · Stronger Rune II (${(hud.bookshelves ?? 0) >= 6 ? "Bookshelf bonus active!" : "Place 6+ Bookshelves nearby for full power"})`}
+                  onClick={() => game.enchantOffer(2)}
+                  hint={`Reveal 3 runes and choose 1 · Cost: 2 XP Levels, paid when you pick · Stronger Rune II (${(hud.bookshelves ?? 0) >= 6 ? "Bookshelf bonus active!" : "Place 6+ Bookshelves nearby for full power"})`}
                 >
-                  ✦ Bind Tier II LEGO Rune · 2 Levels
+                  ✦ Reveal Tier II Runes · 2 Levels
                 </MenuButton>
                 <MenuButton
                   variant="primary"
                   icon={<StarIcon size={20} />}
-                  onClick={() => game.enchant(3)}
-                  hint={`Cost: 3 XP Levels · Master Rune III–V + Bonus Rune (${(hud.bookshelves ?? 0) >= 12 ? "Max Bookshelf power active!" : "Place 12–15 Bookshelves within 2 blocks for max tier"})`}
+                  onClick={() => game.enchantOffer(3)}
+                  hint={`Reveal 3 runes and choose 1 · Cost: 3 XP Levels, paid when you pick · Master Rune III–V + Bonus Rune (${(hud.bookshelves ?? 0) >= 12 ? "Max Bookshelf power active!" : "Place 12–15 Bookshelves within 2 blocks for max tier"})`}
                 >
-                  ✦✦ Bind Tier III Master Rune · 3 Levels
+                  ✦✦ Reveal Tier III Runes · 3 Levels
                 </MenuButton>
+                {hud.enchOffers && (
+                  <>
+                    <p className="sc-status">✦ The table offers — pick your rune:</p>
+                    {hud.enchOffers.offers.map((o, i) => (
+                      <MenuButton
+                        key={o.key}
+                        variant="primary"
+                        icon={<StarIcon size={20} />}
+                        disabled={!hud.creative && hud.level < (hud.enchOffers?.tier ?? 0)}
+                        onClick={() => game.enchantPick(i)}
+                        hint={`${o.name} rises to level ${o.to} · Cost: ${hud.enchOffers?.tier ?? 0} XP Level${(hud.enchOffers?.tier ?? 0) > 1 ? "s" : ""}, paid now`}
+                      >
+                        ✦ {o.label}
+                      </MenuButton>
+                    ))}
+                    <MenuButton variant="ghost" onClick={() => game.enchantCancel()} hint="Dismiss the offers — no cost">
+                      Not now
+                    </MenuButton>
+                  </>
+                )}
                 {hud.heldEnch && <p className="sc-status">Held: ✦ {hud.heldEnch}</p>}
                 <p className="sc-muted">
-                  Surround the Enchanting Table with up to 15 LEGO Bookshelves (within 2 blocks) to unlock higher rune levels and multi-enchant rolls. Blades & Boss Weapons take Sharpness, Smite, Bane, Fire Aspect, Knockback, Looting. Tridents & Crossbows take Power/Sharpness & Unbreaking. Picks take Efficiency, Fortune or Silk Touch. Armor takes Protection & Thorns; Boots learn Feather Fall, Depth Strider or Frost Walker. Hold a plain Book to bind an Enchanted Book.
+                  Surround the Enchanting Table with up to 15 LEGO Bookshelves (within 2 blocks) to unlock higher rune levels. Reveal a tier to see three runes, then choose the one you want — you pay only when you pick. Blades & Boss Weapons take Sharpness, Smite, Bane, Fire Aspect, Knockback, Looting. Tridents & Crossbows take Power/Sharpness & Unbreaking. Picks take Efficiency, Fortune or Silk Touch. Armor takes Protection & Thorns; Boots learn Feather Fall, Depth Strider or Frost Walker. Hold a plain Book to bind an Enchanted Book (books bind instantly, no choice).
                 </p>
               </div>
             )}
