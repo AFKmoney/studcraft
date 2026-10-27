@@ -487,9 +487,9 @@ put(
     hard: 0.25,
   }),
 );
-put(b(ID.Coal, "Coal", "#2b2b2b", "#3a3a3a", "#2b2b2b", "#1a1a1a", { hard: 1.6, tough: true }));
-put(b(ID.Gold, "Gold", "#f0c43a", "#ffd86a", "#e2b12e", "#c89620", { hard: 1.7, tough: true }));
-put(b(ID.Diamond, "Aqua gem", "#3ec8c8", "#7ee0e0", "#2eb4b4", "#1e9494", { hard: 1.9, tough: true }));
+put(b(ID.Coal, "Coal", "#2b2b2b", "#3a3a3a", "#2b2b2b", "#1a1a1a", { hard: 1.6, tough: true, need: 1 }));
+put(b(ID.Gold, "Gold", "#f0c43a", "#ffd86a", "#e2b12e", "#c89620", { hard: 1.7, tough: true, need: 3 }));
+put(b(ID.Diamond, "Aqua gem", "#3ec8c8", "#7ee0e0", "#2eb4b4", "#1e9494", { hard: 1.9, tough: true, need: 3 }));
 put(b(ID.Red, "Red", "#e23b2f", "#f25a46", "#d43228", "#b02620", { hard: 0.5 }));
 put(b(ID.Blue, "Blue", "#1f5fbf", "#3d7ad4", "#1b56b0", "#154890", { hard: 0.5 }));
 put(b(ID.Yellow, "Yellow", "#f5c518", "#ffe14a", "#e6b40e", "#c8980a", { hard: 0.5 }));
@@ -1117,9 +1117,9 @@ export function stairsVariant(canonical: number, dir: number): number {
 // 313–342. Ores mirror IronOre/EmeraldOre; armor goes through wear() with
 // per-material armor values set right after, like HelmChrome/ResinBoots.
 put(b(ID.CoalOre, "Coal ore", "#9aa1a8", "#a7aeb4", "#565d64", "#7a8188", { hard: 1.6, tough: true, need: 1, drop: ID.Coal }));
-put(b(ID.GoldOre, "Gold ore", "#c9b458", "#a7aeb4", "#d8b93a", "#7a8188", { hard: 1.8, tough: true, need: 2, drop: ID.Gold }));
-put(b(ID.DiamondOre, "Diamond ore", "#7fd8d8", "#a7aeb4", "#5fc8c0", "#7a8188", { hard: 1.9, tough: true, need: 2, drop: ID.Diamond }));
-put(b(ID.LapisOre, "Lapis ore", "#3b5fc4", "#a7aeb4", "#2f4fa8", "#7a8188", { hard: 1.6, tough: true, need: 1, drop: ID.Blue }));
+put(b(ID.GoldOre, "Gold ore", "#c9b458", "#a7aeb4", "#d8b93a", "#7a8188", { hard: 1.8, tough: true, need: 3, drop: ID.Gold }));
+put(b(ID.DiamondOre, "Diamond ore", "#7fd8d8", "#a7aeb4", "#5fc8c0", "#7a8188", { hard: 1.9, tough: true, need: 3, drop: ID.Diamond }));
+put(b(ID.LapisOre, "Lapis ore", "#3b5fc4", "#a7aeb4", "#2f4fa8", "#7a8188", { hard: 1.6, tough: true, need: 2, drop: ID.Blue }));
 put(b(ID.RedOre, "Red ore", "#c43a3a", "#a7aeb4", "#a82f2f", "#7a8188", { hard: 1.7, tough: true, need: 2, drop: ID.Red }));
 put(b(ID.Mycelium, "Mycelium", "#8a728e", "#8a728e", "#8d5a34", "#6d4426", { hard: 0.35, drop: ID.Dirt }));
 put(b(ID.Podzol, "Podzol", "#6a4424", "#6a4424", "#8d5a34", "#5c3a22", { hard: 0.35, drop: ID.Dirt }));

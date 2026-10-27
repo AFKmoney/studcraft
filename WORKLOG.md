@@ -1964,3 +1964,25 @@ Comprehensive documentation of all internal subsystems in StudCraft to ensure fu
 - Not done here: on-device feel on the A54, APK / exe rebuild.
 
 - **Delivery (2026-10-26, Muse — repackage of Claude's v4.13, head `2aec85d`):** tsc 0 errors; web builds (apk + standalone) OK. **APK vc35 / 4.13** (41,324,127 bytes, MD5 `5e616774…`, sha256 `a3d86796…`) — aapt badging verified, testzip None, 14 mp3, 86 cube icons. **PC exe 4.13.0** (120,195,728 bytes, MD5 `d1a9541a…`, sha256 `384b651d…`, unsigned) — asar verified: new bundle `game-B9R7aYtN.js`, no `out/` entries, version 4.13.0; build config restored as `electron-builder.yml` in the PC chantier (electron 33.4.11 pinned, `signAndEditExecutable=false`, afterPack/resedit stamp — the chantier `package.json` had lost its `build` section). **Web zip** (41,073,684 bytes, MD5 `eee85a4f…`, new Drive file `168qeXNugNumKTbYz4lqhpIJZB3eZ3hOL`) and **complete bundle `Studcraft-v4.13-complete.zip`** (202,331,876 bytes, MD5 `66eafff3…`, Drive file `1odFIfvsV33tIkAiTAv08a4UGbbrCIiET`). Drive: APK updated in place (`190eLbHx7orBV70Kd6OGDAm8lMS_ilrBt`) and exe updated in place (`1XcLQhYM6aXQpzOooFpnwlSUvClCAY9x5`); every Drive MD5 verified == local. GitHub Release v4.13 created with notes + Drive links (assets not uploadable — known token scope limit on `uploads.github.com`). Philippe's A54 / PC verdict on v4.13 is the final verdict.
+---
+
+## 2026-10-26 — v4.14: Minecraft mining model + the block visibly crumbles in LEGO (Muse, ordered by Philippe)
+
+**For Claude / Gemini:** touched `src/game/game.ts` (mining model, crack overlay, chips, break burst gating) and `src/game/blocks.ts` (ore `need` data only). Did not touch quality/lighting/worldgen/mob code.
+
+Philippe's order after testing v4.13 on PC: rework block logic "comme dans Minecraft" — the tool in hand must make block destruction easier OR NOT — and you must SEE the block crumble and break apart as LEGO, folding in the voxel-physics direction of the micro-voxel project, LEGO-style. Scope of THIS step: mining truth + visible crumbling + physical brick debris. Persistent sub-block carving and structural collapse of buildings remain the next layer, as Philippe sequenced it.
+
+### Mining model (Minecraft rules)
+- Every block now resolves to a tool class in the mining code: pick class = `tough || need > 0 || hard >= 1`, else the existing AXE_OK / SHOVEL_OK lists, else classless (hands are fine).
+- Right class: speed = `1 + tier x 1.7` (unchanged curve). Wrong tool or bare hands on a classed block: time multiplier penalty — pick class x3.5, axe class x3, shovel class x1.8. Before, bare hands mined everything at full hardness speed (diamonds by hand in 1.9 s).
+- Drops were already tier-gated by `block.need` in breakBlock, but the data had holes — fixed in blocks.ts: legacy worldgen ores `Coal need 1`, `Gold need 3`, `Diamond need 3` (were 0); classic ores `GoldOre 2->3`, `DiamondOre 2->3`, `LapisOre 1->2` (Minecraft parity: gold/diamond need an iron-tier pick, lapis a stone-tier pick).
+
+### Visible crumbling
+- Procedural crack overlay on the mined block: 6 canvas-generated crack textures (zero assets), stages grow with mining progress; from stage 2 the cracks also run along the two brick courses — LEGO bricks split on their seams. The overlay hides on target change, release, or break.
+- Each new damage stage knocks 3 brick chips off the hit face (existing instanced debris pool, block side color).
+- Break burst is now material-aware: solids keep the modular burst (2x2 plate + 1x2 sub-bricks with studs, gravity + terrain bounce + rest snap), plants/non-solids burst into 7 chips, glass shatters into 12 pale shards.
+
+### QA
+- tsc: 0 errors.
+- qa74b (Playwright, SwiftShader, survival seed 23, waited for the chunk-stream plateau at 64 chunks; the VM was heavily loaded, so wall times stretch — the comparisons are same-session): dug grass + 3 dirt down to stone at y=41. Bare hand on stone: NOT broken after 35 s (it now needs ~5.1 game-s at the x3.5 penalty). Stone pick (tier 2) on the same stone: broken in 11.7 s wall. Drop verified visually (stone item landed in hotbar slot 2). Crack stages screenshotted on the block face mid-mine (faint in a dark 1-wide shaft under SwiftShader; stroke contrast raised afterwards), modular debris burst captured mid-flight in the shaft. 0 page errors (1 console error = an external resource failing through the sandbox proxy, unrelated).
+- Philippe's A54 / PC verdict is the final verdict, as always.

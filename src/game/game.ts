@@ -1151,6 +1151,89 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   highlight.visible = false;
   scene.add(highlight);
 
+  // v4.14 — crumbling: a procedural crack overlay that grows over the
+  // block being mined (zero texture assets: the cracks are drawn on a
+  // canvas in 6 stages, and from stage 2 they follow the brick courses —
+  // LEGO bricks split along their seams). Chips fly while you mine and
+  // the block bursts into studded sub-bricks when it breaks.
+  function makeCrackTexture(stage: number): THREE.Texture {
+    const S = 256;
+    const cv = document.createElement("canvas");
+    cv.width = S;
+    cv.height = S;
+    const g = cv.getContext("2d")!;
+    let seed = 1234 + stage * 777;
+    const rnd = () => {
+      seed = (seed * 16807) % 2147483647;
+      return seed / 2147483647;
+    };
+    g.lineCap = "round";
+    const cracks = 3 + stage * 3;
+    for (let c = 0; c < cracks; c++) {
+      let x = S * (0.3 + rnd() * 0.4);
+      let y = S * (0.3 + rnd() * 0.4);
+      let ang = rnd() * Math.PI * 2;
+      const steps = 4 + Math.floor(rnd() * 4) + stage * 2;
+      g.strokeStyle = `rgba(22,13,8,${0.55 + stage * 0.08})`;
+      g.lineWidth = Math.max(1.6, 3.2 - stage * 0.22);
+      g.beginPath();
+      g.moveTo(x, y);
+      for (let s = 0; s < steps; s++) {
+        ang += (rnd() - 0.5) * 1.15;
+        const len = 9 + rnd() * 17;
+        x += Math.cos(ang) * len;
+        y += Math.sin(ang) * len;
+        g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+    if (stage >= 2) {
+      g.strokeStyle = `rgba(22,13,8,${0.38 + stage * 0.08})`;
+      g.lineWidth = 2.2;
+      for (const fy of [1 / 3, 2 / 3]) {
+        g.beginPath();
+        let x = S * 0.12;
+        let y = S * fy + (rnd() - 0.5) * 8;
+        g.moveTo(x, y);
+        while (x < S * 0.88) {
+          x += 14 + rnd() * 22;
+          y += (rnd() - 0.5) * 7;
+          g.lineTo(x, y);
+        }
+        g.stroke();
+      }
+    }
+    const tex = new THREE.CanvasTexture(cv);
+    tex.anisotropy = 2;
+    return tex;
+  }
+  const crackMats: THREE.MeshBasicMaterial[] = [];
+  for (let s = 0; s < 6; s++) {
+    crackMats.push(
+      new THREE.MeshBasicMaterial({ map: makeCrackTexture(s), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }),
+    );
+  }
+  const crackMesh = new THREE.Mesh(new THREE.BoxGeometry(1.006, 1.006, 1.006), crackMats[0]);
+  crackMesh.visible = false;
+  crackMesh.renderOrder = 3;
+  scene.add(crackMesh);
+  let crackStageShown = -1;
+  let chipStage = -1;
+  function showCrack(x: number, y: number, z: number, progress: number) {
+    const stage = Math.max(0, Math.min(5, Math.floor(progress * 5.999)));
+    crackMesh.position.set(x + 0.5, y + 0.5, z + 0.5);
+    if (stage !== crackStageShown) {
+      crackMesh.material = crackMats[stage];
+      crackStageShown = stage;
+    }
+    crackMesh.visible = true;
+  }
+  function hideCrack() {
+    crackMesh.visible = false;
+    crackStageShown = -1;
+    chipStage = -1;
+  }
+
   const ghostMat = skin(0xffffff, { transparent: true, opacity: 0.45, depthWrite: false });
   const ghost = new THREE.Group();
   ghost.userData.keepShadow = false;
@@ -3603,12 +3686,17 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (id === ID.Mushroom || id === ID.MushroomRed) bumpQuest("break", "shroom");
     if (id === ID.Web) bumpQuest("break", "web");
     if (id === ID.EndCrystal) popCrystal(x, y, z);
-    burstModularBlock(x + 0.5, y + 0.5, z + 0.5, block);
+    // v4.14: solids burst into studded LEGO sub-bricks (plates + 1x2s);
+    // plants and glass just shatter into chips.
+    if (block.plant || !block.solid) burst(x + 0.5, y + 0.5, z + 0.5, block.color, 7);
+    else if (block.glass) burst(x + 0.5, y + 0.5, z + 0.5, "#dff2ff", 12);
+    else burstModularBlock(x + 0.5, y + 0.5, z + 0.5, block);
     audio.break();
     swing = 1;
     saveDirty = true;
     mineTime = 0;
     mineKey = "";
+    hideCrack();
   }
 
   function bumpQuest(kind: "break" | "place" | "kill", tag: string) {
@@ -8084,24 +8172,48 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         if (mineKey !== key) {
           mineKey = key;
           mineTime = 0;
+          chipStage = -1;
+          crackStageShown = -1;
         }
         mineTime += dt;
         const held = def(hotbar[slot]);
-        let mult = 1;
-        if (held.tool === "pick" && (block.tough || block.need > 0 || block.hard >= 1)) mult = 1 + held.tier * 1.7;
-        if (held.tool === "axe" && AXE_OK(hit.id)) mult = 1 + held.tier * 1.7;
-        if (held.tool === "shovel" && SHOVEL_OK(hit.id)) mult = 1 + held.tier * 1.7;
+        // v4.14 — Minecraft mining model: every block belongs to a tool
+        // class. The right class multiplies speed by tool tier; bare
+        // hands or the WRONG tool on a tool-class block are heavily
+        // penalized (stone-like x3.5, wood x3, earth x1.8), and drops
+        // stay gated by block.need (pick tier) inside breakBlock.
+        const cls = block.tough || block.need > 0 || block.hard >= 1 ? "pick" : AXE_OK(hit.id) ? "axe" : SHOVEL_OK(hit.id) ? "shovel" : "";
+        const rightTool = cls !== "" && held.tool === cls;
+        let mult = rightTool ? 1 + held.tier * 1.7 : 1;
         if (hotbar[slot] === ID.Shears && (hit.id === ID.Leaves || hit.id === ID.TallGrass)) mult = 6;
         if (rankLv >= 2) mult *= 1.15;
-        let need = (creative ? 0.08 : block.hard) / mult;
+        let need = creative ? 0.08 : block.hard / mult;
+        if (!creative && cls !== "" && !rightTool) need *= cls === "pick" ? 3.5 : cls === "axe" ? 3 : 1.8;
         const eff = enchLvl(hotbar[slot], "efficiency");
         if (eff > 0 && mult > 1) need /= 1 + 0.3 * eff;
         if (hammer && block.tough) need *= 0.38;
-        hud.mine = Math.min(1, mineTime / need);
+        hud.mine = Math.min(1, mineTime / Math.max(need, 0.01));
+        // v4.14 — the block visibly crumbles: crack overlay grows with
+        // progress, and each new damage stage knocks chips off the face.
+        const dmgStage = Math.floor(hud.mine * 6);
+        if (dmgStage > chipStage) {
+          if (chipStage >= 0) {
+            burst(
+              hit.x + 0.5 + hit.nx * 0.55 + (Math.random() - 0.5) * 0.3,
+              hit.y + 0.5 + hit.ny * 0.55 + (Math.random() - 0.5) * 0.3,
+              hit.z + 0.5 + hit.nz * 0.55 + (Math.random() - 0.5) * 0.3,
+              block.side || block.color,
+              3,
+            );
+          }
+          chipStage = dmgStage;
+        }
+        showCrack(hit.x, hit.y, hit.z, hud.mine);
         if (mineTime >= need) breakBlock(hit.x, hit.y, hit.z);
       } else if (!sample.mine) {
         mineTime = 0;
         mineKey = "";
+        hideCrack();
       }
       const held = hotbar[slot];
       if (held && def(held).placeable) {
@@ -8129,6 +8241,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     } else {
       mineTime = 0;
       mineKey = "";
+      hideCrack();
       const heldId = hotbar[slot];
       if (heldId) {
         const held = def(heldId);
