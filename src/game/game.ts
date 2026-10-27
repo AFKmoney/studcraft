@@ -994,8 +994,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   // pass 4: physically based molten plastic — a satin plastic body under a
   // thin wet CLEARCOAT (sharp highlight + Fresnel sky reflection on top of
   // the colour), the way real hot ABS reads. Only molten fragments pay it.
+  // v4.17: no texture — the molten field carries the brick's own colour per
+  // vertex (blended across fused bricks, charred), smooth as real liquid.
   const moltenStd = new THREE.MeshPhysicalMaterial({
-    map: atlas,
     roughness: 0.42,
     metalness: 0.0,
     // Char must read BLACK (Philippe's law). Measured on the rig: a black
@@ -1008,7 +1009,44 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     clearcoatRoughness: 0.2,
     vertexColors: true,
   });
-  const moltenLam = new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true });
+  const moltenLam = new THREE.MeshLambertMaterial({ vertexColors: true });
+  // v4.17 molten shader: the mesher writes, per vertex, brick A's colour
+  // (color), brick B's colour + the signed distance dB − dA (tangent) and the
+  // char amount (uv.x). The border between two fused bricks is drawn here,
+  // per pixel and anti-aliased (sharp, never stair-stepped by the lattice),
+  // then the burnt-plastic ramp: colour -> scorched brown -> glossy black.
+  const moltenize = (mat: THREE.Material, key: string) => {
+    mat.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader
+        .replace("#include <common>", "#include <common>\n#ifndef USE_TANGENT\nattribute vec4 tangent;\n#endif\nvarying vec4 vMolB;\nvarying float vMolC;")
+        .replace("#include <begin_vertex>", "#include <begin_vertex>\nvMolB = tangent;\nvMolC = uv.x;");
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          "#include <common>",
+          `#include <common>
+varying vec4 vMolB;
+varying float vMolC;
+vec3 molChar(vec3 base, float c) {
+  float k = clamp(c, 0.0, 1.0);
+  float brown = max(0.0, 1.0 - abs(k - 0.45) / 0.35) * 0.65;
+  float blk = k * k * (3.0 - 2.0 * k);
+  vec3 col = base * (1.0 - brown) + base * vec3(0.42, 0.26, 0.15) * 1.6 * brown;
+  return col * (1.0 - k * 0.3) * (1.0 - blk * vec3(0.94, 0.955, 0.97));
+}`,
+        )
+        .replace(
+          "#include <color_fragment>",
+          `#if defined( USE_COLOR ) || defined( USE_COLOR_ALPHA )
+  float molS = vMolB.a;
+  float molW = max(fwidth(molS), 1e-4);
+  diffuseColor.rgb *= molChar(mix(vMolB.rgb, vColor.rgb, smoothstep(-molW, molW, molS)), vMolC);
+#endif`,
+        );
+    };
+    mat.customProgramCacheKey = () => key;
+  };
+  moltenize(moltenStd, "molten-v417-std");
+  moltenize(moltenLam, "molten-v417-lam");
   let moltenMat: THREE.Material = settings.realistic ? moltenStd : moltenLam;
 
   const chunkRoot = new THREE.Group();
@@ -10166,6 +10204,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     getYaw: () => player.yaw,
     getSpeed: () => Math.hypot(player.vx, player.vz),
     getPos: () => ({ x: player.x, y: player.y, z: player.z }),
+    // v4.17 QA hook (Claude): place the camera for staged photos. Inert in play.
+    setPos: (x: number, y: number, z: number) => { player.x = x; player.y = y; player.z = z; player.vx = player.vz = 0; return true; },
     setKeys: (codes: string[]) => {
       keys.clear();
       for (const code of codes) keys.add(code);
@@ -10195,10 +10235,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     // fusion geometry reads meltAt + world state only, so QA can stage
     // slump / support-sink / merged-pool scenes deterministically
     // without tending live fires in the crash-prone SwiftShader rig).
-    setMelt: (x: number, y: number, z: number, m: number) => {
+    setMelt: (x: number, y: number, z: number, m: number, sx?: number, sy?: number, sz?: number) => {
       const fx = Math.floor(x), fy = Math.floor(y), fz = Math.floor(z);
       const cm = Math.max(0, Math.min(1, m));
-      FS.heatMap.set(FS.fkey(fx, fy, fz), { h: 0, m: cm, stage: Math.floor(cm * FS.MELT_STAGES) });
+      FS.heatMap.set(FS.fkey(fx, fy, fz), { h: 0, m: cm, stage: Math.floor(cm * FS.MELT_STAGES), sx, sy, sz });
       markDirtyAt(fx, fz);
       saveDirty = true;
       return true;

@@ -1,5 +1,5 @@
 import { ATLAS_COLS, ATLAS_ROWS, ID, def, faceTile } from "./blocks";
-import { fkey, heatDirAt, heatMap, meltAt, meltOrder, puddleSrc } from "./fireState";
+import { MELT_STAGES, fkey, heatDirAt, heatMap, meltAt, puddleSrc } from "./fireState";
 import { FULL, chipMap, pieceIndex, removedAt } from "./chipState";
 import { hasTuftAt, tuftJitter } from "./tuftState";
 import { CS, HEIGHT, type World } from "./world";
@@ -135,122 +135,37 @@ function addBoxT(s: Surface, x0: number, y0: number, z0: number, x1: number, y1:
   pushQuad(s, [[x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0]], [0, 0, -1], side, undefined, tint);
 }
 
-// Charred tint for a finished melt puddle: burnt plastic ends as a near-
-// black warm charcoal pool, only a whisper of the original hue surviving.
-const PUDDLE_CHAR: readonly number[] = [0.05, 0.04, 0.035];
-// v4.16.1 pass 2: the thin cooling rim of a pool stays scorched brown with a
-// trace of the source colour (multiplied by the brick's own texel).
-const PUDDLE_RIM: readonly number[] = [0.12, 0.075, 0.045];
-
 // ---------------------------------------------------------------------------
-// v4.16.1 realism pass 2 (Claude) — MOLTEN SURFACE.
-// Everything that is actually liquid plastic (a block past MOLTEN_MIN melt,
-// and every Melted puddle) is meshed into its own `molten` surface: smooth
-// per-vertex normals over subdivided faces, rendered by a seamless glossy
-// material (game.ts) — no sub-brick seams, no stud texture, real specular
-// and env reflections that follow the curvature. Zero idle cost: when
-// nothing melts the surface is empty and no mesh is created. All of it is
-// computed at meshing time; the per-frame cost is only the triangles of
-// geometry that already existed.
+// MOLTEN SURFACE (v4.16.1 pass 2, rebuilt in v4.17 as an implicit field —
+// see buildChunk). Everything that is liquid plastic goes into its own
+// `molten` surface, rendered by a seamless glossy material (game.ts): no
+// sub-brick seams, no stud texture, real specular that follows the
+// curvature. Zero idle cost: when nothing melts the surface is empty and no
+// mesh is created; all of it is computed at meshing time.
 // ---------------------------------------------------------------------------
 
-// UV of a tile's centre: molten plastic samples ONE texel of its source
-// block's top tile (between the studs = the brick's plain colour), so the
-// atlas detail (seams, studs, bevel) never prints onto the liquid.
-function tileCentreUV(tile: number): [number, number] {
-  const c = tile % ATLAS_COLS;
-  const r = Math.floor(tile / ATLAS_COLS);
-  return [(c + 0.5) / ATLAS_COLS, 1 - (r + 0.5) / ATLAS_ROWS];
-}
-
-// Quad with PER-VERTEX normals (smooth shading) and a single UV point.
-function pushQuadN(s: Surface, v: number[][], nrm: number[][], uv: readonly number[], shade: readonly number[], tints: readonly (readonly number[])[]) {
-  const order = shade[0] + shade[2] < shade[1] + shade[3] ? QUAD_ORDER_1 : QUAD_ORDER_0;
-  const tx = v[1][0] - v[0][0], ty = v[1][1] - v[0][1], tz = v[1][2] - v[0][2];
-  const inv = 1 / (Math.hypot(tx, ty, tz) || 1);
-  for (let k = 0; k < 6; k++) {
-    const i = order[k];
-    const vi = v[i], ni = nrm[i];
-    s.pos.push(vi[0], vi[1], vi[2]);
-    s.nor.push(ni[0], ni[1], ni[2]);
-    s.uv.push(uv[0], uv[1]);
-    const c = shade[i];
-    const tint = tints[i];
-    s.col.push(c * tint[0], c * tint[1], c * tint[2]);
-    s.tan.push(tx * inv, ty * inv, tz * inv, 1);
+// v4.17: a brick's base colour in LINEAR space (vertex colours are linear;
+// the def colours are sRGB hex) — the molten surface is untextured.
+const LIN_CACHE = new Map<number, number[]>();
+function brickLinear(id: number): number[] {
+  let c = LIN_CACHE.get(id);
+  if (!c) {
+    const hex = def(id).color || "#808080";
+    const n = parseInt(hex.slice(1, 7), 16) || 0x808080;
+    const lin = (v: number) => { const s = v / 255; return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); };
+    c = [lin((n >> 16) & 255), lin((n >> 8) & 255), lin(n & 255)];
+    LIN_CACHE.set(id, c);
   }
+  return c;
 }
 
-function norm3(a: number[]) {
-  const l = Math.hypot(a[0], a[1], a[2]) || 1;
-  a[0] /= l; a[1] /= l; a[2] /= l;
-  return a;
-}
-
-// v4.16.1 pass 2 — burnt plastic colour. Real burning ABS does not darken
-// as one flat tint: it goes from its colour through a scorched brown to
-// glossy black char, in irregular patches, hottest (darkest) low down where
-// the fire licks. `charAmt` = local char 0..1 → colour multiplier applied
-// on top of the brick's base tint. The patch noise is a smooth function of
-// WORLD position, so the pattern runs continuously across fused neighbours.
-const SCORCH = [0.42, 0.26, 0.15];
+// Burnt plastic: real burning ABS goes from its colour through a scorched
+// brown to glossy black char, in irregular patches. The mesher writes the
+// char AMOUNT per vertex (this smooth world-space patch noise runs across
+// fused bricks); the colour ramp itself is applied per pixel in the molten
+// shader (game.ts moltenize).
 function charPatch(px: number, py: number, pz: number) {
   return 0.5 + 0.5 * Math.sin(px * 7.3 + pz * 3.1 + py * 5.7) * Math.sin(pz * 6.1 - px * 2.3 + py * 4.1);
-}
-function charTint(base: readonly number[], c: number): number[] {
-  const k = Math.max(0, Math.min(1, c));
-  const brown = Math.max(0, 1 - Math.abs(k - 0.45) / 0.35) * 0.65; // scorched-brown band mid-way
-  const blk = k * k * (3 - 2 * k);
-  const dk = 1 - k * 0.3;
-  const out = [0, 0, 0];
-  for (let i = 0; i < 3; i++) {
-    const col = base[i] * (1 - brown) + base[i] * SCORCH[i] * 1.6 * brown;
-    out[i] = col * dk * (1 - blk * (0.94 + i * 0.015));
-  }
-  return out;
-}
-
-// Radial profile of a molten pool (rho 0 = centre, 1 = rim): a thick viscous
-// body that rolls over a rounded meniscus edge and feathers onto the ground.
-const BLOB_RHO = [0, 0.38, 0.68, 0.86, 0.96, 1.04];
-const BLOB_H = [1, 0.97, 0.87, 0.64, 0.3, 0.02];
-
-// A smooth molten blob: centre (cx, cz), base y, rim radius R(theta), peak
-// thickness H. Smooth normals from the radial slope. Top-facing only (it
-// always sits on a surface). K = angular segments.
-function emitBlob(s: Surface, cx: number, baseY: number, cz: number, R: (t: number) => number, H: number, K: number, uv: readonly number[], tint: readonly number[], rim: readonly number[] = tint) {
-  const rings = BLOB_RHO.length;
-  const P: number[][][] = [];
-  const N: number[][][] = [];
-  for (let k = 0; k <= K; k++) {
-    const th = (k / K) * Math.PI * 2;
-    const c = Math.cos(th), sn = Math.sin(th);
-    const rad = R(th);
-    const pr: number[][] = [], nr: number[][] = [];
-    for (let r = 0; r < rings; r++) {
-      const rho = BLOB_RHO[r];
-      pr.push([cx + c * rad * rho, baseY + H * BLOB_H[r], cz + sn * rad * rho]);
-      // radial slope dy/dr from the neighbouring rings
-      const r0 = Math.max(0, r - 1), r1 = Math.min(rings - 1, r + 1);
-      const dy = H * (BLOB_H[r1] - BLOB_H[r0]);
-      const dr = rad * (BLOB_RHO[r1] - BLOB_RHO[r0]) || 1;
-      const sl = dy / dr;
-      nr.push(norm3([-sl * c, 1, -sl * sn]));
-    }
-    P.push(pr); N.push(nr);
-  }
-  const shade = [1, 1, 1, 1];
-  // charred black body, the thin rim cooler: a scorched-brown edge
-  const ringTint = BLOB_RHO.map((rho) => {
-    const w = Math.max(0, Math.min(1, (rho - 0.9) / 0.14)); // a thin cooling edge only
-    return [tint[0] + (rim[0] - tint[0]) * w, tint[1] + (rim[1] - tint[1]) * w, tint[2] + (rim[2] - tint[2]) * w];
-  });
-  for (let k = 0; k < K; k++) {
-    for (let r = 0; r < rings - 1; r++) {
-      // clockwise in (x, z) seen from above = front face (see FACES top)
-      pushQuadN(s, [P[k + 1][r], P[k + 1][r + 1], P[k][r + 1], P[k][r]], [N[k + 1][r], N[k + 1][r + 1], N[k][r + 1], N[k][r]], uv, shade, [ringTint[r], ringTint[r + 1], ringTint[r + 1], ringTint[r]]);
-    }
-  }
 }
 
 // Horizontal/vertical tube between two points (axis-aligned runs only) —
@@ -353,6 +268,16 @@ function addStud(s: Surface, x: number, y: number, z: number, tile: number, jit 
   }
 }
 
+// v4.17 molten field cache: a contoured cell is reused as long as nothing in
+// its 5×5×5 neighbourhood changed (block ids, melt stages, heat direction,
+// puddle sources) — a remesh only re-contours the cells around the brick
+// whose melt stage moved. Bounded; cleared wholesale when it grows.
+type MoltenCell = { sig: number; pos: number[]; nor: number[]; uv: number[]; col: number[]; tan: number[] };
+const moltenCache = new Map<string, MoltenCell>();
+function appendAll(dst: number[], src: number[]) {
+  for (let i = 0; i < src.length; i += 4096) dst.push(...src.slice(i, i + 4096));
+}
+
 export function buildChunk(world: World, cx: number, cz: number, fancy: boolean, detail = true) {
   const opaque = empty();
   const glass = empty();
@@ -444,106 +369,453 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
     return meltActive && meltAt(x, y, z) > 0;
   };
 
-  // ---- v4.17 MELT = TEARDOWN LEGO (Claude, Philippe 12:01: « si je fais un
-  // trou dans le mur avec du feu, ça doit avoir l'air d'un trou dans du
-  // plastique fondu — pas des coussins, comme du vrai plastique qui fond »).
-  // A heated block melts PIECE BY PIECE (its 12 LEGO pieces), the pieces
-  // facing the flames first (fireState.meltOrder over the heat direction):
-  // melted pieces are GONE — the fire eats a hole — the pieces on the rim of
-  // the hole are molten (rounded, glossy, charred, dripping), the rest of the
-  // block stays a brick. The liquid runs down and pools at the bottom of the
-  // hole. Neighbouring rims overlap into one molten edge.
-  /** [gone, rim] piece masks of a melting block (chips included in gone). */
-  function meltMasks(x: number, y: number, z: number, id: number): [number, number] {
-    const m = meltAt(x, y, z);
-    if (m <= 0) return [removedAt(x, y, z, id), 0];
-    const [dx, dy, dz] = heatDirAt(x, y, z);
-    const order = meltOrder(dx, dy, dz);
-    const k = Math.min(12, Math.floor(m * 12 + 1e-6));
-    let gone = removedAt(x, y, z, id);
-    for (let i = 0; i < k; i++) gone |= 1 << order[i];
-    let rim = 0;
-    if (k < 12) rim |= (1 << order[k]) & ~gone; // the piece melting right now
-    for (let p = 0; p < 12; p++) {
-      if (gone & (1 << p)) continue;
-      const ix = p & 1, iz = (p >> 1) & 1, iy = p >> 2;
-      const nb = [pieceIndex(1 - ix, iy, iz), pieceIndex(ix, iy, 1 - iz)];
-      if (iy > 0) nb.push(pieceIndex(ix, iy - 1, iz));
-      if (iy < 2) nb.push(pieceIndex(ix, iy + 1, iz));
-      for (const q of nb) if (gone & (1 << q)) { rim |= 1 << p; break; }
-    }
-    return [gone & FULL, rim & FULL];
+  // ---- v4.17 MELT, rethought from scratch (Claude — Philippe 12:31: « c'est
+  // affreux, c'est des bulles… repense complètement la fonte »).
+  // Molten plastic is ONE continuous implicit surface (a signed distance
+  // field: pure math, zero assets) instead of separate shapes. Every melting
+  // brick is a volume that softens (edges round a little), SAGS at the top
+  // (lower on the side the flames lick), SLUMPS outward at its foot, is EATEN
+  // AWAY on its exposed faces (most where the heat comes from), RUNS DOWN its
+  // faces in streaks and HANGS DRIPS from an open underside; a puddle is a
+  // thin meniscus sheet on the floor. Everything molten is SMOOTH-UNIONED, so
+  // neighbouring molten bricks, their drips and the pools under them fuse into
+  // one liquid body, and the liquid wets the cold bricks it touches (fillets).
+  // The field is a pure function of world position, contoured cell by cell
+  // with surface nets on an R³ lattice -> identical values on shared
+  // cell faces: no seams between cells or chunks. Mesher-time only, and only
+  // the cells around melting plastic / puddles are contoured (zero idle cost).
+  type Prim = {
+    k: number; // 0 cold brick, 1 molten brick, 2 pool
+    x: number; y: number; z: number; m: number; id: number;
+    lx: number; hx: number; ly: number; lz: number; hz: number;
+    top: number; tx: number; tz: number; ed: number; r: number;
+    fW: number; fE: number; fN: number; fS: number;
+    caps: number[]; // [ax, az, ay, by, r0] per drip / streak
+    cliff: number; // pool: sides (+x, -x, +z, -z bits) that drop away
+    pcx: number; pcz: number; R0: number; p1: number; p2: number; p3: number; H: number;
+  };
+  const isMolten = (x: number, y: number, z: number, id: number) => {
+    if (!meltActive || !id || id === ID.Melted) return false;
+    const d = def(id);
+    if (!d.solid || d.fluid || d.glass || isPartialLego(id, d)) return false;
+    return meltAt(x, y, z) > 0;
+  };
+  const openCell = (id: number) => id !== ID.Melted && !occ(id) && !def(id).fluid;
+  const frac = (v: number) => v - Math.floor(v);
+  const primCache = new Map<number, Prim | null>();
+  const pkey = (x: number, y: number, z: number) => ((y + 8) * 4096 + (x - x0 + 1024)) * 4096 + (z - z0 + 1024);
+  function blankPrim(k: number, x: number, y: number, z: number, id: number): Prim {
+    return { k, x, y, z, m: 0, id, lx: x + 0.03, hx: x + 0.97, ly: y + 0.03, lz: z + 0.03, hz: z + 0.97, top: y + 0.97, tx: 0, tz: 0, ed: 0, r: 0, fW: 0, fE: 0, fN: 0, fS: 0, caps: [], cliff: 0, pcx: 0, pcz: 0, R0: 0, p1: 0, p2: 0, p3: 0, H: 0 };
   }
-  // Rounded box from a subdivided cube (cube-to-rounded-box projection):
-  // flat faces, rounded edges and corners of radius r, smooth normals.
-  function emitRoundBox(s: Surface, cx: number, cy: number, cz: number, hx: number, hy: number, hz: number, r: number, uv: readonly number[], tintAt: (p: number[]) => number[]) {
-    const N = detail ? 3 : 2;
-    const ex = Math.max(0, hx - r), ey = Math.max(0, hy - r), ez = Math.max(0, hz - r);
-    const shade = [1, 1, 1, 1];
-    for (let fi = 0; fi < 6; fi++) {
-      const V = FACES[fi].v, fn = FACES[fi].n;
-      const P: number[][][] = [], Nn: number[][][] = [];
-      for (let i = 0; i <= N; i++) {
-        const pr: number[][] = [], nr: number[][] = [];
-        for (let j = 0; j <= N; j++) {
-          const sp = i / N, tp = j / N;
-          const w0 = (1 - sp) * (1 - tp), w1 = sp * (1 - tp), w2 = sp * tp, w3 = (1 - sp) * tp;
-          const lx = (2 * (w0 * V[0][0] + w1 * V[1][0] + w2 * V[2][0] + w3 * V[3][0]) - 1) * hx;
-          const ly = (2 * (w0 * V[0][1] + w1 * V[1][1] + w2 * V[2][1] + w3 * V[3][1]) - 1) * hy;
-          const lz = (2 * (w0 * V[0][2] + w1 * V[1][2] + w2 * V[2][2] + w3 * V[3][2]) - 1) * hz;
-          const kx = Math.max(-ex, Math.min(ex, lx)), ky = Math.max(-ey, Math.min(ey, ly)), kz = Math.max(-ez, Math.min(ez, lz));
-          let nx = lx - kx, ny = ly - ky, nz = lz - kz;
-          const nl = Math.hypot(nx, ny, nz);
-          if (nl > 1e-6) { nx /= nl; ny /= nl; nz /= nl; } else { nx = fn[0]; ny = fn[1]; nz = fn[2]; }
-          pr.push([cx + kx + nx * r, cy + ky + ny * r, cz + kz + nz * r]);
-          nr.push([nx, ny, nz]);
+  function getPrim(x: number, y: number, z: number): Prim | null {
+    const key = pkey(x, y, z);
+    const hit = primCache.get(key);
+    if (hit !== undefined) return hit;
+    let pr: Prim | null = null;
+    const id = y < 0 || y >= HEIGHT ? 0 : world.get(x, y, z);
+    if (id === ID.Melted) {
+      // pool: a thin rounded sheet, hash-shifted, wider than its cell so
+      // neighbouring pools overlap and fuse
+      const ph = hashBlock(x, y, z);
+      pr = blankPrim(2, x, y, z, puddleSrc.get(fkey(x, y, z)) ?? ID.Melted);
+      pr.m = 1;
+      pr.pcx = x + 0.5 + (ph - 0.5) * 0.14;
+      pr.pcz = z + 0.5 + (frac(ph * 7.3) - 0.5) * 0.14;
+      pr.R0 = 0.66 + frac(ph * 3.9) * 0.08;
+      pr.p1 = ph * 6.283; pr.p2 = frac(ph * 13.7) * 6.283; pr.p3 = frac(ph * 29.3) * 6.283;
+      pr.H = 0.13 + frac(ph * 5.1) * 0.03; // the studs under a puddle are drowned (not drawn)
+      pr.ly = y - 0.04;
+      // at a drop (open cell beside AND below it) the liquid does not hang
+      // out as a shelf: the sheet stops short of the edge and runs over it
+      // in drips down the face
+      const sides: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+      for (let sd = 0; sd < 4; sd++) {
+        const [ox, oz] = sides[sd];
+        if (!openCell(world.get(x + ox, y, z + oz)) || !openCell(world.get(x + ox, y - 1, z + oz))) continue;
+        pr.cliff |= 1 << sd;
+        const hs = hashBlock(x * 5 + sd, y, z * 3 - sd);
+        const n = 1 + (hs > 0.5 ? 1 : 0);
+        for (let q = 0; q < n; q++) {
+          const u = 0.2 + 0.6 * frac(hs * (3.1 + q * 2.3));
+          const ex = ox ? x + 0.5 + ox * 0.5 : x + u, ez = oz ? z + 0.5 + oz * 0.5 : z + u;
+          pr.caps.push(ex - ox * 0.03, ez - oz * 0.03, y + 0.06, y - 0.25 - 0.5 * frac(hs * 7.7 + q * 0.4), 0.065);
         }
-        P.push(pr); Nn.push(nr);
       }
-      for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
-        const q = [P[i][j], P[i + 1][j], P[i + 1][j + 1], P[i][j + 1]];
-        pushQuadN(s, q, [Nn[i][j], Nn[i + 1][j], Nn[i + 1][j + 1], Nn[i][j + 1]], uv, shade, q.map(tintAt));
+    } else if (id && isMolten(x, y, z, id)) {
+      // quantised to the remesh stage (and the heat direction to quarters):
+      // the geometry of a cell is a pure function of what the cache signs
+      const m = Math.min(1, (Math.floor(meltAt(x, y, z) * MELT_STAGES) + 0.5) / MELT_STAGES);
+      const [hdx0, , hdz0] = heatDirAt(x, y, z);
+      const hdx = Math.round(hdx0 * 4) / 4, hdz = Math.round(hdz0 * 4) / 4;
+      pr = blankPrim(1, x, y, z, id);
+      pr.m = m;
+      // a puddle is only a thin sheet at the bottom of its cell: for the
+      // brick next to / above it, that cell is open space
+      const op = (id: number) => id === ID.Melted || openCell(id);
+      const oW = op(world.get(x - 1, y, z)), oE = op(world.get(x + 1, y, z));
+      const oN = op(world.get(x, y, z - 1)), oS = op(world.get(x, y, z + 1));
+      const oU = op(world.get(x, y + 1, z)), oD = op(world.get(x, y - 1, z));
+      // exposed faces are eaten away (most on the side the heat comes from);
+      // faces against bricks stay welded (the box reaches a hair past them)
+      const eat = (open: boolean, dot: number) => (open ? m * (0.07 + 0.33 * Math.max(0, dot)) : -0.03);
+      pr.lx = x + eat(oW, -hdx); pr.hx = x + 1 - eat(oE, hdx);
+      pr.lz = z + eat(oN, -hdz); pr.hz = z + 1 - eat(oS, hdz);
+      pr.ly = oD ? y + 0.1 * m : y - 0.03;
+      if (oU) {
+        pr.top = y + 1 - 0.48 * Math.pow(m, 1.2);
+        pr.tx = 0.4 * m * hdx; pr.tz = 0.4 * m * hdz; // lower toward the flames
+        pr.ed = 0.04 * m; // the top edges roll over a little
+      } else pr.top = y + 1.03;
+      const belowMolten = isMolten(x, y - 1, z, world.get(x, y - 1, z));
+      if (!oD && !belowMolten) {
+        // resting on something cold: the soft plastic slumps out at its foot
+        // (volume goes somewhere: the lower the top, the wider the foot)
+        const fl = 0.26 * m;
+        pr.fW = oW ? fl : 0; pr.fE = oE ? fl : 0;
+        pr.fN = oN ? fl : 0; pr.fS = oS ? fl : 0;
       }
+      pr.r = 0.02 + 0.045 * m;
+      const h = hashBlock(x, y, z);
+      // drips hanging from an open underside: thin, tapering, a bead at the tip
+      if (oD && m > 0.08) {
+        const n = 1 + Math.floor(h * 2.99);
+        for (let i = 0; i < n; i++) {
+          const hi = hashBlock(x * 3 + i * 17, y + i * 5, z * 7 - i * 11);
+          const len = m * (0.2 + 0.62 * frac(hi * 3.7));
+          pr.caps.push(x + 0.2 + 0.6 * hi, z + 0.2 + 0.6 * frac(hi * 7.31), pr.ly + 0.06, pr.ly - len, 0.065 + 0.035 * m);
+        }
+      }
+      // streaks: plastic running down the exposed faces
+      if (m > 0.12) {
+        const sides: [boolean, number][] = [[oW, 0], [oE, 1], [oN, 2], [oS, 3]];
+        for (const [open, sd] of sides) {
+          if (!open) continue;
+          const hs = hashBlock(x + sd * 31, y * 3 + sd, z - sd * 13);
+          const runs = hs < 0.45 ? 2 : 1;
+          for (let q = 0; q < runs; q++) {
+          const u = q ? 0.15 + 0.3 * frac(hs * 2.9) : 0.55 + 0.3 * frac(hs * 5.3);
+          const ax = sd === 0 ? pr.lx + 0.012 : sd === 1 ? pr.hx - 0.012 : x + u;
+          const az = sd === 2 ? pr.lz + 0.012 : sd === 3 ? pr.hz - 0.012 : z + u;
+          // a run keeps going down the molten brick below / off an open edge
+          const by = oD ? pr.ly - m * 0.45 * frac(hs * 9.1 + q * 0.37) : belowMolten ? y - m * 0.55 * frac(hs * 4.3 + q * 0.61) : y + 0.05;
+          pr.caps.push(ax, az, Math.min(pr.top, y + 1) - 0.1, by, 0.045 + 0.03 * m);
+          }
+        }
+      }
+    } else if (id) {
+      // a cold brick only matters where molten plastic touches it (the
+      // wetting fillet): touching a molten brick or a puddle on a face
+      const d = def(id);
+      if (d.solid && !d.fluid && !isPartialLego(id, d)) {
+        let touch = false;
+        for (let f = 0; f < 6 && !touch; f++) {
+          const n = FACES[f].n, nx = x + n[0], ny = y + n[1], nz = z + n[2];
+          const nid = ny < 0 || ny >= HEIGHT ? 0 : world.get(nx, ny, nz);
+          touch = nid === ID.Melted || isMolten(nx, ny, nz, nid);
+        }
+        if (touch) pr = blankPrim(0, x, y, z, id);
+      }
+    }
+    primCache.set(key, pr);
+    return pr;
+  }
+  const smin = (a: number, b: number, k: number) => {
+    const h = Math.max(k - Math.abs(a - b), 0) / k;
+    return Math.min(a, b) - h * h * k * 0.25;
+  };
+  function primDist(p: Prim, px: number, py: number, pz: number) {
+    if (p.k === 0) {
+      const qx = Math.abs(px - (p.x + 0.5)) - 0.47, qy = Math.abs(py - (p.y + 0.5)) - 0.47, qz = Math.abs(pz - (p.z + 0.5)) - 0.47;
+      return Math.hypot(Math.max(qx, 0), Math.max(qy, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qy, qz), 0);
+    }
+    if (p.k === 2) {
+      const dx = px - p.pcx, dz = pz - p.pcz;
+      if (py > p.ly + 0.5 || Math.abs(dx) > 1.05 || Math.abs(dz) > 1.05) return 1;
+      const th = Math.atan2(dz, dx);
+      let R = p.R0 * (1 + 0.09 * Math.sin(2 * th + p.p1) + 0.06 * Math.sin(3 * th + p.p2) + 0.04 * Math.sin(5 * th + p.p3));
+      if (p.cliff) {
+        const c = Math.cos(th), sn = Math.sin(th);
+        const lobe = (v: number) => (v > 0 ? v * v : 0);
+        const w = Math.max(p.cliff & 1 ? lobe(c) : 0, p.cliff & 2 ? lobe(-c) : 0, p.cliff & 4 ? lobe(sn) : 0, p.cliff & 8 ? lobe(-sn) : 0);
+        R *= 1 - 0.45 * w;
+      }
+      const rr = p.H * 0.5;
+      const qx = Math.hypot(dx, dz) - R + rr, qy = Math.abs(py - (p.ly + rr)); // fully rounded edge = meniscus
+      return withCaps(p, Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - rr, px, py, pz);
+    }
+    // far from this brick's reach (flare, drips into the cell below): it
+    // cannot change the surface — skip the exact distance
+    if (px < p.x - 0.45 || px > p.x + 1.45 || pz < p.z - 0.45 || pz > p.z + 1.45 || py > p.y + 1.25 || py < p.y - 1.05) return 1;
+    const ox = px - (p.x + 0.5), oz = pz - (p.z + 0.5);
+    const top = Math.max(p.ly + 0.06, p.top - p.tx * ox - p.tz * oz - p.ed * (ox * ox + oz * oz) * 4);
+    const t = Math.min(1, Math.max(0, (py - p.y) / (0.3 + 0.35 * p.m)));
+    const f = (1 - t) * (1 - t);
+    const lx = p.lx - p.fW * f, hx = p.hx + p.fE * f, lz = p.lz - p.fN * f, hz = p.hz + p.fS * f;
+    const r = Math.min(p.r, (top - p.ly) * 0.45);
+    const qx = Math.abs(px - (lx + hx) * 0.5) - (hx - lx) * 0.5 + r;
+    const qy = Math.abs(py - (p.ly + top) * 0.5) - (top - p.ly) * 0.5 + r;
+    const qz = Math.abs(pz - (lz + hz) * 0.5) - (hz - lz) * 0.5 + r;
+    let d = Math.hypot(Math.max(qx, 0), Math.max(qy, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qy, qz), 0) - r;
+    // SRN wobble: a soft uneven skin + vertical run-lines
+    d += p.m * (0.026 * Math.sin(7.3 * px + 2.1 * py + 1.3) * Math.sin(6.7 * pz - 3.3 * py + 0.7) + 0.014 * Math.sin(19 * (0.8 * px + 0.6 * pz) + 2.5 * Math.sin(4.1 * py)));
+    return withCaps(p, d, px, py, pz);
+  }
+  function withCaps(p: Prim, d: number, px: number, py: number, pz: number) {
+    const c = p.caps;
+    for (let i = 0; i < c.length; i += 5) {
+      const ax = c[i], az = c[i + 1], ay = c[i + 2], by = c[i + 3], r0 = c[i + 4];
+      if (Math.abs(px - ax) > r0 + 0.14 || Math.abs(pz - az) > r0 + 0.14 || py > ay + 0.14 || py < by - r0 - 0.14) continue;
+      const yy = Math.min(ay, Math.max(by, py));
+      const s = (yy - by) / (ay - by || 1);
+      let dc = Math.hypot(px - ax, py - yy, pz - az) - r0 * (0.55 + 0.45 * s);
+      dc = Math.min(dc, Math.hypot(px - ax, py - (by + r0 * 0.35), pz - az) - r0 * 1.05);
+      d = smin(d, dc, 0.07);
+    }
+    return d;
+  }
+  /** distance to a molten prim's surface + the colour-marbling wobble */
+  const mdist = (p: Prim, px: number, py: number, pz: number) =>
+    primDist(p, px, py, pz) + 0.035 * Math.sin(9.1 * px + 5.3 * py + p.x * 1.7 + p.z * 2.3) * Math.sin(7.7 * pz - 4.1 * py + p.y * 1.3);
+  const listCache = new Map<number, Prim[]>();
+  function cellList(cx: number, cy: number, cz: number) {
+    const key = pkey(cx, cy, cz);
+    let l = listCache.get(key);
+    if (!l) {
+      l = [];
+      for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+        const p = getPrim(cx + dx, cy + dy, cz + dz);
+        if (p) l.push(p);
+      }
+      listCache.set(key, l);
+    }
+    return l;
+  }
+  function field(px: number, py: number, pz: number) {
+    const l = cellList(Math.floor(px), Math.floor(py), Math.floor(pz));
+    let dCold = 1e9, dMol = 1e9;
+    for (let i = 0; i < l.length; i++) {
+      const p = l[i];
+      const d = primDist(p, px, py, pz);
+      if (p.k === 0) { if (d < dCold) dCold = d; continue; }
+      dMol = dMol > 1e8 ? d : smin(dMol, d, 0.12);
+    }
+    if (dMol > 1e8) return dCold;
+    return smin(dMol, dCold, 0.06);
+  }
+
+  // Domain = melting bricks, puddles and the open cells around them (where
+  // slumps, drips, streaks and pools reach). Local numeric keys.
+  const domain = new Set<number>();
+  function addSource(sx: number, sy: number, sz: number) {
+    for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      const x = sx + dx, y = sy + dy, z = sz + dz;
+      const lx = x - x0, lz = z - z0;
+      if (lx < 0 || lx >= CS || lz < 0 || lz >= CS || y < 0 || y >= HEIGHT) continue;
+      const id = world.get(x, y, z);
+      if (id === ID.Melted || openCell(id) || isMolten(x, y, z, id)) domain.add((y * CS + lz) * CS + lx);
     }
   }
-  function emitMeltHole(x: number, y: number, z: number, id: number, melt: number, jit: number, base: number[], h0: number) {
-    const [gone, rim] = meltMasks(x, y, z, id);
-    // the bricks still standing: heat-scorched, normal LEGO pieces
-    const scorch = charTint(base, 0.2 * melt);
-    if ((gone | rim) !== FULL) emitChippedBlock(x, y, z, id, gone | rim, jit, scorch);
-    const uv = tileCentreUV(faceTile(id, 0));
-    const mChar = Math.min(1, 0.4 + melt * 0.7);
-    const tintAt = (p: number[]) => charTint(base, mChar + (charPatch(p[0], p[1], p[2]) - 0.5) * 0.55 * mChar);
-    const H3 = 1 / 3;
-    for (let p = 0; p < 12; p++) {
-      if (!(rim & (1 << p))) continue;
-      const ix = p & 1, iz = (p >> 1) & 1, iy = p >> 2;
-      const hp = hashBlock(x * 13 + p, y * 7 - p, z * 11 + p * 3);
-      // molten rim piece: rounded, a touch swollen so neighbouring rim pieces
-      // overlap into ONE continuous molten edge, sagging a little
-      const cx = x + ix * 0.5 + 0.25, cz = z + iz * 0.5 + 0.25;
-      const cy = y + (iy + 0.5) * H3 - 0.05 * melt;
-      const hy = H3 * 0.5 * (1.02 - 0.12 * melt);
-      emitRoundBox(molten, cx, cy, cz, 0.27, hy, 0.27, Math.min(0.15, hy * 0.95), uv, tintAt);
-      // drips hang where the plastic can run: under a rim piece with nothing
-      // below it (a melted piece, or open air under the block)
-      const belowOpen = iy > 0 ? !!(gone & (1 << pieceIndex(ix, iy - 1, iz))) : !occ(world.get(x, y - 1, z));
-      if (belowOpen && melt > 0.2) {
-        const L = (0.1 + 0.42 * melt) * (0.55 + 0.9 * hp);
-        const dx = cx + (hp - 0.5) * 0.18, dz = cz + (((hp * 7.7) % 1) - 0.5) * 0.18;
-        const top = cy - hy + 0.04;
-        emitRoundBox(molten, dx, top - L * 0.5, dz, 0.055, L * 0.5, 0.055, 0.05, uv, tintAt);
-        emitRoundBox(molten, dx, top - L, dz, 0.075, 0.07, 0.075, 0.068, uv, tintAt); // the bead at the tip
+  function contourMolten() {
+    // One shared lattice for the whole chunk: every lattice point is
+    // evaluated once (cells share their faces), normals come from central
+    // differences ON the lattice (no extra field evaluations per vertex).
+    const R = detail ? 5 : 3, inv = 1 / R;
+    if (moltenCache.size > 3000) moltenCache.clear();
+    // numeric melt-stage / heat-dir / puddle-source lookups for the signature
+    const qmap = new Map<number, number>();
+    for (const [k, e] of heatMap) {
+      if (e.m <= 0) continue;
+      const [qx, qy, qz] = k.split(",").map(Number);
+      if (qx < x0 - 3 || qx > x0 + CS + 2 || qz < z0 - 3 || qz > z0 + CS + 2) continue;
+      const [hx, , hz] = heatDirAt(qx, qy, qz);
+      qmap.set(pkey(qx, qy, qz), 1 + Math.floor(e.m * MELT_STAGES) + 16 * (Math.round(hx * 4) + 4) + 256 * (Math.round(hz * 4) + 4));
+    }
+    for (const [k, src] of puddleSrc) {
+      const [qx, qy, qz] = k.split(",").map(Number);
+      if (qx < x0 - 3 || qx > x0 + CS + 2 || qz < z0 - 3 || qz > z0 + CS + 2) continue;
+      qmap.set(pkey(qx, qy, qz), 100000 + src);
+    }
+    const cellSig = (x: number, y: number, z: number) => {
+      let h = 2166136261 ^ R;
+      // block ids over 5×5×5 (they shape the prims next door); melt stage /
+      // heat dir only where a change can still reach this cell's vertices:
+      // the 3×3×3 around it, plus the layer 2 above (drips hang 1 cell down)
+      for (let dy = -2; dy <= 2; dy++) for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+        const yy = y + dy;
+        const id = yy < 0 || yy >= HEIGHT ? 0 : world.get(x + dx, yy, z + dz);
+        h = Math.imul(h ^ id, 16777619);
+        if (dx >= -1 && dx <= 1 && dz >= -1 && dz <= 1 && dy >= -1) h = Math.imul(h ^ (qmap.get(pkey(x + dx, yy, z + dz)) ?? 0), 16777619);
+      }
+      return h >>> 0;
+    };
+    let pend: { key: string; sig: number; p: number; u: number; t: number } | null = null;
+    const flush = () => {
+      if (!pend) return;
+      moltenCache.set(pend.key, {
+        sig: pend.sig,
+        pos: molten.pos.slice(pend.p), nor: molten.nor.slice(pend.p), col: molten.col.slice(pend.p),
+        uv: molten.uv.slice(pend.u), tan: molten.tan.slice(pend.t),
+      });
+      pend = null;
+    };
+    const lat = new Map<number, number>();
+    const gkey = (gx: number, gy: number, gz: number) => ((gy + 16) * 2048 + (gx - x0 * R + 256)) * 2048 + (gz - z0 * R + 256);
+    const S = (gx: number, gy: number, gz: number) => {
+      const k = gkey(gx, gy, gz);
+      let v = lat.get(k);
+      if (v === undefined) {
+        v = field(gx * inv, gy * inv, gz * inv);
+        lat.set(k, v);
+      }
+      return v;
+    };
+    // vertex of a lattice sub-cube (min corner gx,gy,gz): mean of its edge
+    // crossings; normal = gradient of the trilinear field there. Shared by
+    // every quad of the chunk (global lattice key).
+    const VP: number[] = [], VN: number[] = [], VC: number[] = [];
+    const vmap = new Map<number, number>();
+    const cv = [0, 0, 0, 0, 0, 0, 0, 0];
+    const EDGES = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
+    const netVert = (gx: number, gy: number, gz: number) => {
+      const key = gkey(gx, gy, gz);
+      const hit = vmap.get(key);
+      if (hit !== undefined) return hit;
+      for (let bit = 0; bit < 8; bit++) cv[bit] = S(gx + (bit & 1), gy + ((bit >> 1) & 1), gz + ((bit >> 2) & 1));
+      let sx = 0, sy = 0, sz = 0, n = 0;
+      for (const [e0, e1] of EDGES) {
+        const a = cv[e0], b = cv[e1];
+        if (a < 0 === b < 0) continue;
+        const t = a / (a - b);
+        sx += (e0 & 1) + ((e1 & 1) - (e0 & 1)) * t;
+        sy += ((e0 >> 1) & 1) + (((e1 >> 1) & 1) - ((e0 >> 1) & 1)) * t;
+        sz += ((e0 >> 2) & 1) + (((e1 >> 2) & 1) - ((e0 >> 2) & 1)) * t;
+        n++;
+      }
+      const fx = n ? sx / n : 0.5, fy = n ? sy / n : 0.5, fz = n ? sz / n : 0.5;
+      // gradient of the trilinear interpolant
+      const gxv = (1 - fy) * (1 - fz) * (cv[1] - cv[0]) + fy * (1 - fz) * (cv[3] - cv[2]) + (1 - fy) * fz * (cv[5] - cv[4]) + fy * fz * (cv[7] - cv[6]);
+      const gyv = (1 - fx) * (1 - fz) * (cv[2] - cv[0]) + fx * (1 - fz) * (cv[3] - cv[1]) + (1 - fx) * fz * (cv[6] - cv[4]) + fx * fz * (cv[7] - cv[5]);
+      const gzv = (1 - fx) * (1 - fy) * (cv[4] - cv[0]) + fx * (1 - fy) * (cv[5] - cv[1]) + (1 - fx) * fy * (cv[6] - cv[2]) + fx * fy * (cv[7] - cv[3]);
+      const gl = Math.hypot(gxv, gyv, gzv) || 1;
+      const px = (gx + fx) * inv, py = (gy + fy) * inv, pz = (gz + fz) * inv;
+      // colour: the molten prims near the vertex and how close each one's own
+      // surface is (+ a marbling wobble where two colours fused). The shader
+      // draws the sharp border between two bricks from the signed distance
+      // difference; the char amount is blended smoothly.
+      const cp = charPatch(px, py, pz);
+      const l = cellList(Math.floor(px), Math.floor(py), Math.floor(pz));
+      let dmin = 1e9;
+      const near: [Prim, number][] = [];
+      for (let i = 0; i < l.length; i++) {
+        const p = l[i];
+        if (!p.k) continue;
+        const d = mdist(p, px, py, pz);
+        near.push([p, d]);
+        if (d < dmin) dmin = d;
+      }
+      let ch = 0, wt = 0;
+      for (let i = near.length - 1; i >= 0; i--) {
+        const [p, d] = near[i];
+        if (d > dmin + 0.2) { near.splice(i, 1); continue; }
+        if (d > dmin + 0.09) continue;
+        const w0 = 1 - (d - dmin) / 0.09;
+        const w = w0 * w0;
+        ch += (p.k === 2 ? 0.62 + 0.25 * cp : Math.min(1, p.m * 0.9 + (cp - 0.5) * 0.45 * p.m)) * w;
+        wt += w;
+      }
+      const idx = VP.length / 3;
+      VP.push(px, py, pz); VN.push(gxv / gl, gyv / gl, gzv / gl); VC.push(wt > 0 ? ch / wt : 0.5);
+      VNear.push(near);
+      vmap.set(key, idx);
+      return idx;
+    };
+    const VNear: [Prim, number][][] = [];
+    const dAt = (i: number, p: Prim) => {
+      for (const [q, d] of VNear[i]) if (q === p) return d;
+      return mdist(p, VP[i * 3], VP[i * 3 + 1], VP[i * 3 + 2]);
+    };
+    const tri = (a: number, b: number, c: number) => {
+      // orient with the field gradient (outward)
+      const ax = VP[a * 3], ay = VP[a * 3 + 1], az = VP[a * 3 + 2];
+      const ux = VP[b * 3] - ax, uy = VP[b * 3 + 1] - ay, uz = VP[b * 3 + 2] - az;
+      const wx = VP[c * 3] - ax, wy = VP[c * 3 + 1] - ay, wz = VP[c * 3 + 2] - az;
+      const cx = uy * wz - uz * wy, cy = uz * wx - ux * wz, cz = ux * wy - uy * wx;
+      if (cx * cx + cy * cy + cz * cz < 1e-14) return;
+      const nx = VN[a * 3] + VN[b * 3] + VN[c * 3], ny = VN[a * 3 + 1] + VN[b * 3 + 1] + VN[c * 3 + 1], nz = VN[a * 3 + 2] + VN[b * 3 + 2] + VN[c * 3 + 2];
+      const o1 = cx * nx + cy * ny + cz * nz < 0 ? c : b, o2 = o1 === b ? c : b;
+      // the two bricks this triangle shows: lowest summed distance over its
+      // corners (a triangle spans at most one colour border)
+      let pA: Prim | null = null, pB: Prim | null = null, sA = 1e9, sB = 1e9;
+      const na = VNear[a], nb = VNear[b], nc = VNear[c];
+      if (na.length === 1 && nb.length === 1 && nc.length === 1 && na[0][0] === nb[0][0] && na[0][0] === nc[0][0]) {
+        pA = na[0][0]; // inside one brick's colour: the common case
+      } else {
+        for (let w = 0; w < 3; w++) {
+          const lst = w === 0 ? na : w === 1 ? nb : nc;
+          for (let j = 0; j < lst.length; j++) {
+            const p = lst[j][0];
+            if (p === pA || p === pB) continue;
+            const sc = dAt(a, p) + dAt(b, p) + dAt(c, p);
+            if (sc < sA) { pB = pA; sB = sA; pA = p; sA = sc; }
+            else if (sc < sB) { pB = p; sB = sc; }
+          }
+        }
+      }
+      const cA = pA ? brickLinear(pA.id) : [0.3, 0.3, 0.3];
+      const cB = pB ? brickLinear(pB.id) : cA;
+      for (let q = 0; q < 3; q++) {
+        const i = q === 0 ? a : q === 1 ? o1 : o2;
+        molten.pos.push(VP[i * 3], VP[i * 3 + 1], VP[i * 3 + 2]);
+        molten.nor.push(VN[i * 3], VN[i * 3 + 1], VN[i * 3 + 2]);
+        // molten vertex layout (read by game.ts moltenize): color = brick A,
+        // tangent = (brick B, dB − dA), uv.x = char amount
+        molten.col.push(cA[0], cA[1], cA[2]);
+        molten.tan.push(cB[0], cB[1], cB[2], pA && pB ? dAt(i, pB) - dAt(i, pA) : 1);
+        molten.uv.push(VC[i], 0);
+      }
+    };
+    for (const key of domain) {
+      flush();
+      const lx = key % CS, lz = Math.floor(key / CS) % CS, y = Math.floor(key / (CS * CS));
+      const x = x0 + lx, z = z0 + lz;
+      const sig = cellSig(x, y, z);
+      const ckey = x + "," + y + "," + z + "," + R;
+      const hit = moltenCache.get(ckey);
+      if (hit && hit.sig === sig) {
+        appendAll(molten.pos, hit.pos); appendAll(molten.nor, hit.nor); appendAll(molten.col, hit.col);
+        appendAll(molten.uv, hit.uv); appendAll(molten.tan, hit.tan);
+        continue;
+      }
+      pend = { key: ckey, sig, p: molten.pos.length, u: molten.uv.length, t: molten.tan.length };
+      // only cells that molten plastic can reach
+      let any = false;
+      for (const p of cellList(x, y, z)) if (p.k) { any = true; break; }
+      if (!any) continue;
+      const bx = x * R, by = y * R, bz = z * R;
+      let neg = 0, pos = 0;
+      for (let k = 0; k <= R; k++) for (let j = 0; j <= R; j++) for (let i = 0; i <= R; i++) {
+        if (S(bx + i, by + k, bz + j) < 0) neg++; else pos++;
+      }
+      if (!neg || !pos) continue;
+      // SURFACE NETS: one quad per lattice edge (owned by this cell) that
+      // crosses the surface, joining the vertices of the 4 sub-cubes around it
+      for (let k = 0; k < R; k++) for (let j = 0; j < R; j++) for (let i = 0; i < R; i++) {
+        const gx = bx + i, gy = by + k, gz = bz + j;
+        const v0 = S(gx, gy, gz);
+        for (let ax = 0; ax < 3; ax++) {
+          const v1 = ax === 0 ? S(gx + 1, gy, gz) : ax === 1 ? S(gx, gy + 1, gz) : S(gx, gy, gz + 1);
+          if (v0 < 0 === v1 < 0) continue;
+          let a: number, b: number, c: number, d: number;
+          if (ax === 0) { a = netVert(gx, gy, gz); b = netVert(gx, gy - 1, gz); c = netVert(gx, gy - 1, gz - 1); d = netVert(gx, gy, gz - 1); }
+          else if (ax === 1) { a = netVert(gx, gy, gz); b = netVert(gx - 1, gy, gz); c = netVert(gx - 1, gy, gz - 1); d = netVert(gx, gy, gz - 1); }
+          else { a = netVert(gx, gy, gz); b = netVert(gx - 1, gy, gz); c = netVert(gx - 1, gy - 1, gz); d = netVert(gx, gy - 1, gz); }
+          // split along the shorter diagonal-free order; orientation fixed per triangle
+          tri(a, b, c);
+          tri(a, c, d);
+        }
       }
     }
-    // the liquid pools at the bottom of the hole (on solid ground)
-    let goneLow = 0;
-    for (let p = 0; p < 4; p++) if (gone & (1 << p)) goneLow++;
-    if (goneLow && occ(world.get(x, y - 1, z))) {
-      const rA = 0.3 + 0.45 * melt * (goneLow / 4) + 0.1;
-      const hA = h0 * 6.283;
-      emitBlob(molten, x + 0.5, y, z + 0.5, (th) => rA * (1 + 0.12 * Math.sin(2 * th + hA) + 0.06 * Math.sin(5 * th + hA * 1.7)), 0.03 + 0.06 * melt, detail ? 14 : 8, uv, charTint(base, Math.min(1, mChar + 0.15)), charTint(base, mChar * 0.85));
-    }
+    flush();
   }
 
   // ---- v4.17 Teardown LEGO: a damaged block is meshed piece by piece —
@@ -556,7 +828,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
     const nid = world.get(wx, wy, wz);
     if (!occ(nid)) return false;
     let rm = removedAt(wx, wy, wz, nid);
-    if (meltActive && meltAt(wx, wy, wz) > 0) { const [g, r] = meltMasks(wx, wy, wz, nid); rm |= g | r; }
+    if (meltActive && meltAt(wx, wy, wz) > 0) return false;
     return !rm || !(rm & (1 << pieceIndex(ix, iy, iz)));
   };
   const PIECE_FACES = [
@@ -669,68 +941,8 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
           const top = faceTile(id, 0);
           const bot = faceTile(id, 2);
           if (id === ID.Melted) {
-            // v4.15: glossy puddle of the block that melted — two low slabs
-            // carrying the SOURCE block's tiles (fireState.puddleSrc).
-            const src = puddleSrc.get(fkey(x, y, z)) ?? ID.Melted;
-            // Liquid, NOT a plate (Philippe's verdict on the first version:
-            // the studded TOP tile made it read as a flat LEGO plate). The
-            // puddle wears the SMOOTH side tile on every face — glossy
-            // molten plastic has no studs.
-            const pTop = faceTile(src, 1);
-            const pSide = faceTile(src, 1);
-            // v4.15 rework (Philippe: "que ça se liquéfie pis que ça
-            // s'étende"): the puddle OVERFLOWS its cell — a wide irregular
-            // glossy sheet, hash-shifted so no two puddles align, plus a
-            // thin drip tongue that ran off one side.
-            const ph = hashBlock(x, y, z);
-            const ox = (ph - 0.5) * 0.12, oz = ((ph * 7.3) % 1 - 0.5) * 0.12;
-            // v4.16.1 FUSION (Philippe's law — no stacked plates, no
-            // voids): a puddle with puddles BELOW it is the same pool,
-            // not a separate plate floating in its own cell — the whole
-            // sheet drops onto the pool beneath (0.8 per melted level).
-            let pudSink = 0;
-            while (pudSink < 3 && world.get(x, y - 1 - pudSink, z) === ID.Melted) pudSink++;
-            const py = y - pudSink * 0.8;
-            // v4.16.1 realism pass 2 (Claude): the pool is a smooth
-            // viscous BLOB, not stacked boxes — organic rim (3 hashed
-            // harmonics), thick rounded body, meniscus edge feathering
-            // onto the ground, smooth normals for a real wet highlight.
-            // FUSION, horizontal: toward each Melted neighbour the rim
-            // swells past the shared boundary, so neighbouring blobs
-            // overlap into ONE continuous pool (no bridges, no seams).
-            void pTop; void pSide;
-            const uv = tileCentreUV(faceTile(src, 0));
-            const nE = world.get(x + 1, y, z) === ID.Melted, nW = world.get(x - 1, y, z) === ID.Melted;
-            const nS = world.get(x, y, z + 1) === ID.Melted, nN = world.get(x, y, z - 1) === ID.Melted;
-            const p1 = ph * 6.283, p2 = ((ph * 13.7) % 1) * 6.283, p3 = ((ph * 29.3) % 1) * 6.283;
-            const lobe = (th: number, a: number) => { const c = Math.cos(th - a); return c > 0 ? c * c * c * c : 0; };
-            const R = (th: number) =>
-              0.7 + 0.08 * Math.sin(2 * th + p1) + 0.05 * Math.sin(3 * th + p2) + 0.03 * Math.sin(5 * th + p3) +
-              (nE ? 0.42 * lobe(th, 0) : 0) + (nS ? 0.42 * lobe(th, Math.PI / 2) : 0) +
-              (nW ? 0.42 * lobe(th, Math.PI) : 0) + (nN ? 0.42 * lobe(th, -Math.PI / 2) : 0);
-            const K = detail ? 18 : 10;
-            emitBlob(molten, x + 0.5 + ox, py, z + 0.5 + oz, R, 0.12 + ph * 0.06, K, uv, PUDDLE_CHAR, PUDDLE_RIM);
-            // Satellites + drip tongue live only on the pool's outer
-            // perimeter (ground layer, toward a non-puddle cell) —
-            // inside a merged pool they would read as separate plates.
-            if (pudSink === 0) {
-              // A detached splat droplet beside the pool — liquid throws
-              // satellites.
-              if (!(ph > 0.5 ? nE : nW)) {
-                const sx = x + (ph > 0.5 ? 1.28 : -0.28) + ox, sz = z + 0.25 + ((ph * 3.1) % 1) * 0.5 + oz;
-                const r0 = 0.1 + ((ph * 5.9) % 1) * 0.06;
-                emitBlob(molten, sx, y, sz, (th) => r0 * (1 + 0.18 * Math.sin(3 * th + p2)), 0.045, 8, uv, PUDDLE_CHAR);
-              }
-              // A tongue that ran off one side: an elongated blob
-              // reaching out from the rim.
-              const dir = Math.floor(ph * 4) % 4;
-              const open = dir === 0 ? !nN : dir === 1 ? !nE : dir === 2 ? !nS : !nW;
-              if (open) {
-                const a = dir === 0 ? -Math.PI / 2 : dir === 1 ? 0 : dir === 2 ? Math.PI / 2 : Math.PI;
-                const tx = x + 0.5 + ox + Math.cos(a) * 0.62, tz = z + 0.5 + oz + Math.sin(a) * 0.62;
-                emitBlob(molten, tx, y, tz, (th) => 0.14 + 0.3 * lobe(th, a) * (1 + 0.15 * Math.sin(th * 4 + p3)), 0.055, 12, uv, PUDDLE_CHAR);
-              }
-            }
+            // v4.17: a puddle is part of the molten field (contoured below)
+            addSource(x, y, z);
           } else if (self.slab) {
             addBoxT(opaque, x, y, z, x + 1, y + 0.5, z + 1, tile, top, bot);
             if (fancy) addStud(opaque, x, y - 0.5, z, top);
@@ -995,14 +1207,17 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
             continue;
           }
         }
-        // v4.17 melt = Teardown LEGO: a heated block is meshed piece by piece
-        // (hole + molten rim + drips + pool) — see emitMeltHole.
-        const melt = heatMap.size ? meltAt(x, y, z) : 0;
-        if (melt > 0 && self.solid && !self.fluid && !self.glass) {
-          emitMeltHole(x, y, z, id, melt, jit, scratchTint, h0);
+        // v4.17 melt: a melting brick is part of the molten field (contoured
+        // below); only its studs stay real geometry while they still stand.
+        if (isMolten(x, y, z, id)) {
+          addSource(x, y, z);
+          const p = getPrim(x, y, z);
+          if (fancy && p && p.m < 0.4 && p.top < y + 1.01) {
+            const sink = (y + 1 - p.top) + p.ed * 0.46 + Math.hypot(p.tx, p.tz) * 0.34;
+            addStud(opaque, x, y, z, faceTile(id, 0), jit, sink, 1 - p.m * 2.4);
+          }
           continue;
         }
-
         for (let fi = 0; fi < 6; fi++) {
           const face = FACES[fi];
           const nx = face.n[0];
@@ -1032,11 +1247,27 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
             scratchShade[vi] = shadeAt(x, y, z, nx, ny, nz, v[0], v[1], v[2]) * jit;
           }
           pushQuad(surf, scratchVerts, face.n, tile, scratchShade, scratchTint);
-          if (fancy && ny > 0 && !self.fluid && self.solid && !n.plant) addStud(surf, x, y, z, faceTile(id, 0), jit);
+          if (fancy && ny > 0 && !self.fluid && self.solid && !n.plant && nid !== ID.Melted) addStud(surf, x, y, z, faceTile(id, 0), jit);
         }
       }
     }
   }
+
+  // ---- v4.17 molten field: contour the domain (surface nets).
+  if (meltActive) {
+    for (const [k, e] of heatMap) {
+      if (e.m <= 0) continue;
+      const [sx, sy, sz] = k.split(",").map(Number);
+      if (sx < x0 - 1 || sx > x0 + CS || sz < z0 - 1 || sz > z0 + CS) continue;
+      if (isMolten(sx, sy, sz, world.get(sx, sy, sz))) addSource(sx, sy, sz);
+    }
+    for (const k of puddleSrc.keys()) {
+      const [sx, sy, sz] = k.split(",").map(Number);
+      if (sx < x0 - 1 || sx > x0 + CS || sz < z0 - 1 || sz > z0 + CS) continue;
+      if (world.get(sx, sy, sz) === ID.Melted) addSource(sx, sy, sz);
+    }
+  }
+  if (domain.size) contourMolten();
 
   return { opaque, glass, water, plant, molten, emitters };
 }
