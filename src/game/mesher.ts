@@ -124,14 +124,18 @@ function addBox(s: Surface, x0: number, y0: number, z0: number, x1: number, y1: 
 
 // Box with per-face tiles (side / top / bottom), for slabs and stairs whose
 // top must carry the material's top tile, not its side tile.
-function addBoxT(s: Surface, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, side: number, top: number, bottom: number) {
-  pushQuad(s, [[x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1]], [1, 0, 0], side);
-  pushQuad(s, [[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]], [-1, 0, 0], side);
-  pushQuad(s, [[x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0]], [0, 1, 0], top);
-  pushQuad(s, [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], [0, -1, 0], bottom);
-  pushQuad(s, [[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], [0, 0, 1], side);
-  pushQuad(s, [[x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0]], [0, 0, -1], side);
+function addBoxT(s: Surface, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, side: number, top: number, bottom: number, tint?: readonly number[]) {
+  pushQuad(s, [[x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1]], [1, 0, 0], side, undefined, tint);
+  pushQuad(s, [[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]], [-1, 0, 0], side, undefined, tint);
+  pushQuad(s, [[x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0]], [0, 1, 0], top, undefined, tint);
+  pushQuad(s, [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], [0, -1, 0], bottom, undefined, tint);
+  pushQuad(s, [[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], [0, 0, 1], side, undefined, tint);
+  pushQuad(s, [[x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0]], [0, 0, -1], side, undefined, tint);
 }
+
+// Charred tint for a finished melt puddle: burnt plastic ends as a near-
+// black warm charcoal pool, only a whisper of the original hue surviving.
+const PUDDLE_CHAR: readonly number[] = [0.05, 0.04, 0.035];
 
 function pushStudVert(
   s: Surface,
@@ -317,10 +321,31 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
             // v4.15: glossy puddle of the block that melted — two low slabs
             // carrying the SOURCE block's tiles (fireState.puddleSrc).
             const src = puddleSrc.get(fkey(x, y, z)) ?? ID.Melted;
-            const pTop = faceTile(src, 0);
+            // Liquid, NOT a plate (Philippe's verdict on the first version:
+            // the studded TOP tile made it read as a flat LEGO plate). The
+            // puddle wears the SMOOTH side tile on every face — glossy
+            // molten plastic has no studs.
+            const pTop = faceTile(src, 1);
             const pSide = faceTile(src, 1);
-            addBoxT(opaque, x + 0.02, y, z + 0.02, x + 0.98, y + 0.15, z + 0.98, pSide, pTop, pSide);
-            addBoxT(opaque, x + 0.14, y + 0.15, z + 0.14, x + 0.86, y + 0.23, z + 0.86, pSide, pTop, pSide);
+            // v4.15 rework (Philippe: "que ça se liquéfie pis que ça
+            // s'étende"): the puddle OVERFLOWS its cell — a wide irregular
+            // glossy sheet, hash-shifted so no two puddles align, plus a
+            // thin drip tongue that ran off one side.
+            const ph = hashBlock(x, y, z);
+            const ox = (ph - 0.5) * 0.12, oz = ((ph * 7.3) % 1 - 0.5) * 0.12;
+            const hBase = 0.09 + ph * 0.02;
+            addBoxT(opaque, x - 0.14 + ox, y, z - 0.14 + oz, x + 1.14 + ox, y + hBase, z + 1.14 + oz, pSide, pTop, pSide, PUDDLE_CHAR);
+            addBoxT(opaque, x - 0.03 - ox, y + hBase, z - 0.03 - oz, x + 1.03 - ox, y + hBase + 0.05, z + 1.03 - oz, pSide, pTop, pSide, PUDDLE_CHAR);
+            addBoxT(opaque, x + 0.16 + oz, y + hBase + 0.05, z + 0.28 - ox, x + 0.74 + oz, y + hBase + 0.09, z + 0.8 - ox, pSide, pTop, pSide, PUDDLE_CHAR);
+            // A detached splat droplet beside the pool — liquid throws
+            // satellites; perfect rectangles read as plates, splats don't.
+            const sx = x + (ph > 0.5 ? 1.22 : -0.3) + ox, sz = z + ((ph * 3.1) % 1) * 0.5 + oz;
+            addBoxT(opaque, sx, y, sz, sx + 0.24, y + 0.045, sz + 0.2, pSide, pTop, pSide, PUDDLE_CHAR);
+            const dir = Math.floor(ph * 4) % 4;
+            if (dir === 0) addBoxT(opaque, x + 0.3, y, z - 0.48, x + 0.7, y + 0.045, z + 0.1, pSide, pTop, pSide, PUDDLE_CHAR);
+            else if (dir === 1) addBoxT(opaque, x + 0.9, y, z + 0.3, x + 1.48, y + 0.045, z + 0.7, pSide, pTop, pSide, PUDDLE_CHAR);
+            else if (dir === 2) addBoxT(opaque, x + 0.3, y, z + 0.9, x + 0.7, y + 0.045, z + 1.48, pSide, pTop, pSide, PUDDLE_CHAR);
+            else addBoxT(opaque, x - 0.48, y, z + 0.3, x + 0.1, y + 0.045, z + 0.7, pSide, pTop, pSide, PUDDLE_CHAR);
           } else if (self.slab) {
             addBoxT(opaque, x, y, z, x + 1, y + 0.5, z + 1, tile, top, bot);
             if (fancy) addStud(opaque, x, y - 0.5, z, top);
@@ -523,15 +548,19 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
         scratchTint[1] = 1;
         scratchTint[2] = 0.986 + ((h0 * 43.7) % 1) * 0.028;
 
-        // v4.15 melt: sparse lookup (free when nothing melts). Scorch tint:
-        // darker + warmer as the plastic cooks.
+        // v4.15 melt: sparse lookup (free when nothing melts). CHAR tint
+        // (Philippe's law: melting plastic BLACKENS, ultra realistic, and
+        // stays fully OPAQUE — never a fade): a gentle warm pre-darken,
+        // then a smoothstep char curve that takes the block to warm
+        // charcoal-black as the melt completes.
         const melt = heatMap.size ? meltAt(x, y, z) : 0;
-        const sag = melt * 0.5;
+        const sag = melt * 0.78;
         if (melt > 0) {
           const dk = 1 - melt * 0.3;
-          scratchTint[0] *= dk * (1 - melt * 0.05);
-          scratchTint[1] *= dk * (1 - melt * 0.22);
-          scratchTint[2] *= dk * (1 - melt * 0.3);
+          const ch = melt * melt * (3 - 2 * melt);
+          scratchTint[0] *= dk * (1 - ch * 0.94);
+          scratchTint[1] *= dk * (1 - ch * 0.96);
+          scratchTint[2] *= dk * (1 - ch * 0.97);
         }
 
         for (let fi = 0; fi < 6; fi++) {
@@ -561,15 +590,27 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
             sv[1] = y + v[1] - ny * pull;
             sv[2] = z + v[2] - nz * pull;
             if (melt > 0 && v[1] === 1) {
-              // Sag the top + pull the shoulders in: a pure function of the
-              // local vertex, so shared edges deform identically (no cracks).
+              // Slump: the top sinks hard + the shoulders pull in: a pure
+              // function of the local vertex, so shared edges deform
+              // identically (no cracks).
               sv[1] -= sag;
-              sv[0] += (0.5 - v[0]) * melt * 0.16;
-              sv[2] += (0.5 - v[2]) * melt * 0.16;
+              sv[0] += (0.5 - v[0]) * melt * 0.22;
+              sv[2] += (0.5 - v[2]) * melt * 0.22;
+            } else if (melt > 0 && v[1] === 0 && ny === 0) {
+              // Base bulge (v4.15 rework): melting plastic SPREADS at the
+              // foot — the silhouette goes short + wide and reads as
+              // liquefying from far away, not as a tint change.
+              sv[0] += nx * melt * 0.13;
+              sv[2] += nz * melt * 0.13;
             }
             scratchShade[vi] = shadeAt(x, y, z, nx, ny, nz, v[0], v[1], v[2]) * jit;
           }
+          // Wet sheen on a liquefying top face (brightens instead of
+          // fading — melted plastic is glossy, never transparent).
+          const sheen = melt > 0.4 && ny > 0 ? 1 + (melt - 0.4) * 0.3 : 1;
+          if (sheen !== 1) { scratchTint[0] *= sheen; scratchTint[1] *= sheen; scratchTint[2] *= sheen; }
           pushQuad(surf, scratchVerts, face.n, tile, scratchShade, scratchTint);
+          if (sheen !== 1) { scratchTint[0] /= sheen; scratchTint[1] /= sheen; scratchTint[2] /= sheen; }
           if (fancy && ny > 0 && !self.fluid && self.solid && !n.plant && melt < 0.85) addStud(surf, x, y, z, faceTile(id, 0), jit, sag, 1 - melt * 0.8);
         }
       }

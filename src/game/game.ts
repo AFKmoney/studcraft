@@ -4174,7 +4174,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   // emitters): with nothing burning, this is a no-op — Philippe's law (A1
   // performance even on cheap devices) holds by construction. Plastic MELTS
   // (heat -> sag in the mesher -> glossy puddle); wood BURNS and spreads.
-  const NEVER_HEAT = new Set<number>([ID.Bedrock, ID.Stone, ID.Cobble, ID.Obsidian, ID.Glass, ID.Dirt, ID.Grass, ID.Sand, ID.Gravel, ID.Soul, ID.Farmland, ID.IronBlock, ID.Gold, ID.Diamond, ID.Hard, ID.Lava, ID.Water, ID.Fire, ID.Melted]);
+  const NEVER_HEAT = new Set<number>([ID.Bedrock, ID.Stone, ID.Cobble, ID.Obsidian, ID.Glass, ID.Dirt, ID.Grass, ID.Sand, ID.Gravel, ID.Soul, ID.Farmland, ID.IronBlock, ID.Gold, ID.Diamond, ID.Hard, ID.Lava, ID.Water, ID.Fire, ID.Melted,
+    // v4.15 audit (Philippe's scope law — only what would REALLY melt may
+    // melt): every ore/rock, metal machine and fixture, special relic and
+    // organic ground block the registry audit caught in the melt set.
+    ID.Coal, ID.IronOre, ID.Furnace, ID.Lamp, ID.LampOn, ID.Piston, ID.TinOre, ID.CopperOre, ID.AmberOre, ID.ChromeOre, ID.SapphireOre, ID.ResinOre, ID.PrismOre, ID.MasterBrick, ID.ChromeBrick, ID.TNT, ID.Netherrack, ID.EndStone, ID.EmeraldOre, ID.Enchanter, ID.Anvil, ID.Brew, ID.Dispenser, ID.Hopper, ID.Mud, ID.Moss, ID.Clay, ID.Ash, ID.AshSoil, ID.CrystalOre, ID.Pumpkin, ID.Melon, ID.Hay, ID.Observer, ID.ObserverOn, ID.EndFrame, ID.EndFrameEye, ID.EndCrystal, ID.Basalt, ID.Calcite, ID.Tuff, ID.Spawner, ID.Grindstone, ID.ShulkerBox, ID.Beacon, ID.Conduit, ID.Target, ID.GuardianSpike, ID.PharaohGold, ID.WitchVenom, ID.IllagerBadge, ID.VoidCore, ID.TidalBlade, ID.PharaohStaff, ID.WitchStaff, ID.ExecutionerAxe, ID.VoidBlade, ID.GuardianPlate, ID.PharaohCrown, ID.CoalOre, ID.GoldOre, ID.DiamondOre, ID.LapisOre, ID.RedOre, ID.Mycelium, ID.Podzol]);
   const NEIGHBORS6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]] as const;
   function isPlastic(id: number) {
     if (!id || NEVER_HEAT.has(id)) return false;
@@ -4186,6 +4190,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   }
   function flamOf(id: number) {
     if (id === ID.Leaves) return 1;
+    if (id === ID.Hay) return 0.9; // dry hay goes up fast (audit fix: it melted!)
+    if (id === ID.Coal) return 0.6; // a coal block is fuel — it burns, never melts
     if (id === ID.Log) return 0.35;
     if (id === ID.Bookshelf) return 0.7;
     if (AXE_OK(id)) return 0.5;
@@ -4213,6 +4219,28 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     fireFxDirty = true;
     saveDirty = true;
     return true;
+  }
+  // v4.15: a bucket of water drowns fire in a 3x3x3 splash — Fire cells go
+  // out, burning blocks stop, hot plastic stops cooking (its slump stays:
+  // melted plastic does not un-melt). Called by the bucket pour handler.
+  function douseArea(cx: number, cy: number, cz: number) {
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
+      const x = cx + dx, y = cy + dy, z = cz + dz, k = FS.fkey(x, y, z);
+      if (FS.fireCells.has(k)) {
+        world.set(x, y, z, ID.Air);
+        FS.fireCells.delete(k);
+        fireAge.delete(k);
+        markDirtyAt(x, z);
+      }
+      if (FS.burningMap.delete(k)) markDirtyAt(x, z);
+      const st = FS.heatMap.get(k);
+      if (st) {
+        st.h = 0;
+        if (st.m <= 0) FS.heatMap.delete(k);
+      }
+    }
+    fireFxDirty = true;
+    saveDirty = true;
   }
   let fireAcc = 0;
   function tickFire(dt: number) {
@@ -4261,17 +4289,25 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
         continue;
       }
       e.h = Math.max(0, e.h - 0.045);
-      if (e.h > 0.5) e.m = Math.min(1, e.m + (e.h - 0.5) * 0.11);
+      // Calm, liquid slump (Philippe: "fondre tranquillement comme un
+      // liquide") — a full melt takes ~8 s at full heat, not ~4.
+      if (e.h > 0.5) e.m = Math.min(1, e.m + (e.h - 0.5) * 0.06);
       const st = Math.floor(e.m * 8);
       if (st !== e.stage) {
         e.stage = st;
         markDirtyAt(x, z);
+        fireFxDirty = true; // melting blocks gain/lose their flame licks here
       }
       if (e.m >= 1) {
         const srcId = world.get(x, y, z);
-        FS.puddleSrc.set(k, srcId);
-        world.set(x, y, z, ID.Melted);
-        burst(x + 0.5, y + 0.7, z + 0.5, def(srcId).side, 5);
+        if (srcId === ID.Ice || srcId === ID.Snow) {
+          world.set(x, y, z, ID.Water); // ice + snow melt into water, not plastic
+        } else {
+          FS.puddleSrc.set(k, srcId);
+          world.set(x, y, z, ID.Melted);
+        }
+        // NO burst here (Philippe's law): melting plastic slumps quietly
+        // into its puddle — it never pops debris onto itself.
         FS.heatMap.delete(k);
         markDirtyAt(x, z);
         saveDirty = true;
@@ -4725,12 +4761,19 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       const py = hit.y + hit.ny;
       const pz = hit.z + hit.nz;
       const pour = held === ID.LavaBucket ? ID.Lava : ID.Water;
-      if (world.get(px, py, pz) === ID.Air && spend(held, 1)) {
+      if (pour === ID.Water && world.get(px, py, pz) === ID.Fire && spend(held, 1)) {
+        // Bucket straight onto flames: no water cell left, the fire drowns.
+        douseArea(px, py, pz);
+        addInv(ID.Bucket, 1);
+        audio.place();
+        saveDirty = true;
+      } else if (world.get(px, py, pz) === ID.Air && spend(held, 1)) {
         world.set(px, py, pz, pour);
         markDirtyAt(px, pz);
         addInv(ID.Bucket, 1);
         audio.place();
         saveDirty = true;
+        if (pour === ID.Water) douseArea(px, py, pz); // the splash puts out what's around
       }
       return;
     }
@@ -6004,20 +6047,20 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
 
   function burst(x: number, y: number, z: number, color: string, n: number) {
     for (let i = 0; i < n; i++) {
-      const life = 0.55 + Math.random() * 0.45;
+      const life = 0.5 + Math.random() * 0.3;
       particles.push({
         x: x + (Math.random() - 0.5) * 0.28,
         y: y + (Math.random() - 0.5) * 0.28,
         z: z + (Math.random() - 0.5) * 0.28,
         vx: (Math.random() - 0.5) * 3.6,
-        vy: 1.4 + Math.random() * 3.4,
+        vy: 0.9 + Math.random() * 2.0,
         vz: (Math.random() - 0.5) * 3.6,
         rx: Math.random() * Math.PI * 2,
         ry: Math.random() * Math.PI * 2,
         rz: Math.random() * Math.PI * 2,
-        vrx: (Math.random() - 0.5) * 11,
-        vry: (Math.random() - 0.5) * 11,
-        vrz: (Math.random() - 0.5) * 11,
+        vrx: (Math.random() - 0.5) * 5.5,
+        vry: (Math.random() - 0.5) * 5.5,
+        vrz: (Math.random() - 0.5) * 5.5,
         life,
         maxLife: life,
         scale: 0.72 + Math.random() * 0.32,
@@ -6034,20 +6077,20 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     const sideCol = block.side || block.color;
     // 1. Eject the top 2×2 LEGO plate (e.g. green grass plate on Grass blocks)
     for (let i = 0; i < 2; i++) {
-      const life = 0.85 + Math.random() * 0.45;
+      const life = 0.7 + Math.random() * 0.3;
       particles.push({
         x: x + (Math.random() - 0.5) * 0.32,
         y: y + 0.26,
         z: z + (Math.random() - 0.5) * 0.32,
         vx: (Math.random() - 0.5) * 3.2,
-        vy: 2.2 + Math.random() * 2.6,
+        vy: 1.3 + Math.random() * 1.6,
         vz: (Math.random() - 0.5) * 3.2,
         rx: (Math.random() - 0.5) * 0.5,
         ry: Math.random() * Math.PI * 2,
         rz: (Math.random() - 0.5) * 0.5,
-        vrx: (Math.random() - 0.5) * 9,
-        vry: (Math.random() - 0.5) * 9,
-        vrz: (Math.random() - 0.5) * 9,
+        vrx: (Math.random() - 0.5) * 5,
+        vry: (Math.random() - 0.5) * 5,
+        vrz: (Math.random() - 0.5) * 5,
         life,
         maxLife: life,
         scale: 1.05,
@@ -6057,20 +6100,20 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     }
     // 2. Eject the 6 running-bond 1×2 and 2×1 sub-bricks from courses 0 & 1
     for (let i = 0; i < 8; i++) {
-      const life = 0.85 + Math.random() * 0.5;
+      const life = 0.7 + Math.random() * 0.35;
       particles.push({
         x: x + (Math.random() - 0.5) * 0.42,
         y: y + (i < 4 ? 0.0 : -0.22),
         z: z + (Math.random() - 0.5) * 0.42,
         vx: (Math.random() - 0.5) * 3.8,
-        vy: 1.6 + Math.random() * 3.2,
+        vy: 1.0 + Math.random() * 1.9,
         vz: (Math.random() - 0.5) * 3.8,
         rx: (Math.random() - 0.5) * 0.8,
         ry: (i % 2) * (Math.PI / 2) + (Math.random() - 0.5) * 0.4,
         rz: (Math.random() - 0.5) * 0.8,
-        vrx: (Math.random() - 0.5) * 10,
-        vry: (Math.random() - 0.5) * 10,
-        vrz: (Math.random() - 0.5) * 10,
+        vrx: (Math.random() - 0.5) * 5.5,
+        vry: (Math.random() - 0.5) * 5.5,
+        vrz: (Math.random() - 0.5) * 5.5,
         life,
         maxLife: life,
         scale: 1.0,
@@ -6173,24 +6216,28 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       const p = particles[i];
       p.life -= dt;
       if (p.life <= 0) continue;
-      p.vy -= 14.5 * dt;
+      p.vy -= 22 * dt; // physics rework: debris falls HEAVY, never floats
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.z += p.vz * dt;
       p.rx += p.vrx * dt;
       p.ry += p.vry * dt;
       p.rz += p.vrz * dt;
-      // Physical terrain bounce for unclipped LEGO bricks & plates
-      const gy = groundY(p.x, p.z) + (settings.studs ? STUD_H : 0) + 0.05;
+      // Physical terrain bounce for unclipped LEGO bricks & plates.
+      // A melt puddle's visual surface is ~0.28 high, not a full block:
+      // rest debris ON the liquid, never floating at full-block height.
+      const gBase = groundY(p.x, p.z);
+      const onPuddle = world.get(Math.floor(p.x), Math.round(gBase - 1), Math.floor(p.z)) === ID.Melted;
+      const gy = onPuddle ? gBase - 0.7 : gBase + (settings.studs ? STUD_H : 0) + 0.05;
       if (p.y < gy && p.vy < 0) {
         p.y = gy;
-        p.vy = -p.vy * 0.45;
+        p.vy = -p.vy * 0.32;
         p.vx *= 0.72;
         p.vz *= 0.72;
         p.vrx *= 0.65;
         p.vry *= 0.75;
         p.vrz *= 0.65;
-        if (Math.abs(p.vy) < 0.35) {
+        if (Math.abs(p.vy) < 0.6) {
           p.vy = 0;
           p.rx = Math.round(p.rx / (Math.PI / 2)) * (Math.PI / 2);
           p.rz = Math.round(p.rz / (Math.PI / 2)) * (Math.PI / 2);
@@ -6242,7 +6289,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       vec3 fwd = normalize(toCam + vec3(0.001, 0.0, 0.0));
       vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), fwd));
       float sway = sin(uTime * 3.1 + aPhase * 23.0 + ly * 2.6) * 0.07 * ly;
-      vec3 wp = aPos + right * (position.x * aScale + sway) + vec3(0.0, ly * 1.2 * aScale, 0.0);
+      vec3 wp = aPos + right * (position.x * aScale + sway) + vec3(0.0, ly * 1.05 * aScale, 0.0);
       gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
     }`;
   const fireFxFrag = `
@@ -6259,14 +6306,18 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       float t = uTime;
       vec2 uv = vUv;
       float rise = uv.y;
-      vec2 fp = vec2(uv.x * 5.0 + vPhase * 31.0, uv.y * 7.0 - t * 2.6 + vPhase * 17.0);
+      vec2 fp = vec2(uv.x * 6.8 + vPhase * 31.0, uv.y * 9.5 - t * 2.6 + vPhase * 17.0);
       float n = snoise(fp) * 0.5 + 0.5;
       float n2 = snoise(fp * 2.3 + vec2(3.7, 1.3) - vec2(0.0, t * 1.7)) * 0.5 + 0.5;
-      float w = mix(0.46, 0.05, pow(rise, 1.25)) * (0.85 + 0.3 * sin(t * 9.0 + vPhase * 41.0));
-      float d = abs(uv.x - 0.5 + (n - 0.5) * 0.34 * rise);
-      float body = smoothstep(w, w - 0.30, d);
+      // Physics rework (Philippe: flames read as flat "cards"): ragged
+      // silhouette — noise eats the width, the edge is crisp not feathered,
+      // and erosion punches real gaps between tongues.
+      float w = mix(0.46, 0.05, pow(rise, 1.25)) * (0.85 + 0.3 * sin(t * 9.0 + vPhase * 41.0)) * (0.62 + 0.62 * n2);
+      float d = abs(uv.x - 0.5 + (n - 0.5) * 0.42 * rise);
+      float body = smoothstep(w, w - 0.15, d);
       float lick = smoothstep(0.35, 0.9, n2 + (1.0 - rise) * 0.55);
       float a = clamp(body * (0.35 + lick), 0.0, 1.0);
+      a *= smoothstep(0.10, 0.42, n + (1.0 - rise) * 0.38);
       a *= 1.0 - smoothstep(0.72, 1.0, rise) * 0.9;
       if (a < 0.012) discard;
       float heat = clamp((1.0 - rise) * 0.75 + n * 0.38, 0.0, 1.0);
@@ -6371,6 +6422,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       const [x, y, z] = FS.funkey(k);
       fxPush(flameFx, x + 0.5, y + 0.55, z + 0.5, fxHash(k) + 0.37, 0.8);
     }
+    // Melting plastic BURNS as it liquefies (Philippe: "que ça brûle plus").
+    for (const [k, st] of FS.heatMap) {
+      if (st.m < 0.5) continue;
+      const [x, y, z] = FS.funkey(k);
+      fxPush(flameFx, x + 0.5, y + 0.55, z + 0.5, fxHash(k) + 0.61, 0.5);
+    }
     fxCommit(flameFx);
     // Smoke: fires, burning blocks, campfires, exposed lava.
     const puff = (x: number, y: number, z: number, k: string, s: number) => {
@@ -6384,6 +6441,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     for (const k of FS.burningMap.keys()) {
       const [x, y, z] = FS.funkey(k);
       puff(x + 0.5, y + 1.25, z + 0.5, k, 0.9);
+    }
+    for (const [k, st] of FS.heatMap) {
+      if (st.m < 0.3) continue;
+      const [x, y, z] = FS.funkey(k);
+      puff(x + 0.5, y + 1.2, z + 0.5, k, 0.7);
     }
     for (const k of FS.allEmitters()) {
       const [x, y, z] = FS.funkey(k);
