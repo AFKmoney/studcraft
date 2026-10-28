@@ -2348,13 +2348,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // v4.17: the arm is rolled/turned so a tool's head leans up-LEFT toward the
   // crosshair and the hand sits lower right (Minecraft first-person logic),
   // picked from staged phone-rig photos (rx/ry/rz = base rotation).
-  const vmBase = { x: 0.16, y: -0.085, z: -0.25, s: 0.56, block: 0.58, tool: 0.78, toolSpin: 0.35, rx: -0.1, ry: -0.1, rz: -0.55 };
+  const vmBase = { x: 0.175, y: -0.105, z: -0.25, s: 0.56, block: 0.58, tool: 0.78, toolSpin: 0.35, rx: -0.1, ry: -0.1, rz: -0.3, lean: -0.45, grip: 0.1 };
   // v4.17 held-item poses (viewBrick space), Minecraft logic: a block sits IN
   // the hand turned 45° (you see two faces and the top), a small item is held
   // flat in the clip, tools pass through the bore. Tunable by the QA hook.
   const heldPose = {
-    bx: 0.022, by: 0.035, bz: -0.06, brx: 0.32, bry: -0.785, brz: 0.06, bs: 0.5,
-    ix: 0.012, iy: 0.04, iz: -0.055, irx: 0.5, iry: -0.6, irz: 0.15, is: 0.62,
+    bx: 0, by: -0.005, bz: -0.035, brx: 0.32, bry: -0.785, brz: 0.06, bs: 0.5,
+    ix: 0, iy: 0, iz: -0.03, irx: 0.5, iry: -0.6, irz: 0.15, is: 0.62,
   };
   const vm = { equip: 1, land: 0, swayX: 0, swayY: 0, lastYaw: 0, lastPitch: 0, wasGrounded: true, fallV: 0, sprint: 0, place: 0 };
 
@@ -9820,9 +9820,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         if (heldIsTool) {
           // Handle through the bore (claw local Y), gripped just below the head.
           fpsClaw.add(heldBrickGroup);
-          const gripY = def(held).tool === "sword" ? 0.11 : 0.07;
+          const gripY = def(held).tool === "sword" ? 0.11 : vmBase.grip;
           heldBrickGroup.position.set(0, gripY * 1.25 * vmBase.tool, 0);
-          heldBrickGroup.rotation.set(0, vmBase.toolSpin, 0);
+          heldBrickGroup.rotation.set(0, vmBase.toolSpin, vmBase.lean);
           heldBrickGroup.scale.setScalar(1.25 * vmBase.tool);
         } else if (def(held).placeable) {
           viewBrick.add(heldBrickGroup);
