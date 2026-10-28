@@ -2386,7 +2386,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // holding them (vanilla hides the arm when an item is held). So the item is
   // shrunk about its grip point (angles untouched) and the arm anchor is
   // nudged up-left. Picked from phone-rig photos; QA hook setMcHeld.
-  const mcTune = { size: 0.5, ax: 0.44, ay: -0.34, az: -0.72, bsize: 0.6, isize: 0.3, bx: 0.34, by: -0.17, bz: -0.72 };
+  const mcTune = { size: 0.5, ax: 0.44, ay: -0.34, az: -0.72, bsize: 0.55, isize: 0.3, bx: 0.34, by: -0.1, bz: -0.72 };
   let heldKind = 0; // 0 tool, 1 block / small item
   const ARM_SCALE = 0.56 / MC_K; // the minifig arm keeps its old on-screen size
   const mcDisplay = (rot: [number, number, number], tr16: [number, number, number], sc: number) =>
@@ -2444,7 +2444,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const f = (upright ? 13 / 16 : 15.5 / 16 * Math.SQRT2 * 0.84) / len;
       const sprite = new THREE.Matrix4()
         .makeTranslation(upright ? 0.5 : 2 / 16, 1.5 / 16, 0.5)
-        .multiply(new THREE.Matrix4().makeRotationZ(upright ? 0 : -Math.PI / 4))
+        .multiply(new THREE.Matrix4().makeRotationZ(upright ? -Math.PI / 6 : -Math.PI / 4)) // a torch leans 30°, tools sit on the diagonal
         .multiply(new THREE.Matrix4().makeScale(f, f, f))
         .multiply(new THREE.Matrix4().makeTranslation(-c.x, -box.min.y, -c.z));
       M = MC_HANDHELD.clone().multiply(sprite);
