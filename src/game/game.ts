@@ -2386,7 +2386,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // holding them (vanilla hides the arm when an item is held). So the item is
   // shrunk about its grip point (angles untouched) and the arm anchor is
   // nudged up-left. Picked from phone-rig photos; QA hook setMcHeld.
-  const mcTune = { size: 0.5, ax: 0.44, ay: -0.34, az: -0.72, bsize: 0.55, isize: 0.3, bx: 0.34, by: -0.1, bz: -0.72 };
+  const mcTune = { size: 0.5, ax: 0.44, ay: -0.34, az: -0.72, bsize: 0.5, isize: 0.3, bx: 0.32, by: 0.0, bz: -0.72 };
   let heldKind = 0; // 0 tool, 1 block / small item
   const ARM_SCALE = 0.56 / MC_K; // the minifig arm keeps its old on-screen size
   const mcDisplay = (rot: [number, number, number], tr16: [number, number, number], sc: number) =>
