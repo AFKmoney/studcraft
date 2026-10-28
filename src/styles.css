@@ -3595,3 +3595,28 @@ kbd {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* v4.17 fix: the hotbar stays visible inside the inventory (Minecraft-style),
+   so you see which slot an item goes into. */
+.sc-inv-hotbar {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  gap: 6px;
+  padding-top: 10px;
+  margin-top: 6px;
+  border-top: 1px solid rgba(255, 240, 214, 0.1);
+  flex: none;
+}
+.sc-inv-hotbar .sc-cell {
+  aspect-ratio: 1;
+  min-height: 0;
+}
+.sc-inv-hotbar .sc-cell.target {
+  outline: 2px solid var(--sc-gold);
+  outline-offset: 1px;
+  background: rgba(245, 197, 24, 0.14);
+}
+@media (max-height: 460px) {
+  .sc-inv-hotbar { gap: 4px; padding-top: 6px; margin-top: 4px; }
+  .sc-inv-hotbar .sc-cell { aspect-ratio: auto; height: 40px; }
+}

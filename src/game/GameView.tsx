@@ -1531,6 +1531,10 @@ function HoldButton({ label, onHold, children, className, buzz }: { label: strin
     setDown(v);
     onHold(v);
   };
+  // unmounted while held (a menu opened under the finger): release the hold
+  const holdRef = useRef(onHold);
+  holdRef.current = onHold;
+  useEffect(() => () => holdRef.current(false), []);
   return (
     <button
       className={"sc-hold " + className + (down ? " down" : "")}
@@ -1606,8 +1610,36 @@ function Inventory({ game }: { game: GameApi }) {
             {page === "quests" && <QuestList hud={hud} onClaim={(id) => game.claim(id)} />}
             {page === "skills" && <SkillTree hud={hud} onUnlock={(id) => game.unlock(id)} />}
           </div>
+          {(page === "bin" || page === "craft") && <InvHotbar game={game} />}
         </div>
       </section>
+    </div>
+  );
+}
+
+// The hotbar, always visible inside the inventory (like Minecraft): you see
+// which slot an item goes into. Tap a slot to make it the target; tap the
+// target slot again to empty it (creative). Items tapped in the grid land in
+// the target slot, which then moves to the next empty one.
+function InvHotbar({ game }: { game: GameApi }) {
+  const hud = game.hud;
+  return (
+    <div className="sc-inv-hotbar" role="group" aria-label="Hotbar">
+      {hud.hotbar.map((item, i) => (
+        <button
+          key={i}
+          className={"sc-cell" + (i === hud.slot ? " target" : "")}
+          aria-label={item.id > 0 ? `Hotbar ${i + 1}: ${def(item.id).name}` : `Hotbar ${i + 1}: empty`}
+          onClick={() => {
+            if (i === hud.slot && hud.creative && item.id > 0) game.clearSlot(i);
+            else game.setSlot(i);
+          }}
+        >
+          <span className="sc-cell-hb">{i + 1}</span>
+          {item.id > 0 && <ItemIcon id={item.id} />}
+          {item.id > 0 && !hud.creative && item.count > 1 && <em>{item.count > 999 ? "999+" : item.count}</em>}
+        </button>
+      ))}
     </div>
   );
 }
@@ -1626,7 +1658,7 @@ function itemBinCategory(id: number): BinCategory {
   return "materials";
 }
 
-function BinGrid({ game, filter = "", cat = "all" }: { game: GameApi; filter?: string; cat?: BinCategory }) {
+function BinGrid({ game, filter = "", cat = "all", onPick }: { game: GameApi; filter?: string; cat?: BinCategory; onPick?: (id: number) => void }) {
   const hud = game.hud;
   const q = filter.trim().toLowerCase();
   const ids = CATALOG.filter((id) => {
@@ -1650,6 +1682,10 @@ function BinGrid({ game, filter = "", cat = "all" }: { game: GameApi; filter?: s
             title={`${d.name}${d.maxUse > 0 && count > 0 ? ` (${count}/${d.maxUse} durability)` : count > 0 ? ` (×${count})` : ""}`}
             aria-label={d.name + (count >= 0 ? `, ${count}` : "")}
             onClick={(e) => {
+              if (onPick) {
+                onPick(id); // stations: the tap moves the stack (no hotbar change)
+                return;
+              }
               if (e.shiftKey) {
                 game.shiftStack(id);
                 return;
@@ -1746,7 +1782,7 @@ function BinPage({ game }: { game: GameApi }) {
           ))}
         </div>
         <BinGrid game={game} filter={filter} cat={cat} />
-        <p className="sc-hint">Click to assign to active hotbar slot ({hud.slot + 1}) · Shift-click or double-tap to move stack.</p>
+        <p className="sc-hint">Tap an item: it goes into hotbar slot {hud.slot + 1} (highlighted below) · tap another slot to choose where.</p>
       </div>
     </div>
   );
@@ -2120,8 +2156,8 @@ function StationScreen({ game }: { game: GameApi }) {
                     <figcaption>Output</figcaption>
                   </figure>
                 </div>
-                <p className="sc-hint">Hold an item below, then tap Input or Fuel to load it. Tap Output to collect.</p>
-                <BinGrid game={game} />
+                <p className="sc-hint">Tap an item below: ores and food go to Input, fuel to Fuel. Tap a kiln slot to take its stack back.</p>
+                <BinGrid game={game} onPick={(id) => game.furnaceQuick(id)} />
               </>
             )}
             {hud.panel === "chest" && (
@@ -2135,8 +2171,8 @@ function StationScreen({ game }: { game: GameApi }) {
                   ))}
                 </div>
                 <p className="sc-label">Your bag</p>
-                <BinGrid game={game} />
-                <p className="sc-hint">Tap a chest cell to take it. Hold a bag item, then tap an empty chest cell to store it.</p>
+                <BinGrid game={game} onPick={(id) => game.chestStore(id)} />
+                <p className="sc-hint">Tap a crate stack to take it all · tap a bag item to put its whole stack in the crate.</p>
               </>
             )}
             {hud.panel === "enchant" && (

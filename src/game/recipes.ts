@@ -47,7 +47,6 @@ export const RECIPES: Recipe[] = [
   r("stairs-cobble", "Cobble stairs", "6 cobble → 4", [[C, 6]], ID.StairsCobble0, 4, { shape: [C, 0, 0, C, C, 0, C, C, C], w: 3, h: 3, cat: "build" }),
   r("sign", "Sign", "6 planks + stick → 3", [[P, 6], [S, 1]], ID.Sign, 3, { shape: [P, P, P, P, P, P, 0, S, 0], w: 3, h: 3, cat: "build" }),
   r("hammer", "Brick hammer", "3 stone + 2 planks", [[ID.Stone, 3], [P, 2]], 0, 1, { special: "hammer", cat: "tools" }),
-  r("glass", "Windows", "2 sand → 2", [[ID.Sand, 2]], ID.Glass, 2, { shape: [ID.Sand, ID.Sand], w: 2, h: 1, cat: "build" }),
   r("basalt", "Basalt brick", "4 stone → 4", [[ID.Stone, 4]], ID.Basalt, 4, { shape: [ID.Stone, ID.Stone, ID.Stone, ID.Stone], w: 2, h: 2, cat: "build" }),
   r("calcite", "Calcite brick", "4 sand → 4", [[ID.Sand, 4]], ID.Calcite, 4, { shape: [ID.Sand, ID.Sand, ID.Sand, ID.Sand], w: 2, h: 2, cat: "build" }),
   r("tuff", "Tuff brick", "4 cobble → 4", [[ID.Cobble, 4]], ID.Tuff, 4, { shape: [C, C, C, C], w: 2, h: 2, cat: "build" }),
@@ -213,6 +212,10 @@ export const RECIPES: Recipe[] = [
     h: 2,
     cat: "gear",
   }),
+  r("cap-leather", "Leather cap", "5 pelts", [[ID.Pelt, 5]], ID.HelmLeather, 1, { shape: [ID.Pelt, ID.Pelt, ID.Pelt, ID.Pelt, 0, ID.Pelt], w: 3, h: 2, cat: "gear" }),
+  r("shell-leather", "Leather shell", "8 pelts", [[ID.Pelt, 8]], ID.ChestLeather, 1, { shape: [ID.Pelt, 0, ID.Pelt, ID.Pelt, ID.Pelt, ID.Pelt, ID.Pelt, ID.Pelt, ID.Pelt], w: 3, h: 3, cat: "gear" }),
+  r("legs-leather", "Leather legs", "7 pelts", [[ID.Pelt, 7]], ID.LegsLeather, 1, { shape: [ID.Pelt, ID.Pelt, ID.Pelt, ID.Pelt, 0, ID.Pelt, ID.Pelt, 0, ID.Pelt], w: 3, h: 3, cat: "gear" }),
+  r("boots-leather", "Leather boots", "4 pelts", [[ID.Pelt, 4]], ID.BootsLeather, 1, { shape: [ID.Pelt, 0, ID.Pelt, ID.Pelt, 0, ID.Pelt], w: 3, h: 2, cat: "gear" }),
   r("dust", "Red dust", "1 red → 4", [[ID.Red, 1]], ID.Dust, 4, { shape: [ID.Red], w: 1, h: 1, cat: "build" }),
   r("lever", "Lever", "1 stick + 1 cobble", [[S, 1], [C, 1]], ID.Lever, 1, { shape: [S, C], w: 1, h: 2, cat: "build" }),
   r("lamp", "Lamp", "1 dust + 1 window", [[ID.Dust, 1], [ID.Glass, 1]], ID.Lamp, 1, { shape: [ID.Dust, ID.Glass], w: 1, h: 2, cat: "build" }),
@@ -242,8 +245,8 @@ export const RECIPES: Recipe[] = [
     cat: "build",
   }),
   r("hard", "Kiln brick", "4 cobble + 1 coal", [[C, 4], [ID.Coal, 1]], ID.Hard, 1, { cat: "build" }),
-  r("tnt", "Blast brick", "4 dust + 1 blast dust", [[ID.Dust, 4], [ID.Powder, 1]], ID.TNT, 1, {
-    shape: [0, ID.Dust, 0, ID.Dust, ID.Powder, ID.Dust, 0, ID.Dust, 0],
+  r("tnt", "Blast brick", "5 blast dust + 4 sand", [[ID.Powder, 5], [ID.Sand, 4]], ID.TNT, 1, {
+    shape: [ID.Powder, ID.Sand, ID.Powder, ID.Sand, ID.Powder, ID.Sand, ID.Powder, ID.Sand, ID.Powder],
     w: 3,
     h: 3,
     cat: "build",
@@ -311,8 +314,8 @@ export const RECIPES: Recipe[] = [
     h: 2,
     cat: "tools",
   }),
-  r("frame", "Item frame", "4 sticks + 1 pelt", [[S, 4], [ID.Pelt, 1]], ID.Frame, 1, {
-    shape: [0, S, 0, S, ID.Pelt, S, 0, S, 0],
+  r("frame", "Item frame", "8 sticks + 1 pelt", [[S, 8], [ID.Pelt, 1]], ID.Frame, 1, {
+    shape: [S, S, S, S, ID.Pelt, S, S, S, S],
     w: 3,
     h: 3,
     cat: "build",
@@ -665,8 +668,8 @@ export const RECIPES: Recipe[] = [
     h: 3,
     cat: "food",
   }),
-  r("paper", "Paper", "3 reeds → 3", [[ID.Reed, 3]], ID.Paper, 3, { shape: [ID.Reed, ID.Reed, ID.Reed], w: 1, h: 3, cat: "build" }),
-  r("book", "Book", "3 paper", [[ID.Paper, 3]], ID.Book, 1, { shape: [ID.Paper, ID.Paper, ID.Paper], w: 1, h: 3, cat: "build" }),
+  r("paper", "Paper", "3 reeds → 3", [[ID.Reed, 3]], ID.Paper, 3, { shape: [ID.Reed, ID.Reed, ID.Reed], w: 3, h: 1, cat: "build" }),
+  r("book", "Book", "3 paper + 1 pelt", [[ID.Paper, 3], [ID.Pelt, 1]], ID.Book, 1, { shape: [ID.Paper, ID.Paper, ID.Paper, ID.Pelt], w: 2, h: 2, cat: "build" }),
   r("shelf", "Shelf", "6 planks + 3 books", [[ID.Planks, 6], [ID.Book, 3]], ID.Bookshelf, 1, {
     shape: [P, P, P, ID.Book, ID.Book, ID.Book, P, P, P],
     w: 3,
@@ -789,8 +792,6 @@ export const SMELT: Record<number, number> = {
   [ID.ResinOre]: ID.Resin,
   [ID.PrismOre]: ID.Prism,
   [ID.Potato]: ID.BakedPotato,
-  [ID.Carrot]: ID.BakedPotato,
-  [ID.Beetroot]: ID.BakedPotato,
   [ID.Fish]: ID.CookedFish,
 };
 

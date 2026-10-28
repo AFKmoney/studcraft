@@ -2215,3 +2215,21 @@ Philippe (11:4x PDT): « La V4.17, c'est la version Teardown … tu pètes un bl
 - `moltenize` shader (both molten materials) now draws, per pixel and independent of mesh resolution: (1) the brick's LEGO **course seams** at 1/3 and 2/3 of its *slumped* height (mesher writes brick A's material height in `uv.y`, `matFrac`), so the seams droop with the sag, plus staggered vertical joints on the face's dominant axis — anti-aliased with `fwidth`, fading out between 12 % and 60 % melt; (2) **wrinkles + flow streaks** as relief normals from an ANALYTIC world-space gradient (value-noise-warped sine waves); (3) soot in the creases, char speckles, wetter/glossier roughness along the flow (physical material only).
 - Found + fixed on the rig: a sin-based GLSL hash turned into pixel snow at large world coordinates → sine-free hash (lattice mod 289); a screen-space derivative bump stepped in 2×2 pixel blocks (checkerboard) → analytic gradient instead; all terms band-limited (fade before features drop under ~3 px — SRN Nyquist rule).
 - Cost: molten fragments only (~8 value-noise lookups/pixel); zero CPU change.
+
+---
+
+## 2026-10-27 — UI / gameplay bug pass: stuck hold, crate, kiln, inventory hotbar, held items, Minecraft recipes (Claude) — code on main, NOT delivered
+
+Philippe (16:22 PDT): « on peut pas ouvrir les chests, le menu créatif fonctionne pas … les menus marchent pas, inventaire marche pas … les positions des équipements dans la main doivent être logiques … le crafting et tout doit être pensé comme Minecraft ».
+
+Reproduced on an A54-sized phone rig (915×412, DPR 2, real CDP touch events — `drv.mjs` `openPhone` / `touchAt` / `touchLabel`; scripts `qa_phone.mjs`, `qa_held.mjs`, `qa_surv.mjs`).
+
+- **Root cause of "menus don't work" — stuck hold (`game.ts`, `GameView.tsx`):** "Place or use" auto-repeats while held (0.18 s). When it opens a crate/bench/kiln/inventory, the touch HUD unmounts under the finger and the release never arrives → `touch.place` stayed true; closing the menu re-used the block at once (menu re-opened) or kept placing blocks. Fix: `emit()` drops every hold (`touch.*`, mouse) whenever the phase is not "play" and sets `holdLatch`, so place/mine are ignored until released once; `HoldButton` also releases its hold on unmount.
+- **Crate:** a tap on a crate stack takes the WHOLE stack (was 1 per tap); a tap on a bag item stores its whole stack (`chestStore`: tops up matching stacks, then empty cells, 64 per cell). Before, tapping a bag item in the crate REPLACED the active hotbar slot (`assign`) and stored nothing.
+- **Kiln:** a tap on a bag item routes the whole stack (`furnaceQuick`: smeltable → input, fuel → fuel); a tap on input/fuel takes the stack back.
+- **Inventory:** the hotbar is now always visible at the bottom of the Bag/Craft pages (`InvHotbar`), target slot highlighted; tapping items fills the bar slot by slot (target advances to the next empty slot), an item already on the bar just selects it (no duplicates); tapping the target slot again empties it (creative). Station bag grids no longer touch the hotbar (`BinGrid onPick`).
+- **Held items (`game.ts`):** blocks sit IN the clip turned 45° (`heldPose.b*`), small items (food, ingots, gems, buckets, tiles) held in the clip (`heldPose.i*`), tools through the bore as before. Stick / rod / ember rod / bone / arrow got a rod model held like a tool (they fell through to the full brick model — a stick was held as a plank block); every other non-block item is a small 1×2 tile, never a full brick. QA hook `setHeldPose`.
+- **Recipes → Minecraft logic (`recipes.ts`):** windows (glass) only from the kiln (craft recipe removed); TNT = 5 blast dust + 4 sand (checker); paper horizontal; book = 3 paper + 1 pelt (leather); item frame = 8 sticks + 1 pelt; leather cap/shell/legs/boots added (MC shapes); carrots and beetroot no longer "smelt" into baked potato.
+- Also: `setPos` QA hook declared in the hook type (game.ts type error from the v4.17 work).
+- **Checks:** game.ts type-checks with the stub file (only stub gaps left); bundle + CSS build; phone-rig photos of inventory, crate, bench, kiln, held items. Full `npm run typecheck` still pending an agent with npm access.
+- **NOT delivered** — Philippe's A54 verdict.

@@ -158,6 +158,7 @@ export type GameApi = {
   respawn: () => void;
   toggleInventory: () => void;
   setSlot: (i: number) => void;
+  clearSlot: (i: number) => void;
   swapSlots: (a: number, b: number) => void;
   assign: (id: number) => void;
   hold: (id: number) => void;
@@ -170,6 +171,8 @@ export type GameApi = {
   armorTap: (i: number) => void;
   furnaceTap: (part: number) => void;
   chestTap: (i: number) => void;
+  chestStore: (id: number) => void;
+  furnaceQuick: (id: number) => void;
   enchant: (tier?: number) => void;
   enchantOffer: (tier?: number) => void;
   enchantPick: (i: number) => void;
@@ -280,6 +283,8 @@ declare global {
       setHeld?: (id: number) => boolean;
       setSwing?: (v: number) => boolean;
       setVm?: (v: Record<string, number>) => boolean;
+      setHeldPose?: (v: Record<string, number>) => boolean;
+      setPos?: (x: number, y: number, z: number) => boolean;
     };
   }
 }
@@ -2150,6 +2155,35 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return { group, isTool: false, flames };
     }
 
+    // 4b. ROD-LIKE ITEMS (stick, fishing rod, ember rod, bone, arrow): a LEGO
+    // bar held through the hand like a tool — before v4.17 they fell through
+    // to the full brick model and a stick was held as a plank block.
+    if (id === ID.Stick || id === ID.Rod || id === ID.Blaze || id === ID.Bone || id === ID.Arrow) {
+      const mat = skin(id === ID.Stick ? 0x8a5a2b : baseHex);
+      addCylPart(group, 0.016, 0.016, 0.3, 0, 0.04, 0, mat, 10);
+      if (id === ID.Rod) {
+        const line = addCylPart(group, 0.004, 0.004, 0.22, 0.05, 0.12, 0, skin(0xe8e4dc), 6);
+        line.rotation.z = 0.5;
+      } else if (id === ID.Arrow) {
+        addBoxPart(group, 0.03, 0.04, 0.03, 0, 0.2, 0, skin(0xb0b6be));
+        addBoxPart(group, 0.034, 0.05, 0.008, 0, -0.1, 0, skin(0xd82e22));
+      } else if (id === ID.Bone) {
+        addCylPart(group, 0.03, 0.03, 0.04, 0, 0.19, 0, mat, 10);
+        addCylPart(group, 0.03, 0.03, 0.04, 0, -0.11, 0, mat, 10);
+      }
+      return { group, isTool: true, flames };
+    }
+
+    // 4c. EVERY OTHER NON-BLOCK ITEM (string, feather, paper, dust, shells…):
+    // a small 1×2 LEGO tile in the item's colour — small enough to sit in the
+    // hand, never a full brick.
+    if (!d.placeable) {
+      const mat = skin(baseHex);
+      addBoxPart(group, 0.17, 0.05, 0.1, 0, 0, 0, mat);
+      addStudGrid(group, 0.15, 0.025, 0.08, 2, 1, skin(shiftHex(baseHex, 1.12)), 0, 0, true);
+      return { group, isTool: false, flames };
+    }
+
     // 5. ALL PLACEABLE WORLD BLOCKS: True 3-Course Modular LEGO Sub-Brick Assembly!
     // Renders the top 2×2 LEGO plate (with 4 hollow studs) + 2 staggered courses of 1×2 LEGO bricks with real 3D seam gaps!
     const isGrassLike = id === ID.Grass || id === ID.Snow || id === ID.Mycelium || id === ID.Podzol;
@@ -2311,6 +2345,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
 
   // Viewmodel animation state (renderCamera).
   const vmBase = { x: 0.15, y: -0.075, z: -0.25, s: 0.56, block: 0.58, tool: 0.78, toolSpin: 0.35 };
+  // v4.17 held-item poses (viewBrick space), Minecraft logic: a block sits IN
+  // the hand turned 45° (you see two faces and the top), a small item is held
+  // flat in the clip, tools pass through the bore. Tunable by the QA hook.
+  const heldPose = {
+    bx: 0.022, by: 0.035, bz: -0.06, brx: 0.32, bry: -0.785, brz: 0.06, bs: 0.5,
+    ix: 0.012, iy: 0.04, iz: -0.055, irx: 0.5, iry: -0.6, irz: 0.15, is: 0.62,
+  };
   const vm = { equip: 1, land: 0, swayX: 0, swayY: 0, lastYaw: 0, lastPitch: 0, wasGrounded: true, fallV: 0, sprint: 0, place: 0 };
 
   // Positioned at z = -0.27 with scale 0.56 so all 3D parts stay > camera.near (0.08) and < player HW (0.34)
@@ -2952,7 +2993,18 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   const tmp = new THREE.Color();
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+  // A hold that opens a menu (crate, bench, kiln, inventory, pause…) never
+  // gets its release: the touch HUD unmounts under the finger. Before this
+  // fix the "place / use" hold stayed stuck ON, so closing the crate reused it
+  // at once (re-opened) or kept placing blocks — menus "didn't work". Any
+  // non-play phase now drops every hold, and the next press must start fresh.
+  let holdLatch = false;
   function emit() {
+    if (phase !== "play") {
+      touch.mine = touch.place = touch.jump = false;
+      mouseMine = mousePlace = false;
+      holdLatch = true;
+    }
     snapshot();
     listeners.forEach((fn) => fn());
   }
@@ -8786,8 +8838,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     str += padIn.x;
     fwd += padIn.y;
     const jump = keys.has("Space") || touch.jump || padIn.jump;
-    const mine = mouseMine || touch.mine || padIn.mine;
-    const place = mousePlace || touch.place || padIn.place;
+    let mine = mouseMine || touch.mine || padIn.mine;
+    let place = mousePlace || touch.place || padIn.place;
+    if (holdLatch) {
+      if (!mine && !place) holdLatch = false;
+      else mine = place = false;
+    }
     const mag = Math.hypot(fwd, str);
     if (mag > 1) {
       fwd /= mag;
@@ -9750,12 +9806,18 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           heldBrickGroup.position.set(0, gripY * 1.25 * vmBase.tool, 0);
           heldBrickGroup.rotation.set(0, vmBase.toolSpin, 0);
           heldBrickGroup.scale.setScalar(1.25 * vmBase.tool);
+        } else if (def(held).placeable) {
+          viewBrick.add(heldBrickGroup);
+          // a block sits in the clip, turned 45°, top and two faces visible
+          heldBrickGroup.position.set(heldPose.bx, heldPose.by, heldPose.bz);
+          heldBrickGroup.rotation.set(heldPose.brx, heldPose.bry, heldPose.brz);
+          heldBrickGroup.scale.setScalar(heldPose.bs * vmBase.block / 0.58);
         } else {
           viewBrick.add(heldBrickGroup);
-          // Blocks rest on top of the open clip instead of filling the screen.
-          heldBrickGroup.position.set(-0.035, 0.062, -0.03);
-          heldBrickGroup.rotation.set(0.22, -0.62, 0.08);
-          heldBrickGroup.scale.setScalar(vmBase.block);
+          // a small item (food, ingot, gem, bucket, tile) held in the clip
+          heldBrickGroup.position.set(heldPose.ix, heldPose.iy, heldPose.iz);
+          heldBrickGroup.rotation.set(heldPose.irx, heldPose.iry, heldPose.irz);
+          heldBrickGroup.scale.setScalar(heldPose.is);
         }
 
         const built3 = buildLegoItem3D(held);
@@ -10447,6 +10509,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       lastHeldId = -1; // rebuild the held item at the new scale
       return true;
     },
+    setHeldPose: (v: Record<string, number>) => {
+      Object.assign(heldPose, v);
+      lastHeldId = -1;
+      return true;
+    },
     setSwing: (v: number) => {
       swing = v;
       return true;
@@ -10738,8 +10805,29 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         say("You don't have that");
         return;
       }
+      // already on the bar: just select that slot (no duplicates, like Minecraft)
+      const at = hotbar.indexOf(id);
+      if (at >= 0) {
+        slot = at;
+        cursor = id;
+        emit();
+        return;
+      }
       hotbar[slot] = id;
       cursor = id;
+      // the target moves on to the next EMPTY slot, so tapping items fills the bar
+      for (let k = 1; k < 9; k++) {
+        const j = (slot + k) % 9;
+        if (!hotbar[j]) {
+          slot = j;
+          break;
+        }
+      }
+      emit();
+    },
+    clearSlot(i) {
+      i = (i + 9) % 9;
+      hotbar[i] = 0;
       emit();
     },
     hold(id) {
@@ -10884,13 +10972,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           f.fuelN = slotN + 1;
         }
       } else if (slotN > 0) {
-        addInv(slotId, 1);
+        addInv(slotId, slotN); // a tap takes the whole stack back
         if (part === 0) {
-          f.inN -= 1;
-          if (f.inN <= 0) f.in = 0;
+          f.inN = 0;
+          f.in = 0;
         } else {
-          f.fuelN -= 1;
-          if (f.fuelN <= 0) f.fuel = 0;
+          f.fuelN = 0;
+          f.fuel = 0;
         }
       }
       saveDirty = true;
@@ -10906,9 +10994,61 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         bin.ids[i] = cursor;
         bin.ns[i] = n + 1;
       } else if (n > 0) {
-        addInv(id, 1);
-        bin.ns[i] = n - 1;
-        if (bin.ns[i] <= 0) bin.ids[i] = 0;
+        // Minecraft: a tap takes the whole stack
+        addInv(id, n);
+        bin.ns[i] = 0;
+        bin.ids[i] = 0;
+      }
+      saveDirty = true;
+      emit();
+    },
+    // v4.17 fix: tapping a bag item in the crate moves its whole stack in
+    // (topping up matching stacks first, 64 per cell) — it used to REPLACE the
+    // active hotbar slot instead and store nothing.
+    chestStore(id) {
+      if (!id) return;
+      const bin = ensureChest(focus.x + "," + focus.y + "," + focus.z);
+      let left = creative ? 64 : (inv[id] ?? 0);
+      if (left <= 0) return say("You don't have that");
+      const moved0 = left;
+      for (let pass = 0; pass < 2 && left > 0; pass++) {
+        for (let i = 0; i < bin.ids.length && left > 0; i++) {
+          const same = bin.ids[i] === id && (bin.ns[i] ?? 0) > 0;
+          const free = !bin.ids[i] || (bin.ns[i] ?? 0) <= 0;
+          if (pass === 0 ? !same : !free) continue; // top up first, then empty cells
+          const base = same ? (bin.ns[i] ?? 0) : 0;
+          const k = Math.min(64 - base, left);
+          if (k <= 0) continue;
+          bin.ids[i] = id;
+          bin.ns[i] = base + k;
+          left -= k;
+        }
+      }
+      if (left === moved0) return say("The crate is full");
+      if (!creative) {
+        inv[id] -= moved0 - left;
+        if ((inv[id] ?? 0) <= 0) for (let i = 0; i < 9; i++) if (hotbar[i] === id) hotbar[i] = 0;
+      }
+      saveDirty = true;
+      emit();
+    },
+    // v4.17 fix: tapping a bag item at the kiln routes its whole stack
+    // (smeltable -> input, else fuel -> fuel slot), like a shift-click.
+    furnaceQuick(id) {
+      if (!id) return;
+      const f = ensureFurnace(focus.x + "," + focus.y + "," + focus.z, focus.x, focus.y, focus.z);
+      const have = creative ? 64 : (inv[id] ?? 0);
+      if (have <= 0) return say("You don't have that");
+      const toIn = !!SMELT[id] && (!f.in || f.in === id);
+      const toFuel = !toIn && fuelTime(id) > 0 && (!f.fuel || f.fuel === id);
+      if (!toIn && !toFuel) return say(SMELT[id] || fuelTime(id) > 0 ? "That slot is busy" : "The kiln won't take that");
+      const cur = toIn ? f.inN : f.fuelN;
+      const k = Math.min(have, 64 - cur);
+      if (k <= 0) return say("That slot is full");
+      if (toIn) { f.in = id; f.inN = cur + k; } else { f.fuel = id; f.fuelN = cur + k; }
+      if (!creative) {
+        inv[id] -= k;
+        if ((inv[id] ?? 0) <= 0) for (let i = 0; i < 9; i++) if (hotbar[i] === id) hotbar[i] = 0;
       }
       saveDirty = true;
       emit();
