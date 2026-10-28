@@ -9186,9 +9186,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         const t = signs.get(hit.x + "," + hit.y + "," + hit.z);
         hud.targetName = t ? "Sign — " + t : "Sign";
       } else hud.targetName = block.name;
-      highlight.visible = true;
+      // F1 (clean screenshot mode, like Minecraft) also hides the block outline
+      highlight.visible = !hud.hidden;
       highlight.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
-      studOutline.visible = settings.studs && !def(world.get(hit.x, hit.y + 1, hit.z)).solid;
+      studOutline.visible = !hud.hidden && settings.studs && !def(world.get(hit.x, hit.y + 1, hit.z)).solid;
       const key = hit.x + "," + hit.y + "," + hit.z;
       // v4.16 — tufts tear FIRST: punching the top of a grass block strips
       // the tuft growing between its studs — instant, by hand, like MC
