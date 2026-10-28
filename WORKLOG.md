@@ -2233,3 +2233,8 @@ Reproduced on an A54-sized phone rig (915×412, DPR 2, real CDP touch events —
 - Also: `setPos` QA hook declared in the hook type (game.ts type error from the v4.17 work).
 - **Checks:** game.ts type-checks with the stub file (only stub gaps left); bundle + CSS build; phone-rig photos of inventory, crate, bench, kiln, held items. Full `npm run typecheck` still pending an agent with npm access.
 - **NOT delivered** — Philippe's A54 verdict.
+
+### Held items + aim pass (Claude, Philippe 21:03 EDT: « corrige la position des objets dans les mains, le aim et tout »)
+- **First-person aim verified correct** on the phone rig: 8 aim points across block boundaries, the targeted block = the block under the crosshair (`qa_aim.mjs`).
+- **Third-person aim was wrong** — the camera `lookAt` the minifig's back, so the crosshair sat on the player while the targeted block was elsewhere. Now an over-the-shoulder camera (4.2 back, 0.62 right, 0.28 up, collision-clamped) **aligned with the look direction**, and the target ray is cast from that camera (`thirdAim`), reach measured from the eye → crosshair = target (verified: crosshair on blue, target Blue).
+- **Viewmodel pose:** base rotation added (`vmBase.rx/ry/rz`); chosen pose (x 0.16, y −0.085, rx −0.1, ry −0.1, rz −0.55) leans tool heads up-left toward the crosshair, sword diagonal toward the centre, hand lower right — picked from 6 candidates photographed on the phone rig (`qa_pose.mjs`). Blocks/small items keep their in-clip poses from the previous pass.

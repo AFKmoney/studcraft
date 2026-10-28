@@ -2345,7 +2345,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
 
   // Viewmodel animation state (renderCamera).
   const thirdAim = { ok: false, x: 0, y: 0, z: 0, back: 0 };
-  const vmBase = { x: 0.15, y: -0.075, z: -0.25, s: 0.56, block: 0.58, tool: 0.78, toolSpin: 0.35, rx: 0, ry: 0, rz: 0 };
+  // v4.17: the arm is rolled/turned so a tool's head leans up-LEFT toward the
+  // crosshair and the hand sits lower right (Minecraft first-person logic),
+  // picked from staged phone-rig photos (rx/ry/rz = base rotation).
+  const vmBase = { x: 0.16, y: -0.085, z: -0.25, s: 0.56, block: 0.58, tool: 0.78, toolSpin: 0.35, rx: -0.1, ry: -0.1, rz: -0.55 };
   // v4.17 held-item poses (viewBrick space), Minecraft logic: a block sits IN
   // the hand turned 45° (you see two faces and the top), a small item is held
   // flat in the clip, tools pass through the bore. Tunable by the QA hook.
