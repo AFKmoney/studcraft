@@ -2386,7 +2386,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // holding them (vanilla hides the arm when an item is held). So the item is
   // shrunk about its grip point (angles untouched) and the arm anchor is
   // nudged up-left. Picked from phone-rig photos; QA hook setMcHeld.
-  const mcTune = { size: 0.62, ax: 0.5, ay: -0.42, az: -0.72 };
+  const mcTune = { size: 0.5, ax: 0.44, ay: -0.34, az: -0.72, bsize: 0.7, isize: 0.42, bx: 0.36, by: -0.26, bz: -0.72 };
+  let heldKind = 0; // 0 tool, 1 block / small item
   const ARM_SCALE = 0.56 / MC_K; // the minifig arm keeps its old on-screen size
   const mcDisplay = (rot: [number, number, number], tr16: [number, number, number], sc: number) =>
     new THREE.Matrix4()
@@ -2476,10 +2477,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     M.decompose(heldBrickGroup.position, heldBrickGroup.quaternion, heldBrickGroup.scale);
     heldBrickGroup.add(model);
     // shrink item AND hand about the clip (keeps them aligned)
+    heldKind = isTool ? 0 : 1;
+    const sz = isTool ? mcTune.size : d.placeable ? mcTune.bsize : mcTune.isize;
     const pivot = fpsArmGroup.position.clone();
-    const shrink = (o: THREE.Object3D) => { o.position.sub(pivot).multiplyScalar(mcTune.size).add(pivot); o.scale.multiplyScalar(mcTune.size); };
-    shrink(heldBrickGroup);
-    fpsArmGroup.scale.multiplyScalar(Math.max(0.75, mcTune.size)); // the hand shrinks less: it must still read as a hand
+    heldBrickGroup.position.sub(pivot).multiplyScalar(sz).add(pivot);
+    heldBrickGroup.scale.multiplyScalar(sz);
+    fpsArmGroup.scale.multiplyScalar(Math.max(0.75, sz)); // the hand shrinks less: it must still read as a hand
   }
   const vm = { equip: 1, land: 0, swayX: 0, swayY: 0, lastYaw: 0, lastPitch: 0, wasGrounded: true, fallV: 0, sprint: 0, place: 0 };
 
@@ -9853,9 +9856,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const sq = Math.sqrt(sw);
     const fA = Math.sin(sw * sw * Math.PI), gA = Math.sin(sq * Math.PI);
     const D2R = Math.PI / 180;
-    const ax = (heldBrickGroup.visible && lastHeldId > 0 ? mcTune.ax : MC_ANCHOR.x) - 0.4 * gA + (walkX + vm.swayX * 0.5 + vm.sprint * 0.03) * 2.2 * k;
-    const ay = (heldBrickGroup.visible && lastHeldId > 0 ? mcTune.ay : MC_ANCHOR.y) + 0.2 * Math.sin(sq * Math.PI * 2) + (walkY + breathe + landY - vm.swayY * 0.4 - vm.sprint * 0.05) * 2.2 * k - eq * 0.6;
-    const az = (heldBrickGroup.visible && lastHeldId > 0 ? mcTune.az : MC_ANCHOR.z) - 0.2 * Math.sin(sw * Math.PI);
+    const holding = heldBrickGroup.visible && lastHeldId > 0;
+    const ax = (holding ? (heldKind ? mcTune.bx : mcTune.ax) : MC_ANCHOR.x) - 0.4 * gA + (walkX + vm.swayX * 0.5 + vm.sprint * 0.03) * 2.2 * k;
+    const ay = (holding ? (heldKind ? mcTune.by : mcTune.ay) : MC_ANCHOR.y) + 0.2 * Math.sin(sq * Math.PI * 2) + (walkY + breathe + landY - vm.swayY * 0.4 - vm.sprint * 0.05) * 2.2 * k - eq * 0.6;
+    const az = (holding ? (heldKind ? mcTune.bz : mcTune.az) : MC_ANCHOR.z) - 0.2 * Math.sin(sw * Math.PI);
     viewBrick.scale.setScalar(MC_K);
     viewBrick.position.set(ax * MC_K, ay * MC_K, az * MC_K);
     const qa = new THREE.Quaternion()
