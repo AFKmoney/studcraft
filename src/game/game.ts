@@ -271,6 +271,7 @@ declare global {
       setInv?: (id: number, n: number) => boolean;
       mpConnect?: (url: string, room: string, name: string) => boolean;
       getMobs?: () => string[];
+      mobAudit?: () => Record<string, { h: number; minY: number; w: number; d: number }>;
       getHamlet?: () => { x: number; y: number; z: number } | null;
       getChunks?: () => number;
       /** QA: stop/restart the frame loop so a capture sees a still frame. */
@@ -2348,7 +2349,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // v4.17: the arm is rolled/turned so a tool's head leans up-LEFT toward the
   // crosshair and the hand sits lower right (Minecraft first-person logic),
   // picked from staged phone-rig photos (rx/ry/rz = base rotation).
-  const vmBase = { x: 0.175, y: -0.105, z: -0.25, s: 0.56, block: 0.58, tool: 0.78, toolSpin: 0.35, rx: -0.1, ry: -0.1, rz: -0.3, lean: -0.45, grip: 0.1 };
+  const vmBase = { x: 0.175, y: -0.105, z: -0.25, s: 0.56, block: 0.58, tool: 0.78, toolSpin: 0.35, rx: -0.1, ry: -0.1, rz: -0.3, lean: -0.45, grip: 0.1, mcTilt: 54, mcDepth: 15, mcTwist: 0 };
   // v4.17 held-item poses (viewBrick space), Minecraft logic: a block sits IN
   // the hand turned 45° (you see two faces and the top), a small item is held
   // flat in the clip, tools pass through the bore. Tunable by the QA hook.
@@ -2365,6 +2366,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   camera.add(viewBrick);
 
   const fig = makeMinifig();
+  // Minecraft proportions: the player character is exactly 1.8 blocks tall
+  // (the raw minifig measures 1.29 — Philippe, 2026-10-28).
+  {
+    const fb = new THREE.Box3().setFromObject(fig.group);
+    const fh = fb.max.y - fb.min.y;
+    if (fh > 0.05) fig.group.scale.setScalar(1.8 / fh);
+  }
   const figHeldGroup = new THREE.Group();
   figHeldGroup.position.set(-0.08, -0.58, -0.10);
   fig.armR.add(figHeldGroup);
@@ -7324,7 +7332,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         if (!creative && (inv[ID.NameTag] ?? 0) <= 0) return say("Need a name tag");
         mob.name = name;
         const plate = nameSprite(name);
-        plate.position.set(0, 2.25, 0);
+        const nb = new THREE.Box3().setFromObject(mob.mesh);
+        plate.position.set(0, (nb.max.y - nb.min.y || 1.8) + 0.45, 0);
         mob.mesh.add(plate);
         if (!creative) spend(ID.NameTag, 1);
         say("Named " + name + " — it will stay");
@@ -9818,12 +9827,33 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         heldFlames = built1.flames;
         heldBrickGroup.add(built1.group);
         if (heldIsTool) {
-          // Handle through the bore (claw local Y), gripped just below the head.
+          // MINECRAFT first-person logic (Philippe, 2026-10-28: replicate MC
+          // exactly). Vanilla item/handheld firstperson_righthand display =
+          // rotation [0, -90, 25], translation [1.13, 3.2, 1.13], scale 0.68:
+          // the item hangs from the hand anchor with its long axis on the
+          // ~45-degree diagonal, head toward the crosshair, tip slightly away,
+          // flat face toward the camera, grip at the hand with only the
+          // pommel below. Our tools are 3D (handle along +Y), so that exact
+          // orientation is built as a basis in VIEW space and converted into
+          // claw-local space: the handle still passes through the clip, at
+          // the grip point, but no longer follows the bore axis.
           fpsClaw.add(heldBrickGroup);
           const gripY = def(held).tool === "sword" ? 0.11 : vmBase.grip;
-          heldBrickGroup.position.set(0, gripY * 1.25 * vmBase.tool, 0);
-          heldBrickGroup.rotation.set(0, vmBase.toolSpin, vmBase.lean);
-          heldBrickGroup.scale.setScalar(1.25 * vmBase.tool);
+          const toolScale = 1.25 * vmBase.tool;
+          heldBrickGroup.scale.setScalar(toolScale);
+          const tilt = THREE.MathUtils.degToRad(vmBase.mcTilt);
+          const depth = THREE.MathUtils.degToRad(vmBase.mcDepth);
+          const yT = new THREE.Vector3(-Math.sin(tilt) * Math.cos(depth), Math.cos(tilt) * Math.cos(depth), -Math.sin(depth)).normalize();
+          const zT = new THREE.Vector3(0, -yT.z, yT.y).normalize();
+          const xT = new THREE.Vector3().crossVectors(yT, zT).normalize();
+          if (vmBase.mcTwist) {
+            const tw = new THREE.Quaternion().setFromAxisAngle(yT, THREE.MathUtils.degToRad(vmBase.mcTwist));
+            xT.applyQuaternion(tw);
+            zT.applyQuaternion(tw);
+          }
+          const qTarget = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(xT, yT, zT));
+          heldBrickGroup.quaternion.copy(fpsClaw.quaternion).invert().multiply(qTarget);
+          heldBrickGroup.position.set(0, gripY * toolScale, 0).applyQuaternion(heldBrickGroup.quaternion);
         } else if (def(held).placeable) {
           viewBrick.add(heldBrickGroup);
           // a block sits in the clip, turned 45°, top and two faces visible
@@ -10548,6 +10578,20 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return true;
     },
     getMobs: () => mobs.filter((m) => !m.dead).map((m) => m.kind),
+    mobAudit: () => {
+      const kinds = ["sheep", "creeper", "cow", "walker", "pig", "chicken", "spider", "skelly", "villager", "ghast", "dragon", "horse", "phantom", "piglin", "frog", "fox", "crab", "wisp", "slime", "wolf", "golem", "wither", "enderman", "blaze", "witch", "bee", "cat", "squid", "bat", "drowned", "husk", "stray", "goat", "axolotl", "parrot", "guardian", "shulker", "pillager", "vindicator", "evoker", "vex", "ravager"];
+      const out: Record<string, { h: number; minY: number; w: number; d: number }> = {};
+      const box = new THREE.Box3();
+      for (const k of kinds) {
+        const b = buildLego(k, 1);
+        box.setFromObject(b.group);
+        out[k] = { h: +(box.max.y - box.min.y).toFixed(2), minY: +box.min.y.toFixed(2), w: +(box.max.x - box.min.x).toFixed(2), d: +(box.max.z - box.min.z).toFixed(2) };
+      }
+      const fig = makeMinifig();
+      box.setFromObject(fig.group);
+      out.__player = { h: +(box.max.y - box.min.y).toFixed(2), minY: +box.min.y.toFixed(2), w: +(box.max.x - box.min.x).toFixed(2), d: +(box.max.z - box.min.z).toFixed(2) };
+      return out;
+    },
     getPeers: () => [...mp.peers.values()].map((p) => ({ name: p.name, x: p.x, y: p.y, z: p.z })),
     getEnch: (id: number) => ench.get(id) ?? null,
     setEnch: (id: number, key: string, lvl: number) => {
@@ -13425,9 +13469,50 @@ export function buildLego(kind: string, scale: number): LegoBody {
   }
 
   alignQuadruped(built, kind);
+  // MINECRAFT proportions (Philippe, 2026-10-28: "tous les mobs sont petits
+  // comparer a minecraft, corrige ca, compare tout a minecraft"). Every model
+  // was built ~1.2-1.55x small (humanoids 1.29 vs MC 1.95, player fig 1.29 vs
+  // 1.8 — measured by the mobAudit QA hook). Normalize each kind to its exact
+  // Minecraft height in blocks, scaling every direct child about the group
+  // origin (the death ragdoll unclips direct children, so no wrapper group).
+  // Ground kinds are also re-grounded (feet exactly on the origin); flyers
+  // and swimmers keep their authored hover offset. boat/cart untouched.
+  const mcTarget = MC_HEIGHT[kind];
+  if (mcTarget) {
+    const box = new THREE.Box3().setFromObject(built.group);
+    const h = box.max.y - box.min.y;
+    if (h > 0.05) {
+      const f = mcTarget / h;
+      if (Math.abs(f - 1) > 0.02 || (!MC_FLOATING.has(kind) && box.min.y !== 0)) {
+        for (const c of [...built.group.children]) {
+          c.scale.multiplyScalar(f);
+          c.position.multiplyScalar(f);
+          if (!MC_FLOATING.has(kind)) c.position.y -= box.min.y * f;
+        }
+      }
+    }
+  }
   if (scale !== 1) built.group.scale.multiplyScalar(scale);
   return built;
 }
+
+// Minecraft heights in blocks (hitbox height of the living creature; the
+// camera eye is already MC-exact at 1.62). Flyers whose visual span is not
+// their hitbox height (phantom wingspan, ghast tentacles) are normalized on
+// total height as built. wisp/crab are Studcraft originals, sized to their
+// closest MC analogues (allay / cave spider).
+const MC_HEIGHT: Record<string, number> = {
+  sheep: 1.3, creeper: 1.7, cow: 1.4, walker: 1.95, pig: 0.9, chicken: 0.7,
+  spider: 0.5, skelly: 1.99, villager: 1.95, ghast: 4, dragon: 4, horse: 1.6,
+  piglin: 1.95, frog: 0.5, fox: 0.7, crab: 0.5, wisp: 0.7, slime: 1.5,
+  wolf: 0.85, golem: 2.7, wither: 3.5, enderman: 2.9, blaze: 1.8, witch: 1.95,
+  bee: 0.45, cat: 0.7, squid: 0.8, bat: 0.55, drowned: 1.95, husk: 1.95,
+  stray: 1.99, goat: 1.3, axolotl: 0.4, parrot: 0.9, guardian: 0.85,
+  shulker: 1, pillager: 1.95, vindicator: 1.95, evoker: 1.95, vex: 0.8,
+  ravager: 2.2,
+};
+// Kinds whose model origin is not the ground (fly, swim, hover by design).
+const MC_FLOATING = new Set(["ghast", "phantom", "bat", "bee", "vex", "blaze", "dragon", "wither", "parrot", "wisp", "squid", "guardian"]);
 
 // v4.13 anatomy fix: these beasts were modelled with the torso long across X
 // while they face and walk along -Z — they moved broadside, with the head on the

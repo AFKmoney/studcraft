@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-27 (v4.16 delivered — block identity pass; full day journal at the end of this file).
+**Last update:** 2026-10-28 (v4.17 — Claude's melt/fire/Teardown/UI train + MC-exact held tools + Minecraft proportions for every creature; full day journal at the end of this file).
 
 ## 2026-10-26 — v4.12: Engine performance, mob judder & floating animal parts (Muse, ordered by Philippe after his A54 test of v4.11)
 
@@ -2249,3 +2249,26 @@ Philippe (2026-10-27 21:58 EDT, with A54 captures): « je veux que tu corrige la
 - **QA method note (rig lesson):** after any held-item/vm change the whole viewmodel dips (equip animation) for a FRAME-COUNT-bound duration; wall-clock waits (10 s, even 18 s) produced empty photos on the SwiftShader rig (qa82/qa84 — artefact of the bench, not a game bug). qa85 polls canvas pixels for the red sleeve in the bottom-right corner and captures only once the pose is settled. Photos: `~/workspace/studcraft-work/qa85-out/` (pick/sword/stone at −0.45) + qa83 settled baselines.
 - **Checks:** `npx tsc --noEmit` 0 errors on the synced tree; standalone build OK.
 - **NOT delivered** — no version bump, no builds. Ships with the v4.16.1/v4.17 delivery train; Philippe's A54 verdict closes it.
+
+
+## 2026-10-28 — v4.17: held tools redone to the EXACT Minecraft logic + every creature resized to Minecraft proportions (Muse) — delivery train
+
+Philippe rejected the lean pass above the same night (2026-10-28 01:03 EDT): « non bro vas checker des screenshots des items en main dans Minecraft pis réplique la logique exacte ». He was right, measured: at lean −0.45 the sword still sat ~72–84° from horizontal on screen; Minecraft's held sword sits at ~46°. Then (01:12): « les outils et les personnages doivent être proportionnés, tous les mobs sont petits comparés à Minecraft, corrige ça, compare tout à Minecraft, ensuite package l'installer et l'APK ».
+
+### Held tools — Minecraft's own transform, not an approximation
+- **Source of truth:** vanilla `item/handheld.json` firstperson_righthand display = rotation [0, −90, 25], translation [1.13, 3.2, 1.13], scale [0.68, 0.68, 0.68] (thirdperson_righthand: [0, −90, 55], scale 0.85), cross-checked against measured reference screenshots (held sword axis ≈ 46° from horizontal, grip at the hand, pommel only below).
+- **Implementation (game.ts):** the tool branch no longer rolls around the claw bore. It builds the tool's orientation as a basis directly in VIEW space — long axis at `vmBase.mcTilt`° above horizontal, tipped `mcDepth`° away in depth, optional `mcTwist` — then converts it into claw-local space (`fpsClaw.quaternion⁻¹ · qTarget`). Grip stays a point ON the handle (`vmBase.grip` 0.1, sword 0.11) passed through the claw clip; tool scale 1.25 × vmBase.tool (0.975). Blocks/small items keep the re-seated claw poses from the lean pass; `lean` is retired from the tool path.
+- **Angle found by photo sweep in one session each (pixel-settled captures):** mcTilt 45 → sword ~67° on screen (projection steepens the view-space angle at this FOV/aspect), 30/22 → ~60–68° (noisier, sheep photobomb), 58 and 66 → ~38°. Shipped default **mcTilt 54** (interpolated onto the MC ~46°), mcDepth 15, mcTwist 0 — all still live-tunable via the `setVm` QA hook. Pick at the same basis reads as the MC diagonal with the head toward the crosshair.
+- The lean entry above stays in the log as history; its conclusion is superseded by this one.
+
+### Proportions — measured against Minecraft, every kind (new QA hook `mobAudit`)
+- **Audit (Box3 of every built model, blocks):** nearly everything was built 1.2–1.55× SMALL. Humanoids (villager/walker/skelly/illagers/witch/piglin…) 1.29 vs MC 1.95; player minifig 1.29 vs 1.8; sheep 0.86 vs 1.3; cow 1.01 vs 1.4; golem 1.88 vs 2.7; enderman 2.09 vs 2.9; ghast 1.79 vs 4.0; wither 1.84 vs 3.5; dragon 1.69 vs 4.0; slime 0.79 vs 1.5. A few were already right (chicken 0.71≈0.7, spider 0.52≈0.5, fox, parrot) and one was too BIG: squid 1.10 vs MC 0.8. The camera eye was already MC-exact (1.62) — only the models were small.
+- **Fix (game.ts):** `MC_HEIGHT` table in `buildLego` — every kind is normalized to its exact Minecraft height by scaling each DIRECT child about the group origin (no wrapper group: the death ragdoll unclips direct children; hurt-squash/baby/slime scales live on the outer group and compose untouched). Ground kinds are re-grounded (feet on the origin); flyers/swimmers (`MC_FLOATING`: ghast, phantom, bat, bee, vex, blaze, dragon, wither, parrot, wisp, squid, guardian) keep their authored hover offset. Slime tiers still multiply on top (0.6 / 1.05 / 1.5). Wisp/crab are Studcraft originals, sized to their closest MC analogues (allay 0.7 / cave spider 0.5). Phantom is normalized on height as built (its wingspan is already MC-like). boat/cart untouched (vehicles).
+- **Player character:** the minifig is scaled to exactly **1.8** at setup (Box3-measured, same method). Third-person held items scale with it.
+- **Nameplates** now sit at measured model height + 0.45 instead of a hard-coded 2.25 (a named golem's plate was inside its head; a named chicken's floated).
+- **Verification:** re-audit after the fix — **41/41 kinds exactly on target (±0.06)**, squid shrunk to 0.80 included (`qa87-out2.json`). Photo proof: lineup on a flat stone platform against a 4-block measuring wall (`qa89-out/lineup-2.png`) — chicken ≈ 0.7 rows, pig ≈ 0.9, sheep ≈ 1.3, cow ≈ 1.4, villager ≈ 1.95, golem ≈ 2.7, enderman ≈ 2.9 up the wall grid. Health bars/blob shadows already derive from the measured Box3 (`visOf`), so they follow automatically.
+- **Checks:** `npx tsc --noEmit` 0 errors; standalone build OK.
+
+### Delivery (this train)
+- v4.17 ships everything since v4.16: Claude's melt realism passes 2–4 + FUSION, Minecraft fire, item 13 (weather + enchanting UI), v4.17 Teardown LEGO (chipState + SDF melt surface), the UI/gameplay bug pass, the aim pass, the lean pass (superseded), this entry's MC-exact tools + proportions.
+- **Next move (claimed, Muse):** bump APK manifest (vc39 / 4.17), PC chantier (package.json + install.nsi → 4.17.0), rebuild all, final-dist sword photo check at mcTilt 54, Drive uploads MD5-verified, GitHub Release v4.17. Philippe's A54 verdict closes the melt, tools and proportions threads.
