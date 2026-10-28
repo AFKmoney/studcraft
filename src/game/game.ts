@@ -2471,8 +2471,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const edge = new THREE.Vector3(1, 0, 0).transformDirection(M);
       const up = new THREE.Vector3(0, 1, 0).transformDirection(M);
       const mouth = up.clone().multiplyScalar(1).addScaledVector(ARM_OUT, -0.35);
-      const clawR = 0.084 * ARM_SCALE * 0.82;
-      placeArm(bottom.addScaledVector(up, -clawR * 0.55), edge, mouth, ARM_SCALE * 0.82);
+      const sz0 = d.placeable ? mcTune.bsize : mcTune.isize;
+      const clawR = 0.084 * ARM_SCALE * 0.82 * Math.max(0.75, sz0) / sz0; // in item space (before the shrink)
+      placeArm(bottom.addScaledVector(up, -clawR * 0.9), edge, mouth, ARM_SCALE * 0.82);
     }
     M.decompose(heldBrickGroup.position, heldBrickGroup.quaternion, heldBrickGroup.scale);
     heldBrickGroup.add(model);
