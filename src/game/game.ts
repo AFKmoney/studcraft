@@ -2409,6 +2409,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     .multiply(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(-0.1, -0.1, -0.3, "XYZ")))
     .multiply(new THREE.Matrix4().makeScale(0.56, 0.56, 0.56));
   const clawRest = fpsClaw.quaternion.clone();
+  const heldBase = { pos: new THREE.Vector3(), quat: new THREE.Quaternion() };
   function restArm() {
     for (const o of fpsUpperArm) o.visible = true;
     fpsArmGroup.matrix.copy(armRest);
@@ -2489,6 +2490,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const pivot = fpsArmGroup.position.clone();
     heldBrickGroup.position.sub(pivot).multiplyScalar(sz).add(pivot);
     heldBrickGroup.scale.multiplyScalar(sz);
+    heldBase.pos.copy(heldBrickGroup.position);
+    heldBase.quat.copy(heldBrickGroup.quaternion);
     fpsArmGroup.scale.multiplyScalar(Math.max(0.75, sz)); // the hand shrinks less: it must still read as a hand
   }
   const vm = { equip: 1, land: 0, swayX: 0, swayY: 0, lastYaw: 0, lastPitch: 0, wasGrounded: true, fallV: 0, sprint: 0, place: 0 };
@@ -9877,14 +9880,19 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       .multiply(new THREE.Quaternion().setFromAxisAngle(Y_AXIS, -45 * D2R));
     // small look-lag / sprint / bob tilt on top (no effect at rest)
     qa.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler((-vm.sprint * 0.2 - vm.swayY * 0.4) * k, vm.swayX * 0.6 * k, (walkX * 0.8 + vm.sprint * 0.1) * k, "XYZ")));
-    viewBrick.quaternion.copy(qa);
-    if (holding) {
-      // pivot the whole viewmodel about the GRIP (where the clip holds the
-      // handle), not the shoulder anchor: the hand + forearm stay low right
-      // and only the item arcs (the anchor pivot swept the forearm across)
-      const g = fpsArmGroup.position.clone().multiplyScalar(MC_K);
-      const rg = g.clone().applyQuaternion(qa);
-      viewBrick.position.add(g.sub(rg));
+    if (!holding) {
+      viewBrick.quaternion.copy(qa);
+      fpsClaw.quaternion.copy(clawRest);
+    } else {
+      // holding: the swing is a WRIST motion — the hand (clip) and the item
+      // turn together about the grip, the forearm stays put (pivoting the
+      // whole arm swept the forearm and its open end across the screen)
+      viewBrick.quaternion.identity();
+      const g = fpsArmGroup.position;
+      heldBrickGroup.quaternion.copy(qa).multiply(heldBase.quat);
+      heldBrickGroup.position.copy(heldBase.pos).sub(g).applyQuaternion(qa).add(g);
+      const aq = fpsArmGroup.quaternion;
+      fpsClaw.quaternion.copy(aq).invert().multiply(qa).multiply(aq).multiply(clawRest);
     }
     void arc; void strike; void heldIsTool;
   }
