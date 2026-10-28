@@ -2359,6 +2359,116 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     bx: 0, by: -0.005, bz: -0.035, brx: 0.32, bry: -0.785, brz: 0.06, bs: 0.5,
     ix: 0, iy: 0, iz: -0.03, irx: 0.5, iry: -0.6, irz: 0.15, is: 0.62,
   };
+  // ── v4.17 HELD ITEMS = MINECRAFT'S EXACT FIRST-PERSON CHAIN (Claude, after
+  // Philippe 2026-10-28 10:07: « va checker Minecraft … les objets doivent
+  // être alignés avec les mains, pas tout croche »). Vanilla, right hand:
+  //   ItemInHandRenderer.applyItemArmTransform: translate(0.56, -0.52, -0.72)
+  //   then the model's display transform firstperson_righthand:
+  //     item/handheld + item/generated: rotation [0,-90,25], translation
+  //       [1.13, 3.2, 1.13]/16, scale 0.68   (block: rotation [0,45,0], scale 0.40)
+  //   applied as T · R(XYZ) · S, then the model drawn from (-0.5,-0.5,-0.5)
+  //   in its 16-px sprite space (a tool sprite runs bottom-left -> top-right).
+  // Our tools are 3D (handle along +Y), so each model is first mapped into
+  // that sprite space (shaft on the sprite diagonal), then the vanilla chain
+  // places it. THE HAND IS DERIVED FROM THE ITEM: the C-clip is put on the
+  // handle with its bore ALONG the handle and the arm leaving toward the
+  // lower right — so item and hand are aligned by construction (before, the
+  // item was oriented on its own and stuck to a fixed hand: crossing at an
+  // angle). The whole chain is scaled by MC_K about the eye: identical on
+  // screen (perspective), but everything stays within ~0.35 of the eye so it
+  // never pokes into walls (the viewmodel shares the world depth buffer).
+  const MC_K = 0.4;
+  const X_AXIS = new THREE.Vector3(1, 0, 0), Y_AXIS = new THREE.Vector3(0, 1, 0), Z_AXIS = new THREE.Vector3(0, 0, 1);
+  const MC_ANCHOR = new THREE.Vector3(0.56, -0.52, -0.72);
+  const ARM_SCALE = 0.56 / MC_K; // the minifig arm keeps its old on-screen size
+  const mcDisplay = (rot: [number, number, number], tr16: [number, number, number], sc: number) =>
+    new THREE.Matrix4()
+      .makeTranslation(tr16[0] / 16, tr16[1] / 16, tr16[2] / 16)
+      .multiply(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(THREE.MathUtils.degToRad(rot[0]), THREE.MathUtils.degToRad(rot[1]), THREE.MathUtils.degToRad(rot[2]), "XYZ")))
+      .multiply(new THREE.Matrix4().makeScale(sc, sc, sc))
+      .multiply(new THREE.Matrix4().makeTranslation(-0.5, -0.5, -0.5));
+  const MC_HANDHELD = mcDisplay([0, -90, 25], [1.13, 3.2, 1.13], 0.68);
+  const MC_BLOCK = new THREE.Matrix4().makeRotationY(THREE.MathUtils.degToRad(45)).multiply(new THREE.Matrix4().makeScale(0.4, 0.4, 0.4));
+  // the empty-hand pose (unchanged on screen): the old camera-space arm
+  // transform expressed in the new MC anchor space
+  const armRest = new THREE.Matrix4()
+    .makeTranslation(MC_ANCHOR.x * MC_K, MC_ANCHOR.y * MC_K, MC_ANCHOR.z * MC_K)
+    .multiply(new THREE.Matrix4().makeScale(MC_K, MC_K, MC_K))
+    .invert()
+    .multiply(new THREE.Matrix4().makeTranslation(0.175, -0.105, -0.25))
+    .multiply(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(-0.1, -0.1, -0.3, "XYZ")))
+    .multiply(new THREE.Matrix4().makeScale(0.56, 0.56, 0.56));
+  const clawRest = fpsClaw.quaternion.clone();
+  function restArm() {
+    fpsArmGroup.matrix.copy(armRest);
+    fpsArmGroup.matrix.decompose(fpsArmGroup.position, fpsArmGroup.quaternion, fpsArmGroup.scale);
+  }
+  /** put the C-clip at `grip` (anchor space) with its bore along `bore` and its
+   *  mouth toward `mouth`; the arm leaves opposite the mouth */
+  function placeArm(grip: THREE.Vector3, bore: THREE.Vector3, mouth: THREE.Vector3, scale: number) {
+    const y = bore.clone().normalize();
+    const z = mouth.clone().addScaledVector(y, -mouth.dot(y)).normalize();
+    const x = new THREE.Vector3().crossVectors(y, z).normalize();
+    const want = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+    fpsArmGroup.quaternion.copy(want).multiply(clawRest.clone().invert());
+    fpsArmGroup.scale.setScalar(scale);
+    fpsArmGroup.position.copy(grip); // the claw sits at the arm group's origin
+  }
+  restArm();
+  const ARM_OUT = new THREE.Vector3(0.42, -0.62, 0.66).normalize(); // toward the lower-right corner, back toward the eye
+  function placeHeldMinecraft(id: number, model: THREE.Object3D, isTool: boolean) {
+    model.removeFromParent(); // measure the model in its own frame
+    model.position.set(0, 0, 0);
+    viewBrick.add(heldBrickGroup);
+    heldBrickGroup.position.set(0, 0, 0);
+    heldBrickGroup.quaternion.identity();
+    heldBrickGroup.scale.setScalar(1);
+    model.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(model);
+    const c = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const d = def(id);
+    let M: THREE.Matrix4;
+    if (isTool) {
+      const len = Math.max(1e-3, size.y);
+      const upright = id === ID.Torch || id === ID.RedTorch || id === ID.RedTorchOn;
+      // model -> sprite space: handle end at the sprite's bottom-left, shaft on the diagonal (torches stand upright)
+      const f = (upright ? 13 / 16 : 15.5 / 16 * Math.SQRT2 * 0.84) / len;
+      const sprite = new THREE.Matrix4()
+        .makeTranslation(upright ? 0.5 : 2 / 16, 1.5 / 16, 0.5)
+        .multiply(new THREE.Matrix4().makeRotationZ(upright ? 0 : -Math.PI / 4))
+        .multiply(new THREE.Matrix4().makeScale(f, f, f))
+        .multiply(new THREE.Matrix4().makeTranslation(-c.x, -box.min.y, -c.z));
+      M = MC_HANDHELD.clone().multiply(sprite);
+      const grip = new THREE.Vector3(c.x, box.min.y + len * (d.tool === "sword" ? 0.1 : 0.16), c.z).applyMatrix4(M);
+      const shaft = new THREE.Vector3(0, 1, 0).transformDirection(M);
+      const mouth = ARM_OUT.clone().negate();
+      // clip bore sized to the handle: the minifig hand closes on it
+      placeArm(grip, shaft, mouth, ARM_SCALE * 0.82);
+    } else {
+      // blocks: vanilla block display; small items: vanilla generated display
+      const maxDim = Math.max(size.x, size.y, size.z, 1e-3);
+      if (d.placeable) {
+        M = MC_BLOCK.clone().multiply(new THREE.Matrix4().makeScale(1 / maxDim, 1 / maxDim, 1 / maxDim)).multiply(new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z));
+      } else {
+        const f = 11 / 16 / maxDim;
+        M = MC_HANDHELD.clone()
+          .multiply(new THREE.Matrix4().makeTranslation(0.5, 0.5, 0.5))
+          .multiply(new THREE.Matrix4().makeRotationY(Math.PI / 2)) // our 3D item faces the camera like the sprite does
+          .multiply(new THREE.Matrix4().makeScale(f, f, f))
+          .multiply(new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z));
+      }
+      // the hand holds it from below: clip under the bottom, bore along an edge, mouth up
+      const bottom = new THREE.Vector3(c.x, box.min.y, c.z).applyMatrix4(M);
+      const edge = new THREE.Vector3(1, 0, 0).transformDirection(M);
+      const up = new THREE.Vector3(0, 1, 0).transformDirection(M);
+      const mouth = up.clone().multiplyScalar(1).addScaledVector(ARM_OUT, -0.35);
+      const clawR = 0.084 * ARM_SCALE * 0.82;
+      placeArm(bottom.addScaledVector(up, -clawR * 0.55), edge, mouth, ARM_SCALE * 0.82);
+    }
+    M.decompose(heldBrickGroup.position, heldBrickGroup.quaternion, heldBrickGroup.scale);
+    heldBrickGroup.add(model);
+  }
   const vm = { equip: 1, land: 0, swayX: 0, swayY: 0, lastYaw: 0, lastPitch: 0, wasGrounded: true, fallV: 0, sprint: 0, place: 0 };
 
   // Positioned at z = -0.27 with scale 0.56 so all 3D parts stay > camera.near (0.08) and < player HW (0.34)
@@ -9723,18 +9833,28 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const walkY = -Math.abs(Math.cos(bob)) * 0.02 * bobAmp * (1 + vm.sprint * 0.8);
     const breathe = Math.sin(elapsed * 1.8) * 0.004 * (1 - bobAmp);
     const landY = -Math.sin(vm.land * Math.PI) * 0.06 * vm.land;
-    const tool = heldIsTool;
-    viewBrick.scale.setScalar(vmBase.s);
-    viewBrick.position.set(
-      vmBase.x + (walkX + vm.swayX * 0.5 - arc * (tool ? 0.07 : 0.05) + vm.sprint * 0.03) * k,
-      vmBase.y + (walkY + breathe + landY - vm.swayY * 0.4 - eq * 0.32 - vm.sprint * 0.05 + arc * 0.02) * k,
-      vmBase.z + (-arc * (tool ? 0.05 : 0.09) + strike * 0.02) * k,
-    );
-    viewBrick.rotation.set(
-      vmBase.rx + ((tool ? -0.72 : -0.5) * arc + eq * 0.7 - vm.sprint * 0.35 - vm.swayY * 0.6 + Math.sin(bob * 2) * 0.012 * bobAmp) * k,
-      vmBase.ry + (vm.swayX * 0.9 + arc * (tool ? 0.18 : 0.1)) * k,
-      vmBase.rz + ((tool ? 0.24 : 0.14) * arc + walkX * 1.4 + vm.sprint * 0.2 + Math.sin(elapsed * 0.9) * 0.01 * (1 - bobAmp)) * k,
-    );
+    // Minecraft's attack swing (ItemInHandRenderer.applyItemArmAttackTransform),
+    // around the arm anchor, p = 0 -> 1 over the swing:
+    //   translate(-0.4·sin(√p·π), 0.2·sin(√p·2π), -0.2·sin(p·π))
+    //   rotY(45 - 20·sin(p²·π)) · rotZ(-20·sin(√p·π)) · rotX(-80·sin(√p·π)) · rotY(-45)
+    const sw = swing > 0 ? p : 0;
+    const sq = Math.sqrt(sw);
+    const fA = Math.sin(sw * sw * Math.PI), gA = Math.sin(sq * Math.PI);
+    const D2R = Math.PI / 180;
+    const ax = MC_ANCHOR.x - 0.4 * gA + (walkX + vm.swayX * 0.5 + vm.sprint * 0.03) * 2.2 * k;
+    const ay = MC_ANCHOR.y + 0.2 * Math.sin(sq * Math.PI * 2) + (walkY + breathe + landY - vm.swayY * 0.4 - vm.sprint * 0.05) * 2.2 * k - eq * 0.6;
+    const az = MC_ANCHOR.z - 0.2 * Math.sin(sw * Math.PI);
+    viewBrick.scale.setScalar(MC_K);
+    viewBrick.position.set(ax * MC_K, ay * MC_K, az * MC_K);
+    const qa = new THREE.Quaternion()
+      .setFromAxisAngle(Y_AXIS, (45 - 20 * fA) * D2R)
+      .multiply(new THREE.Quaternion().setFromAxisAngle(Z_AXIS, -20 * gA * D2R))
+      .multiply(new THREE.Quaternion().setFromAxisAngle(X_AXIS, -80 * gA * D2R))
+      .multiply(new THREE.Quaternion().setFromAxisAngle(Y_AXIS, -45 * D2R));
+    // small look-lag / sprint / bob tilt on top (no effect at rest)
+    qa.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler((-vm.sprint * 0.2 - vm.swayY * 0.4) * k, vm.swayX * 0.6 * k, (walkX * 0.8 + vm.sprint * 0.1) * k, "XYZ")));
+    viewBrick.quaternion.copy(qa);
+    void arc; void strike; void heldIsTool;
   }
 
   function renderCamera(dt: number) {
@@ -9830,52 +9950,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       heldBrickGroup.clear();
       figHeldGroup.clear();
       heldFlames = [];
+      if (!held) restArm();
       if (held) {
         const built1 = buildLegoItem3D(held);
         heldIsTool = built1.isTool;
         heldFlames = built1.flames;
         heldBrickGroup.add(built1.group);
-        if (heldIsTool) {
-          // MINECRAFT first-person logic (Philippe, 2026-10-28: replicate MC
-          // exactly). Vanilla item/handheld firstperson_righthand display =
-          // rotation [0, -90, 25], translation [1.13, 3.2, 1.13], scale 0.68:
-          // the item hangs from the hand anchor with its long axis on the
-          // ~45-degree diagonal, head toward the crosshair, tip slightly away,
-          // flat face toward the camera, grip at the hand with only the
-          // pommel below. Our tools are 3D (handle along +Y), so that exact
-          // orientation is built as a basis in VIEW space and converted into
-          // claw-local space: the handle still passes through the clip, at
-          // the grip point, but no longer follows the bore axis.
-          fpsClaw.add(heldBrickGroup);
-          const gripY = def(held).tool === "sword" ? 0.11 : vmBase.grip;
-          const toolScale = 1.25 * vmBase.tool;
-          heldBrickGroup.scale.setScalar(toolScale);
-          const tilt = THREE.MathUtils.degToRad(vmBase.mcTilt);
-          const depth = THREE.MathUtils.degToRad(vmBase.mcDepth);
-          const yT = new THREE.Vector3(-Math.sin(tilt) * Math.cos(depth), Math.cos(tilt) * Math.cos(depth), -Math.sin(depth)).normalize();
-          const zT = new THREE.Vector3(0, -yT.z, yT.y).normalize();
-          const xT = new THREE.Vector3().crossVectors(yT, zT).normalize();
-          if (vmBase.mcTwist) {
-            const tw = new THREE.Quaternion().setFromAxisAngle(yT, THREE.MathUtils.degToRad(vmBase.mcTwist));
-            xT.applyQuaternion(tw);
-            zT.applyQuaternion(tw);
-          }
-          const qTarget = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(xT, yT, zT));
-          heldBrickGroup.quaternion.copy(fpsClaw.quaternion).invert().multiply(qTarget);
-          heldBrickGroup.position.set(0, gripY * toolScale, 0).applyQuaternion(heldBrickGroup.quaternion);
-        } else if (def(held).placeable) {
-          viewBrick.add(heldBrickGroup);
-          // a block sits in the clip, turned 45°, top and two faces visible
-          heldBrickGroup.position.set(heldPose.bx, heldPose.by, heldPose.bz);
-          heldBrickGroup.rotation.set(heldPose.brx, heldPose.bry, heldPose.brz);
-          heldBrickGroup.scale.setScalar(heldPose.bs * vmBase.block / 0.58);
-        } else {
-          viewBrick.add(heldBrickGroup);
-          // a small item (food, ingot, gem, bucket, tile) held in the clip
-          heldBrickGroup.position.set(heldPose.ix, heldPose.iy, heldPose.iz);
-          heldBrickGroup.rotation.set(heldPose.irx, heldPose.iry, heldPose.irz);
-          heldBrickGroup.scale.setScalar(heldPose.is);
-        }
+        placeHeldMinecraft(held, built1.group, heldIsTool);
 
         const built3 = buildLegoItem3D(held);
         if (built3.isTool) {
