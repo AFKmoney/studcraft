@@ -2344,7 +2344,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   viewBrick.add(fpsArmGroup);
 
   // Viewmodel animation state (renderCamera).
-  const vmBase = { x: 0.15, y: -0.075, z: -0.25, s: 0.56, block: 0.58, tool: 0.78, toolSpin: 0.35 };
+  const vmBase = { x: 0.15, y: -0.075, z: -0.25, s: 0.56, block: 0.58, tool: 0.78, toolSpin: 0.35, rx: 0, ry: 0, rz: 0 };
   // v4.17 held-item poses (viewBrick space), Minecraft logic: a block sits IN
   // the hand turned 45° (you see two faces and the top), a small item is held
   // flat in the clip, tools pass through the bore. Tunable by the QA hook.
@@ -9706,9 +9706,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       vmBase.z + (-arc * (tool ? 0.05 : 0.09) + strike * 0.02) * k,
     );
     viewBrick.rotation.set(
-      ((tool ? -0.72 : -0.5) * arc + eq * 0.7 - vm.sprint * 0.35 - vm.swayY * 0.6 + Math.sin(bob * 2) * 0.012 * bobAmp) * k,
-      (vm.swayX * 0.9 + arc * (tool ? 0.18 : 0.1)) * k,
-      ((tool ? 0.24 : 0.14) * arc + walkX * 1.4 + vm.sprint * 0.2 + Math.sin(elapsed * 0.9) * 0.01 * (1 - bobAmp)) * k,
+      vmBase.rx + ((tool ? -0.72 : -0.5) * arc + eq * 0.7 - vm.sprint * 0.35 - vm.swayY * 0.6 + Math.sin(bob * 2) * 0.012 * bobAmp) * k,
+      vmBase.ry + (vm.swayX * 0.9 + arc * (tool ? 0.18 : 0.1)) * k,
+      vmBase.rz + ((tool ? 0.24 : 0.14) * arc + walkX * 1.4 + vm.sprint * 0.2 + Math.sin(elapsed * 0.9) * 0.01 * (1 - bobAmp)) * k,
     );
   }
 
