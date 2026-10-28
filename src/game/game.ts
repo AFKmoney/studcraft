@@ -2307,7 +2307,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const m = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 12), mat);
     m.position.copy(p);
     fpsArmGroup.add(m);
+    return m;
   };
+  const fpsUpperArm: THREE.Object3D[] = []; // hidden while an item is held (see placeHeldMinecraft)
   // Minifig anatomy: the wrist pin enters the back of the C, the mouth opens along
   // the forearm (away from the elbow) and the bore runs across the arm — so a
   // tool handle passes straight through the hand.
@@ -2325,8 +2327,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // Moulded sleeve rim where the hand pin plugs in
     const rim = fpsSeg(wristB.clone().addScaledVector(dir, -0.014), wristB.clone().addScaledVector(dir, 0.012), 0.069, 0.069, fpsSleeveMat);
     rim.scale.set(1.04, 1, 1.04);
-    fpsJoint(elbow, 0.079, fpsSleeveMat);
-    fpsSeg(elbow, shoulder, 0.079, 0.088, fpsSleeveMat); // upper arm, mostly off-screen
+    fpsUpperArm.push(fpsJoint(elbow, 0.079, fpsSleeveMat));
+    fpsUpperArm.push(fpsSeg(elbow, shoulder, 0.079, 0.088, fpsSleeveMat)); // upper arm, mostly off-screen
   }
   // The hand: a real C-clip, mouth turned up-and-in so the held item sits in the bore.
   const fpsClaw = new THREE.Group();
@@ -2408,6 +2410,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     .multiply(new THREE.Matrix4().makeScale(0.56, 0.56, 0.56));
   const clawRest = fpsClaw.quaternion.clone();
   function restArm() {
+    for (const o of fpsUpperArm) o.visible = true;
     fpsArmGroup.matrix.copy(armRest);
     fpsArmGroup.matrix.decompose(fpsArmGroup.position, fpsArmGroup.quaternion, fpsArmGroup.scale);
   }
@@ -2425,6 +2428,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   restArm();
   const ARM_OUT = new THREE.Vector3(0.42, -0.62, 0.66).normalize(); // toward the lower-right corner, back toward the eye
   function placeHeldMinecraft(id: number, model: THREE.Object3D, isTool: boolean) {
+    // with an item, only the hand + forearm show: the vanilla swing pivots at
+    // the shoulder anchor and would sweep the upper arm across the screen
+    for (const o of fpsUpperArm) o.visible = false;
     model.removeFromParent(); // measure the model in its own frame
     model.position.set(0, 0, 0);
     viewBrick.add(heldBrickGroup);
@@ -9866,7 +9872,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const qa = new THREE.Quaternion()
       .setFromAxisAngle(Y_AXIS, (45 - 20 * fA) * D2R)
       .multiply(new THREE.Quaternion().setFromAxisAngle(Z_AXIS, -20 * gA * D2R))
-      .multiply(new THREE.Quaternion().setFromAxisAngle(X_AXIS, -80 * gA * D2R))
+      .multiply(new THREE.Quaternion().setFromAxisAngle(X_AXIS, -80 * gA * D2R * 0.7))
       .multiply(new THREE.Quaternion().setFromAxisAngle(Y_AXIS, -45 * D2R));
     // small look-lag / sprint / bob tilt on top (no effect at rest)
     qa.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler((-vm.sprint * 0.2 - vm.swayY * 0.4) * k, vm.swayX * 0.6 * k, (walkX * 0.8 + vm.sprint * 0.1) * k, "XYZ")));
