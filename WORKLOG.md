@@ -2279,3 +2279,26 @@ Philippe rejected the lean pass above the same night (2026-10-28 01:03 EDT): « 
   - **Portable** MD5 `65d473a7107a1ac2cb085497059436f8` (Drive `1XcLQhYM6aXQpzOooFpnwlSUvClCAY9x5`), **folder zip v4.17** MD5 `ba361bb760b2b4507bc5863310ebf532` (`158rTvR8zb6yMgyXXSfSQl0Dmh-4AAqda`), **web zip** MD5 `d59175cc7ede1826e2fed904d6339986` (`1UcHV4MrVRY_1BsaP71rRG-tIOJrBro6h`), **bundle v4.17** MD5 `ad3774843fec53abfaa50661868595a3` (`1UwmLHddoQFJzQnnpBEQmLjMmBbZczJKq`) — all Drive MD5s re-verified after upload.
   - **GitHub Release v4.17** published (notes + Drive links + MD5s; assets still cannot be uploaded with this credential — `uploads.github.com` 401, unchanged).
   - Not photo-verified: the third-person fig (the `setThird` API is not reachable from the QA hooks — its 1.8 scale is set from the same Box3 measurement the audit verified for all 41 mob kinds). Still open on Philippe's verdict alone: melt realism, tool pose, proportions, v4.14 mining/FPS.
+
+## 2026-10-28 — RPG ROADMAP: the other 50% (Philippe's direction, claimed by Muse)
+
+Philippe (2026-10-28): the game is **Minecraft × Teardown × LEGO × RPG** — and « c'est pas fini, on est juste à cinquante pour cent ». v4.17 is a milestone, not the finish. Audit of what already exists (Muse, code read end-to-end): rank levels 1–30 with XP curves, titles and auto-perks (`ranks.ts`); a 4-branch skill tree (Miner/Hunter/Mason/Mage) bought with per-level points, mana + 3 spells (`skills.ts`); 37 one-off board quests (`quests.ts`); traders with tiers, stock and per-hamlet reputation; a 40-entry discovery codex; 10 landmark site kinds (`sites.ts`); bosses exist only as high-XP mobs (dragon 150, ravager 15, evoker 12).
+
+**What's missing (the RPG half), in build order:**
+- **R1 — Quest chains & campaign.** Today all 37 quests sit open on one flat board: no order, no givers, no story. Chains with step gating + a main campaign ("The Master Brick" — the codex already teases it at level 22) + 3 side chains; the quest panel becomes a journal grouped by chain. **← THIS SESSION**
+- **R2 — Boss encounters.** Dragon/wither get encounter design (phases, adds, tells, unique named drops) instead of being stat bags.
+- **R3 — The dungeon.** A new multi-room underground site kind: locked doors, traps, a mini-boss, a loot vault — generated like the other sites.
+- **R4 — Build identity.** A specialization choice that commits the character (one signature branch bonus) + rare named loot with affixes, so two players' gear reads different.
+
+Rules that stay in force: saves stay compatible (chain state derives from the existing done-set; no save format change in R1), perf law (A1 on cheap devices; all of this is data + counting, ~zero frame cost), WORKLOG + push per phase, Philippe's A54 verdict closes each phase.
+
+## 2026-10-28 — RPG R1: quest chains & the Master Brick campaign (Muse) — code on main, NOT delivered
+
+Philippe's "lets go" on the RPG roadmap above. The flat board of 37 one-off errands is now four story lines with step gating:
+
+- **Data (`quests.ts`):** every quest carries a `chain`; step order = array order within the chain. `CHAINS` names the lines and their givers: **The Master Brick** (Elder Maren, clerk — the campaign, 10 steps), **The Hamlet Table** (Bess, grocer, 7), **The Wild Ledger** (Tam, ranger, 10), **The Four Lands** (Ivo, mage, 11). Pure helpers: `chainQuests` / `chainStepOf` / `questActive(q, isDone)`.
+- **New finale:** `masterbrick` — "have" the crafted Master Brick (the codex's rank-22 craft), keep=true, pays 40 emeralds + 2 stud cores, 150 xp. The campaign's last step, locked until the nine before it are claimed.
+- **Gating (game.ts):** `bumpQuest` and the inventory "have" scan only count the CURRENT step of each chain; `claim()` refuses a locked step with a message naming the chain. The HUD tracker follows the first active open quest. **Saves untouched** — chain state derives from the stored {id, n, done} done-set, so an old save mid-board keeps everything it had claimed and simply finds the rest ordered.
+- **Journal (GameView + styles):** the quest panel groups by chain with a header (line name + giver), each card shows "step X of Y", locked steps render dimmed with a 🔒 and "finish the step before" instead of a dead counter.
+- **QA:** `npx tsc --noEmit` 0 errors; standalone build OK. New hooks `getQuests` / `questAudit` (synthetic done-sets): all 5 audit checks pass — fresh world activates exactly the 4 openers, the finale stays locked until all 9 priors are done, a mid-chain step unlocks only in order, all 38 quests sit in a chain. Booted live (qa92): **exactly 4 active quests on a fresh world (logs / wheat / hunt / moss), 0 page errors**. Not screenshot-verified: the journal panel itself (reachability of the hub in the QA rig) — Philippe's A54 look closes it.
+- **Next move (claimed, Muse):** ship R1 with the next delivery train (v4.18) once Philippe has the v4.17 verdicts in; R2 boss encounters after that.

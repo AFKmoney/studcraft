@@ -1,4 +1,4 @@
-import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
+import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode, Fragment } from "react";
 import { CATALOG, COLORS, ID, def } from "./blocks";
 import type { EnterKind, GameApi, Phase, Quality, Upscale } from "./game";
 import { RECIPES, type Recipe } from "./recipes";
@@ -2328,25 +2328,41 @@ function StationScreen({ game }: { game: GameApi }) {
 }
 
 function QuestList({ hud, onClaim }: { hud: GameApi["hud"]; onClaim: (id: string) => void }) {
+  let lastChain = "";
   return (
     <ul className="sc-cards">
-      {hud.quests.map((quest) => (
-        <li key={quest.id} className={"sc-card" + (quest.ready && !quest.done ? " glow" : "") + (quest.done ? " done" : "")}>
-          <div className="sc-card-text">
-            <strong>{quest.name}</strong>
-            <span>{quest.detail}</span>
-            <div className="sc-progress">
-              <span style={{ width: `${Math.min(100, (quest.n / Math.max(1, quest.need)) * 100)}%` }} />
-            </div>
-            <small>
-              {quest.done ? "Claimed" : `${quest.n} / ${quest.need}`} · Reward: {quest.reward}
-            </small>
-          </div>
-          <button className={"sc-btn sc-btn-sm" + (quest.ready && !quest.done ? " sc-btn-primary" : "")} disabled={!quest.ready || quest.done} onClick={() => onClaim(quest.id)}>
-            {quest.done ? <CheckIcon size={16} /> : "Claim"}
-          </button>
-        </li>
-      ))}
+      {hud.quests.map((quest) => {
+        const header = quest.chainName && quest.chainName !== lastChain ? quest.chainName : null;
+        if (quest.chainName) lastChain = quest.chainName;
+        return (
+          <Fragment key={quest.id}>
+            {header && (
+              <li className="sc-chain-head">
+                <strong>{header}</strong>
+                {quest.from && <span>{quest.from}</span>}
+              </li>
+            )}
+            <li className={"sc-card" + (quest.ready && !quest.done ? " glow" : "") + (quest.done ? " done" : "") + (quest.locked ? " locked" : "")}>
+              <div className="sc-card-text">
+                <strong>
+                  {quest.name}
+                  {quest.steps && quest.steps > 1 && <em className="sc-step"> · step {quest.step} of {quest.steps}</em>}
+                </strong>
+                <span>{quest.locked ? "Locked — finish the step before this one." : quest.detail}</span>
+                <div className="sc-progress">
+                  <span style={{ width: `${Math.min(100, (quest.n / Math.max(1, quest.need)) * 100)}%` }} />
+                </div>
+                <small>
+                  {quest.done ? "Claimed" : `${quest.n} / ${quest.need}`} · Reward: {quest.reward}
+                </small>
+              </div>
+              <button className={"sc-btn sc-btn-sm" + (quest.ready && !quest.done ? " sc-btn-primary" : "")} disabled={!quest.ready || quest.done} onClick={() => onClaim(quest.id)}>
+                {quest.done ? <CheckIcon size={16} /> : quest.locked ? "🔒" : "Claim"}
+              </button>
+            </li>
+          </Fragment>
+        );
+      })}
     </ul>
   );
 }

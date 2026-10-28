@@ -2937,6 +2937,29 @@ kbd {
   opacity: 0.6;
 }
 
+.sc-chain-head {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 10px 2px 2px;
+}
+.sc-chain-head strong {
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.95;
+}
+.sc-chain-head span {
+  font-size: 11px;
+  opacity: 0.65;
+}
+.sc-step {
+  font-style: normal;
+  font-size: 11px;
+  opacity: 0.6;
+}
+
 .sc-card.learned {
   border-color: rgba(54, 168, 82, 0.45);
   background: rgba(54, 168, 82, 0.08);

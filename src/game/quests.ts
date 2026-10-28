@@ -131,6 +131,7 @@ export function traderOf(role: string | undefined) {
 
 export type QuestDef = {
   id: string;
+  chain?: string;
   name: string;
   detail: string;
   kind: "break" | "place" | "kill" | "have";
@@ -145,6 +146,7 @@ export type QuestDef = {
 export const QUESTS: QuestDef[] = [
   {
     id: "logs",
+    chain: "master",
     name: "First posts",
     detail: "Chop 8 wood bricks.",
     kind: "break",
@@ -159,6 +161,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "torches",
+    chain: "master",
     name: "Light the lane",
     detail: "Place 6 torches anywhere.",
     kind: "place",
@@ -173,6 +176,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "wheat",
+    chain: "provider",
     name: "Fill the grocer",
     detail: "Hold 12 grain, then claim. The grain is spent.",
     kind: "have",
@@ -187,6 +191,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "hunt",
+    chain: "hunter",
     name: "Night watch",
     detail: "Drop 4 night studs, bone studs, or fuse bricks.",
     kind: "kill",
@@ -201,6 +206,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "tin",
+    chain: "master",
     name: "Tin for the smith",
     detail: "Hold 6 tin ore, then claim. The ore is spent.",
     kind: "have",
@@ -215,6 +221,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "gem",
+    chain: "master",
     name: "Deep stud",
     detail: "Hold an aqua gem or a prism, then claim. One is spent.",
     kind: "have",
@@ -229,6 +236,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "moss",
+    chain: "wilds",
     name: "Fen posts",
     detail: "Break 8 moss bricks. Fens sit low and wet.",
     kind: "break",
@@ -243,6 +251,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "snow",
+    chain: "wilds",
     name: "Cap the ridge",
     detail: "Break 8 snow bricks on a snow cap.",
     kind: "break",
@@ -257,6 +266,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "ash",
+    chain: "wilds",
     name: "Ash course",
     detail: "Break 8 ash bricks. Dry hot ridges.",
     kind: "break",
@@ -271,6 +281,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "clay",
+    chain: "wilds",
     name: "Shore clay",
     detail: "Break 6 clay bricks along a shore.",
     kind: "break",
@@ -285,6 +296,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "web",
+    chain: "wilds",
     name: "Cut the web",
     detail: "Drop 3 crawlers.",
     kind: "kill",
@@ -299,6 +311,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "frogs",
+    chain: "hunter",
     name: "Fen chorus",
     detail: "Drop 3 hop studs.",
     kind: "kill",
@@ -313,6 +326,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "foxes",
+    chain: "hunter",
     name: "Grove tails",
     detail: "Drop 2 brush studs.",
     kind: "kill",
@@ -327,6 +341,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "crabs",
+    chain: "hunter",
     name: "Tide pinch",
     detail: "Drop 3 pinch studs on sand or shore.",
     kind: "kill",
@@ -341,6 +356,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "wisps",
+    chain: "master",
     name: "Night dust",
     detail: "Drop 3 wisp studs after dark, in fen, grove, or snow.",
     kind: "kill",
@@ -355,6 +371,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "bones",
+    chain: "wilds",
     name: "Bone pile",
     detail: "Hold 6 bones, then claim. The bones are spent.",
     kind: "have",
@@ -369,6 +386,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "tome",
+    chain: "master",
     name: "Open the tome",
     detail: "Hold a spell tome. It is not spent.",
     kind: "have",
@@ -384,6 +402,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "cactus",
+    chain: "wilds",
     name: "Ridge spines",
     detail: "Break 4 cactus studs on an ash ridge.",
     kind: "break",
@@ -398,6 +417,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "reeds",
+    chain: "wilds",
     name: "Cut the fen",
     detail: "Break 6 reeds.",
     kind: "break",
@@ -412,6 +432,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "crystal",
+    chain: "master",
     name: "Shard ear",
     detail: "Hold 4 crystals, then claim. They are spent.",
     kind: "have",
@@ -426,6 +447,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "bloom",
+    chain: "wilds",
     name: "Grove press",
     detail: "Break 6 blooms.",
     kind: "break",
@@ -440,6 +462,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "pelt",
+    chain: "wilds",
     name: "Winter pile",
     detail: "Hold 3 pelts, then claim. They are spent.",
     kind: "have",
@@ -454,6 +477,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "seal",
+    chain: "master",
     name: "Wax the board",
     detail: "Hold a wax seal. It is not spent.",
     kind: "have",
@@ -469,6 +493,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "slimes",
+    chain: "hunter",
     name: "Split the stud",
     detail: "Drop 4 slime bricks. Big ones split into smaller studs.",
     kind: "kill",
@@ -483,6 +508,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "gourds",
+    chain: "provider",
     name: "Orange course",
     detail: "Break 4 pumpkins. Plains and grove patches grow them.",
     kind: "break",
@@ -497,6 +523,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "melons",
+    chain: "provider",
     name: "Green rind",
     detail: "Break 4 melons.",
     kind: "break",
@@ -511,6 +538,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "shrooms",
+    chain: "provider",
     name: "Cap pick",
     detail: "Break 6 mushrooms. Caves and fens.",
     kind: "break",
@@ -525,6 +553,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "webs",
+    chain: "wilds",
     name: "Cut the mine",
     detail: "Break 4 webs. Mines hang them in the dark.",
     kind: "break",
@@ -539,6 +568,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "goats",
+    chain: "hunter",
     name: "Ridge horns",
     detail: "Drop 2 ridge goats on a snow cap.",
     kind: "kill",
@@ -553,6 +583,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "bees",
+    chain: "provider",
     name: "Comb run",
     detail: "Drop 3 stud bees in a grove or on the plains.",
     kind: "kill",
@@ -567,6 +598,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "turtles",
+    chain: "hunter",
     name: "Slow shells",
     detail: "Drop 2 shore turtles.",
     kind: "kill",
@@ -581,6 +613,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "bats",
+    chain: "hunter",
     name: "Dusk squeak",
     detail: "Drop 3 bats after dark.",
     kind: "kill",
@@ -595,6 +628,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "raiders",
+    chain: "hunter",
     name: "Outpost watch",
     detail: "Drop 3 bandits. They hold the fence posts and do not burn at dawn.",
     kind: "kill",
@@ -609,6 +643,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "honey",
+    chain: "provider",
     name: "Jar the comb",
     detail: "Hold 2 honey, then claim. The honey is spent.",
     kind: "have",
@@ -623,6 +658,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "bearings",
+    chain: "provider",
     name: "Take a bearing",
     detail: "Hold a compass. It is not spent. It points at the nearest hamlet and site.",
     kind: "have",
@@ -638,6 +674,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "pages",
+    chain: "master",
     name: "Press the reeds",
     detail: "Hold 6 paper, then claim. The paper is spent.",
     kind: "have",
@@ -652,6 +689,7 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "horn",
+    chain: "hunter",
     name: "Sound the ridge",
     detail: "Hold a horn. It is not spent. Place with it to shove hostiles back.",
     kind: "have",
@@ -665,4 +703,70 @@ export const QUESTS: QuestDef[] = [
     ],
     xp: 8,
   },
+  {
+    id: "masterbrick",
+    chain: "master",
+    name: "The Master Brick",
+    detail: "Craft the Master Brick: prism, sapphire, chrome and resin in one brick (rank 22). The hamlet has waited a long time for this.",
+    kind: "have",
+    tag: "master",
+    what: ID.MasterBrick,
+    need: 1,
+    reward: [
+      [ID.Emerald, 40],
+      [ID.Core, 2],
+    ],
+    xp: 150,
+    keep: true,
+  },
 ];
+
+
+// RPG chains (v4.18, Philippe's "the other 50%"): the flat quest board becomes
+// four story lines. A quest only counts progress while it is the current step
+// of its chain — every earlier step claimed. Step order = QUESTS array order
+// within the chain. Chain state derives from the quest done-set, so old saves
+// (which store only {id, n, done}) stay valid untouched.
+export type ChainDef = { name: string; from: string; blurb: string };
+export const CHAINS: Record<string, ChainDef> = {
+  master: {
+    name: "The Master Brick",
+    from: "Elder Maren, hamlet clerk",
+    blurb: "The hamlet's long road: first posts, first ore, first magic — all the way to the brick of legend.",
+  },
+  provider: {
+    name: "The Hamlet Table",
+    from: "Bess, hamlet grocer",
+    blurb: "Feed the hamlet: fields, orchards, hives and the winter store.",
+  },
+  hunter: {
+    name: "The Wild Ledger",
+    from: "Tam, hamlet ranger",
+    blurb: "Every beast of the wilds, entered in the ledger one by one — raiders last but one.",
+  },
+  wilds: {
+    name: "The Four Lands",
+    from: "Ivo, hamlet mage",
+    blurb: "Walk the strange lands — fen, snow, ash and shore — and bring back their proofs.",
+  },
+};
+
+export function chainQuests(chain: string): QuestDef[] {
+  return QUESTS.filter((q) => q.chain === chain);
+}
+
+export function chainStepOf(q: QuestDef): { step: number; steps: number } {
+  if (!q.chain) return { step: 1, steps: 1 };
+  const list = chainQuests(q.chain);
+  return { step: list.findIndex((e) => e.id === q.id) + 1, steps: list.length };
+}
+
+/** A quest is active when every earlier step of its chain is done. */
+export function questActive(q: QuestDef, isDone: (id: string) => boolean): boolean {
+  if (!q.chain) return true;
+  for (const e of chainQuests(q.chain)) {
+    if (e.id === q.id) return true;
+    if (!isDone(e.id)) return false;
+  }
+  return true;
+}

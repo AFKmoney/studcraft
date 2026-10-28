@@ -8,7 +8,7 @@ import * as CH from "./chipState";
 import { NEIGHBORS, RECIPES, SMELT, fuelTime, matchGrid } from "./recipes";
 import { DISCOVER, MOB_XP, ORE_HEAR, ORE_XP, nextPerk, rankTitle, xpNeed } from "./ranks";
 import { manaMaxFor, skillById, spellsFor } from "./skills";
-import { QUESTS, traderOf, tradeLevelFor, TIER_NAMES, TIER_XP, type TraderRole } from "./quests";
+import { QUESTS, CHAINS, chainStepOf, questActive, traderOf, tradeLevelFor, TIER_NAMES, TIER_XP, type TraderRole } from "./quests";
 import { MpClient } from "./mp";
 import { clearSave, deleteWorld, hasSave, listWorlds, loadLatest, loadSettings, loadWorld, writeSettings, writeWorld, type SaveV1, type WorldSlot } from "./save";
 import { buildAtlas } from "./textures";
@@ -89,7 +89,7 @@ export type Hud = {
   traderLevel: string;
   traderNext: string;
   netStatus: string;
-  quests: { id: string; name: string; detail: string; n: number; need: number; done: boolean; ready: boolean; reward: string }[];
+  quests: { id: string; name: string; detail: string; n: number; need: number; done: boolean; ready: boolean; reward: string; chain?: string; chainName?: string; from?: string; step?: number; steps?: number; locked?: boolean }[];
   questAlert: string;
   questTrack: string;
   won: boolean;
@@ -272,6 +272,8 @@ declare global {
       mpConnect?: (url: string, room: string, name: string) => boolean;
       getMobs?: () => string[];
       mobAudit?: () => Record<string, { h: number; minY: number; w: number; d: number }>;
+      getQuests?: () => { id: string; chain?: string; step: number; steps: number; n: number; done: boolean; active: boolean }[];
+      questAudit?: () => Record<string, boolean>;
       getHamlet?: () => { x: number; y: number; z: number } | null;
       getChunks?: () => number;
       /** QA: stop/restart the frame loop so a capture sees a still frame. */
@@ -3168,22 +3170,26 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       stock: tStocks[oi] ?? 0,
     }));
     let alert = "";
+    const isDoneQ = (id: string) => quests.find((p) => p.id === id)?.done ?? false;
     hud.quests = QUESTS.map((q) => {
       const prog = quests.find((p) => p.id === q.id) ?? { n: 0, done: false };
+      const active = questActive(q, isDoneQ);
       let n = prog.n;
-      let ready = !prog.done && n >= q.need;
-      if (!prog.done && q.kind === "have") {
+      let ready = !prog.done && active && n >= q.need;
+      if (!prog.done && active && q.kind === "have") {
         const held = q.id === "gem" ? Math.max(inv[ID.Diamond] ?? 0, inv[ID.Prism] ?? 0) : (inv[q.what] ?? 0);
         n = Math.min(q.need, held);
         ready = held >= q.need;
       }
       if (ready && !alert) alert = q.name + " ready";
       const reward = q.reward.map(([id, count]) => count + " " + def(id).name.toLowerCase()).join(", ");
-      return { id: q.id, name: q.name, detail: q.detail, n, need: q.need, done: prog.done, ready, reward };
+      const { step, steps } = chainStepOf(q);
+      const chainDef = q.chain ? CHAINS[q.chain] : undefined;
+      return { id: q.id, name: q.name, detail: q.detail, n, need: q.need, done: prog.done, ready, reward, chain: q.chain, chainName: chainDef?.name, from: chainDef?.from, step, steps, locked: !prog.done && !active };
     });
     hud.questAlert = alert;
     const readyQ = hud.quests.find((q) => q.ready);
-    const openQ = hud.quests.find((q) => !q.done);
+    const openQ = hud.quests.find((q) => !q.done && !q.locked);
     hud.questTrack = readyQ ? readyQ.name + " · ready" : openQ ? openQ.name + " " + openQ.n + "/" + openQ.need : "Board clear";
     hud.won = won;
     hud.skills = [...skills];
@@ -3999,8 +4005,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   }
 
   function bumpQuest(kind: "break" | "place" | "kill", tag: string) {
+    const isDone = (id: string) => quests.find((p) => p.id === id)?.done ?? false;
     for (const q of QUESTS) {
       if (q.kind !== kind || q.tag !== tag) continue;
+      if (!questActive(q, isDone)) continue;
       const prog = quests.find((p) => p.id === q.id);
       if (!prog || prog.done || prog.n >= q.need) continue;
       prog.n += 1;
@@ -10593,6 +10601,27 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       out.__player = { h: +(box.max.y - box.min.y).toFixed(2), minY: +box.min.y.toFixed(2), w: +(box.max.x - box.min.x).toFixed(2), d: +(box.max.z - box.min.z).toFixed(2) };
       return out;
     },
+    getQuests: () => {
+      const isDone = (id: string) => quests.find((p) => p.id === id)?.done ?? false;
+      return QUESTS.map((q) => {
+        const { step, steps } = chainStepOf(q);
+        const prog = quests.find((p) => p.id === q.id) ?? { n: 0, done: false };
+        return { id: q.id, chain: q.chain, step, steps, n: prog.n, done: prog.done, active: questActive(q, isDone) };
+      });
+    },
+    questAudit: () => {
+      const byId = (id: string) => QUESTS.find((q) => q.id === id)!;
+      const none = () => false;
+      const doneExcept = (keepOpen: string) => (id: string) => id !== keepOpen;
+      const only = (...ids: string[]) => (id: string) => ids.includes(id);
+      return {
+        fresh_only_openers_active: ["logs", "wheat", "hunt", "moss"].every((id) => questActive(byId(id), none)) && ["torches", "tin", "masterbrick", "gourds", "frogs", "snow", "pages"].every((id) => !questActive(byId(id), none)),
+        finale_locked_until_all_prior_done: !questActive(byId("masterbrick"), only("logs", "torches", "tin", "gem", "wisps", "tome", "crystal", "seal")) && questActive(byId("masterbrick"), doneExcept("masterbrick")),
+        mid_chain_unlock: questActive(byId("tin"), only("logs", "torches")) && !questActive(byId("gem"), only("logs", "torches")),
+        every_quest_in_a_chain: QUESTS.every((q) => !!q.chain && !!CHAINS[q.chain!]),
+        chain_sizes: QUESTS.length === 38,
+      };
+    },
     getPeers: () => [...mp.peers.values()].map((p) => ({ name: p.name, x: p.x, y: p.y, z: p.z })),
     getEnch: (id: number) => ench.get(id) ?? null,
     setEnch: (id: number, key: string, lvl: number) => {
@@ -11489,6 +11518,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const prog = quests.find((entry) => entry.id === id);
       if (!q || !prog) return;
       if (prog.done) return say("Already claimed");
+      if (!questActive(q, (id) => quests.find((p) => p.id === id)?.done ?? false))
+        return say("Locked — finish the earlier steps of " + (q.chain ? CHAINS[q.chain].name : "this line") + " first");
       if (q.kind === "have") {
         if (q.id === "gem") {
           const use = (inv[ID.Diamond] ?? 0) > 0 ? ID.Diamond : (inv[ID.Prism] ?? 0) > 0 ? ID.Prism : 0;
