@@ -9864,8 +9864,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const fA = Math.sin(sw * sw * Math.PI), gA = Math.sin(sq * Math.PI);
     const D2R = Math.PI / 180;
     const holding = heldBrickGroup.visible && lastHeldId > 0;
-    const ax = (holding ? (heldKind ? mcTune.bx : mcTune.ax) : MC_ANCHOR.x) - 0.4 * gA + (walkX + vm.swayX * 0.5 + vm.sprint * 0.03) * 2.2 * k;
-    const ay = (holding ? (heldKind ? mcTune.by : mcTune.ay) : MC_ANCHOR.y) + 0.2 * Math.sin(sq * Math.PI * 2) + (walkY + breathe + landY - vm.swayY * 0.4 - vm.sprint * 0.05) * 2.2 * k - eq * 0.6;
+    const swT = holding ? 0.35 : 1; // holding: the hand stays put, the item does the chop
+    const ax = (holding ? (heldKind ? mcTune.bx : mcTune.ax) : MC_ANCHOR.x) - 0.4 * gA * swT + (walkX + vm.swayX * 0.5 + vm.sprint * 0.03) * 2.2 * k;
+    const ay = (holding ? (heldKind ? mcTune.by : mcTune.ay) : MC_ANCHOR.y) + 0.2 * Math.sin(sq * Math.PI * 2) * swT + (walkY + breathe + landY - vm.swayY * 0.4 - vm.sprint * 0.05) * 2.2 * k - eq * 0.6;
     const az = (holding ? (heldKind ? mcTune.bz : mcTune.az) : MC_ANCHOR.z) - 0.2 * Math.sin(sw * Math.PI);
     viewBrick.scale.setScalar(MC_K);
     viewBrick.position.set(ax * MC_K, ay * MC_K, az * MC_K);
@@ -9877,6 +9878,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // small look-lag / sprint / bob tilt on top (no effect at rest)
     qa.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler((-vm.sprint * 0.2 - vm.swayY * 0.4) * k, vm.swayX * 0.6 * k, (walkX * 0.8 + vm.sprint * 0.1) * k, "XYZ")));
     viewBrick.quaternion.copy(qa);
+    if (holding) {
+      // pivot the whole viewmodel about the GRIP (where the clip holds the
+      // handle), not the shoulder anchor: the hand + forearm stay low right
+      // and only the item arcs (the anchor pivot swept the forearm across)
+      const g = fpsArmGroup.position.clone().multiplyScalar(MC_K);
+      const rg = g.clone().applyQuaternion(qa);
+      viewBrick.position.add(g.sub(rg));
+    }
     void arc; void strike; void heldIsTool;
   }
 
