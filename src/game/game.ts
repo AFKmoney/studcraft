@@ -2344,6 +2344,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   viewBrick.add(fpsArmGroup);
 
   // Viewmodel animation state (renderCamera).
+  const thirdAim = { ok: false, x: 0, y: 0, z: 0, back: 0 };
   const vmBase = { x: 0.15, y: -0.075, z: -0.25, s: 0.56, block: 0.58, tool: 0.78, toolSpin: 0.35, rx: 0, ry: 0, rz: 0 };
   // v4.17 held-item poses (viewBrick space), Minecraft logic: a block sits IN
   // the hand turned 45° (you see two faces and the top), a small item is held
@@ -8981,7 +8982,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const rdx = -Math.sin(player.yaw) * Math.cos(player.pitch);
     const rdy = Math.sin(player.pitch);
     const rdz = -Math.cos(player.yaw) * Math.cos(player.pitch);
-    const hit = raycast(player.x, eyeY, player.z, rdx, rdy, rdz, reach);
+    // third person: aim along the camera ray (it is parallel to the look
+    // direction and passes through the crosshair), reach measured from the eye
+    const tp = settings.third && thirdAim.ok;
+    const hit = tp ? raycast(thirdAim.x, thirdAim.y, thirdAim.z, rdx, rdy, rdz, reach + thirdAim.back) : raycast(player.x, eyeY, player.z, rdx, rdy, rdz, reach);
     let mobT = 99;
     let mob: Mob | null = null;
     for (const m of mobs) {
@@ -9740,23 +9744,33 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       fig.group.visible = false;
       viewBrick.visible = false;
     } else if (settings.third) {
-      const backX = Math.sin(player.yaw);
-      const backZ = Math.cos(player.yaw);
-      let dist = 4.6;
-      const aimY = player.y + 1.05;
-      const camY = player.y + 2.35;
-      for (let i = 1; i <= 10; i++) {
-        const t = i / 10;
-        const sx = player.x + backX * dist * t;
-        const sy = aimY + (camY - aimY) * t;
-        const sz = player.z + backZ * dist * t;
+      // v4.17 aim fix: over-the-shoulder camera ALIGNED with the look direction
+      // (it used to lookAt the player's back, so the crosshair sat on the
+      // minifig while the targeted block was elsewhere). The target ray is
+      // cast from this camera (see thirdAim), so crosshair = target, exactly.
+      const cp = Math.cos(player.pitch);
+      const fx = -Math.sin(player.yaw) * cp, fy = Math.sin(player.pitch), fz = -Math.cos(player.yaw) * cp;
+      const rx = Math.cos(player.yaw), rz = -Math.sin(player.yaw);
+      const ex = player.x, ey = player.y + EYE, ez = player.z;
+      const want = 4.2, sh = 0.62, up = 0.28;
+      let dist = want;
+      for (let i = 1; i <= 14; i++) {
+        const t = i / 14;
+        const sx = ex - fx * want * t + rx * sh * t, sy = ey - fy * want * t + up * t, sz = ez - fz * want * t + rz * sh * t;
         if (solidAt(Math.floor(sx), Math.floor(sy), Math.floor(sz))) {
-          dist = Math.max(1.35, dist * ((i - 1) / 10));
+          dist = Math.max(0.6, want * ((i - 1.5) / 14));
           break;
         }
       }
-      camera.position.set(player.x + backX * dist, player.y + 1.15 + dist * 0.22, player.z + backZ * dist);
-      camera.lookAt(player.x, aimY, player.z);
+      const k = dist / want;
+      camera.position.set(ex - fx * dist + rx * sh * k, ey - fy * dist + up * k, ez - fz * dist + rz * sh * k);
+      camera.rotation.order = "YXZ";
+      camera.rotation.y = player.yaw;
+      camera.rotation.x = player.pitch;
+      camera.rotation.z = 0;
+      thirdAim.ok = true;
+      thirdAim.x = camera.position.x; thirdAim.y = camera.position.y; thirdAim.z = camera.position.z;
+      thirdAim.back = Math.hypot(camera.position.x - ex, camera.position.y - ey, camera.position.z - ez);
       fig.group.visible = true;
       updateFigArmor();
       fig.group.position.set(player.x, player.y + (settings.studs ? STUD_H : 0), player.z);
@@ -9776,6 +9790,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       viewBrick.visible = false;
     } else {
       camera.position.set(player.x, eye + bobY, player.z);
+      thirdAim.ok = false;
       fig.group.visible = false;
       viewBrick.visible = phase === "play";
     }
