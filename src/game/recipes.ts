@@ -356,6 +356,12 @@ export const RECIPES: Recipe[] = [
     h: 2,
     cat: "tools",
   }),
+  r("welder", "Welding torch", "2 ingots + 1 spark", [[I, 2], [ID.Flint, 1]], ID.Welder, 1, {
+    shape: [I, 0, 0, I, ID.Flint, 0],
+    w: 2,
+    h: 3,
+    cat: "tools",
+  }),
   r("flint", "Spark", "1 iron + 1 cobble", [[I, 1], [C, 1]], ID.Flint, 1, {
     shape: [I, C],
     w: 2,

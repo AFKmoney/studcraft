@@ -70,6 +70,7 @@ export type SaveV1 = {
   tufts?: [number, number, number][];
   chips?: [number, number, number, number][]; // v4.17 Teardown: [x, y, z, (id << 12) | removedMask]
   bricks?: [number, number, number, number][]; // P0 stud grid: [id, sx, sy, sz] — stud coords (sx = 2 × block x), y stays cell-aligned
+  welds?: [number, number, number, number, number, number][]; // P2: welded brick pairs [sx1, sy1, sz1, sx2, sy2, sz2] (stud coords of both bricks)
   worldDays?: number;
 };
 

@@ -315,6 +315,8 @@ declare global {
       getIntegrity?: () => { total: number; supported: number; stressed: string[]; falling: number; stress: Record<string, number>; sag: Record<string, number> };
       getBrickMeshY?: (sx: number, sy: number, sz: number) => number | null;
       stepBricks?: (dt: number) => { total: number; supported: number; stressed: string[]; falling: number; stress: Record<string, number> };
+      weldAt?: (sx1: number, sy1: number, sz1: number, sx2: number, sy2: number, sz2: number) => boolean;
+      getWelds?: () => { count: number; pairs: string[]; welded: string[] };
     };
   }
 }
@@ -3723,6 +3725,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // P0: restore the stud-grid brick layer.
     clearBricks();
     for (const [id, sx, sy, sz] of data.bricks ?? []) addBrick(id, sx, sy, sz);
+    // P2: restore welded joints — only pairs whose bricks both came back.
+    for (const [ax, ay, az, bx, by, bz] of data.welds ?? []) {
+      const ka = brickKey(ax, ay, az);
+      const kb = brickKey(bx, by, bz);
+      if (bricks.has(ka) && bricks.has(kb)) welds.add(weldKey(ka, kb));
+    }
     rebuildAllBrickMeshes();
     for (const [x, y, z] of data.tufts ?? []) TS.tuftGone.add(TS.tkey(x, y, z));
     ench.clear();
@@ -4482,6 +4490,35 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // physics; no net sync; sand can rest-fall through a brick.
   type Brick = { id: number; sx: number; sy: number; sz: number };
   const bricks = new Map<string, Brick>(); // key "sx,sy,sz" (stud coords)
+  // P2: welded joints between touching bricks — pair keys "keyA|keyB"
+  // (sorted). A welded pair supports each other with NO cantilever cost
+  // in computeIntegrity (see the P1 section); a welded brick refuses
+  // normal mining (cut it with shears, or it never comes apart in v1).
+  const welds = new Set<string>();
+  let weldPrime = ""; // brick key primed by the welding torch (first click)
+  let weldActAt = 0; // debounce for the torch's repeat-fire place path
+  const weldKey = (a: string, b: string) => (a < b ? a + "|" + b : b + "|" + a);
+  function brickWelded(key: string): boolean {
+    for (const w of welds) {
+      const [a, b] = w.split("|");
+      if (a === key || b === key) return true;
+    }
+    return false;
+  }
+  function unweldBrick(key: string) {
+    for (const w of [...welds]) {
+      const [a, b] = w.split("|");
+      if (a === key || b === key) welds.delete(w);
+    }
+    if (weldPrime === key) weldPrime = "";
+  }
+  function bricksTouch(a: Brick, b: Brick): boolean {
+    const ox = Math.min(a.sx + 2, b.sx + 2) - Math.max(a.sx, b.sx);
+    const oz = Math.min(a.sz + 2, b.sz + 2) - Math.max(a.sz, b.sz);
+    if (a.sy === b.sy) return (ox === 0 && oz > 0) || (oz === 0 && ox > 0);
+    if (Math.abs(a.sy - b.sy) === 1) return ox > 0 && oz > 0;
+    return false;
+  }
   const brickGrid = new Map<string, Set<string>>(); // voxel cell key -> brick keys
   const brickMeshes = new Map<number, THREE.InstancedMesh>();
   const brickGeos = new Map<number, THREE.BufferGeometry>();
@@ -4514,6 +4551,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   function removeBrick(key: string) {
     const b = bricks.get(key);
     if (!b) return;
+    unweldBrick(key);
     bricks.delete(key);
     for (const ck of brickCells(b)) {
       const s = brickGrid.get(ck);
@@ -4527,6 +4565,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
 
   function clearBricks() {
     bricks.clear();
+    welds.clear();
+    weldPrime = "";
     brickGrid.clear();
     brickStress.clear();
     brickSagged.clear();
@@ -4903,8 +4943,16 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         let best = -1;
         for (const ob of all) {
           if (ob === b) continue;
-          const oc = cant.get(brickKey(ob.sx, ob.sy, ob.sz));
+          const okey = brickKey(ob.sx, ob.sy, ob.sz);
+          const oc = cant.get(okey);
           if (oc === undefined) continue;
+          // P2: a welded joint is a permanent bond — support crosses it
+          // at the SAME cantilever count, no matter the direction, so a
+          // welded run holds far past the free cantilever max of 2.
+          if (welds.size > 0 && welds.has(weldKey(k, okey))) {
+            best = best < 0 ? oc : Math.min(best, oc);
+            continue;
+          }
           const ox = Math.min(b.sx + 2, ob.sx + 2) - Math.max(b.sx, ob.sx);
           const oz = Math.min(b.sz + 2, ob.sz + 2) - Math.max(b.sz, ob.sz);
           if (ob.sy === b.sy - 1 && ox > 0 && oz > 0) best = best < 0 ? oc : Math.min(best, oc);
@@ -5033,6 +5081,55 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     lastIntegrity = { total: bricks.size, supported: cant.size, stressed, falling: fallingBricks.length };
   }
 
+  // P2: welding torch action on the aimed brick. First click primes a
+  // brick, second click on a TOUCHING brick seals the joint. Clicking
+  // the primed brick again cancels. The place path repeat-fires while
+  // the button is held, so real actions are debounced to one per
+  // 350 ms — a held button can prime but never prime+cancel itself.
+  function weldAction(bh: BrickHit) {
+    const now = performance.now();
+    if (now - weldActAt < 350) return;
+    weldActAt = now;
+    const k = bh.key;
+    const b = bh.brick;
+    if (!weldPrime) {
+      weldPrime = k;
+      burst(b.sx / 2 + 0.5, b.sy + 0.9, b.sz / 2 + 0.5, "#ffb347", 5);
+      say("Weld primed — tap a touching brick to seal the joint");
+      swing = 1;
+      return;
+    }
+    if (weldPrime === k) {
+      weldPrime = "";
+      say("Weld cancelled");
+      return;
+    }
+    const a = bricks.get(weldPrime);
+    if (!a) {
+      weldPrime = k;
+      say("Weld primed — tap a touching brick to seal the joint");
+      return;
+    }
+    if (!bricksTouch(a, b)) {
+      say("Too far apart — welded bricks must touch");
+      return;
+    }
+    const wk = weldKey(weldPrime, k);
+    if (welds.has(wk)) {
+      weldPrime = "";
+      say("Already welded");
+      return;
+    }
+    welds.add(wk);
+    weldPrime = "";
+    wearHeld();
+    burst((a.sx + b.sx) / 4 + 0.5, b.sy + 0.7, (a.sz + b.sz) / 4 + 0.5, "#ffcf5e", 10);
+    audio.place();
+    swing = 1;
+    saveDirty = true;
+    say("Welded — that joint holds for good");
+  }
+
   function placeBrickNow(id: number, sx: number, sy: number, sz: number) {
     // Plants in overlapped cells are cleared (classic placement overwrites
     // them via world.set; the brick layer has to do it explicitly).
@@ -5057,6 +5154,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // half-offset target): food + generic placement only, v1.
   function tryPlaceBrick(bh: BrickHit) {
     const held = hotbar[slot];
+    // P2: the welding torch never places — it welds the aimed brick.
+    if (held === ID.Welder) {
+      weldAction(bh);
+      return;
+    }
     const heldDef = def(held);
     if (heldDef.food) {
       eat();
@@ -10126,6 +10228,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         return [x, y, z, v] as [number, number, number, number];
       }),
       bricks: [...bricks.values()].map((b) => [b.id, b.sx, b.sy, b.sz] as [number, number, number, number]),
+      welds: [...welds].map((w) => {
+        const [a, b] = w.split("|");
+        const [ax, ay, az] = a.split(",").map(Number);
+        const [bx, by, bz] = b.split(",").map(Number);
+        return [ax, ay, az, bx, by, bz] as [number, number, number, number, number, number];
+      }),
       beacons: [...beaconBuffs.entries()].map(([key, buff]) => {
         const [x, y, z] = key.split(",").map(Number);
         return { x, y, z, buff };
@@ -10556,12 +10664,21 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       // P0: the crosshair is on a snapped brick.
       const bk = bHit.brick;
       const block = def(bk.id);
-      hud.targetName = block.name;
+      hud.targetName = brickWelded(bHit.key) ? block.name + " · welded" : block.name;
       highlight.visible = !hud.hidden;
       highlight.position.set(bk.sx / 2 + 0.5, bk.sy + 0.5, bk.sz / 2 + 0.5);
       studOutline.visible = false;
       const key = "B:" + bHit.key;
-      if (sample.mine && block.hard !== Infinity) {
+      if (sample.mine && block.hard !== Infinity && brickWelded(bHit.key) && hotbar[slot] !== ID.Shears) {
+        // P2: a welded brick cannot be mined apart — cut the joint with
+        // shears (normal mining then works and drops the weld), or melt
+        // it in the foundry loop (P6). Everything else just sparks.
+        if (mineKey !== key) say("Welded solid — cut it with shears");
+        mineKey = key;
+        mineTime = 0;
+        hud.mine = 0;
+        hideCrack();
+      } else if (sample.mine && block.hard !== Infinity) {
         if (mineKey !== key) {
           mineKey = key;
           mineTime = 0;
@@ -11983,6 +12100,25 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const m = new THREE.Matrix4();
       mesh.getMatrixAt(idx, m);
       return m.elements[13];
+    },
+    // P2 QA hooks: weld two touching bricks directly + read the joint
+    // set back (inert in play — the torch path is weldAction).
+    weldAt: (sx1: number, sy1: number, sz1: number, sx2: number, sy2: number, sz2: number) => {
+      const a = bricks.get(brickKey(sx1, sy1, sz1));
+      const b = bricks.get(brickKey(sx2, sy2, sz2));
+      if (!a || !b || !bricksTouch(a, b)) return false;
+      welds.add(weldKey(brickKey(sx1, sy1, sz1), brickKey(sx2, sy2, sz2)));
+      saveDirty = true;
+      return true;
+    },
+    getWelds: () => {
+      const welded = new Set<string>();
+      for (const w of welds) {
+        const [a, b] = w.split("|");
+        welded.add(a);
+        welded.add(b);
+      }
+      return { count: welds.size, pairs: [...welds], welded: [...welded] };
     },
     // One evaluate can advance brick stress and the fall. The rig's frames
     // are ~700× slower than game time, so waiting on requestAnimationFrame

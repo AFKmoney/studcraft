@@ -373,6 +373,9 @@ export const ID = {
   Gear40: 367,
   Bevel12: 368,
   Bevel20: 369,
+  // Muse lane (P2 welding): IDs 400+ are reserved for the brick-layer
+  // pillars so they can never collide with Grok's Technic catalogue.
+  Welder: 400,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -817,6 +820,7 @@ item(ID.Bow, "Bow", "#c4924a", { tool: "bow" as ToolKind, tier: 1, maxUse: 80 })
 item(ID.Arrow, "Arrow", "#d9dde2");
 item(ID.Rod, "Rod", "#6b3e22", { maxUse: 40 });
 item(ID.Shears, "Shears", "#c5ccd3", { maxUse: 80 });
+item(ID.Welder, "Welding torch", "#f07820", { maxUse: 120 });
 item(ID.Bone, "Bone", "#f4f1ea");
 item(ID.Flint, "Spark", "#f07820", { maxUse: 40 });
 item(ID.Bottle, "Bottle", "#d5f3f6");
@@ -1390,6 +1394,7 @@ export const CATALOG = [
   ID.Arrow,
   ID.Rod,
   ID.Shears,
+  ID.Welder,
   ID.Flint,
   ID.Boat,
   ID.Cart,
