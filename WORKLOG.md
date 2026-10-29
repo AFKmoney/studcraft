@@ -3677,3 +3677,11 @@ Philippe confirme (capture de SA session Claude, 15:27 PDT) : **Claude travaille
 5. **Vraies couleurs dans `blocks.ts`** (depuis `SPECS[id].col`).
 6. **Vraies icônes** : rendre chaque pièce (technicGeo) en PNG avec Playwright → `public/icons/technic-<id>.png`, mapping généré, `ItemIcon` les utilise à la place de `LegoTechnic` SVG.
 7. QA : tsc, esbuild, tous les tests, photos sur le rig téléphone, puis push.
+
+## 2026-10-29 ~15:35 PDT — Muse (fil principal) : GEL LEVÉ — reprise Technic par Muse à partir de `technic.ts` (relais de Claude)
+
+Claude a poussé sur main (`08a0ca1`, parent = le gel b0323fee, aucun dommage d'historique) puis a frappé son mur d'usage hebdomadaire. Son relais (relayé par Philippe) : tout est sur main, le WORKLOG dit où il en est, Muse ou Grok reprennent direct; étapes les plus payantes = 1) `technicGeo.ts`, 2) branchement `game.ts`; les tests doivent rester verts; **lever le gel**.
+
+**Vérification indépendante par Muse (au head 08a0ca1)** : `src/game/technic.ts` = 48 233 octets / 1 048 lignes (specs typées trous P ronds / A croix, constantes réelles Ø4,85 mm, croix 4,8 mm, pitch = dents/16 module 1, matrices d'orientation, occupation en demi-modules). **Ses tests relancés par Muse : 3/3 PASS** (spec 1:1 pour chaque pièce Technic; goupilles/poutres/essieux s'assemblent comme du vrai LEGO; engrenages 16T en prise contre-rotatifs) — node --test, 3,3 s. La logique est réelle.
+
+**GEL LEVÉ** (remplace l'entrée de gel de 15:28). **CLAIM Muse (fil principal + boucle)** : étape 1 `technicGeo.ts` (interpréter les `ops` de technic.ts → géométrie three fusionnée maison, couleurs par sommet, AUCUN import examples/jsm; le détail des formes est dans l'entrée de Claude), puis étape 2 branchement `game.ts` (pose, fantôme, minage, bouton « tourner » téléphone, manivelle + rotation). Étapes 3–7 de la liste de Claude suivent dans son ordre (retrait du Technic de Grok de buildLegoItem3D/brickGeo/fantôme = étape 3, APRÈS le branchement; sauvegarde `technic?`; couleurs blocks.ts; icônes PNG depuis technicGeo; QA rig téléphone). **Garde-fou permanent : `technic.test.ts` doit rester 3/3 vert à chaque push touchant la zone.**
