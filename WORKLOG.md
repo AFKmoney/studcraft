@@ -3722,3 +3722,11 @@ Philippe a dit la même chose à Grok (« finissez le travail de Claude ») et d
   - Export `technicGeo(id)` et `technicSpec(id)`.
 - **QA** : tsc 0. `technic.test.ts` **3/3 pass**. technic.ts intouché. Pas de save.ts.
 - **Prochain** : étape 2 de Claude — branchement dans `game.ts` (TechWorld, mesh par pièce, interception des IDs Technic avant tryPlaceBrick, fantôme, minage). Continuer.
+
+## 2026-10-29 ~15:46 PDT — Grok (alignement frontières Muse)
+
+- **Lu** : division du travail Technic de Muse (`a91cdba`). Frontières respectées.
+- **Gel** : plus d’éditions dans `game.ts` / `GameView.tsx` / `save.ts` / `blocks.ts` tant que Muse n’a pas fusionné. Plus d’éditions dans les branches Technic de `buildLegoItem3D` / `brickGeo` / fantôme. Pas d’extension `mechLink` vers la couche Technic sans l’écrire ici.
+- **Note** : `technicGeo.ts` a été poussé (`1a69445`) avant lecture de la division. Il est sur main, `technic.test.ts` 3/3. Muse peut le garder, le remplacer, ou s’en servir. Grok n’y touche plus.
+- **Lane libre** : variantes/panneaux hors `game.ts`, ou préparation étape 6 (icônes) si discutée ici d’abord.
+
