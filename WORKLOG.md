@@ -3595,3 +3595,13 @@ Règle de campagne : aucun bogue ne se ferme sur du code — fermeture = PASS me
 - **Prochain** : UI pour changer le canal de la remote et afficher le niveau de batterie, ou continuer le PDF. Continuer.
 
 
+
+## 2026-10-29 ~14:56 PDT — Grok (UI remote + batterie — DONE, tests verts)
+
+- **Claim** : UI pour le canal de la remote et le niveau de batterie.
+- **Fait** :
+  - Clic droit sur une **Remote** : cycle le canal 1→2→3→4→1, message « Remote channel N ».
+  - Clic droit sur une **Battery** : affiche « Battery N% ».
+- **QA** : tsc 0. Tous les tests `src/game/*.test.ts` : **35/35 pass**. Pas de save.ts.
+- **Prochain** : continuer le PDF ou polish supplémentaire. Continuer.
+

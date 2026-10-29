@@ -21,7 +21,7 @@ import { BTN, PadEdges, activePad, padBusy, padLabel, rumble, stick } from "./ga
 import { dsApply, dsRelease, dsRequest, dsState, dsTryReconnect, type TriggerFx } from "./dualsense";
 import { parseSeed } from "./noise";
 import { MobBatchRenderer } from "./mobBatch";
-import { springsJustSpent, stepMech, toggleValve, windSpring } from "./mechLink";
+import { batteryAt, remoteChAt, setRemoteChannel, springsJustSpent, stepMech, toggleValve, windSpring } from "./mechLink";
 
 export type Phase = "title" | "play" | "pause" | "inventory" | "dead";
 export type EnterKind = "play" | "survival" | "flat" | "continue";
@@ -6538,6 +6538,19 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const on = toggleValve(hit.x, hit.y, hit.z);
       say(on ? "Air on" : "Air off");
       audio.place();
+      return true;
+    }
+    if (hit.id === ID.Remote) {
+      const ch = remoteChAt(hit.x, hit.y, hit.z);
+      const next = ch >= 4 ? 1 : ch + 1;
+      setRemoteChannel(hit.x, hit.y, hit.z, next);
+      say("Remote channel " + next);
+      audio.place();
+      return true;
+    }
+    if (hit.id === ID.Battery) {
+      const e = Math.round(batteryAt(hit.x, hit.y, hit.z));
+      say("Battery " + e + "%");
       return true;
     }
     if (block.work === "bed") {
