@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-29 (Grok — tourelle 371, le bloc du dessus avance d'une case dans le sens horaire).
+**Last update:** 2026-10-29 (Grok — embrayage 24T, bloc 372, il passe le couple jusqu'à 2 puis il patine).
 
 ## 2026-10-26 — v4.12: Engine performance, mob judder & floating animal parts (Muse, ordered by Philippe after his A54 test of v4.11)
 
@@ -2467,6 +2467,7 @@ Pitch : Minecraft, c'est un monde de cubes. Studs, c'est un monde de plastique �
   - [x] Coniques 12T/20T (368/369) : entraxe 2 studs. Le 20T à l'est et l'essieu qui suit tournent à −3/5, sur l'autre axe.
   - [x] Vérin (370) : un tour pousse le bloc à l'est d'une case. Fin de course : il patine. Vis arrêtée : le bloc reste.
   - [x] Tourelle (371) : un tour fait passer le bloc du dessus à la case suivante, sens horaire : dessus, est, sud, ouest, nord, puis retour.
+  - [x] Embrayage 24T (372) : sur l'arbre, couple 1, il entraîne. Mené par un 8T, couple 3, il patine et l'essieu derrière ne tourne pas.
 - [ ] **P4 · Son plastique** — clics, snaps, cliquetis 100 % synthétisés DSP, zéro asset
 
 ### Lane RPG
@@ -2511,7 +2512,7 @@ Toutes les 10 minutes, l'agent qui se réveille lit CE fichier et prend le derni
 
 ## P5 — PORTÉE ÉLARGIE par Philippe (2026-10-29 03:52 EDT) : « TOUT ce que LEGO Technic offre »
 Philippe : pas juste la mécanique — **les pièces ÉLECTRIQUES aussi**, pour que l'utilisateur puisse TOUT faire : véhicules, pelle mécanique, tout l'espace des possibles Technic. Le nord de P5 = le kit Technic complet en jeu. Livraison en couches (la physique reste LÉGÈRE — graphe de rotation borné/local, machines endormies au loin, un véhicule = UN assemblage rigide sur roues, pas un corps rigide par brique) :
-- [ ] **P5a · Drivetrain** — livré jusqu'à 371, tourelle incluse. Case parente ouverte : l'embrayage 24T qui patine au couple. Pas de pneumatique à moitié. Pas de redstone. P6 (IDs 401+) est à Muse.
+- [ ] **P5a · Drivetrain** — pièces seules livrées jusqu'à 372. Case parente ouverte : la pneumatique, en un seul lot, pas une pièce. Pas de redstone. P6 (trempe, ID 403) est à Muse.
 - [ ] **P5b · Électrique + conduite** : moteurs (tailles = couple/vitesse), hub/batterie, télécommande à canaux — le joueur LIE un hub et CONDUIT sa machine (véhicules qui roulent pour vrai sur le terrain)
 - [ ] **P5c · Pneumatique + vérins** : pompe (manuelle ou moteur), réservoir d'air, valves, cylindres V2 + vérins linéaires à vis — bras de pelle, flèches de grue, tourelles 28T/56T (une pelle qui CREUSE dans le monde voxel : le godet casse les blocs)
 - [ ] **P5d · Capteurs + automatisation** : capteurs (distance, inclinaison, couleur), logique simple sur hub — machines qui réagissent toutes seules
@@ -2695,8 +2696,19 @@ EN COURS au début de la passe. Fichiers : `blocks.ts` (371, avant les IDs 400),
 - Craft : 2 engrenages 16T + 1 essieu, en colonne. Aucun fichier de modèle.
 - QA : 25/25. `tsc` 0 erreur.
 
+### Next move — TAKEN and DONE (embrayage 24T, 372)
+Ne pas le refaire. P6-2 (trempe) reste à Muse. Pas de `save.ts`.
+
+### 2026-10-29 — Grok (embrayage 24T, 372) — FAIT
+Vérifié avant de coder : `tsc` 0 erreur, 25/25 tests jeu. Muse n'a rien poussé depuis la coulée (étape 2, qa106). Son prochain geste claimé est la trempe, ID 403, pas encore dans le code.
+
+- Bloc 372. Sur l'arbre, couple 1, il passe. Mené par un 8T, couple 3, au-dessus de 2 : il patine. L'engrenage d'entrée continue de tourner. L'essieu derrière ne tourne pas.
+- Craft : 1 engrenage 24T + 1 essieu. Aucun fichier de modèle.
+- QA après : 26/26. `tsc` 0 erreur.
+
 ### Next move — UNCLAIMED
-**P5a, prochaine pièce : l'embrayage 24T.** Il passe le couple, puis il patine quand le couple dépasse le sien. Bloc **372**. Pas de `save.ts`, pas les IDs 400+, pas de pneumatique. Avant P4, avant les sites de débris.
+**P5a, la pneumatique, en un seul lot.** Pompe **373**, cylindre **374**, valve **375**, réservoir **376**. Pas une pièce seule. Pas de `save.ts`, pas les IDs 400+, pas P4 avant ce lot. Avant les sites de débris.
+
 
 
 

@@ -31,6 +31,7 @@ export type MechBlockIds = {
   b20: number;
   act: number;
   turret: number;
+  slip: number;
   water: number;
   door: number;
   doorOpen: number;
@@ -69,6 +70,7 @@ function specFor(id: number, ids: MechBlockIds): Spec | null {
   if (id === ids.b20) return { kind: "gear", teeth: 20, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.act) return { kind: "axle", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.turret) return { kind: "axle", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
+  if (id === ids.slip) return { kind: "slip", teeth: 24, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   return null;
 }
 

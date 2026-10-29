@@ -1,6 +1,6 @@
 import { beforeEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { clearMech, speedAt } from "./mechState.ts";
+import { clearMech, speedAt, torqueAt } from "./mechState.ts";
 import { clearActs, clearBelts, clearRacks, clearSprings, clearTraps, clearTurrets, springLeft, stepMech, windSpring, type MechBlockIds } from "./mechLink.ts";
 
 const ids: MechBlockIds = {
@@ -31,6 +31,7 @@ const ids: MechBlockIds = {
   b20: 30,
   act: 31,
   turret: 32,
+  slip: 33,
   water: 14,
   door: 15,
   doorOpen: 16,
@@ -286,5 +287,28 @@ describe("placed technic", () => {
       { x: 1, y: 1, z: 0, id: 0 },
       { x: 0, y: 1, z: 1, id: 99 },
     ]);
+  });
+
+  it("passes torque through a 24T clutch and slips past the limit", () => {
+    const light = new Map<string, number>([
+      ["0,1,0", ids.crankOn],
+      ["0,0,0", ids.slip],
+      ["0,-1,0", ids.axle],
+    ]);
+    const getLight = (x: number, y: number, z: number) => light.get(x + "," + y + "," + z) ?? 0;
+    stepMech(getLight, [{ x: 0, y: 1, z: 0 }, { x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 }], ids, 0);
+    assert.deepEqual(speedAt(0, -2, 0), { n: 1, d: 1 });
+    assert.deepEqual(torqueAt(0, 0, 0), { n: 1, d: 1 });
+    const heavy = new Map<string, number>([
+      ["0,1,0", ids.crankOn],
+      ["0,0,0", ids.g8],
+      ["1,0,0", ids.slip],
+      ["1,1,0", ids.axle],
+    ]);
+    const getHeavy = (x: number, y: number, z: number) => heavy.get(x + "," + y + "," + z) ?? 0;
+    stepMech(getHeavy, [{ x: 0, y: 1, z: 0 }, { x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 1, y: 1, z: 0 }], ids, 0);
+    assert.deepEqual(speedAt(0, 0, 0), { n: 1, d: 1 });
+    assert.deepEqual(speedAt(2, 0, 0), { n: 0, d: 1 });
+    assert.deepEqual(speedAt(2, 2, 0), { n: 0, d: 1 });
   });
 });

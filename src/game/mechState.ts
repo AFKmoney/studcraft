@@ -7,9 +7,11 @@
 // belt joins two pulleys. At most 64 visits per tick.
 
 export const MESH_CAP = 64;
+/** A 24T clutch gear passes torque up to 2. Past that it slips and drives nothing. */
+export const SLIP_LIMIT = 2;
 
 export type Axis = "x" | "y" | "z";
-export type MechKind = "axle" | "gear" | "worm" | "crank" | "clutch" | "pulley" | "cam" | "wheel" | "diff";
+export type MechKind = "axle" | "gear" | "worm" | "crank" | "clutch" | "pulley" | "cam" | "wheel" | "diff" | "slip";
 
 export type MechPart = {
   x: number;
@@ -154,7 +156,7 @@ function meshing(p: MechPart): MechPart[] {
   const out: MechPart[] = [];
   if (!p.teeth) return out;
   for (const q of parts.values()) {
-    if (q === p || q.kind !== "gear" || !q.teeth || q.axis !== p.axis) continue;
+    if (q === p || (q.kind !== "gear" && q.kind !== "slip") || !q.teeth || q.axis !== p.axis) continue;
     const need = meshStuds(p.teeth, q.teeth);
     if (need !== (need | 0)) continue;
     if (beside(p, q, need)) out.push(q);
@@ -194,6 +196,7 @@ export function solveMech(seeds: { x: number; y: number; z: number; s: Frac }[] 
   let guard = 0;
   const push = (p: MechPart, s: Frac, t: Frac) => {
     if (guard >= MESH_CAP) return;
+    if (p.kind === "slip" && Math.abs(t.n) > SLIP_LIMIT * Math.abs(t.d)) return;
     const k = mkey(p.x, p.y, p.z);
     const prev = speeds.get(k);
     if (prev) {
@@ -223,7 +226,7 @@ export function solveMech(seeds: { x: number; y: number; z: number; s: Frac }[] 
     if (!(p.kind === "clutch" && p.open) && p.kind !== "diff") {
       for (const n of nearestShaft(p)) push(n, s, t);
     }
-    if (p.kind === "gear") {
+    if (p.kind === "gear" || p.kind === "slip") {
       for (const n of meshing(p)) push(n, mul(s, -p.teeth, n.teeth), mul(t, n.teeth, p.teeth));
     } else if (p.kind === "worm") {
       for (const n of wormDriven(p)) push(n, mul(s, -1, n.teeth), mul(t, n.teeth, 1));
