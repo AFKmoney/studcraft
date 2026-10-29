@@ -833,6 +833,12 @@ export const RECIPES: Recipe[] = [
     h: 3,
     cat: "build",
   }),
+  r("ring", "Driving ring", "1 gear + 1 axle", [[ID.Gear16, 1], [ID.Axle, 1]], ID.Ring, 1, {
+    shape: [ID.Gear16, ID.Axle],
+    w: 1,
+    h: 2,
+    cat: "build",
+  }),
 ];
 
 export const SMELT: Record<number, number> = {

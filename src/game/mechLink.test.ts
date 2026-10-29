@@ -24,6 +24,8 @@ const ids: MechBlockIds = {
   road: 23,
   belt: 24,
   trap: 25,
+  ring: 26,
+  ringLo: 27,
   water: 14,
   door: 15,
   doorOpen: 16,
@@ -194,5 +196,20 @@ describe("placed technic", () => {
     grid.set("0,0,0", 40);
     const held = stepMech(get, [{ x: 0, y: 3, z: 0 }, { x: 0, y: 2, z: 0 }, { x: 0, y: 1, z: 0 }], ids, 1);
     assert.deepEqual(held, []);
+  });
+
+  it("shifts a driving ring from 1:1 to 1:2", () => {
+    const grid = new Map<string, number>([
+      ["0,0,0", ids.crankOn],
+      ["0,1,0", ids.ring],
+      ["1,1,0", ids.axle],
+    ]);
+    const get = (x: number, y: number, z: number) => grid.get(x + "," + y + "," + z) ?? 0;
+    const cells = [{ x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, { x: 1, y: 1, z: 0 }];
+    stepMech(get, cells, ids, 0);
+    assert.deepEqual(speedAt(2, 2, 0), { n: 1, d: 1 });
+    grid.set("0,1,0", ids.ringLo);
+    stepMech(get, cells, ids, 0);
+    assert.deepEqual(speedAt(2, 2, 0), { n: 1, d: 2 });
   });
 });

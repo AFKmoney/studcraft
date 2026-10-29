@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-29 (Grok — hook stepBricks pour que Muse mesure la chute sans attendre les frames).
+**Last update:** 2026-10-29 (Grok — anneau de vitesse 365/366, rapport 1 ou 2).
 
 ## 2026-10-26 — v4.12: Engine performance, mob judder & floating animal parts (Muse, ordered by Philippe after his A54 test of v4.11)
 
@@ -2462,6 +2462,7 @@ Pitch : Minecraft, c'est un monde de cubes. Studs, c'est un monde de plastique �
   - [x] Roue (362) : au bout de l'essieu elle tourne avec lui. L'eau ne la lance pas (ça, c'est la roue à eau)
   - [x] Convoyeur (363) : un tour de l'essieu avance le bloc posé dessus d'une case. Case prise : il attend
   - [x] Piège (364) : un tour de l'essieu fait tomber le bloc posé dessus, à travers, si la case en dessous est libre
+  - [x] Anneau de vitesse (365/366) : clic droit, rapport 1 ou rapport 2. L'essieu à l'est prend le rapport. Le clic tient le choix.
 - [ ] **P4 · Son plastique** — clics, snaps, cliquetis 100 % synthétisés DSP, zéro asset
 
 ### Lane RPG
@@ -2506,7 +2507,7 @@ Toutes les 10 minutes, l'agent qui se réveille lit CE fichier et prend le derni
 
 ## P5 — PORTÉE ÉLARGIE par Philippe (2026-10-29 03:52 EDT) : « TOUT ce que LEGO Technic offre »
 Philippe : pas juste la mécanique — **les pièces ÉLECTRIQUES aussi**, pour que l'utilisateur puisse TOUT faire : véhicules, pelle mécanique, tout l'espace des possibles Technic. Le nord de P5 = le kit Technic complet en jeu. Livraison en couches (la physique reste LÉGÈRE — graphe de rotation borné/local, machines endormies au loin, un véhicule = UN assemblage rigide sur roues, pas un corps rigide par brique) :
-- [ ] **P5a · Drivetrain** — la liste courte est livrée (345–364), case parente ouverte : il manque encore l'anneau de vitesse (driving ring) pour qu'une boîte existe. Pas de redstone.
+- [ ] **P5a · Drivetrain** — liste courte + anneau livrés (345–366). Case parente ouverte : engrenage 40T, coniques, vérin. Pas de redstone. P2 (soudure) est à Muse.
 - [ ] **P5b · Électrique + conduite** : moteurs (tailles = couple/vitesse), hub/batterie, télécommande à canaux — le joueur LIE un hub et CONDUIT sa machine (véhicules qui roulent pour vrai sur le terrain)
 - [ ] **P5c · Pneumatique + vérins** : pompe (manuelle ou moteur), réservoir d'air, valves, cylindres V2 + vérins linéaires à vis — bras de pelle, flèches de grue, tourelles 28T/56T (une pelle qui CREUSE dans le monde voxel : le godet casse les blocs)
 - [ ] **P5d · Capteurs + automatisation** : capteurs (distance, inclinaison, couleur), logique simple sur hub — machines qui réagissent toutes seules
@@ -2639,8 +2640,19 @@ EN COURS au début de la passe. Fichiers : `blocks.ts`, `recipes.ts`, `mechLink.
 - QA : 20/20. `tsc` 0 erreur.
 - La liste courte P5a est finie. La case parente reste ouverte : sans anneau de vitesse, pas de boîte.
 
+### Next move — TAKEN and DONE (anneau 365/366)
+Ne pas le refaire. P2 (soudure) et P7 (IDs 400+) restent à Muse. Le résumé qui disait « le piège reste » était en retard : 364 est dans `8f97794`.
+
+### 2026-10-29 — Grok (anneau de vitesse, 365/366) — FAIT
+EN COURS au début de la passe. Fichiers : `blocks.ts`, `recipes.ts`, `mechLink.ts`, le clic droit et le bloc `mechAcc`. Pas `save.ts`, pas la soudure, pas les IDs 400+.
+
+- Bloc 365, rapport 1. Clic droit : bloc 366, rapport 2. L'essieu à l'est tourne à la même vitesse, ou à la moitié.
+- Craft : 1 engrenage 16T + 1 essieu. Aucun fichier de modèle. Le choix est le bloc, pas un champ de sauvegarde.
+- QA : 21/21. `tsc` 0 erreur.
+
 ### Next move — UNCLAIMED
-**P5a, prochaine pièce : l'anneau de vitesse (driving ring).** Clic droit : rapport 1 ou rapport 2. Bloc **365**. Sans lui, pas de boîte de vitesses (conclusion de recherche). Pas de `save.ts`, pas les zones briques de Muse, pas les IDs 400+. Avant P4, avant les sites de débris.
+**P5a, prochaine pièce : l'engrenage 40T.** Même entraxe catalogue, (N₁+N₂)/16. Bloc **367**. Pas de `save.ts`, pas la soudure de Muse, pas les IDs 400+. Avant P4, avant les sites de débris.
+
 
 
 

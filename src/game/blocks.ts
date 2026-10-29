@@ -368,6 +368,8 @@ export const ID = {
   Road: 362,
   Belt: 363,
   Trap: 364,
+  Ring: 365,
+  RingLo: 366,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -1215,6 +1217,8 @@ put(b(ID.UJoint, "Universal joint", "#8e959c", "#d0d4da", "#4a5058", "#f5c518", 
 put(b(ID.Road, "Road wheel", "#1a1a1a", "#3a3e44", "#8e959c", "#d0d4da", { hard: 0.4 }));
 put(b(ID.Belt, "Conveyor", "#2a2e32", "#f0c43a", "#1a1a1a", "#4a5058", { hard: 0.4 }));
 put(b(ID.Trap, "Trap", "#2a2e32", "#e23b2f", "#1a1a1a", "#4a5058", { hard: 0.4 }));
+put(b(ID.Ring, "Driving ring", "#f0c43a", "#f5c518", "#4a5058", "#d0d4da", { hard: 0.4 }));
+put(b(ID.RingLo, "Driving ring low", "#c4924a", "#f0c43a", "#4a5058", "#8e959c", { hard: 0.4 }));
 
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];

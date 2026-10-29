@@ -24,6 +24,8 @@ export type MechBlockIds = {
   road: number;
   belt: number;
   trap: number;
+  ring: number;
+  ringLo: number;
   water: number;
   door: number;
   doorOpen: number;
@@ -56,6 +58,7 @@ function specFor(id: number, ids: MechBlockIds): Spec | null {
   if (id === ids.road) return { kind: "wheel", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.belt) return { kind: "axle", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.trap) return { kind: "axle", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
+  if (id === ids.ring || id === ids.ringLo) return { kind: "axle", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   return null;
 }
 
@@ -151,12 +154,14 @@ export function stepMech(
   const racks: MechCell[] = [];
   const belts: MechCell[] = [];
   const traps: MechCell[] = [];
+  const rings: MechCell[] = [];
   const joints: MechCell[] = [];
   for (const c of cells) {
     const id = get(c.x, c.y, c.z);
     if (id === ids.rack) racks.push(c);
     if (id === ids.belt) belts.push(c);
     if (id === ids.trap) traps.push(c);
+    if (id === ids.ring || id === ids.ringLo) rings.push(c);
     const spec = specFor(id, ids);
     if (!spec) continue;
     let drive = spec.drive;
@@ -204,6 +209,12 @@ export function stepMech(
     const sp = speedAt(c.x * 2, c.y * 2, c.z * 2);
     if (!sp.n) continue;
     feeds.push({ x: (c.x + 1) * 2, y: c.y * 2, z: c.z * 2, s: sp });
+  }
+  for (const c of rings) {
+    const sp = speedAt(c.x * 2, c.y * 2, c.z * 2);
+    if (!sp.n) continue;
+    const low = get(c.x, c.y, c.z) === ids.ringLo;
+    feeds.push({ x: (c.x + 1) * 2, y: c.y * 2, z: c.z * 2, s: low ? { n: sp.n, d: sp.d * 2 } : sp });
   }
   if (feeds.length) solveMech(feeds);
   integrateMech(dt);
