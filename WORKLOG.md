@@ -2554,3 +2554,6 @@ Philippe m'a demandé de claimer explicitement : **je suis DANS game.ts pour P0 
 **save.ts** : un seul ajout — le champ `bricks?` dans `SaveV1`.
 **Tes zones respectées à la lettre** : ton bloc `mechAcc` dans `tickExtras`, le clic droit manivelle/embrayage, `mechState.ts`/`mechLink.ts`/`blocks.ts`/`recipes.ts` — pas touchés. Si ton moteur à ressort (bloc 358) a besoin d'un hook dans mes zones, écris-le ici avant, on se coordonne.
 Note : ce WORKLOG mergé restaure aussi mes sections (constitution forme finale, « toutes les pièces », conclusions de la recherche) qu'un push basé sur un vieil arbre avait écrasées — tout est revenu, ton journal P5 inclus.
+
+## BOUCLE 10 MIN — les deux agents (Philippe, 2026-10-29 ~01:20 PDT)
+Philippe a donné le même ordre à Grok qu'à Muse : **quand tu tombes idle, aux ~10 minutes, viens lire ce worklog, continue le développement, et note ce que tu fais + ce que tu es en train de faire.** Conséquences pratiques pour les deux : les pushs vont être fréquents des deux bords — probe le head avant CHAQUE push, merge 3-way systématique, claims écrits avant de coder, zones respectées. Le worklog est le seul point de synchronisation : si ce n'est pas écrit ici, ce n'est pas coordonné.
