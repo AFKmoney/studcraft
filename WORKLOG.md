@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-29 (Grok — crémaillère 360. Ressort 358 et différentiel 359 étaient déjà dans le code.)
+**Last update:** 2026-10-29 (Grok — cardan 361, l'essieu de côté tourne avec l'arbre).
 
 ## 2026-10-26 — v4.12: Engine performance, mob judder & floating animal parts (Muse, ordered by Philippe after his A54 test of v4.11)
 
@@ -2458,7 +2458,8 @@ Pitch : Minecraft, c'est un monde de cubes. Studs, c'est un monde de plastique �
   - [x] Moteur à ressort (358) : clic droit l'arme, il tourne, il s'arrête. Pas sauvé.
   - [x] Différentiel (359) : l'arbre en dessous et celui au-dessus, la sortie à l'est tourne à (A+B)/2
   - [x] Crémaillère (360) : un tour du pignon voisin la pousse d'une case vers +X, ou -X si le pignon tourne à l'envers
-  - [ ] Cardan, roues, convoyeur, piège
+  - [x] Cardan (361) : l'arbre vertical passe dans les essieux à l'est, même sens, sans les aligner
+  - [ ] Roues, convoyeur, piège
 - [ ] **P4 · Son plastique** — clics, snaps, cliquetis 100 % synthétisés DSP, zéro asset
 
 ### Lane RPG
@@ -2503,7 +2504,7 @@ Toutes les 10 minutes, l'agent qui se réveille lit CE fichier et prend le derni
 
 ## P5 — PORTÉE ÉLARGIE par Philippe (2026-10-29 03:52 EDT) : « TOUT ce que LEGO Technic offre »
 Philippe : pas juste la mécanique — **les pièces ÉLECTRIQUES aussi**, pour que l'utilisateur puisse TOUT faire : véhicules, pelle mécanique, tout l'espace des possibles Technic. Le nord de P5 = le kit Technic complet en jeu. Livraison en couches (la physique reste LÉGÈRE — graphe de rotation borné/local, machines endormies au loin, un véhicule = UN assemblage rigide sur roues, pas un corps rigide par brique) :
-- [ ] **P5a · Drivetrain** — livré par Grok jusqu'à 360 : essieux, engrenages 8/16/24, vis, embrayage, poulies, manivelle, roue à eau, moulin, came, ressort, différentiel (A+B)/2, crémaillère. Reste : cardans, roues, convoyeur, piège
+- [ ] **P5a · Drivetrain** — livré par Grok jusqu'à 361 : essieux, engrenages 8/16/24, vis, embrayage, poulies, manivelle, roue à eau, moulin, came, ressort, différentiel (A+B)/2, crémaillère, cardan. Reste : roues, convoyeur, piège
 - [ ] **P5b · Électrique + conduite** : moteurs (tailles = couple/vitesse), hub/batterie, télécommande à canaux — le joueur LIE un hub et CONDUIT sa machine (véhicules qui roulent pour vrai sur le terrain)
 - [ ] **P5c · Pneumatique + vérins** : pompe (manuelle ou moteur), réservoir d'air, valves, cylindres V2 + vérins linéaires à vis — bras de pelle, flèches de grue, tourelles 28T/56T (une pelle qui CREUSE dans le monde voxel : le godet casse les blocs)
 - [ ] **P5d · Capteurs + automatisation** : capteurs (distance, inclinaison, couleur), logique simple sur hub — machines qui réagissent toutes seules
@@ -2576,6 +2577,18 @@ C'était en cours pendant cette passe. Fichiers : `blocks.ts`, `recipes.ts`, `me
 - QA : 16/16. `tsc` 0 erreur.
 - Famille couverte : crémaillère. Pas encore : cardan, roues, convoyeur, piège.
 
+### Next move — TAKEN and DONE (cardan 361)
+Ne pas le refaire.
+
+### 2026-10-29 — Grok (cardan, 361) — FAIT
+EN COURS au début de la passe. Fichiers : `blocks.ts`, `recipes.ts`, `mechLink.ts`, bloc `mechAcc` seulement. Pas `save.ts`, pas les zones P0.
+
+- Bloc 361. Craft : 2 essieux + 1 bâton. Aucun fichier de modèle.
+- L'arbre vertical entre dans le cardan. Les essieux posés à l'est, sur la même rangée, tournent au même sens et à la même vitesse. Ils ne sont pas sur l'axe de l'arbre.
+- QA : 17/17. `tsc` 0 erreur.
+- Famille couverte : cardan. Pas encore : roues, convoyeur, piège.
+
 ### Next move — UNCLAIMED
-**P5a, prochaine pièce : le cardan.** Il laisse passer la rotation entre deux essieux qui ne sont pas dans le même axe. Bloc **361**. Pas de `save.ts`, pas les zones P0 de Muse. Avant P4, avant les sites de débris.
+**P5a, prochaine pièce : les roues.** Une roue au bout d'un essieu qui tourne. Bloc **362**. Pas un modèle : une fonction. Pas de `save.ts`, pas les zones P0 de Muse. Avant P4, avant les sites de débris.
+
 

@@ -809,6 +809,12 @@ export const RECIPES: Recipe[] = [
     h: 1,
     cat: "build",
   }),
+  r("ujoint", "Universal joint", "2 axles + 1 stick", [[ID.Axle, 2], [ID.Stick, 1]], ID.UJoint, 1, {
+    shape: [ID.Axle, ID.Stick, ID.Axle],
+    w: 3,
+    h: 1,
+    cat: "build",
+  }),
 ];
 
 export const SMELT: Record<number, number> = {

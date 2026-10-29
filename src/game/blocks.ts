@@ -364,6 +364,7 @@ export const ID = {
   Spring: 358,
   Diff: 359,
   Rack: 360,
+  UJoint: 361,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -1207,6 +1208,7 @@ put(b(ID.Mill, "Windmill", "#f4f1ea", "#ffffff", "#c5ccd3", "#8e959c", { hard: 0
 put(b(ID.Spring, "Spring motor", "#d0d4da", "#f4f6f8", "#8e959c", "#e23b2f", { hard: 0.4 }));
 put(b(ID.Diff, "Differential", "#4a4e55", "#f0c43a", "#3a3e44", "#f5c518", { hard: 0.4 }));
 put(b(ID.Rack, "Rack", "#6e767e", "#c5ccd3", "#4a5058", "#f0c43a", { hard: 0.4 }));
+put(b(ID.UJoint, "Universal joint", "#8e959c", "#d0d4da", "#4a5058", "#f5c518", { hard: 0.4 }));
 
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];
