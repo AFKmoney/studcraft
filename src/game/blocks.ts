@@ -380,6 +380,9 @@ export const ID = {
   // P6 La Fonderie (Muse): plastic pellets — the foundry feedstock that
   // broken plastic blocks and mobs yield (see plasticYield in game.ts).
   Pellets: 401,
+  // P6 step 2 (Muse): plastic ingot — pellets smelted in the Kiln
+  // (SMELT[401] = 402); the casting stock the colour moulds spend.
+  PlasticIngot: 402,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -826,6 +829,7 @@ item(ID.Rod, "Rod", "#6b3e22", { maxUse: 40 });
 item(ID.Shears, "Shears", "#c5ccd3", { maxUse: 80 });
 item(ID.Welder, "Welding torch", "#f07820", { maxUse: 120 });
 item(ID.Pellets, "Plastic pellets", "#e8dcc0");
+item(ID.PlasticIngot, "Plastic ingot", "#d9c58f");
 item(ID.Bone, "Bone", "#f4f1ea");
 item(ID.Flint, "Spark", "#f07820", { maxUse: 40 });
 item(ID.Bottle, "Bottle", "#d5f3f6");
@@ -1402,6 +1406,7 @@ export const CATALOG = [
   ID.Shears,
   ID.Welder,
   ID.Pellets,
+  ID.PlasticIngot,
   ID.Flint,
   ID.Boat,
   ID.Cart,

@@ -318,6 +318,11 @@ declare global {
       weldAt?: (sx1: number, sy1: number, sz1: number, sx2: number, sy2: number, sz2: number) => boolean;
       getWelds?: () => { count: number; pairs: string[]; welded: string[] };
       plasticYieldOf?: (id: number) => number;
+      smeltOf?: (id: number) => number;
+      stageFurnace?: (x: number, y: number, z: number, inId: number, inN: number, fuelId: number, fuelN: number) => { in: number; inN: number; fuel: number; fuelN: number; out: number; outN: number; cook: number; burn: number };
+      getFurnace?: (x: number, y: number, z: number) => { in: number; inN: number; fuel: number; fuelN: number; out: number; outN: number; cook: number; burn: number } | null;
+      stepFurnace?: (dt: number) => boolean;
+      craftOf?: (recipeId: string) => boolean;
     };
   }
 }
@@ -11605,6 +11610,37 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
   }
 
+  // P6 step 2 (Muse): the Kiln tick, extracted verbatim from frameBody
+  // so the QA rig can advance it deterministically (stepFurnace hook —
+  // the stepBricks precedent: rig frames run far slower than game time,
+  // so a 5 s cook would otherwise take minutes of wall time to observe).
+  function tickFurnaces(dt: number) {
+    for (const f of furnaces.values()) {
+      if (Math.hypot(f.x - player.x, f.z - player.z) > 20) continue;
+      if (f.burn > 0) f.burn -= dt;
+      const product = SMELT[f.in];
+      const can = !!product && f.inN > 0 && (f.out === 0 || f.out === product) && f.outN < 64 && product !== f.in;
+      if (f.burn <= 0 && can && f.fuelN > 0 && fuelTime(f.fuel) > 0) {
+        f.burn = fuelTime(f.fuel) * (skills.has("kiln") ? 1.6 : 1);
+        f.fuelN -= 1;
+        if (f.fuelN <= 0) f.fuel = 0;
+        saveDirty = true;
+      }
+      if (f.burn > 0 && can) {
+        f.cook += dt;
+        if (f.cook >= 5) {
+          f.cook = 0;
+          f.inN -= 1;
+          if (f.inN <= 0) f.in = 0;
+          f.out = product;
+          f.outN += 1;
+          gainXp(product === ID.Ingot || product === ID.Tin || product === ID.Copper || product === ID.Amber || product === ID.Chrome || product === ID.Sapphire || product === ID.Resin || product === ID.Prism ? 2 : 1);
+          saveDirty = true;
+        }
+      } else if (f.cook > 0) f.cook = Math.max(0, f.cook - dt * 2);
+    }
+  }
+
   function frameBody() {
     timer.update();
     const dt = Math.min(timer.getDelta(), 0.05);
@@ -11724,30 +11760,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       tickRedstone(dt);
       tickFire(dt);
-      for (const f of furnaces.values()) {
-        if (Math.hypot(f.x - player.x, f.z - player.z) > 20) continue;
-        if (f.burn > 0) f.burn -= dt;
-        const product = SMELT[f.in];
-        const can = !!product && f.inN > 0 && (f.out === 0 || f.out === product) && f.outN < 64 && product !== f.in;
-        if (f.burn <= 0 && can && f.fuelN > 0 && fuelTime(f.fuel) > 0) {
-          f.burn = fuelTime(f.fuel) * (skills.has("kiln") ? 1.6 : 1);
-          f.fuelN -= 1;
-          if (f.fuelN <= 0) f.fuel = 0;
-          saveDirty = true;
-        }
-        if (f.burn > 0 && can) {
-          f.cook += dt;
-          if (f.cook >= 5) {
-            f.cook = 0;
-            f.inN -= 1;
-            if (f.inN <= 0) f.in = 0;
-            f.out = product;
-            f.outN += 1;
-            gainXp(product === ID.Ingot || product === ID.Tin || product === ID.Copper || product === ID.Amber || product === ID.Chrome || product === ID.Sapphire || product === ID.Resin || product === ID.Prism ? 2 : 1);
-            saveDirty = true;
-          }
-        } else if (f.cook > 0) f.cook = Math.max(0, f.cook - dt * 2);
-      }
+      tickFurnaces(dt);
       lightAcc += dt;
       if (lightAcc > 0.16) {
         lightAcc = 0;
@@ -12132,6 +12145,31 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     },
     // P6 QA hook: the foundry yield table itself (inert in play).
     plasticYieldOf: (id: number) => plasticYield(id),
+    // P6 step 2 QA hooks (inert in play): the SMELT gate table, a furnace
+    // staged through the same ensureFurnace the panel uses, a snapshot
+    // witness, a deterministic tick of the REAL tickFurnaces (the
+    // stepBricks precedent), and the real api.craft path by recipe id.
+    smeltOf: (id: number) => SMELT[id] ?? 0,
+    stageFurnace: (x: number, y: number, z: number, inId: number, inN: number, fuelId: number, fuelN: number) => {
+      const fx = Math.floor(x), fy = Math.floor(y), fz = Math.floor(z);
+      const f = ensureFurnace(fx + "," + fy + "," + fz, fx, fy, fz);
+      f.in = inId; f.inN = inN; f.fuel = fuelId; f.fuelN = fuelN; f.out = 0; f.outN = 0; f.cook = 0; f.burn = 0;
+      saveDirty = true;
+      return { in: f.in, inN: f.inN, fuel: f.fuel, fuelN: f.fuelN, out: f.out, outN: f.outN, cook: f.cook, burn: f.burn };
+    },
+    getFurnace: (x: number, y: number, z: number) => {
+      const f = furnaces.get(Math.floor(x) + "," + Math.floor(y) + "," + Math.floor(z));
+      if (!f) return null;
+      return { in: f.in, inN: f.inN, fuel: f.fuel, fuelN: f.fuelN, out: f.out, outN: f.outN, cook: f.cook, burn: f.burn };
+    },
+    stepFurnace: (dt: number) => {
+      tickFurnaces(Math.max(0, Math.min(dt, 6)));
+      return true;
+    },
+    craftOf: (recipeId: string) => {
+      api.craft(recipeId, 1);
+      return true;
+    },
     getWelds: () => {
       const welded = new Set<string>();
       for (const w of welds) {

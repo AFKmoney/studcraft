@@ -869,6 +869,65 @@ export const RECIPES: Recipe[] = [
     h: 2,
     cat: "build",
   }),
+  // P6 step 2 (Muse) — Kiln casting: the colour moulds. The donor brick is
+  // the pigment/master: it is consumed into the melt, 4 plastic ingots
+  // (smelted pellets) join it, and the mould pours 2 bricks of its colour.
+  // Net +1 brick per cast; pellets come from breaking plastic (2 per colour
+  // brick), so a cast costs 2 broken colour bricks + kiln fuel and time.
+  r("cast-red", "Cast red bricks", "4 ingots + 1 red → 2", [[ID.PlasticIngot, 4], [ID.Red, 1]], ID.Red, 2, {
+    shape: [ID.PlasticIngot, ID.PlasticIngot, ID.PlasticIngot, ID.PlasticIngot, ID.Red, 0],
+    w: 3,
+    h: 2,
+    cat: "build",
+  }),
+  r("cast-orange", "Cast orange bricks", "4 ingots + 1 orange → 2", [[ID.PlasticIngot, 4], [ID.Orange, 1]], ID.Orange, 2, {
+    shape: [ID.PlasticIngot, ID.PlasticIngot, ID.PlasticIngot, ID.PlasticIngot, ID.Orange, 0],
+    w: 3,
+    h: 2,
+    cat: "build",
+  }),
+  r("cast-yellow", "Cast yellow bricks", "4 ingots + 1 yellow → 2", [[ID.PlasticIngot, 4], [ID.Yellow, 1]], ID.Yellow, 2, {
+    shape: [ID.PlasticIngot, ID.PlasticIngot, ID.PlasticIngot, ID.PlasticIngot, ID.Yellow, 0],
+    w: 3,
+    h: 2,
+    cat: "build",
+  }),
+  r("cast-green", "Cast green bricks", "4 ingots + 1 green → 2", [[ID.PlasticIngot, 4], [ID.Green, 1]], ID.Green, 2, {
+    shape: [ID.PlasticIngot, ID.PlasticIngot, ID.PlasticIngot, ID.PlasticIngot, ID.Green, 0],
+    w: 3,
+    h: 2,
+    cat: "build",
+  }),
+  r("cast-blue", "Cast blue bricks", "4 ingots + 1 blue → 2", [[ID.PlasticIngot, 4], [ID.Blue, 1]], ID.Blue, 2, {
+    shape: [ID.PlasticIngot, ID.PlasticIngot, ID.PlasticIngot, ID.PlasticIngot, ID.Blue, 0],
+    w: 3,
+    h: 2,
+    cat: "build",
+  }),
+  r("cast-azure", "Cast azure bricks", "4 ingots + 1 azure → 2", [[ID.PlasticIngot, 4], [ID.Azure, 1]], ID.Azure, 2, {
+    shape: [ID.PlasticIngot, ID.PlasticIngot, ID.PlasticIngot, ID.PlasticIngot, ID.Azure, 0],
+    w: 3,
+    h: 2,
+    cat: "build",
+  }),
+  r("cast-pink", "Cast pink bricks", "4 ingots + 1 pink → 2", [[ID.PlasticIngot, 4], [ID.Pink, 1]], ID.Pink, 2, {
+    shape: [ID.PlasticIngot, ID.PlasticIngot, ID.PlasticIngot, ID.PlasticIngot, ID.Pink, 0],
+    w: 3,
+    h: 2,
+    cat: "build",
+  }),
+  r("cast-white", "Cast white bricks", "4 ingots + 1 white → 2", [[ID.PlasticIngot, 4], [ID.White, 1]], ID.White, 2, {
+    shape: [ID.PlasticIngot, ID.PlasticIngot, ID.PlasticIngot, ID.PlasticIngot, ID.White, 0],
+    w: 3,
+    h: 2,
+    cat: "build",
+  }),
+  r("cast-black", "Cast black bricks", "4 ingots + 1 black → 2", [[ID.PlasticIngot, 4], [ID.Black, 1]], ID.Black, 2, {
+    shape: [ID.PlasticIngot, ID.PlasticIngot, ID.PlasticIngot, ID.PlasticIngot, ID.Black, 0],
+    w: 3,
+    h: 2,
+    cat: "build",
+  }),
 ];
 
 export const SMELT: Record<number, number> = {
@@ -889,6 +948,10 @@ export const SMELT: Record<number, number> = {
   [ID.PrismOre]: ID.Prism,
   [ID.Potato]: ID.BakedPotato,
   [ID.Fish]: ID.CookedFish,
+  // P6 step 2 (Muse): the Kiln is the foundry — pellets melt down 1:1
+  // into casting ingots (5 s cook each, like every SMELT row); the cost
+  // of casting lives in the mould recipes above, not in the melt.
+  [ID.Pellets]: ID.PlasticIngot,
 };
 
 export function fuelTime(id: number): number {
