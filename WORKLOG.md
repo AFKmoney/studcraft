@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-29 (Grok — clic de pose P4, deux tons synthétisés, aucun fichier audio).
+**Last update:** 2026-10-29 (Grok — snap P4, un tic plus haut et plus court quand une brique s'assoit).
 
 ## 2026-10-26 — v4.12: Engine performance, mob judder & floating animal parts (Muse, ordered by Philippe after his A54 test of v4.11)
 
@@ -2469,7 +2469,7 @@ Pitch : Minecraft, c'est un monde de cubes. Studs, c'est un monde de plastique �
   - [x] Tourelle (371) : un tour fait passer le bloc du dessus à la case suivante, sens horaire : dessus, est, sud, ouest, nord, puis retour.
   - [x] Embrayage 24T (372) : sur l'arbre, couple 1, il entraîne. Mené par un 8T, couple 3, il patine et l'essieu derrière ne tourne pas.
   - [x] Pneumatique, le lot (373 pompe, 374 cylindre, 375 valve, 376 réservoir) : valve fermée, l'air reste dans le réservoir (plafond 4). Valve ouverte, un tour pousse le cylindre et dépense 1. Un tour à l'envers le ramène. L'air n'est pas sauvé.
-- [ ] **P4 · Son plastique** — le clic de pose est livré (deux tons, aucun fichier). Reste : le snap, le cliquetis de casse. Zéro asset.
+- [ ] **P4 · Son plastique** — pose et snap livrés, synthétisés, aucun fichier. Reste : le cliquetis de casse. Zéro asset.
 
 ### Lane RPG
 - [x] R1 : 4 chaînes de quêtes, 38 quêtes, journal par chaîne
@@ -2729,8 +2729,21 @@ EN COURS au début de la passe. Fichier : `audio.ts` seulement, plus un test. Pa
 - Le test lit le fichier source : pas de wav, mp3, ogg, ni de décodage.
 - QA : 28/28. `tsc` 0 erreur.
 
+### Next move — TAKEN and DONE (snap)
+Ne pas le refaire. P8 (inventaire, retraits, machines) est à Muse. Pas de `save.ts`. Pas qa96.
+
+### 2026-10-29 — Grok (snap) — FAIT
+J'ai lu la directive P8 de 12:46. Elle est claimée par Muse, `recipes.ts` en coordination. Je n'y touche pas. La chaîne qa96 est la sienne aussi.
+
+EN COURS au début de la passe. Fichiers : `audio.ts`, une ligne dans `placeBrickNow`, le test.
+
+- Le snap est un seul tic, 2480 Hz, 8 ms. Plus haut et plus court que la pose (1860 Hz, 12 ms).
+- Il joue quand une brique s'assoit. La pose d'un bloc voxel garde le clic de pose.
+- Aucun fichier audio. QA : 29/29. `tsc` 0 erreur.
+
 ### Next move — UNCLAIMED
-**P4, le snap.** Un clic synthétisé, plus court et plus haut que la pose, joué quand une brique s'assoit. Pas un fichier. Pas de `save.ts`, pas les IDs 400+, pas qa96. Avant les sites de débris.
+**P4, le cliquetis de casse.** Un son synthétisé, plus grave que le snap, joué quand une brique casse. Pas un fichier. Pas de `save.ts`, pas les IDs 400+, pas P8, pas qa96. Avant les sites de débris.
+
 
 
 

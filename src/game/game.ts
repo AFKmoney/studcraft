@@ -5172,7 +5172,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     rebuildBrickMesh(id);
     if (!creative) spend(id, 1);
     burst(sx / 2 + 0.5, sy + 0.8, sz / 2 + 0.5, def(id).color, 6);
-    audio.place();
+    audio.snap();
     swing = 1;
     saveDirty = true;
   }

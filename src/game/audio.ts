@@ -4,6 +4,9 @@ export const PLACE_CLICK = [
   { freq: 740, dur: 0.034, type: "triangle" as const, gain: 0.028 },
 ];
 
+/** Stud seat: one tick, higher and shorter than the place click. No sample. */
+export const SNAP_CLICK = [{ freq: 2480, dur: 0.008, type: "square" as const, gain: 0.032 }];
+
 export function createAudio() {
   let ctx: AudioContext | null = null;
   let bus: GainNode | null = null;
@@ -104,7 +107,7 @@ export function createAudio() {
       for (const n of PLACE_CLICK) tone(n.freq, n.dur, n.type, n.gain);
     },
     snap() {
-      tone(680, 0.04, "square", 0.03);
+      for (const n of SNAP_CLICK) tone(n.freq, n.dur, n.type, n.gain);
     },
     mine() {
       noise(0.05, 0.04, 1200);
