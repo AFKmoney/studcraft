@@ -332,7 +332,7 @@ export const RECIPES: Recipe[] = [
     h: 2,
     cat: "magic",
   }),
-  r("bow", "Bow", "3 sticks + 3 string", [[S, 3], [ID.String, 3]], ID.Bow, 1, {
+  r("bow", "Arc / Bow", "3 sticks + 3 string", [[S, 3], [ID.String, 3]], ID.Bow, 1, {
     shape: [0, S, ID.String, S, 0, ID.String, 0, S, ID.String],
     w: 3,
     h: 3,

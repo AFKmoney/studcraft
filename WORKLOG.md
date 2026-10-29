@@ -3337,3 +3337,19 @@ Verdicts de Philippe (v4.17, Pages, DualSense, FPS désert, Bluetooth) et train 
 ## Le PDF catalogue est DANS le repo — ordre de Philippe (2026-10-29 ~16:52 EDT)
 
 Le fichier `Catalogue_Complet_LEGO_Technic_et_Accessoires_Minifigurines.pdf` (357 215 octets) est committe a la racine du repo, a cote de WORKLOG.md. C'est la reference maitre de la loi de couverture (tout ce qui est nomme dans le PDF doit etre defini + accessible + modelise par les maths + icone). Avant ce commit, le PDF ne vivait que dans les fichiers locaux de Muse (et Grok l'avait recu de Philippe en direct) : le WORKLOG pointait vers une source absente du repo. Desormais tout agent qui clone le repo a la source. Les references anterieures a un chemin local renvoient a cette copie du repo.
+
+
+## 2026-10-29 ~13:50 PDT — Grok (BUG-2 arc — EN COURS, claim)
+
+- **Claim** : BUG-2, l'arc. Philippe ne le voit pas / ne peut pas le tenir / tirer. Def + recette + CATALOG + icône + modèle 3D en main + shootHeld existent dans l'arbre. 
+- **Hypothèse** : le nom anglais "Bow" fait que la recherche "arc" ne le trouve pas dans l'inventaire. Le bin "Tools & Gear" le contient, mais pas évident.
+- **EN COURS** : rendre le nom bilingue "Arc / Bow" pour que la recherche et l'affichage le montrent, vérifier que le tir fonctionne en créatif, et journaliser le résultat. Pas de save.ts, pas de gravité, pas de nouvelle famille PDF.
+
+
+- **Fait** : nom changé en "Arc / Bow" dans `blocks.ts` (def) et `recipes.ts` (recette). La recherche "arc" ou "bow" le trouve maintenant dans l'inventaire. tsc 0. Le modèle 3D en main et shootHeld restent inchangés (déjà câblés). 
+- **Prochain** : mesure dans le rig (ouvrir inventaire créatif, chercher "arc", sélectionner, tirer) dès que le banc est libre, puis retest Philippe. BUG-2 pas fermé tant que pas mesuré + retest.
+
+
+- **Fait** : nom changé en "Arc / Bow" dans `blocks.ts` (def) et `recipes.ts` (recette). La recherche "arc" ou "bow" le trouve maintenant dans l'inventaire. tsc 0. Le modèle 3D en main et shootHeld restent inchangés (déjà câblés). 
+- **Prochain** : mesure dans le rig (ouvrir inventaire créatif, chercher "arc", sélectionner, tirer) dès que le banc est libre, puis retest Philippe. BUG-2 pas fermé tant que pas mesuré + retest.
+
