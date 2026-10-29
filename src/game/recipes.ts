@@ -1077,6 +1077,73 @@ export const RECIPES: Recipe[] = [
     cat: "build",
   }),
 
+  r("dbevel12", "Double bevel 12T", "1 bevel 12T + 1 axle", [[ID.Bevel12, 1], [ID.Axle, 1]], ID.DBevel12, 1, {
+    shape: [ID.Bevel12, ID.Axle],
+    w: 2,
+    h: 1,
+    cat: "build",
+  }),
+  r("dbevel20", "Double bevel 20T", "1 bevel 20T + 1 axle", [[ID.Bevel20, 1], [ID.Axle, 1]], ID.DBevel20, 1, {
+    shape: [ID.Bevel20, ID.Axle],
+    w: 2,
+    h: 1,
+    cat: "build",
+  }),
+  r("dbevel36", "Double bevel 36T", "1 gear 24T + 1 bevel 12T", [[ID.Gear24, 1], [ID.Bevel12, 1]], ID.DBevel36, 1, {
+    shape: [ID.Gear24, ID.Bevel12],
+    w: 2,
+    h: 1,
+    cat: "build",
+  }),
+  r("rack4", "Rack 1×4", "1 rack + 1 plank", [[ID.Rack, 1], [ID.Planks, 1]], ID.Rack4, 1, {
+    shape: [ID.Rack, ID.Planks],
+    w: 2,
+    h: 1,
+    cat: "build",
+  }),
+  r("rack7", "Rack 1×7", "1 rack4 + 1 liftarm3", [[ID.Rack4, 1], [ID.Liftarm3, 1]], ID.Rack7, 1, {
+    shape: [ID.Rack4, ID.Liftarm3],
+    w: 2,
+    h: 1,
+    cat: "build",
+  }),
+  r("rack14", "Rack 1×14", "2 rack7", [[ID.Rack7, 2]], ID.Rack14, 1, {
+    shape: [ID.Rack7, ID.Rack7],
+    w: 2,
+    h: 1,
+    cat: "build",
+  }),
+  r("cvjoint", "CV joint", "1 universal joint + 1 axle", [[ID.UJoint, 1], [ID.Axle, 1]], ID.CVJoint, 1, {
+    shape: [ID.UJoint, ID.Axle],
+    w: 2,
+    h: 1,
+    cat: "build",
+  }),
+  r("actmini", "Linear actuator mini", "1 actuator + 1 stick", [[ID.Actuator, 1], [ID.Stick, 1]], ID.ActMini, 1, {
+    shape: [ID.Actuator, ID.Stick],
+    w: 1,
+    h: 2,
+    cat: "build",
+  }),
+  r("actxl", "Linear actuator XL", "1 actuator + 1 liftarm5", [[ID.Actuator, 1], [ID.Liftarm5, 1]], ID.ActXL, 1, {
+    shape: [ID.Actuator, ID.Liftarm5],
+    w: 1,
+    h: 2,
+    cat: "build",
+  }),
+  r("turn28", "Turntable 28T", "1 turntable + 1 gear 16T", [[ID.Turret, 1], [ID.Gear16, 1]], ID.Turn28, 1, {
+    shape: [ID.Turret, ID.Gear16],
+    w: 2,
+    h: 1,
+    cat: "build",
+  }),
+  r("turn56", "Turntable 56T", "1 turn28 + 1 gear 24T", [[ID.Turn28, 1], [ID.Gear24, 1]], ID.Turn56, 1, {
+    shape: [ID.Turn28, ID.Gear24],
+    w: 2,
+    h: 1,
+    cat: "build",
+  }),
+
   // P6 step 2 (Muse) — Kiln casting: the colour moulds. The donor brick is
   // the pigment/master: it is consumed into the melt, 4 plastic ingots
   // (smelted pellets) join it, and the mould pours 2 bricks of its colour.

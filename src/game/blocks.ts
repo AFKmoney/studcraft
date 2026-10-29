@@ -406,6 +406,18 @@ export const ID = {
   Triangle: 397,
   Hub: 398,
   Knuckle: 399,
+  // CAT-04 variants + panels (Grok, range 423-440 reserved 2026-10-29)
+  DBevel12: 423,
+  DBevel20: 424,
+  DBevel36: 425,
+  Rack4: 426,
+  Rack7: 427,
+  Rack14: 428,
+  CVJoint: 429,
+  ActMini: 430,
+  ActXL: 431,
+  Turn28: 432,
+  Turn56: 433,
   // Muse lane (P2 welding): IDs 400+ are reserved for the brick-layer
   // pillars so they can never collide with Grok's Technic catalogue.
   Welder: 400,
@@ -1354,6 +1366,18 @@ put(b(ID.Shock, "Shock absorber", "#c4924a", "#e0b15a", "#8d5a34", "#6d4426", { 
 put(b(ID.Triangle, "Suspension triangle", "#4a5058", "#6e767e", "#2a2e32", "#1a1a1a", { hard: 0.4 }));
 put(b(ID.Hub, "Hub", "#2a2e32", "#4a5058", "#1a1a1a", "#0e0e0e", { hard: 0.4 }));
 put(b(ID.Knuckle, "Steering knuckle", "#3a3e44", "#5a5e66", "#2a2e32", "#1a1a1a", { hard: 0.4 }));
+// CAT-04 variants
+put(b(ID.DBevel12, "Double bevel 12T", "#5a7d8c", "#8eb4c4", "#3a5560", "#d0d4da", { hard: 0.4 }));
+put(b(ID.DBevel20, "Double bevel 20T", "#3a5560", "#5a7d8c", "#2a3e48", "#f0c43a", { hard: 0.4 }));
+put(b(ID.DBevel36, "Double bevel 36T", "#2a3e48", "#3a5560", "#1a2a30", "#f0c43a", { hard: 0.4 }));
+put(b(ID.Rack4, "Rack 1×4", "#6e767e", "#c5ccd3", "#4a5058", "#f0c43a", { hard: 0.4 }));
+put(b(ID.Rack7, "Rack 1×7", "#6e767e", "#c5ccd3", "#4a5058", "#f0c43a", { hard: 0.4 }));
+put(b(ID.Rack14, "Rack 1×14", "#6e767e", "#c5ccd3", "#4a5058", "#f0c43a", { hard: 0.4 }));
+put(b(ID.CVJoint, "CV joint", "#8e959c", "#d0d4da", "#4a5058", "#f5c518", { hard: 0.4 }));
+put(b(ID.ActMini, "Linear actuator mini", "#4a5058", "#e23b2f", "#2a2e32", "#d0d4da", { hard: 0.4 }));
+put(b(ID.ActXL, "Linear actuator XL", "#4a5058", "#e23b2f", "#2a2e32", "#d0d4da", { hard: 0.4 }));
+put(b(ID.Turn28, "Turntable 28T", "#2a2e32", "#f0c43a", "#1a1a1a", "#8e959c", { hard: 0.4 }));
+put(b(ID.Turn56, "Turntable 56T", "#2a2e32", "#f0c43a", "#1a1a1a", "#8e959c", { hard: 0.4 }));
 
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];
@@ -1771,6 +1795,17 @@ export const CATALOG = [
   ID.Triangle,
   ID.Hub,
   ID.Knuckle,
+  ID.DBevel12,
+  ID.DBevel20,
+  ID.DBevel36,
+  ID.Rack4,
+  ID.Rack7,
+  ID.Rack14,
+  ID.CVJoint,
+  ID.ActMini,
+  ID.ActXL,
+  ID.Turn28,
+  ID.Turn56,
 ];
 
 /** Parts the player can take from the Technic bin. Click-states stay out. */
@@ -1827,6 +1862,17 @@ export const TECHNIC = [
   ID.Triangle,
   ID.Hub,
   ID.Knuckle,
+  ID.DBevel12,
+  ID.DBevel20,
+  ID.DBevel36,
+  ID.Rack4,
+  ID.Rack7,
+  ID.Rack14,
+  ID.CVJoint,
+  ID.ActMini,
+  ID.ActXL,
+  ID.Turn28,
+  ID.Turn56,
 ] as const;
 
 export const COLORS = [ID.Red, ID.Orange, ID.Yellow, ID.Green, ID.Blue, ID.Azure, ID.Pink, ID.White, ID.Black];

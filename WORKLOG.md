@@ -3411,3 +3411,12 @@ Le fichier `Catalogue_Complet_LEGO_Technic_et_Accessoires_Minifigurines.pdf` (35
 - **Prochain** : panneaux fairing (nouvelle plage d’IDs à réserver) ou variantes CAT-04 manquantes (coniques doubles, racks multi-longueurs, CV joint, etc.). Continuer.
 
 
+
+## 2026-10-29 ~14:23 PDT — Grok (CAT-04 variantes — DONE)
+
+- **Claim** : variantes manquantes de CAT-04. Plage 423–440 réservée.
+- **Fait** : Double bevel 12T/20T/36T, Rack 1×4/1×7/1×14, CV joint, Mini + XL actuator, Turntable 28T/56T (IDs 423–433). Placeables, recettes, CATALOG + TECHNIC. Géométrie math : double disques + dents, crémaillères longues, cardan, vérins télescopiques, couronnes.
+- **QA** : tsc 0, catalog.test.ts (TECHNIC.length = 63) pass. Pas de save.ts.
+- **Prochain** : moteur à pistons (cylindre/piston/bielle) ou panneaux fairing, ou pneumatique tuyaux. Continuer sans arrêt.
+
+

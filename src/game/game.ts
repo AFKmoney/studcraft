@@ -1840,6 +1840,46 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       return { group, isTool: false, flames };
     }
+    if (id === ID.DBevel12 || id === ID.DBevel20 || id === ID.DBevel36) {
+      const teeth = id === ID.DBevel12 ? 12 : id === ID.DBevel20 ? 20 : 36;
+      const r = (teeth * 0.5) / 16 * s * 2.2;
+      addCylPart(group, r * 0.7, r * 0.7, s * 0.12, 0, s * 0.04, 0, techMat, 20);
+      addCylPart(group, r * 0.7, r * 0.7, s * 0.12, 0, -s * 0.04, 0, techMat, 20);
+      for (let i = 0; i < Math.min(teeth, 16); i++) {
+        const a = (i / Math.min(teeth, 16)) * Math.PI * 2;
+        addBoxPart(group, s * 0.04, s * 0.08, s * 0.04, Math.cos(a) * r, 0, Math.sin(a) * r, techMat);
+      }
+      return { group, isTool: false, flames };
+    }
+    if (id === ID.Rack4 || id === ID.Rack7 || id === ID.Rack14) {
+      const n = id === ID.Rack4 ? 4 : id === ID.Rack7 ? 7 : 14;
+      const len = n * s * 0.12;
+      addBoxPart(group, s * 0.1, s * 0.08, len, 0, 0, 0, techMat);
+      for (let i = 0; i < n; i++) {
+        const z = (i - (n - 1) / 2) * s * 0.12;
+        addBoxPart(group, s * 0.04, s * 0.06, s * 0.04, s * 0.08, 0, z, techMat);
+      }
+      return { group, isTool: false, flames };
+    }
+    if (id === ID.CVJoint) {
+      addCylPart(group, s * 0.06, s * 0.06, s * 0.3, 0, 0, -s * 0.15, techMat, 10);
+      addCylPart(group, s * 0.06, s * 0.06, s * 0.3, 0, 0, s * 0.15, techMat, 10);
+      addCylPart(group, s * 0.1, s * 0.1, s * 0.12, 0, 0, 0, skin(0xf5c518), 12);
+      return { group, isTool: false, flames };
+    }
+    if (id === ID.ActMini || id === ID.ActXL) {
+      const len = id === ID.ActMini ? s * 0.5 : s * 1.1;
+      addCylPart(group, s * 0.08, s * 0.08, len, 0, 0, 0, techMat, 12);
+      addCylPart(group, s * 0.05, s * 0.05, len * 0.6, 0, 0, len * 0.2, skin(0xe23b2f), 10);
+      return { group, isTool: false, flames };
+    }
+    if (id === ID.Turn28 || id === ID.Turn56) {
+      const teeth = id === ID.Turn28 ? 28 : 56;
+      const r = (teeth * 0.5) / 16 * s * 1.8;
+      addCylPart(group, r, r, s * 0.08, 0, 0, 0, techMat, 32);
+      addCylPart(group, r * 0.6, r * 0.6, s * 0.1, 0, 0, 0, skin(0xf0c43a), 20);
+      return { group, isTool: false, flames };
+    }
 
     if (id === ID.Brew) {
       const stoneMat = skin(0x70757d);
