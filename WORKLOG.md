@@ -2522,3 +2522,7 @@ Avant de construire les sites de débris et le kit Technic complet, recherche pr
 - [ ] **Sites de débris / wreck loot en génération de monde** : placement procédural crédible (biomes, densité, rareté), tables de loot par type de site, équilibrage fabriquer-vs-trouver pour ne pas tuer le crafting ni la fonderie
 - [ ] **Design « tout construire »** : quelles limites restent INVISIBLES pour le joueur (bornes de graphe, sommeil des machines) vs celles qui frustrent; leçons des sandboxes qui ont réussi/échoué là-dessus
 Statut : recherche lancée par Muse le 2026-10-29 (rapport à venir — les conclusions iront dans les sections P5 et Sites de débris).
+
+## CONSTITUTION — FORME FINALE (Philippe, 2026-10-29 03:55 EDT)
+**« Tout construire ce qui est possible de construire en LEGO dans la vie réelle. TOUTES les pièces. »**
+La bibliothèque de pièces du jeu converge vers le catalogue LEGO réel complet (System + Technic) : chaque FAMILLE et chaque classe de géométrie qui existe pour vrai doit exister en jeu — briques, plaques, tuiles, pentes, courbes, liftarms, pins, essieux, engrenages, moteurs, pneumatique, tout. Critère d'achèvement mesurable : le registre de pièces audité contre les catégories BrickLink/Rebrickable jusqu'à couverture complète par famille (c'est la piste « taxonomie » de la recherche approfondie, promue critère officiel). Faisable grâce à la doctrine du jeu : une pièce n'est pas un fichier — c'est une fonction (géométrie procédurale SRN), donc le catalogue complet ne pèse rien.
