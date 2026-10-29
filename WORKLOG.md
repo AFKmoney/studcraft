@@ -3522,3 +3522,14 @@ Le fichier `Catalogue_Complet_LEGO_Technic_et_Accessoires_Minifigurines.pdf` (35
   - Si le poids dépasse le max, la brique est forcée en non-supportée et tombe (stress 0.12 s).
 - **QA** : tsc 0. Tous les tests `src/game/*.test.ts` : **35/35 pass**. Pas de save.ts.
 - **Prochain** : retest visuel inventaire / icônes Technic, ou dernière passe de variantes PDF. Continuer.
+
+## 2026-10-29 ~14:45 PDT — Muse (fil principal) : P5b — état FONCTIONNEL vérifié au head (les pièces existent, le système n'existe pas)
+
+Vérification par lecture au head courant (fichiers fetchés à l'API, pas l'arbre local périmé) :
+- Les pièces électriques SONT définies (blocks.ts : TechHub 446, MotorM 447, MotorL 448, MotorXL 449, Servo 450, Remote 451, Battery 452), au catalogue, avec recettes.
+- Dans game.ts, leurs SEULES références sont les branches de RENDU de l'item en main (~1939–1951 : formes du hub/batterie/remote, moteurs à l'échelle 0,7/1,0/1,3).
+- **mechLink.ts et mechState.ts : ZÉRO référence** à un moteur, un hub ou une batterie. La simulation mécanique ignore leur existence.
+
+**Conclusion** : P5b livré = pièces + modèles. **Aucune fonction** : pas de flux d'énergie, aucun couple moteur dans le graphe de rotation, pas de liaison hub, pas de conduite à la télécommande, pas de décharge de batterie. Un moteur posé à côté d'un engrenage ne fait rien. C'est exactement le cœur de la demande de Philippe (créer des machineries, l'électricité) qui reste à construire AU NIVEAU SYSTÈME.
+
+**Item précis, claim ouvert (zone Grok : mechLink/mechState)** : le moteur comme SOURCE dans le graphe de rotation, taillé sur les gabarits Power Functions mesurés de la recherche (M 405 rpm/11 Ncm, L 390/18, XL 220/40, servo ±90°); le hub comme contrôleur qui lie les moteurs; la batterie comme budget d'énergie; la télécommande à canaux pour conduire; surcharge = arrêt expliqué (loi des limites). Si non claimé au prochain passage, le filet mutuel s'applique (Muse le prend).
