@@ -3114,3 +3114,24 @@ Reformulation précise de l'ordre de Philippe (fil principal, 12:46 PDT : « upd
 - [ ] Critère de livraison : un upgrade dont l'effet ne se voit ni sur la machine, ni en jeu, ni dans les chiffres affichés n'est PAS livré. Chaque niveau est vérifié par QA mesurée (temps de fonte avant/après, capacité comptée), `tsc` 0 erreur.
 
 Séquence (lane Muse) : P8 entre dans la file après la chaîne QA en cours; P8-1 et P8-2 peuvent partir dès que leurs équivalents moulés existent (déjà le cas pour les outils); P8-3 à P8-5 après R3 (moules de boss). Journaliser chaque sous-étape ici, avec ses mesures.
+
+## BOGUES RAPPORTÉS PAR PHILIPPE (2026-10-29 ~13:02 PDT, test live sur Pages) — PRIORITÉ FILE
+
+Verdict utilisateur, donc faits à reproduire avant tout : trois problèmes de cohérence vus par Philippe en jeu. Claim : lane Muse (le prochain run de boucle prend ces bogues AVANT la file normale; un seul rig à la fois — la session QA en cours finit d'abord). Chaque bogue : reproduire dans le rig → cause lue dans le code → fix → QA mesurée → push. Zones Grok intouchées.
+
+### BUG-1 · Les briques posées sur les studs n'ont pas l'éclairage réaliste
+- **Rapporté** : « quand je place des blocs sur deux ou un studs, le realistic lighting ne se montre pas sur les blocs » — les briques de la couche P0 paraissent plates à côté des blocs voxel.
+- **Observation code (arbre local ≈ head, à revérifier au head)** : `rebuildBrickMesh` rend les briques en `InstancedMesh` avec le matériau partagé `opaqueLam` (`MeshLambertMaterial({ map: atlas })`, game.ts ~943) — le même que les fallers. L'éclairage réaliste (`settings.realistic`) passe par des traitements de matériaux dédiés (injections `onBeforeCompile` ~1081/13638/13758, garde ~3069) appliqués au maillage voxel; la variation SRN par brique du monde voxel est cuite dans les couleurs de sommets, ce qu'un `InstancedMesh` Lambert ne reçoit pas tel quel.
+- **À faire** : comparer la chaîne matériau du monde voxel vs `opaqueLam`; donner aux briques le même traitement réaliste (incl. variation de teinte par instance via `instanceColor` si la voie le permet). Critère : capture côte-à-côte brique/voxel même couleur, même lumière — puis l'œil de Philippe ferme le bogue.
+
+### BUG-2 · L'arc « n'est pas un item défini »
+- **Rapporté** : « l'arc n'est pas un item défini ».
+- **Observation code (à revérifier au head ET dans le build déployé)** : la def existe — `item(ID.Bow 138, "Bow", { tool: "bow", tier: 1, maxUse: 80 })` (blocks.ts ~874); la recette existe (`bow` : 3 bâtons + 3 ficelles, recipes.ts ~335); la flèche existe (139) et le tir est câblé (`launchArrow`, consommation de flèches ~6721). Le bogue est donc ailleurs : inventaire (l'arc absent de l'UI inventaire? — recoupe P8-1), rendu en main, ou écart entre l'arbre local et le build live testé par Philippe.
+- **À faire** : reproduire dans le contexte exact (obtenir l'arc en Survival via la recette, le voir dans l'inventaire, le tenir, tirer une flèche) sur le build du head; nommer l'écart précis avant de corriger.
+
+### BUG-3 · La gravité « n'est pas fonctionnelle »
+- **Rapporté** : « la gravité n'est pas fonctionnelle ».
+- **Observation code** : le système existe et qa98 l'a mesuré en cascade localement — drapeaux `fall: true` sur Sand (blocks.ts ~1048), Gravel (~831), Soul (~1675); scan d'apparition centré joueur (±5 en x/z, dy +8..−2, cadence ~0,25 s); `updateFallers(dt)` câblé dans la boucle (~11857). MAIS le test de support de `spawnFaller` ne lit QUE le voxel du dessous (`def(world.get(x, y-1, z)).solid`) — **la couche briques est invisible pour la gravité** : un sable posé sur une brique peut traverser la brique en tombant (ou ne jamais être testé correctement), un sable placé COMME brique (snap studs) ne relève pas des fallers du tout (règles P1 seulement, ancrage ≥2 studs — il peut « flotter » là où un sable voxel tomberait), et hors du rayon ±5/hauteur +8..−2 autour du joueur rien ne spawn. La dette qa98b (hoverSand : case quittée, `landed=false` non confirmé) est de la même famille.
+- **À faire** : reproduire LES cas de Philippe dans le rig : (1) sable/gravier dont le support voxel est retiré, à plusieurs distances/hauteurs du joueur; (2) sable reposant sur une brique, support retiré; (3) sable placé en brique au-dessus du vide. Fix racine selon le cas confirmé (support/atterrissage conscients des briques dans `spawnFaller`/`updateFallers`, ou règle P1 pour les briques `fall`), QA mesurée sur les trois cas, `tsc` 0.
+
+**Ces trois bogues passent avant P8-3+ et R3 dans la file Muse** (la chaîne QA en cours garde le rig jusqu'à sa fin de session). Rien n'est déclaré corrigé sans mesure dans le rig + le verdict de Philippe sur Pages.
