@@ -1827,10 +1827,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     if (id === ID.Axle || id === ID.Axle2 || id === ID.Axle4 || id === ID.Axle6 || id === ID.Axle8 || id === ID.Worm || id === ID.AxleStop3 || id === ID.AxleStop5) {
       const studs = id === ID.Axle2 ? 2 : id === ID.Axle4 ? 4 : id === ID.Axle6 ? 6 : id === ID.Axle8 ? 8 : id === ID.AxleStop3 ? 3 : id === ID.AxleStop5 ? 5 : 3;
-      const len = studs * STUD * 0.5;              // visual length in studs
-      // Cross section: two intersecting rectangles ≈ 4.8 mm
-      const t = 0.06 * STUD;
-      const w = 0.15 * STUD;
+      const len = studs * STUD * 1.2;              // longer so it's clearly an axle
+      // Cross section: two intersecting rectangles, scaled up to be visible
+      const t = 0.12 * STUD;
+      const w = 0.28 * STUD;
       addBoxPart(group, w, len, t, 0, 0, 0, techMat);
       addBoxPart(group, t, len, w, 0, 0, 0, techMat);
       if (id === ID.AxleStop3 || id === ID.AxleStop5) {
@@ -4922,12 +4922,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // Technic pieces: real shape, not a brick cube
     if (TECHNIC_SET.has(id)) {
       const built = buildLegoItem3D(id);
+      built.group.updateMatrixWorld(true);
       const geos: THREE.BufferGeometry[] = [];
       built.group.traverse((obj) => {
         if ((obj as THREE.Mesh).isMesh) {
           const m = obj as THREE.Mesh;
+          m.updateMatrix();
           const gg = (m.geometry as THREE.BufferGeometry).clone();
-          gg.applyMatrix4(m.matrix);
+          gg.applyMatrix4(m.matrixWorld);
           geos.push(gg);
         }
       });
