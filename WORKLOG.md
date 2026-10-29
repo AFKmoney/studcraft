@@ -3458,3 +3458,13 @@ Le fichier `Catalogue_Complet_LEGO_Technic_et_Accessoires_Minifigurines.pdf` (35
 - **Prochain** : structure restante (liftarms longs, frames 7×11/11×15, pins hybrides) ou CAT-06 si lane Muse libre. Continuer jusqu’à couverture PDF.
 
 
+
+## 2026-10-29 ~14:37 PDT — Grok (structure restante CAT-02 — DONE, tests verts)
+
+- **Claim** : liftarms longs + frames + pins hybrides. IDs 453–460.
+- **Fait** : Liftarm 1×9/11/13/15, Frame 7×11, Frame 11×15, Axle pin, Pin with towball. Placeables, recettes, CATALOG + TECHNIC. Géométrie math : poutres longues avec trous, cadres rectangulaires, pins avec rotule.
+- **QA** : tsc 0. Tous les tests `src/game/*.test.ts` : **35/35 pass**. Pas de save.ts.
+- **Couverture PDF (lane Grok)** : CAT-02 structure largement couverte (liftarms impairs 1×3→1×15, fins, coudés, angles #1–#6, frames 5×7/7×11/11×15, pins, bushes, fairings). CAT-03 suspension fait. CAT-04 transmission avancé. CAT-05 pneumatique + électrique fait. CAT-06 reste lane Muse.
+- **Prochain** : variantes mineures restantes (thin liftarms longs, pins 3L, axes à butée) ou polish visuel des menus. Continuer jusqu’à 100 % du PDF côté Grok.
+
+

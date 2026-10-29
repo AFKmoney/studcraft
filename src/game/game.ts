@@ -1956,6 +1956,32 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       return { group, isTool: false, flames };
     }
+    if (id === ID.Liftarm9 || id === ID.Liftarm11 || id === ID.Liftarm13 || id === ID.Liftarm15) {
+      const holes = id === ID.Liftarm9 ? 9 : id === ID.Liftarm11 ? 11 : id === ID.Liftarm13 ? 13 : 15;
+      const len = holes * s * 0.12;
+      addBoxPart(group, s * 0.35, s * 0.14, len, 0, 0, 0, techMat);
+      for (let i = 0; i < Math.min(holes, 8); i++) {
+        const z = (i - 3.5) * s * 0.12;
+        addCylPart(group, s * 0.04, s * 0.04, s * 0.16, 0, 0, z, skin(0x1a1a1a), 6);
+      }
+      return { group, isTool: false, flames };
+    }
+    if (id === ID.Frame711 || id === ID.Frame1115) {
+      const w = id === ID.Frame711 ? s * 0.7 : s * 1.0;
+      const d = id === ID.Frame711 ? s * 0.5 : s * 0.7;
+      addBoxPart(group, w, s * 0.1, s * 0.08, 0, 0, d / 2, techMat);
+      addBoxPart(group, w, s * 0.1, s * 0.08, 0, 0, -d / 2, techMat);
+      addBoxPart(group, s * 0.08, s * 0.1, d, w / 2, 0, 0, techMat);
+      addBoxPart(group, s * 0.08, s * 0.1, d, -w / 2, 0, 0, techMat);
+      return { group, isTool: false, flames };
+    }
+    if (id === ID.AxlePin || id === ID.Towball) {
+      addCylPart(group, s * 0.05, s * 0.05, s * 0.3, 0, 0, 0, techMat, 8);
+      if (id === ID.Towball) {
+        addCylPart(group, s * 0.08, s * 0.08, s * 0.1, 0, s * 0.18, 0, skin(0xc5ccd3), 10);
+      }
+      return { group, isTool: false, flames };
+    }
 
     if (id === ID.Brew) {
       const stoneMat = skin(0x70757d);

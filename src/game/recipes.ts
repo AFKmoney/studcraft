@@ -1262,6 +1262,55 @@ export const RECIPES: Recipe[] = [
     cat: "build",
   }),
 
+  r("liftarm9", "Liftarm 1×9", "1 liftarm7 + 2 planks", [[ID.Liftarm7, 1], [ID.Planks, 2]], ID.Liftarm9, 1, {
+    shape: [ID.Liftarm7, ID.Planks, ID.Planks],
+    w: 3,
+    h: 1,
+    cat: "build",
+  }),
+  r("liftarm11", "Liftarm 1×11", "1 liftarm9 + 2 planks", [[ID.Liftarm9, 1], [ID.Planks, 2]], ID.Liftarm11, 1, {
+    shape: [ID.Liftarm9, ID.Planks, ID.Planks],
+    w: 3,
+    h: 1,
+    cat: "build",
+  }),
+  r("liftarm13", "Liftarm 1×13", "1 liftarm11 + 2 planks", [[ID.Liftarm11, 1], [ID.Planks, 2]], ID.Liftarm13, 1, {
+    shape: [ID.Liftarm11, ID.Planks, ID.Planks],
+    w: 3,
+    h: 1,
+    cat: "build",
+  }),
+  r("liftarm15", "Liftarm 1×15", "1 liftarm13 + 2 planks", [[ID.Liftarm13, 1], [ID.Planks, 2]], ID.Liftarm15, 1, {
+    shape: [ID.Liftarm13, ID.Planks, ID.Planks],
+    w: 3,
+    h: 1,
+    cat: "build",
+  }),
+  r("frame711", "Frame 7×11", "1 frame57 + 2 liftarm5", [[ID.Frame57, 1], [ID.Liftarm5, 2]], ID.Frame711, 1, {
+    shape: [ID.Frame57, ID.Liftarm5, ID.Liftarm5],
+    w: 3,
+    h: 1,
+    cat: "build",
+  }),
+  r("frame1115", "Frame 11×15", "1 frame711 + 2 liftarm7", [[ID.Frame711, 1], [ID.Liftarm7, 2]], ID.Frame1115, 1, {
+    shape: [ID.Frame711, ID.Liftarm7, ID.Liftarm7],
+    w: 3,
+    h: 1,
+    cat: "build",
+  }),
+  r("axlepin", "Axle pin", "1 pin + 1 axle", [[ID.Pin2L, 1], [ID.Axle, 1]], ID.AxlePin, 1, {
+    shape: [ID.Pin2L, ID.Axle],
+    w: 2,
+    h: 1,
+    cat: "build",
+  }),
+  r("towball", "Pin with towball", "1 pin + 1 bush", [[ID.Pin2L, 1], [ID.Bush, 1]], ID.Towball, 1, {
+    shape: [ID.Pin2L, ID.Bush],
+    w: 1,
+    h: 2,
+    cat: "build",
+  }),
+
   // P6 step 2 (Muse) — Kiln casting: the colour moulds. The donor brick is
   // the pigment/master: it is consumed into the melt, 4 plastic ingots
   // (smelted pellets) join it, and the mould pours 2 bricks of its colour.

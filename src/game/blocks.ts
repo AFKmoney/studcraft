@@ -441,6 +441,15 @@ export const ID = {
   Servo: 450,
   Remote: 451,
   Battery: 452,
+  // Remaining CAT-02 structure
+  Liftarm9: 453,
+  Liftarm11: 454,
+  Liftarm13: 455,
+  Liftarm15: 456,
+  Frame711: 457,
+  Frame1115: 458,
+  AxlePin: 459,
+  Towball: 460,
   // Muse lane (P2 welding): IDs 400+ are reserved for the brick-layer
   // pillars so they can never collide with Grok's Technic catalogue.
   Welder: 400,
@@ -1424,6 +1433,15 @@ put(b(ID.MotorXL, "Motor XL", "#e23b2f", "#ff6a3d", "#b02620", "#8a1c18", { hard
 put(b(ID.Servo, "Servo", "#f0c43a", "#ffe14a", "#c4924a", "#8a6428", { hard: 0.4 }));
 put(b(ID.Remote, "Remote control", "#3b96e4", "#5eb0e5", "#1d4f91", "#163a6b", { hard: 0.4 }));
 put(b(ID.Battery, "Battery box", "#2a2e32", "#4a5058", "#1a1a1a", "#0e0e0e", { hard: 0.4 }));
+// Remaining CAT-02
+put(b(ID.Liftarm9, "Liftarm 1×9", "#4a5058", "#6e767e", "#2a2e32", "#1a1a1a", { hard: 0.4 }));
+put(b(ID.Liftarm11, "Liftarm 1×11", "#4a5058", "#6e767e", "#2a2e32", "#1a1a1a", { hard: 0.4 }));
+put(b(ID.Liftarm13, "Liftarm 1×13", "#4a5058", "#6e767e", "#2a2e32", "#1a1a1a", { hard: 0.4 }));
+put(b(ID.Liftarm15, "Liftarm 1×15", "#4a5058", "#6e767e", "#2a2e32", "#1a1a1a", { hard: 0.4 }));
+put(b(ID.Frame711, "Frame 7×11", "#3a3e44", "#4a5058", "#2a2e32", "#1a1a1a", { hard: 0.4 }));
+put(b(ID.Frame1115, "Frame 11×15", "#3a3e44", "#4a5058", "#2a2e32", "#1a1a1a", { hard: 0.4 }));
+put(b(ID.AxlePin, "Axle pin", "#3b96e4", "#5eb0e5", "#1d4f91", "#163a6b", { hard: 0.4 }));
+put(b(ID.Towball, "Pin with towball", "#c5ccd3", "#e0e4e8", "#8e959c", "#4a5058", { hard: 0.4 }));
 
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];
@@ -1871,6 +1889,14 @@ export const CATALOG = [
   ID.Servo,
   ID.Remote,
   ID.Battery,
+  ID.Liftarm9,
+  ID.Liftarm11,
+  ID.Liftarm13,
+  ID.Liftarm15,
+  ID.Frame711,
+  ID.Frame1115,
+  ID.AxlePin,
+  ID.Towball,
 ];
 
 /** Parts the player can take from the Technic bin. Click-states stay out. */
@@ -1957,6 +1983,14 @@ export const TECHNIC = [
   ID.Servo,
   ID.Remote,
   ID.Battery,
+  ID.Liftarm9,
+  ID.Liftarm11,
+  ID.Liftarm13,
+  ID.Liftarm15,
+  ID.Frame711,
+  ID.Frame1115,
+  ID.AxlePin,
+  ID.Towball,
 ] as const;
 
 export const COLORS = [ID.Red, ID.Orange, ID.Yellow, ID.Green, ID.Blue, ID.Azure, ID.Pink, ID.White, ID.Black];
