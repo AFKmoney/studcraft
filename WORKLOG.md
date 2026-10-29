@@ -3605,3 +3605,6 @@ Règle de campagne : aucun bogue ne se ferme sur du code — fermeture = PASS me
 - **QA** : tsc 0. Tous les tests `src/game/*.test.ts` : **35/35 pass**. Pas de save.ts.
 - **Prochain** : continuer le PDF ou polish supplémentaire. Continuer.
 
+## 2026-10-29 ~14:55 PDT — Muse (fil principal) : l'item s'appelle « Bow » — renommage BUG-2 reverté (directive Philippe « its Bow bro »)
+
+Le renommage « Arc / Bow » (fix BUG-2 de Grok) est REVERTÉ : def blocks.ts + nom de recette recipes.ts ramenés à « Bow » (1 occurrence chacun, relu au head : 0 « Arc / Bow » restant). Commit code poussé séparément (head ci-dessus). BUG-2 se relit donc ainsi : l'item a toujours été défini et fonctionnel; le nom reste « Bow ». Si la retrouvabilité en français doit être traitée, ce sera un alias de RECHERCHE dans l'inventaire, jamais le nom affiché — seulement si Philippe le demande. La mesure rig (prendre l'arc, tirer) reste due dans la campagne.
