@@ -19,6 +19,7 @@ export type MechBlockIds = {
   mill: number;
   spring: number;
   diff: number;
+  rack: number;
   water: number;
   door: number;
   doorOpen: number;
@@ -89,6 +90,27 @@ export function springsJustSpent(): MechCell[] {
   return out;
 }
 
+const rackAcc = new Map<string, number>();
+
+export function clearRacks() {
+  rackAcc.clear();
+}
+
+function isGear(id: number, ids: MechBlockIds) {
+  return id === ids.g8 || id === ids.g16 || id === ids.g24;
+}
+
+function gearBeside(c: MechCell, get: (x: number, y: number, z: number) => number, ids: MechBlockIds): MechCell | null {
+  const spots = [
+    { x: c.x - 1, y: c.y, z: c.z },
+    { x: c.x + 1, y: c.y, z: c.z },
+    { x: c.x, y: c.y, z: c.z - 1 },
+    { x: c.x, y: c.y, z: c.z + 1 },
+  ];
+  for (const s of spots) if (isGear(get(s.x, s.y, s.z), ids)) return s;
+  return null;
+}
+
 /** Rebuild the local machine and return door/gate edits the cam is asking for. */
 export function stepMech(
   get: (x: number, y: number, z: number) => number,
@@ -99,8 +121,10 @@ export function stepMech(
   resetParts();
   const cams: MechCell[] = [];
   const diffs: MechCell[] = [];
+  const racks: MechCell[] = [];
   for (const c of cells) {
     const id = get(c.x, c.y, c.z);
+    if (id === ids.rack) racks.push(c);
     const spec = specFor(id, ids);
     if (!spec) continue;
     let drive = spec.drive;
@@ -156,6 +180,29 @@ export function stepMech(
     else if (!open && there === ids.doorOpen) edits.push({ x: nx, y: c.y, z: c.z, id: ids.door });
     else if (open && there === ids.gate) edits.push({ x: nx, y: c.y, z: c.z, id: ids.gateOpen });
     else if (!open && there === ids.gateOpen) edits.push({ x: nx, y: c.y, z: c.z, id: ids.gate });
+  }
+  for (const c of racks) {
+    const gear = gearBeside(c, get, ids);
+    if (!gear || !dt) continue;
+    const sp = speedAt(gear.x * 2, gear.y * 2, gear.z * 2);
+    if (!sp.n) continue;
+    const k = skey(c.x, c.y, c.z);
+    const acc = (rackAcc.get(k) ?? 0) + (sp.n / sp.d) * dt;
+    const step = acc >= 1 ? 1 : acc <= -1 ? -1 : 0;
+    if (!step) {
+      rackAcc.set(k, acc);
+      continue;
+    }
+    const dest = { x: c.x + step, y: c.y, z: c.z };
+    if (get(dest.x, dest.y, dest.z) !== 0) {
+      rackAcc.set(k, step);
+      continue;
+    }
+    edits.push({ x: c.x, y: c.y, z: c.z, id: 0 });
+    edits.push({ ...dest, id: ids.rack });
+    rackAcc.delete(k);
+    const rest = acc - step;
+    if (rest) rackAcc.set(skey(dest.x, dest.y, dest.z), rest);
   }
   return edits;
 }

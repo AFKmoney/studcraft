@@ -803,6 +803,12 @@ export const RECIPES: Recipe[] = [
     h: 1,
     cat: "build",
   }),
+  r("rack", "Rack", "1 gear + 2 planks", [[ID.Gear16, 1], [ID.Planks, 2]], ID.Rack, 1, {
+    shape: [ID.Planks, ID.Gear16, ID.Planks],
+    w: 3,
+    h: 1,
+    cat: "build",
+  }),
 ];
 
 export const SMELT: Record<number, number> = {

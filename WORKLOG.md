@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-29 (Grok — P5 machines placed, door and gate follow the cam).
+**Last update:** 2026-10-29 (Grok — crémaillère 360. Ressort 358 et différentiel 359 étaient déjà dans le code.)
 
 ## 2026-10-26 — v4.12: Engine performance, mob judder & floating animal parts (Muse, ordered by Philippe after his A54 test of v4.11)
 
@@ -2451,11 +2451,14 @@ Pitch : Minecraft, c'est un monde de cubes. Studs, c'est un monde de plastique �
 - [ ] **P2 · Soudure** — le chalumeau soude deux briques en un joint permanent plus fort; on bâtit en soudant, on démolit en coupant/fondant (dépend de P0)
 - [ ] **P6 · La Fonderie** — LA boucle centrale : casser → plastique (rendement différent par bloc, les mobs en droppent) → fondre → couler des items dans des MOULES débloqués par quêtes (R1) et boss (R2/R3); le crafting reste, mais basic seulement
 - [ ] **P3 · Trempe** — intégrée à la Fonderie (P6) : couler avec du plastique trempé = grades supérieurs du même moule
-- [ ] **P5 · Mécanique LEGO** — le cœur tourne. Reste : convoyeur, moteur à ressort, piège. Pas de redstone.
+- [ ] **P5 · Mécanique LEGO** — le cœur tourne. Reste : cardan, roues, convoyeur, piège, puis le kit élargi. Pas de redstone.
   - [x] Essieux, engrenages 8/16/24 (entraxe catalogue), vis sans fin, embrayage, poulies, manivelle
   - [x] Roue à eau (tourne seulement si l'eau la touche) et moulin (air au-dessus, y ≥ 40)
   - [x] Came : ouvre la porte ou la barrière juste à l'est après un demi-tour
-  - [ ] Convoyeur, moteur à ressort, piège
+  - [x] Moteur à ressort (358) : clic droit l'arme, il tourne, il s'arrête. Pas sauvé.
+  - [x] Différentiel (359) : l'arbre en dessous et celui au-dessus, la sortie à l'est tourne à (A+B)/2
+  - [x] Crémaillère (360) : un tour du pignon voisin la pousse d'une case vers +X, ou -X si le pignon tourne à l'envers
+  - [ ] Cardan, roues, convoyeur, piège
 - [ ] **P4 · Son plastique** — clics, snaps, cliquetis 100 % synthétisés DSP, zéro asset
 
 ### Lane RPG
@@ -2488,15 +2491,19 @@ Philippe : cocher en faisant ce que le plan dit, dans l'ordre. P0 reste à Muse.
 - QA : 13/13 tests (`mechState` + `mechLink`). `tsc` 0 erreur. Pas encore sur Pages : le déploiement est en hold.
 - La case P5 reste ouverte : convoyeur, ressort et piège ne sont pas faits.
 
-### Next move — UNCLAIMED
-**Finir P5, dans cet ordre, avant P4.**
-- Un moteur à ressort : clic droit l'arme, il tourne quelques secondes, puis s'arrête. Pas un nouveau système de sauvegarde.
-- Ne pas toucher la couche briques de Muse ni `save.ts`.
-- Fichiers : `game.ts` (le même tick) et le bloc **358** si 357 est le moulin. 345–357 sont déjà les pièces P5.
+### Next move — TAKEN and DONE (le ressort 358 est déjà dans le code, ne pas le refaire)
+Voir la session crémaillère en bas du fichier.
+
+## Rythme — Philippe (2026-10-29)
+Toutes les 10 minutes, l'agent qui se réveille lit CE fichier et prend le dernier « Next move — UNCLAIMED ».
+- Avant de coder : écrire **EN COURS (nom)** avec le move, les fichiers, et pousser cette note.
+- Après : remplacer EN COURS par ce qui est vraiment fait, cocher la case, écrire le prochain move.
+- Ne pas prendre un move déjà marqué EN COURS par quelqu'un d'autre.
+- Ne pas toucher les zones P0 de Muse (`overlapAt`, `tryPlace`, `bootSave`, `packSave`, `save.ts`, le champ `bricks`) tant que sa note P0 EN COURS est en bas.
 
 ## P5 — PORTÉE ÉLARGIE par Philippe (2026-10-29 03:52 EDT) : « TOUT ce que LEGO Technic offre »
 Philippe : pas juste la mécanique — **les pièces ÉLECTRIQUES aussi**, pour que l'utilisateur puisse TOUT faire : véhicules, pelle mécanique, tout l'espace des possibles Technic. Le nord de P5 = le kit Technic complet en jeu. Livraison en couches (la physique reste LÉGÈRE — graphe de rotation borné/local, machines endormies au loin, un véhicule = UN assemblage rigide sur roues, pas un corps rigide par brique) :
-- [ ] **P5a · Drivetrain** — cœur LIVRÉ par Grok (pièces 345–357, voir son journal ci-dessus) : essieux, engrenages 8/16/24 (entraxe catalogue), vis sans fin, embrayage, poulies, manivelle, roue à eau, moulin, came. Reste : différentiel 28T, crémaillère (direction), cardans, roues, convoyeur, moteur à ressort, piège
+- [ ] **P5a · Drivetrain** — livré par Grok jusqu'à 360 : essieux, engrenages 8/16/24, vis, embrayage, poulies, manivelle, roue à eau, moulin, came, ressort, différentiel (A+B)/2, crémaillère. Reste : cardans, roues, convoyeur, piège
 - [ ] **P5b · Électrique + conduite** : moteurs (tailles = couple/vitesse), hub/batterie, télécommande à canaux — le joueur LIE un hub et CONDUIT sa machine (véhicules qui roulent pour vrai sur le terrain)
 - [ ] **P5c · Pneumatique + vérins** : pompe (manuelle ou moteur), réservoir d'air, valves, cylindres V2 + vérins linéaires à vis — bras de pelle, flèches de grue, tourelles 28T/56T (une pelle qui CREUSE dans le monde voxel : le godet casse les blocs)
 - [ ] **P5d · Capteurs + automatisation** : capteurs (distance, inclinaison, couleur), logique simple sur hub — machines qui réagissent toutes seules
@@ -2557,3 +2564,18 @@ Note : ce WORKLOG mergé restaure aussi mes sections (constitution forme finale,
 
 ## BOUCLE 10 MIN — les deux agents (Philippe, 2026-10-29 ~01:20 PDT)
 Philippe a donné le même ordre à Grok qu'à Muse : **quand tu tombes idle, aux ~10 minutes, viens lire ce worklog, continue le développement, et note ce que tu fais + ce que tu es en train de faire.** Conséquences pratiques pour les deux : les pushs vont être fréquents des deux bords — probe le head avant CHAQUE push, merge 3-way systématique, claims écrits avant de coder, zones respectées. Le worklog est le seul point de synchronisation : si ce n'est pas écrit ici, ce n'est pas coordonné.
+
+## EN COURS — terminé dans la même passe (Grok, crémaillère 360)
+C'était en cours pendant cette passe. Fichiers : `blocks.ts`, `recipes.ts`, `mechLink.ts`, et seulement le bloc `mechAcc` de `game.ts`. Pas les zones P0 de Muse. Pas `save.ts`.
+
+### 2026-10-29 — Grok (crémaillère, 360) — FAIT
+- Le journal avait reperdue le ressort 358 et le différentiel 359. Ils sont dans le code depuis `2cb99ae` et `e001b3e`. Cases remises.
+- Bloc 360. Craft : 1 engrenage 16T + 2 planches. Aucun fichier de modèle.
+- Un tour complet du pignon voisin pousse la crémaillère d'une case vers +X. Un tour à l'envers la pousse vers -X. Si la case est prise, elle attend.
+- Le compteur de tours n'est pas sauvé. Il ne tourne que près du joueur.
+- QA : 16/16. `tsc` 0 erreur.
+- Famille couverte : crémaillère. Pas encore : cardan, roues, convoyeur, piège.
+
+### Next move — UNCLAIMED
+**P5a, prochaine pièce : le cardan.** Il laisse passer la rotation entre deux essieux qui ne sont pas dans le même axe. Bloc **361**. Pas de `save.ts`, pas les zones P0 de Muse. Avant P4, avant les sites de débris.
+
