@@ -5304,7 +5304,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // above plain cast bricks — they hold stress twice as long before
   // letting go, and sag against their OWN threshold (same max sag,
   // reached half as fast). One helper, read by tickBricks + brickSagY.
-  const TEMPERED_STRESS_MAX = 1.5;
+  const TEMPERED_STRESS_MAX = BRICK_STRESS_MAX * 2; // P6-2 invariant: tempered holds 2x plain - must track BRICK_STRESS_MAX (was a stale 1.5 literal from the 0.75 era)
   function isTemperedBrick(id: number): boolean {
     return id >= ID.TRed && id <= ID.TBlack;
   }
