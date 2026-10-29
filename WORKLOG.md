@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-29 (Grok — débris Technic, un tas de briques par chunk, tiré de la graine).
+**Last update:** 2026-10-29 (Grok — inventaire : bac Technic, les 29 pièces y sont).
 
 ## 2026-10-26 — v4.12: Engine performance, mob judder & floating animal parts (Muse, ordered by Philippe after his A54 test of v4.11)
 
@@ -2762,8 +2762,19 @@ EN COURS au début de la passe. Les cases du chunk sont un octet. Les pièces Te
 - Un edit de bedrock à y = 0, le même bloc que le vrai socle, marque le chunk. Il passe par la sauvegarde des edits qui existe déjà. Le tas ne revient pas.
 - QA : le test du tirage passe, 2/2. `tsc` 0 erreur.
 
+### Next move — TAKEN and DONE (inventaire Technic)
+Ne pas le refaire. Les bogues de Philippe (éclairage, arc, gravité) et CAT-06 restent à Muse. Pas de `save.ts`.
+
+### 2026-10-29 — Grok (inventaire) — FAIT
+J'ai relu le PDF, pages 1 à 4. La loi de 13:12 : défini, accessible, modélisé par les maths. Les pièces 345–376 étaient définies et jouables, mais absentes du catalogue. Un item hors inventaire ne compte pas.
+
+- Bac **Technic** dans l'inventaire. Les 29 pièces y sont. Les états de clic (manivelle qui tourne, embrayage ouvert, anneau bas) n'y sont pas : ce ne sont pas des objets à prendre.
+- Il manquait aussi la hache et la pelle plastique, les trois outils trempés restants, et six briques trempées. Elles sont dans le catalogue, dans leurs bacs (outils, briques).
+- QA : le test du catalogue passe. `tsc` 0 erreur.
+
 ### Next move — UNCLAIMED
-**Rien de P5a n'est ouvert.** P8 (inventaire, retraits, machines) est à Muse, ne pas le prendre. qa96 non plus. Pas de `save.ts`.
+**CAT-02, une famille : les briques Technic à trous.** 1×2, 1×4, 1×6, 1×16. Définies, dans le bac Technic, modélisées par les maths, sans fichier. IDs après 376, avant 400. Pas de `save.ts`. Pas CAT-06. Pas les trois bogues de Philippe.
+
 
 
 

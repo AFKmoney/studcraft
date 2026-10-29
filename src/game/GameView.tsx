@@ -1,5 +1,5 @@
 import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode, Fragment } from "react";
-import { CATALOG, COLORS, ID, def } from "./blocks";
+import { CATALOG, COLORS, ID, TECHNIC, def } from "./blocks";
 import type { EnterKind, GameApi, Phase, Quality, Upscale } from "./game";
 import { RECIPES, type Recipe } from "./recipes";
 import { CODEX, PERKS } from "./ranks";
@@ -1654,9 +1654,12 @@ function InvHotbar({ game }: { game: GameApi }) {
   );
 }
 
-type BinCategory = "all" | "bricks" | "tools" | "food" | "materials";
+type BinCategory = "all" | "bricks" | "technic" | "tools" | "food" | "materials";
+
+const TECHNIC_IDS = new Set<number>(TECHNIC);
 
 function itemBinCategory(id: number): BinCategory {
+  if (TECHNIC_IDS.has(id)) return "technic";
   const d = def(id);
   if (d.tool || d.armor > 0 || d.armorSlot || d.maxUse > 0 || id === ID.Shield || id === ID.Elytra || id === ID.Bow || id === ID.Crossbow || id === ID.Trident || id === ID.Arrow || id === ID.Totem) {
     return "tools";
@@ -1771,7 +1774,7 @@ function BinPage({ game }: { game: GameApi }) {
       </div>
       <div className="sc-bin-main">
         <div className="sc-search">
-          <input type="search" placeholder="Search bricks, tools, food, ores…" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Search items" />
+          <input type="search" placeholder="Search bricks, technic, tools, food…" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Search items" />
           <span className="sc-held">
             Held: <strong>{hud.cursor ? def(hud.cursor).name : "None"}</strong>
           </span>
@@ -1781,6 +1784,7 @@ function BinPage({ game }: { game: GameApi }) {
             [
               ["all", "All"],
               ["bricks", "Bricks"],
+              ["technic", "Technic"],
               ["tools", "Tools & Gear"],
               ["food", "Food & Brews"],
               ["materials", "Materials"],
