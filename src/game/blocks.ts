@@ -362,6 +362,7 @@ export const ID = {
   Wheel: 356,
   Mill: 357,
   Spring: 358,
+  Diff: 359,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -1203,6 +1204,7 @@ put(b(ID.Pulley, "Pulley", "#2a2a2a", "#4a4a4a", "#1a1a1a", "#101010", { hard: 0
 put(b(ID.Wheel, "Water wheel", "#3b96e4", "#5eb0e5", "#c4924a", "#8d5a34", { hard: 0.4 }));
 put(b(ID.Mill, "Windmill", "#f4f1ea", "#ffffff", "#c5ccd3", "#8e959c", { hard: 0.4 }));
 put(b(ID.Spring, "Spring motor", "#d0d4da", "#f4f6f8", "#8e959c", "#e23b2f", { hard: 0.4 }));
+put(b(ID.Diff, "Differential", "#4a4e55", "#f0c43a", "#3a3e44", "#f5c518", { hard: 0.4 }));
 
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];

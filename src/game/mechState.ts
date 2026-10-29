@@ -9,7 +9,7 @@
 export const MESH_CAP = 64;
 
 export type Axis = "x" | "y" | "z";
-export type MechKind = "axle" | "gear" | "worm" | "crank" | "clutch" | "pulley" | "cam" | "wheel";
+export type MechKind = "axle" | "gear" | "worm" | "crank" | "clutch" | "pulley" | "cam" | "wheel" | "diff";
 
 export type MechPart = {
   x: number;
@@ -182,6 +182,12 @@ function sameBelt(p: MechPart): MechPart[] {
 }
 
 export function tickMech(dt = 1) {
+  solveMech();
+  integrateMech(dt);
+}
+
+/** Speeds only. A differential calls this twice: once to read the inputs, once with the averaged output. */
+export function solveMech(seeds: { x: number; y: number; z: number; s: Frac }[] = []) {
   speeds.clear();
   torques.clear();
   const q: { p: MechPart; s: Frac; t: Frac }[] = [];
@@ -205,12 +211,16 @@ export function tickMech(dt = 1) {
   for (const p of parts.values()) {
     if ((p.kind === "crank" || p.kind === "wheel") && p.driveD) push(p, frac(p.driveN ?? 0, p.driveD), frac(1, 1));
   }
+  for (const seed of seeds) {
+    const p = parts.get(mkey(seed.x, seed.y, seed.z));
+    if (p && seed.s.n) push(p, frac(seed.s.n, seed.s.d), frac(1, 1));
+  }
   for (let i = 0; i < q.length && guard < MESH_CAP; i++) {
     const { p } = q[i];
     const s = speeds.get(mkey(p.x, p.y, p.z));
     const t = torques.get(mkey(p.x, p.y, p.z));
     if (!s || !t || (!s.n && q[i].s.n)) continue;
-    if (!(p.kind === "clutch" && p.open)) {
+    if (!(p.kind === "clutch" && p.open) && p.kind !== "diff") {
       for (const n of nearestShaft(p)) push(n, s, t);
     }
     if (p.kind === "gear") {
@@ -226,6 +236,10 @@ export function tickMech(dt = 1) {
       }
     }
   }
+}
+
+export function integrateMech(dt: number) {
+  if (!dt) return;
   for (const [k, s] of speeds) {
     if (!s.n) continue;
     const next = (angles.get(k) ?? 0) + (s.n / s.d) * dt;

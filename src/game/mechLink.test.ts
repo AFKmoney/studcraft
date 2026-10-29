@@ -18,6 +18,7 @@ const ids: MechBlockIds = {
   wheel: 12,
   mill: 13,
   spring: 19,
+  diff: 20,
   water: 14,
   door: 15,
   doorOpen: 16,
@@ -86,5 +87,21 @@ describe("placed technic", () => {
     assert.equal(springLeft(0, 0, 0), 0);
     stepMech(get, cells, ids, 0.1);
     assert.deepEqual(speedAt(0, 2, 0), { n: 0, d: 1 });
+  });
+
+  it("averages the two shafts into the east axle", () => {
+    const grid = new Map<string, number>([
+      ["0,0,0", ids.crankOn],
+      ["0,1,0", ids.diff],
+      ["0,2,0", ids.crankOn],
+      ["1,1,0", ids.axle],
+    ]);
+    const get = (x: number, y: number, z: number) => grid.get(x + "," + y + "," + z) ?? 0;
+    const cells = [{ x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, { x: 0, y: 2, z: 0 }, { x: 1, y: 1, z: 0 }];
+    stepMech(get, cells, ids, 0);
+    assert.deepEqual(speedAt(2, 2, 0), { n: 1, d: 1 });
+    grid.set("0,2,0", ids.crank);
+    stepMech(get, cells, ids, 0);
+    assert.deepEqual(speedAt(2, 2, 0), { n: 1, d: 2 });
   });
 });

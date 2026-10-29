@@ -1,7 +1,7 @@
 // P5 world adapter. Block cells are 2 studs apart, which is the catalog
 // distance for 16T+16T and 8T+24T. Does not import game.ts or save.ts.
 
-import { putMech, resetParts, strokeAt, tickMech, type Axis, type MechKind } from "./mechState.ts";
+import { integrateMech, putMech, resetParts, solveMech, speedAt, strokeAt, type Axis, type Frac, type MechKind } from "./mechState.ts";
 
 export type MechBlockIds = {
   axle: number;
@@ -18,6 +18,7 @@ export type MechBlockIds = {
   wheel: number;
   mill: number;
   spring: number;
+  diff: number;
   water: number;
   door: number;
   doorOpen: number;
@@ -45,6 +46,7 @@ function specFor(id: number, ids: MechBlockIds): Spec | null {
   if (id === ids.wheel) return { kind: "wheel", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.mill) return { kind: "wheel", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.spring) return { kind: "crank", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
+  if (id === ids.diff) return { kind: "diff", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   return null;
 }
 
@@ -96,6 +98,7 @@ export function stepMech(
 ): MechEdit[] {
   resetParts();
   const cams: MechCell[] = [];
+  const diffs: MechCell[] = [];
   for (const c of cells) {
     const id = get(c.x, c.y, c.z);
     const spec = specFor(id, ids);
@@ -115,6 +118,7 @@ export function stepMech(
       }
     }
     if (id === ids.cam) cams.push(c);
+    if (id === ids.diff) diffs.push(c);
     putMech({
       x: c.x * 2,
       y: c.y * 2,
@@ -129,7 +133,19 @@ export function stepMech(
       pulley: spec.pulley || undefined,
     });
   }
-  tickMech(dt);
+  solveMech();
+  if (diffs.length) {
+    const feeds: { x: number; y: number; z: number; s: Frac }[] = [];
+    for (const c of diffs) {
+      const a = speedAt(c.x * 2, (c.y - 1) * 2, c.z * 2);
+      const b = speedAt(c.x * 2, (c.y + 1) * 2, c.z * 2);
+      const avg = { n: a.n * b.d + b.n * a.d, d: a.d * b.d * 2 };
+      if (!avg.n) continue;
+      feeds.push({ x: (c.x + 1) * 2, y: c.y * 2, z: c.z * 2, s: avg });
+    }
+    if (feeds.length) solveMech(feeds);
+  }
+  integrateMech(dt);
   const edits: MechEdit[] = [];
   for (const c of cams) {
     const lift = strokeAt(c.x * 2, c.y * 2, c.z * 2);

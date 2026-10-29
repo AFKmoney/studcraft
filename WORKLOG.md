@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-29 (Grok — spring motor 358 winds, runs, stops).
+**Last update:** 2026-10-29 (Grok — differential 359, output (A+B)/2).
 
 ## 2026-10-26 — v4.12: Engine performance, mob judder & floating animal parts (Muse, ordered by Philippe after his A54 test of v4.11)
 
@@ -2456,6 +2456,7 @@ Pitch : Minecraft, c'est un monde de cubes. Studs, c'est un monde de plastique �
   - [x] Roue à eau (tourne seulement si l'eau la touche) et moulin (air au-dessus, y ≥ 40)
   - [x] Came : ouvre la porte ou la barrière juste à l'est après un demi-tour
   - [x] Moteur à ressort (358) : clic droit l'arme, il tourne, il s'arrête. Pas sauvé.
+  - [x] Différentiel (359) : l'arbre en dessous et celui au-dessus, la sortie à l'est tourne à (A+B)/2
   - [ ] Convoyeur, piège
 - [ ] **P4 · Son plastique** — clics, snaps, cliquetis 100 % synthétisés DSP, zéro asset
 
@@ -2501,13 +2502,24 @@ Move pris dans le worklog. Muse avait fini la recherche (51 sources) ; elle ne c
 - QA : 14/14 (`mechState` + `mechLink`, dont le ressort qui tourne puis s'arrête). `tsc` 0 erreur.
 - Famille couverte : source d'énergie à ressort. Pas encore : différentiel, crémaillère, cardans, roues, convoyeur, piège, électrique, pneumatique.
 
+### Next move — TAKEN and DONE (différentiel, voir ci-dessous)
+Le différentiel 359 est livré. Ne pas le refaire.
+
+### 2026-10-29 — Grok (différentiel 28T, 359)
+- Bloc 359. Craft : 2 engrenages 16T + 1 essieu. Aucun fichier de modèle.
+- Il coupe l'arbre vertical. L'essieu d'en dessous est A, celui d'au-dessus est B, l'essieu à l'est tourne à (A+B)/2. Un côté arrêté donne la moitié.
+- Pas de `save.ts`. Pas la couche briques.
+- QA : 15/15. `tsc` 0 erreur.
+- Famille couverte : différentiel. Pas encore : crémaillère, cardans, roues, convoyeur, piège.
+
 ### Next move — UNCLAIMED
-**P5a, prochaine pièce : le différentiel 28T.** Deux arbres d'entrée, la sortie tourne à (A+B)/2, comme la conclusion de recherche. Bloc **359**. Pas de `save.ts`, pas la couche briques de Muse. Avant P4, avant les sites de débris.
+**P5a, prochaine pièce : la crémaillère.** Un pignon qui tourne pousse la crémaillère d'un cran (rotation → ligne droite). Bloc **360**. Pas de `save.ts`, pas la couche briques. Avant P4, avant les sites de débris.
+
 
 
 ## P5 — PORTÉE ÉLARGIE par Philippe (2026-10-29 03:52 EDT) : « TOUT ce que LEGO Technic offre »
 Philippe : pas juste la mécanique — **les pièces ÉLECTRIQUES aussi**, pour que l'utilisateur puisse TOUT faire : véhicules, pelle mécanique, tout l'espace des possibles Technic. Le nord de P5 = le kit Technic complet en jeu. Livraison en couches (la physique reste LÉGÈRE — graphe de rotation borné/local, machines endormies au loin, un véhicule = UN assemblage rigide sur roues, pas un corps rigide par brique) :
-- [ ] **P5a · Drivetrain** — cœur LIVRÉ par Grok (pièces 345–358) : essieux, engrenages 8/16/24, vis sans fin, embrayage, poulies, manivelle, roue à eau, moulin, came, moteur à ressort. Reste : différentiel 28T, crémaillère (direction), cardans, roues, convoyeur, piège
+- [ ] **P5a · Drivetrain** — cœur LIVRÉ par Grok (pièces 345–359) : essieux, engrenages 8/16/24, vis sans fin, embrayage, poulies, manivelle, roue à eau, moulin, came, moteur à ressort, différentiel (A+B)/2. Reste : crémaillère (direction), cardans, roues, convoyeur, piège
 - [ ] **P5b · Électrique + conduite** : moteurs (tailles = couple/vitesse), hub/batterie, télécommande à canaux — le joueur LIE un hub et CONDUIT sa machine (véhicules qui roulent pour vrai sur le terrain)
 - [ ] **P5c · Pneumatique + vérins** : pompe (manuelle ou moteur), réservoir d'air, valves, cylindres V2 + vérins linéaires à vis — bras de pelle, flèches de grue, tourelles 28T/56T (une pelle qui CREUSE dans le monde voxel : le godet casse les blocs)
 - [ ] **P5d · Capteurs + automatisation** : capteurs (distance, inclinaison, couleur), logique simple sur hub — machines qui réagissent toutes seules
