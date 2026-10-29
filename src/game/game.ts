@@ -4990,6 +4990,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const pos = new Float32Array(vtx * 3);
     const nor = new Float32Array(vtx * 3);
     const uvA = new Float32Array(vtx * 2);
+    // BUG-1 fix (Muse, 2026-10-29): the realistic material (opaqueStd)
+    // has vertexColors:true — a geometry WITHOUT a color attribute reads
+    // black per vertex and the brick renders desaturated grey (rig
+    // measure qa109: Orange brick RGB 65/65/61 vs Orange voxel
+    // 192/144/111, same cell, same camera). The chunk mesher writes
+    // AO x tint ~ 1 for an unoccluded face, so bricks carry white —
+    // exactly what a free-standing voxel face gets.
+    const col = new Float32Array(vtx * 3).fill(1);
     const index = new Uint32Array(idx);
     let vo = 0;
     let io = 0;
@@ -5006,6 +5014,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
     g.setAttribute("normal", new THREE.BufferAttribute(nor, 3));
     g.setAttribute("uv", new THREE.BufferAttribute(uvA, 2));
+    g.setAttribute("color", new THREE.BufferAttribute(col, 3));
     g.setIndex(new THREE.BufferAttribute(index, 1));
     brickGeos.set(id, g);
     return g;
