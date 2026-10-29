@@ -1188,6 +1188,37 @@ export const RECIPES: Recipe[] = [
     cat: "build",
   }),
 
+  r("springpump", "Spring pump 6L", "1 spring + 1 pump", [[ID.Spring, 1], [ID.Pump, 1]], ID.SpringPump, 1, {
+    shape: [ID.Spring, ID.Pump],
+    w: 1,
+    h: 2,
+    cat: "build",
+  }),
+  r("smallpump", "Small motorized pump", "1 pump + 1 gear 8T", [[ID.Pump, 1], [ID.Gear8, 1]], ID.SmallPump, 1, {
+    shape: [ID.Pump, ID.Gear8],
+    w: 1,
+    h: 2,
+    cat: "build",
+  }),
+  r("fairleft", "Fairing left", "1 fairing1 + 1 stick", [[ID.Fairing1, 1], [ID.Stick, 1]], ID.FairLeft, 1, {
+    shape: [ID.Fairing1, ID.Stick],
+    w: 2,
+    h: 1,
+    cat: "build",
+  }),
+  r("fairright", "Fairing right", "1 fairing1 + 1 stick", [[ID.Fairing1, 1], [ID.Stick, 1]], ID.FairRight, 1, {
+    shape: [ID.Stick, ID.Fairing1],
+    w: 2,
+    h: 1,
+    cat: "build",
+  }),
+  r("fairlarge", "Fairing large", "2 fairing1", [[ID.Fairing1, 2]], ID.FairLarge, 1, {
+    shape: [ID.Fairing1, ID.Fairing1],
+    w: 2,
+    h: 1,
+    cat: "build",
+  }),
+
   // P6 step 2 (Muse) — Kiln casting: the colour moulds. The donor brick is
   // the pigment/master: it is consumed into the melt, 4 plastic ingots
   // (smelted pellets) join it, and the mould pours 2 bricks of its colour.

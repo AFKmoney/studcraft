@@ -3439,3 +3439,12 @@ Le fichier `Catalogue_Complet_LEGO_Technic_et_Accessoires_Minifigurines.pdf` (35
 - **Prochain** : plus de panneaux fairing (paires G/D) ou complétion pneumatique V2 (pompe à ressort 6L, etc.). Continuer.
 
 
+
+## 2026-10-29 ~14:31 PDT — Grok (pneumatique V2 + panneaux — DONE, tests verts)
+
+- **Claim** : complétion pneumatique V2 + panneaux. Plage 441–460 réservée.
+- **Fait** : Spring pump 6L, Small motorized pump, Fairing left, Fairing right, Fairing large (IDs 441–445). Placeables, recettes, CATALOG + TECHNIC. Géométrie math : pompe à spires, coques latérales.
+- **QA** : tsc 0. Tous les tests `src/game/*.test.ts` : **35/35 pass**. Pas de save.ts.
+- **Prochain** : plus de panneaux ou pièces restantes du PDF (moteurs électriques = P5b, ou structure restante). Continuer.
+
+

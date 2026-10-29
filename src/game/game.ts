@@ -1916,6 +1916,26 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       return { group, isTool: false, flames };
     }
+    if (id === ID.SpringPump || id === ID.SmallPump) {
+      addCylPart(group, s * 0.1, s * 0.1, s * 0.6, 0, 0, 0, techMat, 12);
+      for (let i = 0; i < 5; i++) {
+        const y = (i - 2) * s * 0.1;
+        addCylPart(group, s * 0.13, s * 0.13, s * 0.03, 0, y, 0, skin(0x8d5a34), 8);
+      }
+      if (id === ID.SmallPump) {
+        addCylPart(group, s * 0.08, s * 0.08, s * 0.15, 0, s * 0.35, 0, skin(0xf0c43a), 10);
+      }
+      return { group, isTool: false, flames };
+    }
+    if (id === ID.FairLeft || id === ID.FairRight || id === ID.FairLarge) {
+      const side = id === ID.FairRight ? 1 : -1;
+      addBoxPart(group, s * 0.5, s * 0.05, s * 0.6, 0, 0, 0, techMat);
+      addBoxPart(group, s * 0.05, s * 0.35, s * 0.6, side * s * 0.22, s * 0.15, 0, techMat);
+      if (id === ID.FairLarge) {
+        addBoxPart(group, s * 0.05, s * 0.35, s * 0.6, -side * s * 0.22, s * 0.15, 0, techMat);
+      }
+      return { group, isTool: false, flames };
+    }
 
     if (id === ID.Brew) {
       const stoneMat = skin(0x70757d);

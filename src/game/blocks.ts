@@ -427,6 +427,12 @@ export const ID = {
   PipeElbow: 438,
   Fairing1: 439,
   Fairing2: 440,
+  // Pneumatic V2 + more fairings (range 441-460)
+  SpringPump: 441,
+  SmallPump: 442,
+  FairLeft: 443,
+  FairRight: 444,
+  FairLarge: 445,
   // Muse lane (P2 welding): IDs 400+ are reserved for the brick-layer
   // pillars so they can never collide with Grok's Technic catalogue.
   Welder: 400,
@@ -1396,6 +1402,12 @@ put(b(ID.Pipe, "Pneumatic pipe", "#3a5560", "#5a7d8c", "#2a3e48", "#1a2a30", { h
 put(b(ID.PipeElbow, "Pipe elbow", "#3a5560", "#5a7d8c", "#2a3e48", "#1a2a30", { hard: 0.4 }));
 put(b(ID.Fairing1, "Fairing panel #1", "#f4f1ea", "#ffffff", "#c5ccd3", "#8e959c", { hard: 0.4 }));
 put(b(ID.Fairing2, "Fairing panel #2", "#e0e4e8", "#f4f6f8", "#c5ccd3", "#8e959c", { hard: 0.4 }));
+// Pneumatic V2 + more fairings
+put(b(ID.SpringPump, "Spring pump 6L", "#c4924a", "#e0b15a", "#8d5a34", "#6d4426", { hard: 0.4 }));
+put(b(ID.SmallPump, "Small motorized pump", "#3a5560", "#5a7d8c", "#2a3e48", "#1a2a30", { hard: 0.4 }));
+put(b(ID.FairLeft, "Fairing left", "#f4f1ea", "#ffffff", "#c5ccd3", "#8e959c", { hard: 0.4 }));
+put(b(ID.FairRight, "Fairing right", "#f4f1ea", "#ffffff", "#c5ccd3", "#8e959c", { hard: 0.4 }));
+put(b(ID.FairLarge, "Fairing large", "#e0e4e8", "#f4f6f8", "#c5ccd3", "#8e959c", { hard: 0.4 }));
 
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];
@@ -1831,6 +1843,11 @@ export const CATALOG = [
   ID.PipeElbow,
   ID.Fairing1,
   ID.Fairing2,
+  ID.SpringPump,
+  ID.SmallPump,
+  ID.FairLeft,
+  ID.FairRight,
+  ID.FairLarge,
 ];
 
 /** Parts the player can take from the Technic bin. Click-states stay out. */
@@ -1905,6 +1922,11 @@ export const TECHNIC = [
   ID.PipeElbow,
   ID.Fairing1,
   ID.Fairing2,
+  ID.SpringPump,
+  ID.SmallPump,
+  ID.FairLeft,
+  ID.FairRight,
+  ID.FairLarge,
 ] as const;
 
 export const COLORS = [ID.Red, ID.Orange, ID.Yellow, ID.Green, ID.Blue, ID.Azure, ID.Pink, ID.White, ID.Black];
