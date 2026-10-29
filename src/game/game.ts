@@ -1,5 +1,7 @@
 import * as THREE from "three";
 import { ATLAS_COLS, ATLAS_ROWS, BLOCKS, CREATIVE_BAR, ID, TECHNIC, def, faceTile, stairsVariant, type BlockDef } from "./blocks";
+import { TechWorld, ORIENTS, bbox as techBbox, spec as techSpec, type Part as TechPart, type Plan as TechPlan, type Target as TechTarget } from "./technic";
+import { buildTechnicGeometry } from "./technicGeo";
 import { createAudio } from "./audio";
 import { STUD_H, STUD_OFFSETS, STUD_R, buildChunk, type Surface } from "./mesher";
 import * as FS from "./fireState";
@@ -125,6 +127,8 @@ export type TouchState = {
   jump: boolean;
   mine: boolean;
   place: boolean;
+  /** Momentary pulse from the touch "tourner" button: cycles the Technic placement variant. Consumed (reset to false) by the game loop. */
+  spin: boolean;
 };
 
 export type Quality = "auto" | "high" | "balanced" | "performance";
@@ -313,6 +317,10 @@ declare global {
       setPos?: (x: number, y: number, z: number) => boolean;
       placeBrickAt?: (id: number, sx: number, sy: number, sz: number) => boolean;
       getBricks?: () => [number, number, number, number][];
+      placeTechAt?: (id: number, o: number, qx: number, qy: number, qz: number) => boolean;
+      getTechnic?: () => [number, number, number, number, number, number][];
+      stepTechnic?: (dt: number) => { parts: number; jammed: boolean; omegas: Record<string, number>; angles: Record<string, number> };
+      spinTech?: () => number;
       getMineState?: () => { mine: number; time: number; key: string; target: string };
       getIntegrity?: () => { total: number; supported: number; stressed: string[]; falling: number; stress: Record<string, number>; sag: Record<string, number> };
       getBrickMeshY?: (sx: number, sy: number, sz: number) => number | null;
@@ -464,7 +472,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     pad: "",
     padActive: false,
   };
-  const touch: TouchState = { moveX: 0, moveY: 0, jump: false, mine: false, place: false };
+  const touch: TouchState = { moveX: 0, moveY: 0, jump: false, mine: false, place: false, spin: false };
   // ── Controller (v4.0) ───────────────────────────────────────────────────
   // Gameplay layout (Xbox name · PlayStation name):
   //   LS move · RS look · A/✕ jump · RT/R2 mine-attack · LT/L2 place-use
@@ -1499,20 +1507,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   function updateGhostGeo(id: number) {
     if (id === ghostLastId) return;
     ghostLastId = id;
-    // Clear old
+    // Clear old. Technic parts never use this block ghost: the Technic
+    // layer draws its own planned-pose ghost (see the Technic section),
+    // and the block ghost is force-hidden while a Technic part is held.
     while (ghost.children.length) ghost.remove(ghost.children[0]);
-    if (TECHNIC_SET.has(id)) {
-      const built = buildLegoItem3D(id);
-      built.group.traverse((obj) => {
-        if ((obj as THREE.Mesh).isMesh) {
-          const m = obj as THREE.Mesh;
-          m.material = ghostMat;
-          ghost.add(m);
-        }
-      });
-    } else {
-      ghost.add(ghostBody);
-    }
+    ghost.add(ghostBody);
   }
 
 
@@ -1797,250 +1796,27 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return { group, isTool: false, flames };
     }
 
-    // Real LEGO Technic geometry (module 1 metric, 1 stud = 8 mm)
-    // Pitch radius in studs = teeth / 16. Tip radius ≈ pitch + 0.75 mm (0.094 stud).
-    // Axle cross ≈ 4.8 mm wide. Liftarm holes spaced 1 stud apart.
-    const techMat = skin(baseHex);
-    const STUD = s; // 1 block visual unit ≈ 1 stud
-    if (id === ID.Gear8 || id === ID.Gear16 || id === ID.Gear24 || id === ID.Gear40 || id === ID.Bevel12 || id === ID.Bevel20 || id === ID.DBevel12 || id === ID.DBevel20 || id === ID.DBevel36) {
-      const teeth = id === ID.Gear8 ? 8 : id === ID.Gear16 ? 16 : id === ID.Gear24 ? 24 : id === ID.Gear40 ? 40 : id === ID.Bevel12 || id === ID.DBevel12 ? 12 : id === ID.Bevel20 || id === ID.DBevel20 ? 20 : 36;
-      const pitchR = (teeth / 16) * STUD;          // real pitch radius
-      const tipR = pitchR + 0.094 * STUD;          // tip ≈ pitch + 0.75 mm
-      const rootR = pitchR - 0.12 * STUD;
-      const thick = 0.22 * STUD;                   // face width ≈ 1.8 mm
-      // Web
-      addCylPart(group, rootR, rootR, thick * 0.6, 0, 0, 0, techMat, 20);
-      // Teeth as boxes around the pitch circle
-      for (let i = 0; i < teeth; i++) {
-        const a = (i / teeth) * Math.PI * 2 - Math.PI / 2;
-        const tx = Math.cos(a) * (pitchR + 0.04 * STUD);
-        const tz = Math.sin(a) * (pitchR + 0.04 * STUD);
-        addBoxPart(group, 0.08 * STUD, thick, 0.12 * STUD, tx, 0, tz, techMat);
-      }
-      // Axle hole
-      addCylPart(group, 0.06 * STUD, 0.06 * STUD, thick * 1.3, 0, 0, 0, skin(0x1a1a1a), 8);
-      // Double bevel: second disk
-      if (id === ID.DBevel12 || id === ID.DBevel20 || id === ID.DBevel36) {
-        addCylPart(group, rootR * 0.9, rootR * 0.9, thick * 0.5, 0, thick * 0.4, 0, techMat, 16);
-      }
+    // Technic (Claude's 1:1 layer): the held model IS the real geometry
+    // from technicGeo — the same function that renders the part in the
+    // world — normalized to hand size (spec.hand tweaks the fit). The
+    // old hand-modelled Technic shapes that lived here are gone: parts
+    // place through the Technic layer now, never as blocks or bricks.
+    if (TECHNIC_SET.has(id)) {
+      const geo = techGeoOf(id);
+      geo.computeBoundingBox();
+      const bb = geo.boundingBox!;
+      const size = new THREE.Vector3();
+      bb.getSize(size);
+      const centre = new THREE.Vector3();
+      bb.getCenter(centre);
+      const mesh = new THREE.Mesh(geo, techMatSolid);
+      const maxDim = Math.max(size.x, size.y, size.z) || 1;
+      mesh.scale.setScalar((0.55 * (techSpec(id)?.hand ?? 1)) / maxDim);
+      mesh.position.copy(centre).multiplyScalar(-mesh.scale.x);
+      group.add(mesh);
       return { group, isTool: false, flames };
     }
-    if (id === ID.Axle || id === ID.Axle2 || id === ID.Axle4 || id === ID.Axle6 || id === ID.Axle8 || id === ID.Worm || id === ID.AxleStop3 || id === ID.AxleStop5) {
-      const studs = id === ID.Axle2 ? 2 : id === ID.Axle4 ? 4 : id === ID.Axle6 ? 6 : id === ID.Axle8 ? 8 : id === ID.AxleStop3 ? 3 : id === ID.AxleStop5 ? 5 : 3;
-      const len = studs * STUD * 1.2;              // longer so it's clearly an axle
-      // Cross section: two intersecting rectangles, scaled up to be visible
-      const t = 0.12 * STUD;
-      const w = 0.28 * STUD;
-      addBoxPart(group, w, len, t, 0, 0, 0, techMat);
-      addBoxPart(group, t, len, w, 0, 0, 0, techMat);
-      if (id === ID.AxleStop3 || id === ID.AxleStop5) {
-        addBoxPart(group, 0.22 * STUD, 0.08 * STUD, 0.22 * STUD, 0, len / 2 - 0.04 * STUD, 0, skin(0x2a2e32));
-      }
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.Liftarm3 || id === ID.Liftarm5 || id === ID.Liftarm7 || id === ID.Liftarm9 || id === ID.Liftarm11 || id === ID.Liftarm13 || id === ID.Liftarm15 || id === ID.Thin3 || id === ID.Thin5 || id === ID.Thin7) {
-      const holes = id === ID.Liftarm3 || id === ID.Thin3 ? 3 : id === ID.Liftarm5 || id === ID.Thin5 ? 5 : id === ID.Liftarm7 || id === ID.Thin7 ? 7 : id === ID.Liftarm9 ? 9 : id === ID.Liftarm11 ? 11 : id === ID.Liftarm13 ? 13 : 15;
-      const thin = id === ID.Thin3 || id === ID.Thin5 || id === ID.Thin7;
-      const beamW = thin ? 0.28 * STUD : 0.55 * STUD;   // thin ≈ 2.2 mm, normal ≈ 4.4 mm
-      const beamH = 0.18 * STUD;                        // height ≈ 1.4 mm
-      const len = (holes - 1) * STUD + beamW;           // end-to-end
-      addBoxPart(group, beamW, beamH, len, 0, 0, 0, techMat);
-      // Axle holes every stud
-      for (let i = 0; i < holes; i++) {
-        const z = (i - (holes - 1) / 2) * STUD;
-        addCylPart(group, 0.06 * STUD, 0.06 * STUD, beamH * 1.4, 0, 0, z, skin(0x1a1a1a), 8);
-      }
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.Bush || id === ID.HalfBush) {
-      const h = id === ID.HalfBush ? s * 0.08 : s * 0.16;
-      addCylPart(group, s * 0.12, s * 0.12, h, 0, 0, 0, techMat, 12);
-      addCylPart(group, s * 0.045, s * 0.045, h * 1.2, 0, 0, 0, skin(0x1a1a1a), 8);
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.Shock) {
-      addCylPart(group, s * 0.06, s * 0.06, s * 0.7, 0, 0, 0, skin(0x8d5a34), 10);
-      for (let i = 0; i < 6; i++) {
-        const y = (i - 2.5) * s * 0.1;
-        addCylPart(group, s * 0.09, s * 0.09, s * 0.03, 0, y, 0, techMat, 8);
-      }
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.Triangle) {
-      addBoxPart(group, s * 0.7, s * 0.08, s * 0.1, 0, 0, 0, techMat);
-      addBoxPart(group, s * 0.1, s * 0.08, s * 0.5, -s * 0.3, 0, -s * 0.2, techMat);
-      addBoxPart(group, s * 0.1, s * 0.08, s * 0.5, s * 0.3, 0, -s * 0.2, techMat);
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.Hub || id === ID.Knuckle) {
-      addCylPart(group, s * 0.14, s * 0.14, s * 0.2, 0, 0, 0, techMat, 16);
-      addCylPart(group, s * 0.05, s * 0.05, s * 0.35, 0, 0, 0, skin(0x1a1a1a), 8);
-      if (id === ID.Knuckle) {
-        addBoxPart(group, s * 0.08, s * 0.3, s * 0.08, s * 0.18, 0, 0, techMat);
-      }
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.DBevel12 || id === ID.DBevel20 || id === ID.DBevel36) {
-      const teeth = id === ID.DBevel12 ? 12 : id === ID.DBevel20 ? 20 : 36;
-      const r = (teeth * 0.5) / 16 * s * 2.2;
-      addCylPart(group, r * 0.7, r * 0.7, s * 0.12, 0, s * 0.04, 0, techMat, 20);
-      addCylPart(group, r * 0.7, r * 0.7, s * 0.12, 0, -s * 0.04, 0, techMat, 20);
-      for (let i = 0; i < Math.min(teeth, 16); i++) {
-        const a = (i / Math.min(teeth, 16)) * Math.PI * 2;
-        addBoxPart(group, s * 0.04, s * 0.08, s * 0.04, Math.cos(a) * r, 0, Math.sin(a) * r, techMat);
-      }
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.Rack4 || id === ID.Rack7 || id === ID.Rack14) {
-      const n = id === ID.Rack4 ? 4 : id === ID.Rack7 ? 7 : 14;
-      const len = n * s * 0.12;
-      addBoxPart(group, s * 0.1, s * 0.08, len, 0, 0, 0, techMat);
-      for (let i = 0; i < n; i++) {
-        const z = (i - (n - 1) / 2) * s * 0.12;
-        addBoxPart(group, s * 0.04, s * 0.06, s * 0.04, s * 0.08, 0, z, techMat);
-      }
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.CVJoint) {
-      addCylPart(group, s * 0.06, s * 0.06, s * 0.3, 0, 0, -s * 0.15, techMat, 10);
-      addCylPart(group, s * 0.06, s * 0.06, s * 0.3, 0, 0, s * 0.15, techMat, 10);
-      addCylPart(group, s * 0.1, s * 0.1, s * 0.12, 0, 0, 0, skin(0xf5c518), 12);
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.ActMini || id === ID.ActXL) {
-      const len = id === ID.ActMini ? s * 0.5 : s * 1.1;
-      addCylPart(group, s * 0.08, s * 0.08, len, 0, 0, 0, techMat, 12);
-      addCylPart(group, s * 0.05, s * 0.05, len * 0.6, 0, 0, len * 0.2, skin(0xe23b2f), 10);
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.Turn28 || id === ID.Turn56) {
-      const teeth = id === ID.Turn28 ? 28 : 56;
-      const r = (teeth * 0.5) / 16 * s * 1.8;
-      addCylPart(group, r, r, s * 0.08, 0, 0, 0, techMat, 32);
-      addCylPart(group, r * 0.6, r * 0.6, s * 0.1, 0, 0, 0, skin(0xf0c43a), 20);
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.CylBlock) {
-      addBoxPart(group, s * 0.5, s * 0.4, s * 0.5, 0, 0, 0, techMat);
-      addCylPart(group, s * 0.12, s * 0.12, s * 0.5, -s * 0.12, 0, 0, skin(0x2a2e32), 12);
-      addCylPart(group, s * 0.12, s * 0.12, s * 0.5, s * 0.12, 0, 0, skin(0x2a2e32), 12);
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.EnginePiston) {
-      addCylPart(group, s * 0.1, s * 0.1, s * 0.2, 0, 0, 0, techMat, 12);
-      addBoxPart(group, s * 0.06, s * 0.3, s * 0.06, 0, -s * 0.15, 0, skin(0x1a1a1a));
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.ConRod) {
-      addBoxPart(group, s * 0.08, s * 0.5, s * 0.08, 0, 0, 0, techMat);
-      addCylPart(group, s * 0.06, s * 0.06, s * 0.1, 0, s * 0.25, 0, skin(0xc5ccd3), 8);
-      addCylPart(group, s * 0.06, s * 0.06, s * 0.1, 0, -s * 0.25, 0, skin(0xc5ccd3), 8);
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.Pipe) {
-      addCylPart(group, s * 0.04, s * 0.04, s * 0.8, 0, 0, 0, techMat, 10);
-      addCylPart(group, s * 0.06, s * 0.06, s * 0.1, 0, s * 0.35, 0, skin(0x2a2e32), 8);
-      addCylPart(group, s * 0.06, s * 0.06, s * 0.1, 0, -s * 0.35, 0, skin(0x2a2e32), 8);
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.PipeElbow) {
-      addCylPart(group, s * 0.04, s * 0.04, s * 0.4, 0, s * 0.15, 0, techMat, 10);
-      addCylPart(group, s * 0.04, s * 0.04, s * 0.4, s * 0.15, 0, 0, techMat, 10);
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.Fairing1 || id === ID.Fairing2) {
-      addBoxPart(group, s * 0.6, s * 0.05, s * 0.5, 0, 0, 0, techMat);
-      addBoxPart(group, s * 0.05, s * 0.3, s * 0.5, -s * 0.25, s * 0.12, 0, techMat);
-      if (id === ID.Fairing2) {
-        addBoxPart(group, s * 0.05, s * 0.3, s * 0.5, s * 0.25, s * 0.12, 0, techMat);
-      }
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.SpringPump || id === ID.SmallPump) {
-      addCylPart(group, s * 0.1, s * 0.1, s * 0.6, 0, 0, 0, techMat, 12);
-      for (let i = 0; i < 5; i++) {
-        const y = (i - 2) * s * 0.1;
-        addCylPart(group, s * 0.13, s * 0.13, s * 0.03, 0, y, 0, skin(0x8d5a34), 8);
-      }
-      if (id === ID.SmallPump) {
-        addCylPart(group, s * 0.08, s * 0.08, s * 0.15, 0, s * 0.35, 0, skin(0xf0c43a), 10);
-      }
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.FairLeft || id === ID.FairRight || id === ID.FairLarge) {
-      const side = id === ID.FairRight ? 1 : -1;
-      addBoxPart(group, s * 0.5, s * 0.05, s * 0.6, 0, 0, 0, techMat);
-      addBoxPart(group, s * 0.05, s * 0.35, s * 0.6, side * s * 0.22, s * 0.15, 0, techMat);
-      if (id === ID.FairLarge) {
-        addBoxPart(group, s * 0.05, s * 0.35, s * 0.6, -side * s * 0.22, s * 0.15, 0, techMat);
-      }
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.TechHub || id === ID.Battery || id === ID.Remote) {
-      addBoxPart(group, s * 0.5, s * 0.3, s * 0.4, 0, 0, 0, techMat);
-      for (let i = 0; i < 4; i++) {
-        const x = (i - 1.5) * s * 0.1;
-        addCylPart(group, s * 0.03, s * 0.03, s * 0.08, x, s * 0.18, 0, skin(0x3b96e4), 6);
-      }
-      if (id === ID.Remote) {
-        addBoxPart(group, s * 0.15, s * 0.1, s * 0.08, 0, s * 0.22, 0, skin(0x5eb0e5));
-      }
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.MotorM || id === ID.MotorL || id === ID.MotorXL || id === ID.Servo) {
-      const scale = id === ID.MotorM ? 0.7 : id === ID.MotorL ? 1.0 : id === ID.MotorXL ? 1.3 : 0.8;
-      addBoxPart(group, s * 0.35 * scale, s * 0.4 * scale, s * 0.3 * scale, 0, 0, 0, techMat);
-      addCylPart(group, s * 0.06, s * 0.06, s * 0.25 * scale, 0, 0, s * 0.2 * scale, skin(0x2a2e32), 10);
-      if (id === ID.Servo) {
-        addBoxPart(group, s * 0.12, s * 0.12, s * 0.08, 0, s * 0.15, 0, skin(0xf0c43a));
-      }
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.Liftarm9 || id === ID.Liftarm11 || id === ID.Liftarm13 || id === ID.Liftarm15) {
-      const holes = id === ID.Liftarm9 ? 9 : id === ID.Liftarm11 ? 11 : id === ID.Liftarm13 ? 13 : 15;
-      const len = holes * s * 0.12;
-      addBoxPart(group, s * 0.35, s * 0.14, len, 0, 0, 0, techMat);
-      for (let i = 0; i < Math.min(holes, 8); i++) {
-        const z = (i - 3.5) * s * 0.12;
-        addCylPart(group, s * 0.04, s * 0.04, s * 0.16, 0, 0, z, skin(0x1a1a1a), 6);
-      }
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.Frame711 || id === ID.Frame1115) {
-      const w = id === ID.Frame711 ? s * 0.7 : s * 1.0;
-      const d = id === ID.Frame711 ? s * 0.5 : s * 0.7;
-      addBoxPart(group, w, s * 0.1, s * 0.08, 0, 0, d / 2, techMat);
-      addBoxPart(group, w, s * 0.1, s * 0.08, 0, 0, -d / 2, techMat);
-      addBoxPart(group, s * 0.08, s * 0.1, d, w / 2, 0, 0, techMat);
-      addBoxPart(group, s * 0.08, s * 0.1, d, -w / 2, 0, 0, techMat);
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.AxlePin || id === ID.Towball) {
-      addCylPart(group, s * 0.05, s * 0.05, s * 0.3, 0, 0, 0, techMat, 8);
-      if (id === ID.Towball) {
-        addCylPart(group, s * 0.08, s * 0.08, s * 0.1, 0, s * 0.18, 0, skin(0xc5ccd3), 10);
-      }
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.Thin7) {
-      const len = 7 * s * 0.1;
-      addBoxPart(group, s * 0.2, s * 0.1, len, 0, 0, 0, techMat);
-      for (let i = 0; i < 5; i++) {
-        const z = (i - 2) * s * 0.12;
-        addCylPart(group, s * 0.035, s * 0.035, s * 0.12, 0, 0, z, skin(0x1a1a1a), 6);
-      }
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.Pin3L || id === ID.Pin3LFree) {
-      addCylPart(group, s * 0.045, s * 0.045, s * 0.4, 0, 0, 0, techMat, 8);
-      return { group, isTool: false, flames };
-    }
-    if (id === ID.AxleStop3 || id === ID.AxleStop5) {
-      const len = id === ID.AxleStop3 ? s * 0.4 : s * 0.65;
-      addBoxPart(group, s * 0.06, len, s * 0.06, 0, 0, 0, techMat);
-      addBoxPart(group, s * 0.12, s * 0.06, s * 0.12, 0, len / 2 - s * 0.03, 0, skin(0x2a2e32));
-      return { group, isTool: false, flames };
-    }
+
 
     if (id === ID.Brew) {
       const stoneMat = skin(0x70757d);
@@ -4003,9 +3779,15 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // v4.17: restore damaged (partially carved) blocks
     CH.clearChips();
     for (const [x, y, z, v] of data.chips ?? []) CH.chipMap.set(CH.ckey(x, y, z), v);
-    // P0: restore the stud-grid brick layer.
+    // P0: restore the stud-grid brick layer. Technic ids found in the
+    // brick layer are pre-layer saves: they migrate to the Technic
+    // layer instead (conversion: convertLegacyTechBrick).
     clearBricks();
-    for (const [id, sx, sy, sz] of data.bricks ?? []) addBrick(id, sx, sy, sz);
+    clearTech();
+    for (const [id, sx, sy, sz] of data.bricks ?? []) {
+      if (TECHNIC_SET.has(id)) convertLegacyTechBrick(id, sx, sy, sz);
+      else addBrick(id, sx, sy, sz);
+    }
     // P2: restore welded joints — only pairs whose bricks both came back.
     for (const [ax, ay, az, bx, by, bz] of data.welds ?? []) {
       const ka = brickKey(ax, ay, az);
@@ -4013,6 +3795,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (bricks.has(ka) && bricks.has(kb)) welds.add(weldKey(ka, kb));
     }
     rebuildAllBrickMeshes();
+    // Technic layer restore: [id, o, qx, qy, qz, on].
+    for (const [id, o, qx, qy, qz, on] of data.technic ?? []) {
+      if (!TECHNIC_SET.has(id)) continue;
+      const p = tech.add(id, o, [qx, qy, qz]);
+      p.on = on !== 0;
+    }
+    techRevSeen = tech.rev;
+    syncTechMeshes();
     for (const [x, y, z] of data.tufts ?? []) TS.tuftGone.add(TS.tkey(x, y, z));
     ench.clear();
     for (const [id, list] of data.ench ?? []) ench.set(id, Object.fromEntries(list));
@@ -4111,6 +3901,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     const seen = new Set<number>();
     for (const c of cells) {
+      // Debris-site Technic finds join the Technic layer, not bricks.
+      if (TECHNIC_SET.has(c.id)) {
+        convertLegacyTechBrick(c.id, c.x * 2, c.y, c.z * 2);
+        continue;
+      }
       if (!brickSpaceFree(c.x * 2, c.y, c.z * 2)) continue;
       addBrick(c.id, c.x * 2, c.y, c.z * 2);
       seen.add(c.id);
@@ -4861,6 +4656,261 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
 
   const aimPt = { x: 0, y: 0, z: 0 }; // frame aim point (face point of the current target)
 
+  // ---- Technic 1:1 layer (Claude's technic.ts, wired in by Muse) -----
+  // Parts live in their own TechWorld on the half-module lattice (q
+  // units; world blocks = q / 4). Rendering: ONE Mesh per part — parts
+  // are player-placed and few — with geometry from technicGeo (module
+  // units, technic.ts local frame), matrix = T(q/4) · ORIENTS[o] ·
+  // S(0.5), plus the mechanics group spin about the group axis line
+  // (from technic.ts step()). Meshes sync when tech.rev changes;
+  // transforms rewrite every frame (one compose per part, no allocs).
+  // v1 limits: no player collision with parts, no net sync (same as
+  // the P0 brick layer's v1).
+  const tech = new TechWorld();
+  const techGroup = new THREE.Group();
+  scene.add(techGroup);
+  const techMeshes = new Map<number, THREE.Mesh>();
+  const techGeos = new Map<number, THREE.BufferGeometry>();
+  const techMatSolid = new THREE.MeshLambertMaterial({ vertexColors: true });
+  const techGhostMat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.45, depthWrite: false });
+  const techGhostMesh = new THREE.Mesh(new THREE.BufferGeometry(), techGhostMat);
+  techGhostMesh.visible = false;
+  techGhostMesh.frustumCulled = false;
+  techGhostMesh.userData.keepShadow = false;
+  scene.add(techGhostMesh);
+  let techGhostId = 0;
+  let techSpin = 0; // cycles plan() variants (R key / touch "tourner" button)
+  let techRevSeen = -1;
+
+  const EMPTY_TECH_GEO = new THREE.BufferGeometry();
+  function techGeoOf(id: number): THREE.BufferGeometry {
+    let g = techGeos.get(id);
+    if (!g) {
+      // buildTechnicGeometry returns null only for an id without a spec;
+      // every TECHNIC_SET id has one, so the empty fallback is unreachable
+      // in play — it exists to keep the cache total.
+      g = buildTechnicGeometry(id) ?? EMPTY_TECH_GEO;
+      techGeos.set(id, g);
+    }
+    return g;
+  }
+
+  const _techR = new THREE.Matrix4();
+  const _techSpinM = new THREE.Matrix4();
+  const _techNeg = new THREE.Matrix4();
+  const _techV = new THREE.Vector3();
+  /** Pose matrix of a part (no mechanics spin): geometry is in modules,
+   *  the lattice in half-modules — T(q/4) · ORIENTS[o] · S(0.5). */
+  function techBaseMatrix(o: number, q: readonly number[], out: THREE.Matrix4) {
+    const m = ORIENTS[o];
+    _techR.set(m[0], m[1], m[2], 0, m[3], m[4], m[5], 0, m[6], m[7], m[8], 0, 0, 0, 0, 1);
+    out.makeTranslation(q[0] / 4, q[1] / 4, q[2] / 4);
+    out.multiply(_techR);
+    out.scale(_techV.set(0.5, 0.5, 0.5));
+    return out;
+  }
+  /** Full render matrix: base pose, then the group's mechanics spin
+   *  about its axis line (axis point comes from conns — q units). */
+  function techWriteMatrix(p: TechPart, out: THREE.Matrix4) {
+    techBaseMatrix(p.o, p.q, out);
+    const g = tech.groups.get(p.uid);
+    if (g === undefined) return;
+    const ang = tech.gAngle.get(g) ?? 0;
+    if (!ang) return;
+    const axis = tech.gAxis.get(g);
+    if (!axis) return;
+    _techV.set(axis.p[0] / 4, axis.p[1] / 4, axis.p[2] / 4);
+    _techSpinM.makeTranslation(_techV.x, _techV.y, _techV.z);
+    _techSpinM.multiply(_techR.makeRotationAxis(axis.ax === 0 ? _techV.set(1, 0, 0) : axis.ax === 1 ? _techV.set(0, 1, 0) : _techV.set(0, 0, 1), ang));
+    _techV.set(axis.p[0] / 4, axis.p[1] / 4, axis.p[2] / 4);
+    _techSpinM.multiply(_techNeg.makeTranslation(-_techV.x, -_techV.y, -_techV.z));
+    out.premultiply(_techSpinM);
+  }
+
+  function syncTechMeshes() {
+    for (const [uid, mesh] of techMeshes) {
+      if (!tech.parts.has(uid)) {
+        techGroup.remove(mesh);
+        techMeshes.delete(uid);
+      }
+    }
+    for (const p of tech.parts.values()) {
+      if (techMeshes.has(p.uid)) continue;
+      const mesh = new THREE.Mesh(techGeoOf(p.id), techMatSolid);
+      mesh.frustumCulled = false;
+      mesh.matrixAutoUpdate = false;
+      if (plasticOn) {
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+      }
+      techWriteMatrix(p, mesh.matrix);
+      mesh.matrixWorldNeedsUpdate = true;
+      techGroup.add(mesh);
+      techMeshes.set(p.uid, mesh);
+    }
+  }
+  function clearTech() {
+    tech.clear();
+    for (const mesh of techMeshes.values()) techGroup.remove(mesh);
+    techMeshes.clear();
+    techRevSeen = -1;
+    techGhostMesh.visible = false;
+  }
+  /** Voxel/brick solidity for the planner, in BLOCK coords (technic.ts
+   *  floors q/4 itself). Fluids and plants don't block a part. */
+  function techSolidAt(x: number, y: number, z: number) {
+    const id = world.get(x, y, z);
+    if (id !== ID.Air && def(id).solid) return true;
+    return brickCellBlocked(x, y, z);
+  }
+  /** World AABB (blocks) of a posed part, from technic's own bbox. */
+  function techPartAabb(id: number, o: number, q: readonly number[]) {
+    const [lo, hi] = techBbox(id, o);
+    return {
+      c: [(q[0] + (lo[0] + hi[0]) / 2) / 4, (q[1] + (lo[1] + hi[1]) / 2) / 4, (q[2] + (lo[2] + hi[2]) / 2) / 4] as [number, number, number],
+      s: [(hi[0] - lo[0]) / 4, (hi[1] - lo[1]) / 4, (hi[2] - lo[2]) / 4] as [number, number, number],
+    };
+  }
+  function techHitsPlayer(id: number, o: number, q: readonly number[]) {
+    const a = techPartAabb(id, o, q);
+    return (
+      a.c[0] - a.s[0] / 2 < player.x + HW &&
+      a.c[0] + a.s[0] / 2 > player.x - HW &&
+      a.c[1] - a.s[1] / 2 < player.y + BODY &&
+      a.c[1] + a.s[1] / 2 > player.y &&
+      a.c[2] - a.s[2] / 2 < player.z + HW &&
+      a.c[2] + a.s[2] / 2 > player.z - HW
+    );
+  }
+  /** Power rule for technic.step(): a motor runs when it is switched on
+   *  and a switched-on hub / battery box belongs to the same assembly —
+   *  any connector of the box within ~5 M of any connector of the motor
+   *  (conns are in q units, so 10 q), or the part centres within ~6 M
+   *  (some boxes, like the hub's top, carry few connectors). */
+  function techPowered(p: TechPart): boolean {
+    if (p.on === false) return false;
+    if (techSpec(p.id)?.drive !== "motor") return true;
+    const ca = techPartAabb(p.id, p.o, p.q).c;
+    for (const other of tech.parts.values()) {
+      if (other.uid === p.uid || other.on === false) continue;
+      if (techSpec(other.id)?.drive !== "power") continue;
+      const cb = techPartAabb(other.id, other.o, other.q).c;
+      if (Math.hypot((ca[0] - cb[0]) * 4, (ca[1] - cb[1]) * 4, (ca[2] - cb[2]) * 4) <= 12) return true;
+      for (const a of tech.conns(p))
+        for (const b of tech.conns(other))
+          if (Math.hypot(a.c[0] - b.c[0], a.c[1] - b.c[1], a.c[2] - b.c[2]) <= 10 + Math.max(a.len, b.len)) return true;
+    }
+    return false;
+  }
+
+  function tickTechnic(dt: number) {
+    // Spin input: R key (edge, consumed) + the touch "tourner" pulse.
+    if (keys.has("KeyR")) {
+      keys.delete("KeyR");
+      techSpin++;
+    }
+    if (touch.spin) {
+      touch.spin = false;
+      techSpin++;
+    }
+    if (tech.parts.size === 0) return;
+    tech.step(dt, techPowered);
+    if (tech.rev !== techRevSeen) {
+      techRevSeen = tech.rev;
+      syncTechMeshes();
+    }
+    for (const [uid, mesh] of techMeshes) {
+      const p = tech.parts.get(uid);
+      if (!p) continue;
+      techWriteMatrix(p, mesh.matrix);
+      mesh.matrixWorldNeedsUpdate = true;
+    }
+  }
+
+  function hideTechGhost() {
+    techGhostMesh.visible = false;
+  }
+  function showTechGhost(id: number, plan: TechPlan, ok: boolean) {
+    if (id !== techGhostId) {
+      techGhostId = id;
+      techGhostMesh.geometry = techGeoOf(id);
+    }
+    techBaseMatrix(plan.o, plan.q, techGhostMesh.matrix);
+    techGhostMesh.matrixAutoUpdate = false;
+    techGhostMesh.matrixWorldNeedsUpdate = true;
+    techGhostMat.color.set(ok ? 0xffffff : 0xe23b2f);
+    techGhostMat.opacity = ok ? 0.45 : 0.25;
+    techGhostMesh.visible = true;
+  }
+
+  function tryPlaceTech(plan: TechPlan) {
+    const held = hotbar[slot];
+    if (!TECHNIC_SET.has(held)) return;
+    if (!creative && (inv[held] ?? 0) <= 0) {
+      say("Out of those parts");
+      return;
+    }
+    if (techHitsPlayer(held, plan.o, plan.q)) {
+      say("Can't fit a part into yourself");
+      return;
+    }
+    const p = tech.add(held, plan.o, plan.q);
+    if (!creative) spend(held, 1);
+    const c = techPartAabb(p.id, p.o, p.q).c;
+    burst(c[0], c[1], c[2], def(held).color, 6);
+    audio.snap();
+    swing = 1;
+    saveDirty = true;
+  }
+
+  function breakTechPart(uid: number) {
+    const p = tech.parts.get(uid);
+    if (!p) return;
+    const id = p.id;
+    const c = techPartAabb(id, p.o, p.q).c;
+    tech.remove(uid);
+    // A part is a physical object: mining always returns it, in both
+    // modes (no pellets — it comes back as itself, like real LEGO).
+    dropItem(id, 1, c[0], c[1] + 0.25, c[2]);
+    burst(c[0], c[1], c[2], def(id).color, 7);
+    audio.brickBreak();
+    padRumble(0.12, 0.25, 45);
+    swing = 1;
+    saveDirty = true;
+    mineTime = 0;
+    mineKey = "";
+    hideCrack();
+  }
+
+  /** The crank / hub / battery switch: flips the part's `on` flag, which
+   *  technic.step() (cranks) and techPowered() (motors) both read. */
+  function toggleTechPart(p: TechPart) {
+    p.on = p.on === false ? true : false;
+    say(def(p.id).name + (p.on ? " — on" : " — off"));
+    audio.place();
+    saveDirty = true;
+  }
+
+  // Save conversion (Technic étape 4): a Technic part stored as a P0
+  // brick sat in ONE block cell (stud coords sx, sy, sz). Re-seat it
+  // with the planner, flat on the floor of its old cell; if no pose
+  // fits, try the raw lattice origin; if even that collides, drop it
+  // as an item — a migration never deletes a part.
+  function convertLegacyTechBrick(id: number, sx: number, sy: number, sz: number) {
+    const face = sy * 4;
+    const plan = tech.plan(id, { kind: "face", point: [sx * 2 + 2, face, sz * 2 + 2], n: [1, 1], face }, [0, 0, 1], 0, techSolidAt);
+    if (plan) {
+      tech.add(id, plan.o, plan.q);
+      return;
+    }
+    const q: [number, number, number] = [sx * 2, sy * 4, sz * 2];
+    if (tech.test(id, 0, q, techSolidAt) >= 0) {
+      tech.add(id, 0, q);
+      return;
+    }
+    dropItem(id, 1, sx / 2 + 0.5, sy + 1.2, sz / 2 + 0.5);
+  }
+
   const brickKey = (sx: number, sy: number, sz: number) => sx + "," + sy + "," + sz;
   const cellKey3 = (x: number, y: number, z: number) => x + "," + y + "," + z;
 
@@ -4919,49 +4969,6 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   function brickGeo(id: number) {
     let g = brickGeos.get(id);
     if (g) return g;
-    // Technic pieces: real shape, not a brick cube
-    if (TECHNIC_SET.has(id)) {
-      const built = buildLegoItem3D(id);
-      built.group.updateMatrixWorld(true);
-      const geos: THREE.BufferGeometry[] = [];
-      built.group.traverse((obj) => {
-        if ((obj as THREE.Mesh).isMesh) {
-          const m = obj as THREE.Mesh;
-          m.updateMatrix();
-          const gg = (m.geometry as THREE.BufferGeometry).clone();
-          gg.applyMatrix4(m.matrixWorld);
-          geos.push(gg);
-        }
-      });
-      if (geos.length) {
-        // Merge
-        let vtx = 0, idx = 0;
-        for (const gg of geos) {
-          vtx += gg.getAttribute("position").count;
-          idx += (gg.getIndex()?.count ?? gg.getAttribute("position").count);
-        }
-        const pos = new Float32Array(vtx * 3);
-        const nor = new Float32Array(vtx * 3);
-        const index = new Uint32Array(idx);
-        let vo = 0, io = 0;
-        for (const gg of geos) {
-          pos.set(gg.getAttribute("position").array as Float32Array, vo * 3);
-          if (gg.getAttribute("normal")) nor.set(gg.getAttribute("normal").array as Float32Array, vo * 3);
-          const pi = gg.getIndex();
-          if (pi) {
-            for (let i = 0; i < pi.count; i++) index[io + i] = pi.getX(i) + vo;
-            io += pi.count;
-          }
-          vo += gg.getAttribute("position").count;
-        }
-        g = new THREE.BufferGeometry();
-        g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-        g.setAttribute("normal", new THREE.BufferAttribute(nor, 3));
-        g.setIndex(new THREE.BufferAttribute(index, 1));
-        brickGeos.set(id, g);
-        return g;
-      }
-    }
     const parts: THREE.BufferGeometry[] = [fallerGeo(id).clone()];
     // Studs wear the TOP tile, remapped like fallerGeo remaps its faces.
     const tile = faceTile(id, 0);
@@ -5590,6 +5597,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // half-offset target): food + generic placement only, v1.
   function tryPlaceBrick(bh: BrickHit) {
     const held = hotbar[slot];
+    if (TECHNIC_SET.has(held)) return; // Technic parts place through the Technic layer only
     // P2: the welding torch never places — it welds the aimed brick.
     if (held === ID.Welder) {
       weldAction(bh);
@@ -6708,6 +6716,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const sneaking = isSneaking();
     const held = hotbar[slot];
     const heldDef = def(held);
+    if (TECHNIC_SET.has(held)) return; // Technic parts place through the Technic layer only
     if (held === ID.Bow || held === ID.Crossbow) return shootHeld();
     if (held === ID.Trident) return throwTrident();
     if (held === ID.Firework) return launchFirework();
@@ -10719,6 +10728,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         return [x, y, z, v] as [number, number, number, number];
       }),
       bricks: [...bricks.values()].map((b) => [b.id, b.sx, b.sy, b.sz] as [number, number, number, number]),
+      technic: [...tech.parts.values()].map((p) => [p.id, p.o, p.q[0], p.q[1], p.q[2], p.on === false ? 0 : 1] as [number, number, number, number, number, number]),
       welds: [...welds].map((w) => {
         const [a, b] = w.split("|");
         const [ax, ay, az] = a.split(",").map(Number);
@@ -10957,6 +10967,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // (voxel hit, brick hit) owns the crosshair this frame.
     const bHit = bricks.size > 0 ? raycastBricks(rox, roy, roz, rdx, rdy, rdz, reach + (tp ? thirdAim.back : 0)) : null;
     const useBrick = !!bHit && (!hit || bHit.t < hit.dist);
+    // Technic layer: its own DDA raycast on the half-module lattice (t
+    // comes back in q units — /4 = blocks). The nearest of voxel /
+    // brick / Technic owns the crosshair this frame.
+    const tHit = tech.parts.size > 0 ? tech.raycast([rox * 4, roy * 4, roz * 4], [rdx, rdy, rdz], (reach + (tp ? thirdAim.back : 0)) * 4) : null;
+    const tDist = tHit ? tHit.t / 4 : Infinity;
+    const useTech = !!tHit && tDist <= (hit ? hit.dist : Infinity) && tDist <= (bHit ? bHit.t : Infinity);
     if (useBrick && bHit) {
       aimPt.x = rox + rdx * bHit.t;
       aimPt.y = roy + rdy * bHit.t;
@@ -10989,12 +11005,44 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         mob = m;
       }
     }
-    const nearBlock = Math.min(hit ? hit.dist : Infinity, bHit ? bHit.t : Infinity);
+    const nearBlock = Math.min(hit ? hit.dist : Infinity, bHit ? bHit.t : Infinity, tDist);
     const blockFirst = !mob || nearBlock < mobT;
     hud.targetName = "";
     hud.mine = 0;
     highlight.visible = false;
     ghost.visible = false;
+    // Technic placement preview: while a Technic part is held, the
+    // planner (technic.ts plan()) owns the ghost — against the nearest
+    // target, whichever layer it belongs to. The plan is executed
+    // after the aim chain below; the block ghost is force-hidden
+    // whenever a Technic part is held.
+    hideTechGhost();
+    let techPlanNow: TechPlan | null = null;
+    const heldTechId = hotbar[slot];
+    if (TECHNIC_SET.has(heldTechId) && blockFirst) {
+      const look: [number, number, number] = [rdx, rdy, rdz];
+      let tgt: TechTarget | null = null;
+      if (useTech && tHit) tgt = { kind: "part", uid: tHit.uid, point: tHit.point, n: tHit.n, cell: tHit.cell };
+      else if (useBrick && bHit) {
+        const bk = bHit.brick;
+        const ax = bHit.nx !== 0 ? 0 : bHit.ny !== 0 ? 1 : 2;
+        const sg = ax === 0 ? bHit.nx : ax === 1 ? bHit.ny : bHit.nz;
+        const mb = ax === 0 ? bk.sx / 2 : ax === 1 ? bk.sy : bk.sz / 2;
+        tgt = { kind: "face", point: [aimPt.x * 4, aimPt.y * 4, aimPt.z * 4], n: [ax as 0 | 1 | 2, sg], face: sg > 0 ? (mb + 1) * 4 : mb * 4 };
+      } else if (hit) {
+        const ax = hit.nx !== 0 ? 0 : hit.ny !== 0 ? 1 : 2;
+        const sg = ax === 0 ? hit.nx : ax === 1 ? hit.ny : hit.nz;
+        const mb = ax === 0 ? hit.x : ax === 1 ? hit.y : hit.z;
+        tgt = { kind: "face", point: [aimPt.x * 4, aimPt.y * 4, aimPt.z * 4], n: [ax as 0 | 1 | 2, sg], face: sg > 0 ? (mb + 1) * 4 : mb * 4 };
+      }
+      if (tgt) {
+        techPlanNow = tech.plan(heldTechId, tgt, look, techSpin, techSolidAt);
+        if (techPlanNow) {
+          const ok = (creative || (inv[heldTechId] ?? 0) > 0) && !techHitsPlayer(heldTechId, techPlanNow.o, techPlanNow.q);
+          showTechGhost(heldTechId, techPlanNow, ok);
+        }
+      }
+    }
 
     if (!blockFirst && mob) {
       hud.targetName =
@@ -11151,6 +11199,40 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         swing = 1;
         if (mob.hp <= 0) killMob(mob);
       }
+    } else if (useTech && tHit) {
+      // Technic: the crosshair is on a placed part.
+      const tpart = tech.parts.get(tHit.uid)!;
+      const block = def(tpart.id);
+      const tspec = techSpec(tpart.id);
+      hud.targetName = block.name + (tspec?.drive ? (tpart.on === false ? " · off" : " · on") : "");
+      const aabb = techPartAabb(tpart.id, tpart.o, tpart.q);
+      highlight.visible = !hud.hidden;
+      highlight.position.set(aabb.c[0], aabb.c[1], aabb.c[2]);
+      highlight.scale.set(Math.max(aabb.s[0], 0.05), Math.max(aabb.s[1], 0.05), Math.max(aabb.s[2], 0.05));
+      studOutline.visible = false;
+      const key = "T:" + tHit.uid;
+      if (sample.mine && block.hard !== Infinity) {
+        if (mineKey !== key) {
+          mineKey = key;
+          mineTime = 0;
+        }
+        mineTime += dt;
+        // Parts are hand-breakable plastic: hardness x the standard rate.
+        const need = creative ? 0.05 : block.hard * 1.5;
+        hud.mine = Math.min(1, mineTime / Math.max(need, 0.01));
+        hideCrack(); // no crack overlay on parts — hud.mine carries it, like bricks
+        if (mineTime >= need) breakTechPart(tHit.uid);
+      } else if (!sample.mine) {
+        mineTime = 0;
+        mineKey = "";
+        hideCrack();
+      }
+      // Place button on a part: with a Technic part in hand, the
+      // planner pre-pass above owns placement; with anything else in
+      // hand, a drive part (crank / motor / hub / battery) toggles.
+      if (!TECHNIC_SET.has(hotbar[slot]) && tspec?.drive && sample.first && sample.place && !prevPlace) {
+        toggleTechPart(tpart);
+      }
     } else if (useBrick && bHit) {
       // P0: the crosshair is on a snapped brick.
       const bk = bHit.brick;
@@ -11158,6 +11240,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       hud.targetName = brickWelded(bHit.key) ? block.name + " · welded" : block.name;
       highlight.visible = !hud.hidden;
       highlight.position.set(bk.sx / 2 + 0.5, bk.sy + 0.5, bk.sz / 2 + 0.5);
+      highlight.scale.set(1, 1, 1);
       studOutline.visible = false;
       const key = "B:" + bHit.key;
       if (sample.mine && block.hard !== Infinity && brickWelded(bHit.key) && hotbar[slot] !== ID.Shears) {
@@ -11242,6 +11325,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       // F1 (clean screenshot mode, like Minecraft) also hides the block outline
       highlight.visible = !hud.hidden;
       highlight.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
+      highlight.scale.set(1, 1, 1);
       studOutline.visible = !hud.hidden && settings.studs && !def(world.get(hit.x, hit.y + 1, hit.z)).solid;
       const key = hit.x + "," + hit.y + "," + hit.z;
       // v4.16 — tufts tear FIRST: punching the top of a grass block strips
@@ -11386,6 +11470,17 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         else if (heldId === ID.SplashVenom || heldId === ID.SplashTar) throwSplash(heldId);
         else if (heldId === ID.EnderPearl) pearlHop();
         else if (def(heldId).food) eat();
+      }
+    }
+    // Technic: execute the planned placement (pre-pass above) on the
+    // same place-button cadence as blocks/bricks; the block ghost never
+    // shows while a Technic part is held.
+    if (TECHNIC_SET.has(hotbar[slot])) ghost.visible = false;
+    if (techPlanNow) {
+      const placeDown = sample.place;
+      if ((sample.first && placeDown && !prevPlace) || (placeDown && placeCool <= 0 && prevPlace)) {
+        placeCool = 0.18;
+        tryPlaceTech(techPlanNow);
       }
     }
     if (!hud.targetName && hotbar[slot]) {
@@ -12280,6 +12375,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     updateTopples(dt);
     updateFallers(dt);
     tickBricks(dt);
+    tickTechnic(dt);
     // DualSense adaptive triggers (v4.18): R2 stiffens as the block cracks
     // while you mine; L2 gets a weapon "wall" while a bow is in hand.
     if (settings.adaptive) {
@@ -12560,6 +12656,27 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return true;
     },
     getBricks: () => [...bricks.values()].map((b) => [b.id, b.sx, b.sy, b.sz] as [number, number, number, number]),
+    // Technic QA hooks: place a part on the lattice (planner-free: the
+    // pose must pass tech.test), list the layer in save format, and
+    // step the mechanics deterministically (the stepBricks precedent —
+    // rig frames run far slower than game time).
+    placeTechAt: (id: number, o: number, qx: number, qy: number, qz: number) => {
+      if (!TECHNIC_SET.has(id)) return false;
+      if (tech.test(id, o, [qx, qy, qz], techSolidAt) < 0) return false;
+      tech.add(id, o, [qx, qy, qz]);
+      saveDirty = true;
+      return true;
+    },
+    getTechnic: () => [...tech.parts.values()].map((p) => [p.id, p.o, p.q[0], p.q[1], p.q[2], p.on === false ? 0 : 1] as [number, number, number, number, number, number]),
+    stepTechnic: (dt: number) => {
+      tickTechnic(dt);
+      const omegas: Record<string, number> = {};
+      for (const [g, w] of tech.gOmega) omegas[g] = w;
+      const angles: Record<string, number> = {};
+      for (const [g, a] of tech.gAngle) angles[g] = a;
+      return { parts: tech.parts.size, jammed: tech.jammed, omegas, angles };
+    },
+    spinTech: () => ++techSpin,
     // P0 QA witness (qa99b11): mining progress on the current target —
     // key "B:…" = brick branch, voxel key = classic branch, "" = no mining.
     getMineState: () => ({ mine: hud.mine, time: mineTime, key: mineKey, target: hud.targetName }),

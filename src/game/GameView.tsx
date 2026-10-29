@@ -1460,6 +1460,7 @@ function TouchControls({ game }: { game: GameApi }) {
     game.touch.mine = false;
     game.touch.place = false;
     game.touch.jump = false;
+    game.touch.spin = false;
   };
   return (
     <div className="sc-touch" data-silent>
@@ -1529,6 +1530,16 @@ function TouchControls({ game }: { game: GameApi }) {
         </HoldButton>
         <HoldButton className="jump" label="Jump" onHold={(v) => (game.touch.jump = v)} buzz={buzz}>
           <JumpIcon size={28} />
+        </HoldButton>
+        <HoldButton
+          className="spin"
+          label="Turn part — cycle the placement variant"
+          onHold={(v) => {
+            if (v) game.touch.spin = true;
+          }}
+          buzz={buzz}
+        >
+          <GearIcon size={26} />
         </HoldButton>
       </div>
     </div>
