@@ -952,7 +952,7 @@ wear(ID.Helm, "Cap", "#d9dde2", 1);
 wear(ID.PlateArmor, "Shell", "#c5ccd3", 2);
 wear(ID.Legs, "Leg plates", "#aeb6be", 3);
 wear(ID.Boots, "Boots", "#8e959c", 4);
-item(ID.Bow, "Arc / Bow", "#c4924a", { tool: "bow" as ToolKind, tier: 1, maxUse: 80 });
+item(ID.Bow, "Bow", "#c4924a", { tool: "bow" as ToolKind, tier: 1, maxUse: 80 });
 item(ID.Arrow, "Arrow", "#d9dde2");
 item(ID.Rod, "Rod", "#6b3e22", { maxUse: 40 });
 item(ID.Shears, "Shears", "#c5ccd3", { maxUse: 80 });
