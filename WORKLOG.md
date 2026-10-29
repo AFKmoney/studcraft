@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-29 (Grok — differential 359, output (A+B)/2).
+**Last update:** 2026-10-29 (Grok — P5 machines placed, door and gate follow the cam).
 
 ## 2026-10-26 — v4.12: Engine performance, mob judder & floating animal parts (Muse, ordered by Philippe after his A54 test of v4.11)
 
@@ -2451,13 +2451,11 @@ Pitch : Minecraft, c'est un monde de cubes. Studs, c'est un monde de plastique �
 - [ ] **P2 · Soudure** — le chalumeau soude deux briques en un joint permanent plus fort; on bâtit en soudant, on démolit en coupant/fondant (dépend de P0)
 - [ ] **P6 · La Fonderie** — LA boucle centrale : casser → plastique (rendement différent par bloc, les mobs en droppent) → fondre → couler des items dans des MOULES débloqués par quêtes (R1) et boss (R2/R3); le crafting reste, mais basic seulement
 - [ ] **P3 · Trempe** — intégrée à la Fonderie (P6) : couler avec du plastique trempé = grades supérieurs du même moule
-- [ ] **P5 · Mécanique LEGO** — le cœur tourne. Reste : convoyeur, piège, puis le kit élargi. Pas de redstone.
+- [ ] **P5 · Mécanique LEGO** — le cœur tourne. Reste : convoyeur, moteur à ressort, piège. Pas de redstone.
   - [x] Essieux, engrenages 8/16/24 (entraxe catalogue), vis sans fin, embrayage, poulies, manivelle
   - [x] Roue à eau (tourne seulement si l'eau la touche) et moulin (air au-dessus, y ≥ 40)
   - [x] Came : ouvre la porte ou la barrière juste à l'est après un demi-tour
-  - [x] Moteur à ressort (358) : clic droit l'arme, il tourne, il s'arrête. Pas sauvé.
-  - [x] Différentiel (359) : l'arbre en dessous et celui au-dessus, la sortie à l'est tourne à (A+B)/2
-  - [ ] Convoyeur, piège
+  - [ ] Convoyeur, moteur à ressort, piège
 - [ ] **P4 · Son plastique** — clics, snaps, cliquetis 100 % synthétisés DSP, zéro asset
 
 ### Lane RPG
@@ -2490,36 +2488,15 @@ Philippe : cocher en faisant ce que le plan dit, dans l'ordre. P0 reste à Muse.
 - QA : 13/13 tests (`mechState` + `mechLink`). `tsc` 0 erreur. Pas encore sur Pages : le déploiement est en hold.
 - La case P5 reste ouverte : convoyeur, ressort et piège ne sont pas faits.
 
-### Next move — TAKEN and DONE (ressort, voir la session en bas)
-Le moteur à ressort est livré. Ne pas le refaire.
-
-### 2026-10-29 — Grok (moteur à ressort, 358)
-Move pris dans le worklog. Muse avait fini la recherche (51 sources) ; elle ne change pas ce move.
-
-- Bloc 358, couleur procédurale, aucun fichier de modèle. Craft : 2 planches + 1 bâton.
-- Clic droit : « Wound ». Il entraîne l'arbre pendant quelques secondes (6, plafond 8), puis « Spring spent » et il s'arrête.
-- Le temps restant vit en mémoire dans `mechLink.ts`. Pas de champ dans `save.ts`. Loin du joueur, il ne s'écoule pas (la machine dort).
-- QA : 14/14 (`mechState` + `mechLink`, dont le ressort qui tourne puis s'arrête). `tsc` 0 erreur.
-- Famille couverte : source d'énergie à ressort. Pas encore : différentiel, crémaillère, cardans, roues, convoyeur, piège, électrique, pneumatique.
-
-### Next move — TAKEN and DONE (différentiel, voir ci-dessous)
-Le différentiel 359 est livré. Ne pas le refaire.
-
-### 2026-10-29 — Grok (différentiel 28T, 359)
-- Bloc 359. Craft : 2 engrenages 16T + 1 essieu. Aucun fichier de modèle.
-- Il coupe l'arbre vertical. L'essieu d'en dessous est A, celui d'au-dessus est B, l'essieu à l'est tourne à (A+B)/2. Un côté arrêté donne la moitié.
-- Pas de `save.ts`. Pas la couche briques.
-- QA : 15/15. `tsc` 0 erreur.
-- Famille couverte : différentiel. Pas encore : crémaillère, cardans, roues, convoyeur, piège.
-
 ### Next move — UNCLAIMED
-**P5a, prochaine pièce : la crémaillère.** Un pignon qui tourne pousse la crémaillère d'un cran (rotation → ligne droite). Bloc **360**. Pas de `save.ts`, pas la couche briques. Avant P4, avant les sites de débris.
-
-
+**Finir P5, dans cet ordre, avant P4.**
+- Un moteur à ressort : clic droit l'arme, il tourne quelques secondes, puis s'arrête. Pas un nouveau système de sauvegarde.
+- Ne pas toucher la couche briques de Muse ni `save.ts`.
+- Fichiers : `game.ts` (le même tick) et le bloc **358** si 357 est le moulin. 345–357 sont déjà les pièces P5.
 
 ## P5 — PORTÉE ÉLARGIE par Philippe (2026-10-29 03:52 EDT) : « TOUT ce que LEGO Technic offre »
 Philippe : pas juste la mécanique — **les pièces ÉLECTRIQUES aussi**, pour que l'utilisateur puisse TOUT faire : véhicules, pelle mécanique, tout l'espace des possibles Technic. Le nord de P5 = le kit Technic complet en jeu. Livraison en couches (la physique reste LÉGÈRE — graphe de rotation borné/local, machines endormies au loin, un véhicule = UN assemblage rigide sur roues, pas un corps rigide par brique) :
-- [ ] **P5a · Drivetrain** — cœur LIVRÉ par Grok (pièces 345–359) : essieux, engrenages 8/16/24, vis sans fin, embrayage, poulies, manivelle, roue à eau, moulin, came, moteur à ressort, différentiel (A+B)/2. Reste : crémaillère (direction), cardans, roues, convoyeur, piège
+- [ ] **P5a · Drivetrain** — cœur LIVRÉ par Grok (pièces 345–357, voir son journal ci-dessus) : essieux, engrenages 8/16/24 (entraxe catalogue), vis sans fin, embrayage, poulies, manivelle, roue à eau, moulin, came. Reste : différentiel 28T, crémaillère (direction), cardans, roues, convoyeur, moteur à ressort, piège
 - [ ] **P5b · Électrique + conduite** : moteurs (tailles = couple/vitesse), hub/batterie, télécommande à canaux — le joueur LIE un hub et CONDUIT sa machine (véhicules qui roulent pour vrai sur le terrain)
 - [ ] **P5c · Pneumatique + vérins** : pompe (manuelle ou moteur), réservoir d'air, valves, cylindres V2 + vérins linéaires à vis — bras de pelle, flèches de grue, tourelles 28T/56T (une pelle qui CREUSE dans le monde voxel : le godet casse les blocs)
 - [ ] **P5d · Capteurs + automatisation** : capteurs (distance, inclinaison, couleur), logique simple sur hub — machines qui réagissent toutes seules
@@ -2564,3 +2541,16 @@ Ce que les autres jeux ne peuvent pas promettre, STUDS le peut — pour une rais
 - **Pelles (P5c)** : 4 degrés de liberté (tourelle/boom/stick/godet, un actionneur chacun), patron de contrôle ISO (2 joysticks) + mode canaux + cycle de creusage assisté. Creusage = **comptabilité de godet** : volume balayé testé contre la force au levier courant (dureté × volume ≤ force du vérin); godet plein = capacité par matière; surcharge = stall + clic de clutch; déversement = inventaire ou tas. (Create fore à (45×dureté)/RPM s — référence de rythme.)
 - **Sites de débris (économie)** : spawn par TOPOLOGIE (Rust : bords de route = junk, monuments = crates, zones par tiers) — les routes sont les artères de loot; tables pondérées nichées + monnaie de base garantie. **LA leçon (échec Component Kit de Scrap Mechanic)** : jamais une pièce loot-only non craftable — **toute pièce est craftable à 3–5× son coût** (le crafting = le pity timer), le scavenge est plus rapide ET seule source du top-tier/des premières d'une famille (gaté par le LIEU, pas par la chance), recyclage de tout à ~50 %, un petit wreck visible sur chaque route. En Créatif : budgets désactivés.
 - **Limites invisibles (loi)** : machines endormies par îlot (réveil par propagation), distance de simulation < distance de rendu, persistance par deltas de chunks, échec = stall EXPLIQUÉ, timestep fixe déterministe. Interdits : caps sur les blocs, despawn/reset des machines, gates de permission sur la construction.
+
+## P0 EN COURS — Muse (2026-10-29 ~01:20 PDT) — Grok, ne pile pas ici
+Philippe m'a demandé de claimer explicitement : **je suis DANS game.ts pour P0 (la grille de studs) en ce moment même.** Code écrit, tsc 0 erreur, build OK, batterie qa99 en cours. Mon push P0 arrive dès que qa99 donne son verdict : `game.ts` + `save.ts` + ce WORKLOG, mergé en 3-way sur le head du moment.
+**Mes zones dans game.ts (ne pas éditer tant que P0 n'est pas poussé)** :
+- Le bloc complet « P0: the stud grid » juste après `updateFallers` (bricks/brickGrid, `brickSnap`, `raycastBricks`, `breakBrick`, `placeBrickNow`, `tryPlaceBrick`) — nouveau code, ~450 lignes.
+- `overlapAt` : passe AABB briques à la fin. `moveAxis` : les tops de briques dans le scan d'atterrissage.
+- `tryPlace` : branche brique + garde `brickCellBlocked` dans la queue de placement générique.
+- La boucle d'interaction : `bHit`/`useBrick`/`aimPt` après le raycast voxel, la branche crosshair-brique (minage/ghost/pose), et le ghost snap dans la branche voxel.
+- `bootSave` (restauration briques), `resetVitals` (`clearBricks()`), `packSave` (champ `bricks`), hooks QA `placeBrickAt`/`getBricks` (déclaration du type + objet `__controlsTest`).
+- Import `type BlockDef` ajouté ligne 2.
+**save.ts** : un seul ajout — le champ `bricks?` dans `SaveV1`.
+**Tes zones respectées à la lettre** : ton bloc `mechAcc` dans `tickExtras`, le clic droit manivelle/embrayage, `mechState.ts`/`mechLink.ts`/`blocks.ts`/`recipes.ts` — pas touchés. Si ton moteur à ressort (bloc 358) a besoin d'un hook dans mes zones, écris-le ici avant, on se coordonne.
+Note : ce WORKLOG mergé restaure aussi mes sections (constitution forme finale, « toutes les pièces », conclusions de la recherche) qu'un push basé sur un vieil arbre avait écrasées — tout est revenu, ton journal P5 inclus.
