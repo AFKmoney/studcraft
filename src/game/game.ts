@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { ATLAS_COLS, ATLAS_ROWS, BLOCKS, CREATIVE_BAR, ID, def, faceTile, stairsVariant, type BlockDef } from "./blocks";
+import { ATLAS_COLS, ATLAS_ROWS, BLOCKS, CREATIVE_BAR, ID, TECHNIC, def, faceTile, stairsVariant, type BlockDef } from "./blocks";
 import { createAudio } from "./audio";
 import { STUD_H, STUD_OFFSETS, STUD_R, buildChunk, type Surface } from "./mesher";
 import * as FS from "./fireState";
@@ -1495,6 +1495,26 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   }
   ghost.visible = false;
   scene.add(ghost);
+  let ghostLastId = 0;
+  function updateGhostGeo(id: number) {
+    if (id === ghostLastId) return;
+    ghostLastId = id;
+    // Clear old
+    while (ghost.children.length) ghost.remove(ghost.children[0]);
+    if (TECHNIC_SET.has(id)) {
+      const built = buildLegoItem3D(id);
+      built.group.traverse((obj) => {
+        if ((obj as THREE.Mesh).isMesh) {
+          const m = obj as THREE.Mesh;
+          m.material = ghostMat;
+          ghost.add(m);
+        }
+      });
+    } else {
+      ghost.add(ghostBody);
+    }
+  }
+
 
   const boltMat = skin(0xe7f6ff);
   boltMat.emissive = new THREE.Color(0xd6f4ff);
@@ -4837,6 +4857,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   const brickGrid = new Map<string, Set<string>>(); // voxel cell key -> brick keys
   const brickMeshes = new Map<number, THREE.InstancedMesh>();
   const brickGeos = new Map<number, THREE.BufferGeometry>();
+  const TECHNIC_SET = new Set<number>(TECHNIC);
+
   const aimPt = { x: 0, y: 0, z: 0 }; // frame aim point (face point of the current target)
 
   const brickKey = (sx: number, sy: number, sz: number) => sx + "," + sy + "," + sz;
@@ -4897,6 +4919,47 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   function brickGeo(id: number) {
     let g = brickGeos.get(id);
     if (g) return g;
+    // Technic pieces: real shape, not a brick cube
+    if (TECHNIC_SET.has(id)) {
+      const built = buildLegoItem3D(id);
+      const geos: THREE.BufferGeometry[] = [];
+      built.group.traverse((obj) => {
+        if ((obj as THREE.Mesh).isMesh) {
+          const m = obj as THREE.Mesh;
+          const gg = (m.geometry as THREE.BufferGeometry).clone();
+          gg.applyMatrix4(m.matrix);
+          geos.push(gg);
+        }
+      });
+      if (geos.length) {
+        // Merge
+        let vtx = 0, idx = 0;
+        for (const gg of geos) {
+          vtx += gg.getAttribute("position").count;
+          idx += (gg.getIndex()?.count ?? gg.getAttribute("position").count);
+        }
+        const pos = new Float32Array(vtx * 3);
+        const nor = new Float32Array(vtx * 3);
+        const index = new Uint32Array(idx);
+        let vo = 0, io = 0;
+        for (const gg of geos) {
+          pos.set(gg.getAttribute("position").array as Float32Array, vo * 3);
+          if (gg.getAttribute("normal")) nor.set(gg.getAttribute("normal").array as Float32Array, vo * 3);
+          const pi = gg.getIndex();
+          if (pi) {
+            for (let i = 0; i < pi.count; i++) index[io + i] = pi.getX(i) + vo;
+            io += pi.count;
+          }
+          vo += gg.getAttribute("position").count;
+        }
+        g = new THREE.BufferGeometry();
+        g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+        g.setAttribute("normal", new THREE.BufferAttribute(nor, 3));
+        g.setIndex(new THREE.BufferAttribute(index, 1));
+        brickGeos.set(id, g);
+        return g;
+      }
+    }
     const parts: THREE.BufferGeometry[] = [fallerGeo(id).clone()];
     // Studs wear the TOP tile, remapped like fallerGeo remaps its faces.
     const tile = faceTile(id, 0);
@@ -11132,6 +11195,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         const cand = brickEligible(heldId, hd) ? brickSnap(dx, dy, dz, bHit.nx, bHit.ny, bHit.nz) : null;
         if (cand) {
           const ok = brickSpaceFree(cand.sx, cand.sy, cand.sz) && !brickHitsPlayer(cand.sx / 2, cand.sy, cand.sz / 2) && (creative || (inv[heldId] ?? 0) > 0);
+          updateGhostGeo(heldId);
           ghost.visible = true;
           ghost.position.set(cand.sx / 2 + 0.5, cand.sy + 0.5, cand.sz / 2 + 0.5);
           tmp.set(ok ? hd.color : "#e23b2f");
@@ -11263,6 +11327,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         const cand = brickEligible(held, def(held)) ? brickSnap(px, py, pz, hit.nx, hit.ny, hit.nz) : null;
         if (cand) {
           const ok = brickSpaceFree(cand.sx, cand.sy, cand.sz) && !brickHitsPlayer(cand.sx / 2, cand.sy, cand.sz / 2) && (creative || (inv[held] ?? 0) > 0);
+          updateGhostGeo(held);
           ghost.visible = true;
           ghost.position.set(cand.sx / 2 + 0.5, cand.sy + 0.5, cand.sz / 2 + 0.5);
           tmp.set(ok ? def(held).color : "#e23b2f");

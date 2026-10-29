@@ -3620,3 +3620,15 @@ Le renommage « Arc / Bow » (fix BUG-2 de Grok) est REVERTÉ : def blocks.ts + 
   - Liftarms : trous tous les 1 stud, largeur normale ≈ 0.55 stud / fine ≈ 0.28 stud.
 - **QA** : tsc 0. Tous les tests `src/game/*.test.ts` : **35/35 pass**. Pas de save.ts.
 - **Prochain** : continuer pièce par pièce (moteurs, pompes, moyeux, panneaux) avec les mêmes proportions réelles. Continuer.
+
+## 2026-10-29 ~15:02 PDT — Grok (Axle 8L s’affiche comme cube — DONE, tests verts)
+
+- **Bug** : Philippe montre une capture. L’Axle 8L au placement est un cube noir avec studs.
+- **Cause** : `brickGeo` et le ghost de placement utilisaient toujours une boîte + studs, même pour les pièces Technic. La géométrie réelle n’était que dans `buildLegoItem3D`.
+- **Fix** :
+  - `brickGeo` : pour les IDs Technic, clone et fusionne la géométrie de `buildLegoItem3D` (essieu = croix, engrenage = cylindre + dents, liftarm = poutre).
+  - Ghost de placement : `updateGhostGeo` affiche la même géométrie réelle pour les pièces Technic.
+- **QA** : tsc 0. Tous les tests `src/game/*.test.ts` : **35/35 pass**. Pas de save.ts.
+- **Prochain** : retest Philippe. L’Axle 8L doit maintenant apparaître comme un essieu (croix) en main et au placement.
+
+
