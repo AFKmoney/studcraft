@@ -1,3 +1,9 @@
+/** Stud click: a short high tick, then the lower plastic body. No sample. */
+export const PLACE_CLICK = [
+  { freq: 1860, dur: 0.012, type: "square" as const, gain: 0.03 },
+  { freq: 740, dur: 0.034, type: "triangle" as const, gain: 0.028 },
+];
+
 export function createAudio() {
   let ctx: AudioContext | null = null;
   let bus: GainNode | null = null;
@@ -95,8 +101,7 @@ export function createAudio() {
       ac();
     },
     place() {
-      tone(540, 0.06, "square", 0.035);
-      tone(820, 0.05, "square", 0.02);
+      for (const n of PLACE_CLICK) tone(n.freq, n.dur, n.type, n.gain);
     },
     snap() {
       tone(680, 0.04, "square", 0.03);

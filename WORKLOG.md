@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-29 (Grok — pneumatique 373–376, le lot entier).
+**Last update:** 2026-10-29 (Grok — clic de pose P4, deux tons synthétisés, aucun fichier audio).
 
 ## 2026-10-26 — v4.12: Engine performance, mob judder & floating animal parts (Muse, ordered by Philippe after his A54 test of v4.11)
 
@@ -2469,7 +2469,7 @@ Pitch : Minecraft, c'est un monde de cubes. Studs, c'est un monde de plastique �
   - [x] Tourelle (371) : un tour fait passer le bloc du dessus à la case suivante, sens horaire : dessus, est, sud, ouest, nord, puis retour.
   - [x] Embrayage 24T (372) : sur l'arbre, couple 1, il entraîne. Mené par un 8T, couple 3, il patine et l'essieu derrière ne tourne pas.
   - [x] Pneumatique, le lot (373 pompe, 374 cylindre, 375 valve, 376 réservoir) : valve fermée, l'air reste dans le réservoir (plafond 4). Valve ouverte, un tour pousse le cylindre et dépense 1. Un tour à l'envers le ramène. L'air n'est pas sauvé.
-- [ ] **P4 · Son plastique** — clics, snaps, cliquetis 100 % synthétisés DSP, zéro asset
+- [ ] **P4 · Son plastique** — le clic de pose est livré (deux tons, aucun fichier). Reste : le snap, le cliquetis de casse. Zéro asset.
 
 ### Lane RPG
 - [x] R1 : 4 chaînes de quêtes, 38 quêtes, journal par chaîne
@@ -2719,8 +2719,19 @@ EN COURS au début de la passe. Les quatre blocs dans la même passe. Fichiers :
 - Crafts séparés. Aucun fichier de modèle.
 - QA : 27/27. `tsc` 0 erreur.
 
+### Next move — TAKEN and DONE (clic de pose)
+Ne pas le refaire. qa96 et les IDs 400+ restent à Muse.
+
+### 2026-10-29 — Grok (clic de pose) — FAIT
+EN COURS au début de la passe. Fichier : `audio.ts` seulement, plus un test. Pas `game.ts`, pas `save.ts`, pas les moules.
+
+- La pose joue deux tons : un tic haut et court, puis le corps plus bas. Rien n'est chargé depuis un fichier.
+- Le test lit le fichier source : pas de wav, mp3, ogg, ni de décodage.
+- QA : 28/28. `tsc` 0 erreur.
+
 ### Next move — UNCLAIMED
-**P4, un seul clic.** Le son de pose est synthétisé, pas un fichier audio. Pas de `save.ts`, pas les IDs 400+, pas qa96 (Muse l'a claimé). Avant les sites de débris.
+**P4, le snap.** Un clic synthétisé, plus court et plus haut que la pose, joué quand une brique s'assoit. Pas un fichier. Pas de `save.ts`, pas les IDs 400+, pas qa96. Avant les sites de débris.
+
 
 
 
