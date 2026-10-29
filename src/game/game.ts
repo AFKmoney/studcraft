@@ -5240,6 +5240,29 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     return n;
   }
 
+  // Weight above a brick (count of bricks stacked on it, direct or via chain).
+  // Real LEGO: 1 stud holds almost nothing, 2 studs hold a little, 3–4 hold a lot.
+  function weightAbove(b: Brick, all: Brick[], seen = new Set<string>()): number {
+    const k = brickKey(b.sx, b.sy, b.sz);
+    if (seen.has(k)) return 0;
+    seen.add(k);
+    let w = 1; // itself
+    for (const ob of all) {
+      if (ob.sy !== b.sy + 1) continue;
+      const ox = Math.min(b.sx + 2, ob.sx + 2) - Math.max(b.sx, ob.sx);
+      const oz = Math.min(b.sz + 2, ob.sz + 2) - Math.max(b.sz, ob.sz);
+      if (ox > 0 && oz > 0) w += weightAbove(ob, all, seen);
+    }
+    return w;
+  }
+
+  function maxWeightForStuds(studs: number): number {
+    if (studs <= 0) return 0;
+    if (studs === 1) return 1; // only itself
+    if (studs === 2) return 3;
+    return 99; // 3–4 studs hold a stack
+  }
+
   function computeIntegrity() {
     const cant = new Map<string, number>();
     const all = [...bricks.values()];
@@ -5371,8 +5394,17 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const cant = computeIntegrity();
     const stressed: string[] = [];
     const sagIds = new Set<number>(); // ids to rebuild for sag changes only
-    for (const b of [...bricks.values()]) {
+    const allBricks = [...bricks.values()];
+    for (const b of allBricks) {
       const k = brickKey(b.sx, b.sy, b.sz);
+      // Weight overload: too much on 1–2 studs → treat as unsupported (real LEGO)
+      const studs = studsCoveredBelow(b);
+      if (studs > 0 && studs <= 2) {
+        const w = weightAbove(b, allBricks);
+        if (w > maxWeightForStuds(studs)) {
+          cant.delete(k); // force stress / fall
+        }
+      }
       if (cant.has(k)) {
         brickStress.delete(k);
         if (brickSagged.delete(k)) sagIds.add(b.id); // recovered: rise back to 0

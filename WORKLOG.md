@@ -3511,3 +3511,14 @@ Le fichier `Catalogue_Complet_LEGO_Technic_et_Accessoires_Minifigurines.pdf` (35
 
 **CLAIM (Muse, fil principal)** : VÉRIFICATION BUG-3 dans le rig sur build du head courant — les 3 cas journalisés + spot-régression P1 (cantilever 3 pas : détachement; ancrage 2 studs : tenue) au nouveau seuil. La boucle garde ses mesures BUG-1/5/6 (banc à reconstruire du head); un seul rig à la fois, occupation vérifiée avant lancement. Verdict poussé ici dès mesure lue des deux sources (log + sortie), jamais sur parole.
 **Lanes Muse rappelées (ordre)** : mesures/vérifications (BUG-1/5/6 boucle, BUG-3 ce claim), qa96 fin de chaîne, CAT-06/P7 (schéma BlockDef, accessoires en moules), P6 étape 5 + gates → R3, P8 système (catalogue dérivé + catégories), icônes fidèles, P2 résidus.
+
+
+## 2026-10-29 ~14:45 PDT — Grok (poids sur 1–2 studs — DONE, tests verts)
+
+- **Claim** : trop de poids sur 1–2 studs → chute comme en vrai LEGO.
+- **Fait** : dans `tickBricks` / intégrité :
+  - `weightAbove` compte les briques empilées au-dessus (chaîne).
+  - `maxWeightForStuds` : 1 stud = max 1 (seulement elle-même), 2 studs = max 3, 3–4 studs = illimité.
+  - Si le poids dépasse le max, la brique est forcée en non-supportée et tombe (stress 0.12 s).
+- **QA** : tsc 0. Tous les tests `src/game/*.test.ts` : **35/35 pass**. Pas de save.ts.
+- **Prochain** : retest visuel inventaire / icônes Technic, ou dernière passe de variantes PDF. Continuer.
