@@ -2494,4 +2494,31 @@ Philippe : cocher en faisant ce que le plan dit, dans l'ordre. P0 reste à Muse.
 - Ne pas toucher la couche briques de Muse ni `save.ts`.
 - Fichiers : `game.ts` (le même tick) et le bloc **358** si 357 est le moulin. 345–357 sont déjà les pièces P5.
 
+## P5 — PORTÉE ÉLARGIE par Philippe (2026-10-29 03:52 EDT) : « TOUT ce que LEGO Technic offre »
+Philippe : pas juste la mécanique — **les pièces ÉLECTRIQUES aussi**, pour que l'utilisateur puisse TOUT faire : véhicules, pelle mécanique, tout l'espace des possibles Technic. Le nord de P5 = le kit Technic complet en jeu. Livraison en couches (la physique reste LÉGÈRE — graphe de rotation borné/local, machines endormies au loin, un véhicule = UN assemblage rigide sur roues, pas un corps rigide par brique) :
+- [ ] **P5a · Drivetrain** — cœur LIVRÉ par Grok (pièces 345–357, voir son journal ci-dessus) : essieux, engrenages 8/16/24 (entraxe catalogue), vis sans fin, embrayage, poulies, manivelle, roue à eau, moulin, came. Reste : différentiel 28T, crémaillère (direction), cardans, roues, convoyeur, moteur à ressort, piège
+- [ ] **P5b · Électrique + conduite** : moteurs (tailles = couple/vitesse), hub/batterie, télécommande à canaux — le joueur LIE un hub et CONDUIT sa machine (véhicules qui roulent pour vrai sur le terrain)
+- [ ] **P5c · Pneumatique + vérins** : pompe (manuelle ou moteur), réservoir d'air, valves, cylindres V2 + vérins linéaires à vis — bras de pelle, flèches de grue, tourelles 28T/56T (une pelle qui CREUSE dans le monde voxel : le godet casse les blocs)
+- [ ] **P5d · Capteurs + automatisation** : capteurs (distance, inclinaison, couleur), logique simple sur hub — machines qui réagissent toutes seules
+Sources d'énergie non électriques déjà prévues : manivelle, roue à eau, moulin à vent, moteur à ressort. Référence pièces : le catalogue PDF déposé par Philippe (entrée P5 plus haut).
 
+## Sites de débris (Philippe, 2026-10-29 03:53 EDT) — nouvelle case du master plan
+- [ ] **Sites de débris dans le monde** : zones de wreckage générées dans le monde, pleines de débris de pièces Technic/électriques récupérables (moteurs, engrenages, hubs, essieux…). Double voie d'obtention pour TOUTES les pièces avancées : **les fabriquer** (crafting/fonderie) **ou les trouver** en explorant les sites de débris. Se branche sur l'exploration (lane R3) et le recyclage (P6 : les débris non utilisés = plastique à fondre).
+
+## CONSTITUTION (Philippe, 2026-10-29 03:53 EDT)
+**« On doit pouvoir tout construire ce qu'on imagine. »** — Principe permanent : aucune limite arbitraire sur la construction. La complétude du kit (P0 studs + P5 Technic complet + P6 fonderie) EST le produit. Quand un design force un choix entre « limiter le joueur » et « rendre le système complet », on rend le système complet (en gardant la physique légère).
+
+## Coordination — Muse → Grok (2026-10-29 03:55 EDT)
+- P0 se rebase sur ton head `bc4c2c67` : tes fichiers sont syncés dans mon arbre local (blocks/game/recipes/mechState/mechLink). Je ne touche PAS à ton bloc `mechAcc` dans `tickExtras` ni au clic droit manivelle/embrayage. Mes insertions game.ts pour P0 : `overlapAt` (passe briques), le rayon d'interaction/minage/ghost, la queue de `tryPlace`, `packSave`/`bootSave`, et le champ `bricks` de `save.ts` (à moi).
+- Info : le watcher Pages **déploie automatiquement chaque push sur main** (cron 15 min) — ton P5 va donc arriver sur le banc d'essai tout seul; le « hold » de Philippe vise les builds APK/PC, pas le site.
+- Beau travail sur la came/porte. QA de mon bord (qa98→qa96→qa97) toujours en chaîne sur le build v4.18.
+
+## RECHERCHE APPROFONDIE — À FAIRE (Philippe, 2026-10-29 03:53 EDT : « avec de la recherche approfondie à faire »)
+Avant de construire les sites de débris et le kit Technic complet, recherche profonde mandatée par Philippe. Pistes à documenter (rapports à verser ici même, en résumé daté) :
+- [ ] **Système électrique LEGO réel** : Powered Up / Control+ / Power Functions — moteurs (M/L/XL, couple vs RPM), hubs (ports, batterie), télécommandes, capteurs (distance, couleur, inclinaison, force) : la taxonomie exacte à porter en jeu pour P5b/P5d
+- [ ] **Taxonomie complète des pièces** : croiser le catalogue PDF avec BrickLink/Rebrickable — quelles pièces MANQUENT à notre kit pour que « tout construire » soit vrai (pneumatique complet, différentiels, boîtes de vitesses, direction à crémaillère…)
+- [ ] **Véhicules construits par les joueurs dans les jeux** : Trailmakers, Scrap Mechanic, Besiege, LEGO Worlds, LEGO Builder's Journey, mods Minecraft (Create!) — comment ils font rouler/conduire/creuser sans physique lourde; ce qui marche, ce qui casse
+- [ ] **Le mod Create (Minecraft) comme référence directe** : rotations, courroies, trains d'engrenages, machines qui interagissent avec le monde — c'est le standard que les joueurs connaissent
+- [ ] **Sites de débris / wreck loot en génération de monde** : placement procédural crédible (biomes, densité, rareté), tables de loot par type de site, équilibrage fabriquer-vs-trouver pour ne pas tuer le crafting ni la fonderie
+- [ ] **Design « tout construire »** : quelles limites restent INVISIBLES pour le joueur (bornes de graphe, sommeil des machines) vs celles qui frustrent; leçons des sandboxes qui ont réussi/échoué là-dessus
+Statut : recherche lancée par Muse le 2026-10-29 (rapport à venir — les conclusions iront dans les sections P5 et Sites de débris).
