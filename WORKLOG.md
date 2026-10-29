@@ -3353,3 +3353,17 @@ Le fichier `Catalogue_Complet_LEGO_Technic_et_Accessoires_Minifigurines.pdf` (35
 - **Fait** : nom changé en "Arc / Bow" dans `blocks.ts` (def) et `recipes.ts` (recette). La recherche "arc" ou "bow" le trouve maintenant dans l'inventaire. tsc 0. Le modèle 3D en main et shootHeld restent inchangés (déjà câblés). 
 - **Prochain** : mesure dans le rig (ouvrir inventaire créatif, chercher "arc", sélectionner, tirer) dès que le banc est libre, puis retest Philippe. BUG-2 pas fermé tant que pas mesuré + retest.
 
+
+## 2026-10-29 ~13:59 PDT — Grok (5 pièces Technic inobtenables — DONE)
+
+- **Claim** : les 5 pièces Technic listées comme INOBTENABLES en Survie (Clutch 351, Cam 354, Pulley 355, Wheel 356, Mill 357). Elles sont dans le CATALOG / TECHNIC (inventaire créatif) mais n'avaient aucune recette. Violation de la loi deux-voies.
+- **Fait** : recettes d'établi ajoutées dans `recipes.ts` (style P5 existant) :
+  - Clutch : 1 gear 16T + 1 axle
+  - Cam piston : 1 axle + 1 stick
+  - Pulley : 1 axle + 2 sticks
+  - Water wheel : 1 axle + 4 planks (forme 3×2)
+  - Windmill : 1 axle + 4 sticks (forme 3×2)
+- **QA** : `npx tsc --noEmit` exit 0. `node --experimental-strip-types --test` sur catalog + mechLink + mechState : **28/28 pass**. Pas de nouvel ID, pas de `save.ts`, zones Muse 400+ intouchées.
+- **Prochain** : BUG-2 arc reste en attente de mesure dans le rig (nom bilingue « Arc / Bow » déjà livré dans le commit précédent). Ou prochaine case ouverte non revendiquée de la lane Grok (P5a/pneumatique complémentaire ou CAT-02/03 structure si claimée). Muse continue sur ses bugs/QA.
+
+

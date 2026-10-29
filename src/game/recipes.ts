@@ -905,6 +905,37 @@ export const RECIPES: Recipe[] = [
     h: 2,
     cat: "build",
   }),
+  r("clutch", "Clutch", "1 gear 16T + 1 axle", [[ID.Gear16, 1], [ID.Axle, 1]], ID.Clutch, 1, {
+    shape: [ID.Gear16, ID.Axle],
+    w: 2,
+    h: 1,
+    cat: "build",
+  }),
+  r("cam", "Cam piston", "1 axle + 1 stick", [[ID.Axle, 1], [ID.Stick, 1]], ID.Cam, 1, {
+    shape: [ID.Axle, ID.Stick],
+    w: 1,
+    h: 2,
+    cat: "build",
+  }),
+  r("pulley", "Pulley", "1 axle + 2 sticks", [[ID.Axle, 1], [ID.Stick, 2]], ID.Pulley, 1, {
+    shape: [ID.Axle, ID.Stick, ID.Stick],
+    w: 1,
+    h: 3,
+    cat: "build",
+  }),
+  r("waterwheel", "Water wheel", "1 axle + 4 planks", [[ID.Axle, 1], [ID.Planks, 4]], ID.Wheel, 1, {
+    shape: [ID.Planks, ID.Axle, ID.Planks, ID.Planks, 0, ID.Planks],
+    w: 3,
+    h: 2,
+    cat: "build",
+  }),
+  r("windmill", "Windmill", "1 axle + 4 sticks", [[ID.Axle, 1], [ID.Stick, 4]], ID.Mill, 1, {
+    shape: [ID.Stick, ID.Axle, ID.Stick, ID.Stick, 0, ID.Stick],
+    w: 3,
+    h: 2,
+    cat: "build",
+  }),
+
   // P6 step 2 (Muse) — Kiln casting: the colour moulds. The donor brick is
   // the pigment/master: it is consumed into the melt, 4 plastic ingots
   // (smelted pellets) join it, and the mould pours 2 bricks of its colour.
