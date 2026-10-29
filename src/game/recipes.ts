@@ -1022,6 +1022,59 @@ export const RECIPES: Recipe[] = [
     h: 2,
     cat: "build",
   }),
+  // P6 step 4 / P7 tool moulds (Muse) — tools are CAST, not tiered by
+  // ore: the classic tool shapes with plastic ingots (402) as the head
+  // stock pour the plastic tools (404-407, tier 2 / 120 uses); the same
+  // moulds with tempered ingots (403) pour the tempered tools (419-422,
+  // tier 3 / 240 uses). Sticks stay the handle, as in every tool recipe.
+  r("mold-pick", "Cast plastic pick", "3 ingots + 2 sticks", [[ID.PlasticIngot, 3], [S, 2]], ID.PlasticPick, 1, {
+    shape: [ID.PlasticIngot, ID.PlasticIngot, ID.PlasticIngot, 0, S, 0, 0, S, 0],
+    w: 3,
+    h: 3,
+    cat: "tools",
+  }),
+  r("mold-sword", "Cast plastic blade", "2 ingots + 1 stick", [[ID.PlasticIngot, 2], [S, 1]], ID.PlasticSword, 1, {
+    shape: [ID.PlasticIngot, ID.PlasticIngot, S],
+    w: 1,
+    h: 3,
+    cat: "tools",
+  }),
+  r("mold-axe", "Cast plastic axe", "3 ingots + 2 sticks", [[ID.PlasticIngot, 3], [S, 2]], ID.PlasticAxe, 1, {
+    shape: [ID.PlasticIngot, ID.PlasticIngot, 0, ID.PlasticIngot, S, 0, 0, S, 0],
+    w: 3,
+    h: 3,
+    cat: "tools",
+  }),
+  r("mold-shovel", "Cast plastic spade", "1 ingot + 2 sticks", [[ID.PlasticIngot, 1], [S, 2]], ID.PlasticShovel, 1, {
+    shape: [ID.PlasticIngot, S, S],
+    w: 1,
+    h: 3,
+    cat: "tools",
+  }),
+  r("tmold-pick", "Cast tempered plastic pick", "3 tempered ingots + 2 sticks", [[ID.TemperedIngot, 3], [S, 2]], ID.TPlasticPick, 1, {
+    shape: [ID.TemperedIngot, ID.TemperedIngot, ID.TemperedIngot, 0, S, 0, 0, S, 0],
+    w: 3,
+    h: 3,
+    cat: "tools",
+  }),
+  r("tmold-sword", "Cast tempered plastic blade", "2 tempered ingots + 1 stick", [[ID.TemperedIngot, 2], [S, 1]], ID.TPlasticSword, 1, {
+    shape: [ID.TemperedIngot, ID.TemperedIngot, S],
+    w: 1,
+    h: 3,
+    cat: "tools",
+  }),
+  r("tmold-axe", "Cast tempered plastic axe", "3 tempered ingots + 2 sticks", [[ID.TemperedIngot, 3], [S, 2]], ID.TPlasticAxe, 1, {
+    shape: [ID.TemperedIngot, ID.TemperedIngot, 0, ID.TemperedIngot, S, 0, 0, S, 0],
+    w: 3,
+    h: 3,
+    cat: "tools",
+  }),
+  r("tmold-shovel", "Cast tempered plastic spade", "1 tempered ingot + 2 sticks", [[ID.TemperedIngot, 1], [S, 2]], ID.TPlasticShovel, 1, {
+    shape: [ID.TemperedIngot, S, S],
+    w: 1,
+    h: 3,
+    cat: "tools",
+  }),
 ];
 
 export const SMELT: Record<number, number> = {

@@ -325,6 +325,7 @@ declare global {
       getFurnace?: (x: number, y: number, z: number) => { in: number; inN: number; fuel: number; fuelN: number; out: number; outN: number; cook: number; burn: number } | null;
       stepFurnace?: (dt: number) => boolean;
       craftOf?: (recipeId: string) => boolean;
+      defOf?: (id: number) => { name: string; tool: string; tier: number; maxUse: number } | null;
     };
   }
 }
@@ -12221,6 +12222,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     craftOf: (recipeId: string) => {
       api.craft(recipeId, 1);
       return true;
+    },
+    // P6 step 4 QA hook (inert in play): the registry def of an item —
+    // tool kind, tier and uses — read straight from BLOCKS via def().
+    defOf: (id: number) => {
+      const d = BLOCKS[id];
+      if (!d) return null;
+      return { name: d.name, tool: d.tool, tier: d.tier, maxUse: d.maxUse };
     },
     getWelds: () => {
       const welded = new Set<string>();

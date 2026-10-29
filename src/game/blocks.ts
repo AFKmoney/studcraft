@@ -393,6 +393,13 @@ export const ID = {
   // water (right-click water with 402 in hand). The grade is an ID, not
   // metadata: inventory stores counts per ID only.
   TemperedIngot: 403,
+  // P6 step 4 / P7 tool moulds (Muse): plastic tools cast at the
+  // Foundry — the mould is the shape, the ingot is the stock. Tier 2
+  // (stone class), 120 uses: moulded plastic, honestly mid-table.
+  PlasticPick: 404,
+  PlasticSword: 405,
+  PlasticAxe: 406,
+  PlasticShovel: 407,
   // P6-2: tempered colour bricks (410-418, same order as COLORS) — cast
   // from tempered ingots; hard 1.5/tough vs 0.5, and their P1 stress
   // threshold is doubled (stressMaxFor in game.ts).
@@ -405,6 +412,13 @@ export const ID = {
   TPink: 416,
   TWhite: 417,
   TBlack: 418,
+  // P6 step 4 / P7: tempered plastic tools (419-422) — same moulds as
+  // 404-407, poured from tempered ingots (403): tier 3 (iron class),
+  // 240 uses. The grade is the stock, never metadata.
+  TPlasticPick: 419,
+  TPlasticSword: 420,
+  TPlasticAxe: 421,
+  TPlasticShovel: 422,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -865,6 +879,14 @@ item(ID.Welder, "Welding torch", "#f07820", { maxUse: 120 });
 item(ID.Pellets, "Plastic pellets", "#e8dcc0");
 item(ID.PlasticIngot, "Plastic ingot", "#d9c58f");
 item(ID.TemperedIngot, "Tempered ingot", "#a8d8e8");
+gear(ID.PlasticPick, "Plastic pick", "#d9c58f", "pick", 2, 120);
+gear(ID.PlasticSword, "Plastic blade", "#d9c58f", "sword", 2, 120);
+gear(ID.PlasticAxe, "Plastic axe", "#d9c58f", "axe", 2, 120);
+gear(ID.PlasticShovel, "Plastic spade", "#d9c58f", "shovel", 2, 120);
+gear(ID.TPlasticPick, "Tempered plastic pick", "#a8d8e8", "pick", 3, 240);
+gear(ID.TPlasticSword, "Tempered plastic blade", "#a8d8e8", "sword", 3, 240);
+gear(ID.TPlasticAxe, "Tempered plastic axe", "#a8d8e8", "axe", 3, 240);
+gear(ID.TPlasticShovel, "Tempered plastic spade", "#a8d8e8", "shovel", 3, 240);
 item(ID.Bone, "Bone", "#f4f1ea");
 item(ID.Flint, "Spark", "#f07820", { maxUse: 40 });
 item(ID.Bottle, "Bottle", "#d5f3f6");
@@ -1449,6 +1471,9 @@ export const CATALOG = [
   ID.Pellets,
   ID.PlasticIngot,
   ID.TemperedIngot,
+  ID.PlasticPick,
+  ID.PlasticSword,
+  ID.TPlasticPick,
   ID.TRed,
   ID.TBlue,
   ID.TWhite,
