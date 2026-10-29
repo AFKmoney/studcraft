@@ -3656,3 +3656,24 @@ Philippe confirme (capture de SA session Claude, 15:27 PDT) : **Claude travaille
 
 **GEL (tous agents — boucle Muse et Grok)** : ne prendre AUCUN item de logique Technic/P5 tant que Claude n'a pas poussé `technic.ts` ou que Philippe ne libère pas la zone. Ne pas toucher à ses zones P0 historiques non plus. Le câblage P5b poussé par Grok (21:53–21:55 UTC) reste en place mais est considéré NON VÉRIFIÉ et possiblement remplacé par le module de Claude — sa mesure fonctionnelle passe après la livraison de Claude, pas avant.
 **Risque nommé par Philippe** : l'usage de sa session Claude est à ~98 % — Claude peut tomber à court avant de finir. Filet : si ça arrive, Muse reprend la logique Technic au point exact où `technic.ts` sera rendu disponible (push de Claude, même WIP, ou fichier relayé par Philippe). Conseil transmis à Philippe : demander à Claude de pousser son WIP sur sa branche TOUT DE SUITE, même inachevé — la branche ne touche pas main et le travail devient insubmersible.
+
+## 2026-10-29 ~15:32 PDT — Claude (Technic 1:1 — étape 1/4 : noyau logique, PUSH partiel)
+
+- **Fait** : nouveau `src/game/technic.ts` (pur, sans three.js, pas encore branché dans le jeu) :
+  - **Specs 1:1 pour les 99 pièces Technic** : n° de pièce LEGO réel, vraie couleur, vraies cotes (module 8 mm, trou Ø 4.85, croix d'essieu 4.8/1.8 mm, poutre 7.2 mm, mince 0.5M, engrenages module 1 → R = N/16 M, crémaillère au pas π mm, amortisseur 6.5L, cadres 5×7 / 7×11 / 11×15, angles #1–#6 aux vrais angles).
+  - Chaque pièce a ses **trous** (P rond / A croix), ses **arbres** (p goupille / a essieu), son occupation en demi-modules et ses opérations de dessin (pour `technicGeo.ts`, à écrire).
+  - **Grille d'assemblage** : 1 M = 0.5 bloc, coordonnées en demi-modules (q), lignes de trous sur q impairs, 24 orientations. Collision : seul un arbre dans un trou compatible peut partager l'espace (une goupille ronde n'entre jamais dans un trou en croix).
+  - **Planificateur de pose** : goupille/essieu poussé dans le trou visé, pièce trouée enfilée sur l'arbre visé, empilement trou sur trou, pose à plat sur une face de bloc (orientation auto selon le regard), `spin` pour cycler les variantes.
+  - **Raycast DDA** sur les sous-cellules.
+  - **Mécanique** : essieu dans trou en croix = groupe rigide ; engrenages droits engrenés à (N1+N2)/16 M ; coniques perpendiculaires ; vis sans fin 1:N ; moteurs (alimentés par hub/boîtier piles) et manivelle ; détection de blocage.
+- **Tests** : `src/game/technic.test.ts` 3/3 pass (specs des 99 pièces, goupille → poutre → poutre, croix refuse la goupille, 16T↔16T = −1, 8T↔24T = −1/3).
+- **Pas encore touché** : `game.ts`, `blocks.ts`, `icons.tsx`, `save.ts`. Le jeu se comporte exactement comme avant.
+
+### Reste à faire (Technic)
+1. **`src/game/technicGeo.ts`** (three.js) : interpréter les `ops` de chaque spec → BufferGeometry fusionnée avec couleurs par sommet (plate extrudée avec trous, essieu en croix, goupille au tour avec collerette, tubes, engrenages à dents réelles + conicité, vis sans fin hélicoïdale, crémaillère, lathe, hélice de ressort, pales, tenons, pastilles de trous, bras d'angle hors grille, coque de carénage). Fusion maison (pas de `examples/jsm` dans le build).
+2. **Couche Technic dans `game.ts`** : `TechWorld` + un Mesh par pièce (échelle 0.5 bloc/M), intercepter les IDs Technic avant `tryPlaceBrick`/`tryPlace`, raycast Technic comparé au voxel/brick (le plus proche gagne), fantôme de pose (`plan`), minage + drop, bouton/touche « tourner » (spin) pour le mobile, interaction manivelle/boîtier (on/off), `step()` mécanique et rotation des groupes autour de leur axe.
+3. **Retirer le code Technic de Grok** dans `buildLegoItem3D` (≈ l. 1800–2043) et les branches `TECHNIC_SET` de `brickGeo` / `updateGhostGeo` ; en main : la vraie géométrie normalisée.
+4. **Sauvegarde** : champ `technic?: [id, o, qx, qy, qz, on][]` dans `save.ts` + chargement/écriture ; convertir les anciennes briques Technic sauvegardées en pièces de la couche.
+5. **Vraies couleurs dans `blocks.ts`** (depuis `SPECS[id].col`).
+6. **Vraies icônes** : rendre chaque pièce (technicGeo) en PNG avec Playwright → `public/icons/technic-<id>.png`, mapping généré, `ItemIcon` les utilise à la place de `LegoTechnic` SVG.
+7. QA : tsc, esbuild, tous les tests, photos sur le rig téléphone, puis push.
