@@ -3685,3 +3685,13 @@ Claude a poussé sur main (`08a0ca1`, parent = le gel b0323fee, aucun dommage d'
 **Vérification indépendante par Muse (au head 08a0ca1)** : `src/game/technic.ts` = 48 233 octets / 1 048 lignes (specs typées trous P ronds / A croix, constantes réelles Ø4,85 mm, croix 4,8 mm, pitch = dents/16 module 1, matrices d'orientation, occupation en demi-modules). **Ses tests relancés par Muse : 3/3 PASS** (spec 1:1 pour chaque pièce Technic; goupilles/poutres/essieux s'assemblent comme du vrai LEGO; engrenages 16T en prise contre-rotatifs) — node --test, 3,3 s. La logique est réelle.
 
 **GEL LEVÉ** (remplace l'entrée de gel de 15:28). **CLAIM Muse (fil principal + boucle)** : étape 1 `technicGeo.ts` (interpréter les `ops` de technic.ts → géométrie three fusionnée maison, couleurs par sommet, AUCUN import examples/jsm; le détail des formes est dans l'entrée de Claude), puis étape 2 branchement `game.ts` (pose, fantôme, minage, bouton « tourner » téléphone, manivelle + rotation). Étapes 3–7 de la liste de Claude suivent dans son ordre (retrait du Technic de Grok de buildLegoItem3D/brickGeo/fantôme = étape 3, APRÈS le branchement; sauvegarde `technic?`; couleurs blocks.ts; icônes PNG depuis technicGeo; QA rig téléphone). **Garde-fou permanent : `technic.test.ts` doit rester 3/3 vert à chaque push touchant la zone.**
+
+## 2026-10-29 ~15:37 PDT — Muse (fil principal) : ordre de Philippe « finir le travail de Claude, pas attendre 4 jours » — la liste Technic est STAFFÉE en parallèle
+
+Philippe : « Il faut finir le travail que Claude a commencé — on veut pas attendre quatre jours pour faire avancer les Technic. » La liste numérotée de Claude est donc exécutée par Muse en parallèle, pas en série :
+- **Étape 1 `technicGeo.ts`** : agent Muse EN COURS (arbre scratch, géométrie depuis les `ops`, contrôle par pièce).
+- **Étape 2 (+3 retrait du Technic de Grok du rendu, +4 sauvegarde `technic?` et conversion)** : agent Muse EN COURS (arbre scratch technicwire/, patchs prêts à fusionner; technic.ts intouché, zones Grok mechState/mechLink intouchées — la rotation vient du moteur de technic.ts).
+- **Étape 5 couleurs blocks.ts** : agent Muse EN COURS (audit id par id contre les couleurs de specs, la spec fait foi).
+- **Étape 6 icônes PNG** : dès technicGeo livré (rendus Playwright depuis la vraie géométrie, comme spécifié par Claude).
+- **Étape 7 QA rig téléphone** : dès le branchement fusionné; le rig reste à un seul occupant (la vérification BUG-3 y est présentement).
+Le fil principal fusionne chaque étape sur le head du moment, garde `technic.test.ts` à 3/3 vert à chaque push, et journalise les reçus ici. Claude retrouvera sa liste avancée à son retour dimanche.
