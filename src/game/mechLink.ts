@@ -27,6 +27,8 @@ export type MechBlockIds = {
   trap: number;
   ring: number;
   ringLo: number;
+  b12: number;
+  b20: number;
   water: number;
   door: number;
   doorOpen: number;
@@ -61,6 +63,8 @@ function specFor(id: number, ids: MechBlockIds): Spec | null {
   if (id === ids.belt) return { kind: "axle", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.trap) return { kind: "axle", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.ring || id === ids.ringLo) return { kind: "axle", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
+  if (id === ids.b12) return { kind: "gear", teeth: 12, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
+  if (id === ids.b20) return { kind: "gear", teeth: 20, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   return null;
 }
 
@@ -143,6 +147,21 @@ function onJointRun(x: number, y: number, z: number, get: (x: number, y: number,
   return get(x0, y, z) === ujoint;
 }
 
+function isBevel(id: number, ids: MechBlockIds) {
+  return id === ids.b12 || id === ids.b20;
+}
+
+function bevelTeeth(id: number, ids: MechBlockIds) {
+  return id === ids.b12 ? 12 : 20;
+}
+
+/** An axle east of a bevel output, or further along that row, turns on X. */
+function onBevelRun(x: number, y: number, z: number, get: (x: number, y: number, z: number) => number, ids: MechBlockIds) {
+  let x0 = x - 1;
+  while (get(x0, y, z) === ids.axle || get(x0, y, z) === ids.road) x0--;
+  return isBevel(get(x0, y, z), ids) && isBevel(get(x0 - 1, y, z), ids);
+}
+
 /** Rebuild the local machine and return door/gate edits the cam is asking for. */
 export function stepMech(
   get: (x: number, y: number, z: number) => number,
@@ -158,12 +177,14 @@ export function stepMech(
   const traps: MechCell[] = [];
   const rings: MechCell[] = [];
   const joints: MechCell[] = [];
+  const bevels: MechCell[] = [];
   for (const c of cells) {
     const id = get(c.x, c.y, c.z);
     if (id === ids.rack) racks.push(c);
     if (id === ids.belt) belts.push(c);
     if (id === ids.trap) traps.push(c);
     if (id === ids.ring || id === ids.ringLo) rings.push(c);
+    if (isBevel(id, ids)) bevels.push(c);
     const spec = specFor(id, ids);
     if (!spec) continue;
     let drive = spec.drive;
@@ -183,7 +204,11 @@ export function stepMech(
     if (id === ids.cam) cams.push(c);
     if (id === ids.diff) diffs.push(c);
     if (id === ids.ujoint) joints.push(c);
-    const axis = (id === ids.axle || id === ids.road) && onJointRun(c.x, c.y, c.z, get, ids.axle, ids.road, ids.ujoint) ? "x" : spec.axis;
+    const turned =
+      ((id === ids.axle || id === ids.road) &&
+        (onJointRun(c.x, c.y, c.z, get, ids.axle, ids.road, ids.ujoint) || onBevelRun(c.x, c.y, c.z, get, ids))) ||
+      (isBevel(id, ids) && isBevel(get(c.x - 1, c.y, c.z), ids));
+    const axis = turned ? "x" : spec.axis;
     putMech({
       x: c.x * 2,
       y: c.y * 2,
@@ -217,6 +242,18 @@ export function stepMech(
     if (!sp.n) continue;
     const low = get(c.x, c.y, c.z) === ids.ringLo;
     feeds.push({ x: (c.x + 1) * 2, y: c.y * 2, z: c.z * 2, s: low ? { n: sp.n, d: sp.d * 2 } : sp });
+  }
+  for (const c of bevels) {
+    const west = get(c.x - 1, c.y, c.z);
+    if (!isBevel(west, ids)) continue;
+    const sp = speedAt((c.x - 1) * 2, c.y * 2, c.z * 2);
+    if (!sp.n) continue;
+    feeds.push({
+      x: c.x * 2,
+      y: c.y * 2,
+      z: c.z * 2,
+      s: { n: sp.n * -bevelTeeth(west, ids), d: sp.d * bevelTeeth(get(c.x, c.y, c.z), ids) },
+    });
   }
   if (feeds.length) solveMech(feeds);
   integrateMech(dt);

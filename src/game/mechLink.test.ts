@@ -27,6 +27,8 @@ const ids: MechBlockIds = {
   trap: 25,
   ring: 26,
   ringLo: 27,
+  b12: 29,
+  b20: 30,
   water: 14,
   door: 15,
   doorOpen: 16,
@@ -225,5 +227,18 @@ describe("placed technic", () => {
     stepMech(get, [{ x: 0, y: 1, z: 0 }, { x: 0, y: 0, z: 0 }, { x: 2, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }], ids, 0);
     assert.deepEqual(speedAt(4, 0, 0), { n: -3, d: 5 });
     assert.deepEqual(speedAt(2, 0, 0), { n: 0, d: 1 });
+  });
+
+  it("turns a 12T bevel into a 20T on the other axis", () => {
+    const grid = new Map<string, number>([
+      ["0,0,0", ids.crankOn],
+      ["0,1,0", ids.b12],
+      ["1,1,0", ids.b20],
+      ["2,1,0", ids.axle],
+    ]);
+    const get = (x: number, y: number, z: number) => grid.get(x + "," + y + "," + z) ?? 0;
+    stepMech(get, [{ x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, { x: 1, y: 1, z: 0 }, { x: 2, y: 1, z: 0 }], ids, 0);
+    assert.deepEqual(speedAt(2, 2, 0), { n: -3, d: 5 });
+    assert.deepEqual(speedAt(4, 2, 0), { n: -3, d: 5 });
   });
 });

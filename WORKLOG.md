@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-29 (Grok — engrenage 40T, bloc 367, engrène un 24T à deux cases).
+**Last update:** 2026-10-29 (Grok — coniques 12T/20T, blocs 368/369, l'axe tourne de 90°).
 
 ## 2026-10-26 — v4.12: Engine performance, mob judder & floating animal parts (Muse, ordered by Philippe after his A54 test of v4.11)
 
@@ -2464,6 +2464,7 @@ Pitch : Minecraft, c'est un monde de cubes. Studs, c'est un monde de plastique �
   - [x] Piège (364) : un tour de l'essieu fait tomber le bloc posé dessus, à travers, si la case en dessous est libre
   - [x] Anneau de vitesse (365/366) : clic droit, rapport 1 ou rapport 2. L'essieu à l'est prend le rapport. Le clic tient le choix.
   - [x] Engrenage 40T (367) : entraxe (N₁+N₂)/16. Avec un 24T, deux cases, rapport −3/5. Un 16T collé contre lui ne prend pas (3,5 studs, hors grille).
+  - [x] Coniques 12T/20T (368/369) : entraxe 2 studs. Le 20T à l'est et l'essieu qui suit tournent à −3/5, sur l'autre axe.
 - [ ] **P4 · Son plastique** — clics, snaps, cliquetis 100 % synthétisés DSP, zéro asset
 
 ### Lane RPG
@@ -2508,7 +2509,7 @@ Toutes les 10 minutes, l'agent qui se réveille lit CE fichier et prend le derni
 
 ## P5 — PORTÉE ÉLARGIE par Philippe (2026-10-29 03:52 EDT) : « TOUT ce que LEGO Technic offre »
 Philippe : pas juste la mécanique — **les pièces ÉLECTRIQUES aussi**, pour que l'utilisateur puisse TOUT faire : véhicules, pelle mécanique, tout l'espace des possibles Technic. Le nord de P5 = le kit Technic complet en jeu. Livraison en couches (la physique reste LÉGÈRE — graphe de rotation borné/local, machines endormies au loin, un véhicule = UN assemblage rigide sur roues, pas un corps rigide par brique) :
-- [ ] **P5a · Drivetrain** — livré jusqu'à 367, 40T inclus. Case parente ouverte : coniques, vérin. Pas de redstone. P2 (soudure, ID 400) est à Muse.
+- [ ] **P5a · Drivetrain** — livré jusqu'à 369, coniques inclus. Case parente ouverte : le vérin linéaire. Pas de redstone. P2 (soudure, ID 400) est à Muse.
 - [ ] **P5b · Électrique + conduite** : moteurs (tailles = couple/vitesse), hub/batterie, télécommande à canaux — le joueur LIE un hub et CONDUIT sa machine (véhicules qui roulent pour vrai sur le terrain)
 - [ ] **P5c · Pneumatique + vérins** : pompe (manuelle ou moteur), réservoir d'air, valves, cylindres V2 + vérins linéaires à vis — bras de pelle, flèches de grue, tourelles 28T/56T (une pelle qui CREUSE dans le monde voxel : le godet casse les blocs)
 - [ ] **P5d · Capteurs + automatisation** : capteurs (distance, inclinaison, couleur), logique simple sur hub — machines qui réagissent toutes seules
@@ -2662,8 +2663,19 @@ EN COURS au début de la passe. Muse est dans `blocks.ts` / `recipes.ts` / `game
 - Craft : 2 engrenages 16T. Aucun fichier de modèle.
 - QA : 22/22. `tsc` 0 erreur.
 
+### Next move — TAKEN and DONE (coniques 368/369)
+Ne pas le refaire. L'ID 400 reste le chalumeau de Muse.
+
+### 2026-10-29 — Grok (coniques 12T/20T) — FAIT
+EN COURS au début de la passe. Fichiers : `blocks.ts` (368, 369), `recipes.ts`, `mechLink.ts`, deux lignes de `mechAcc`. Pas `save.ts`, pas l'ID 400.
+
+- Le 12T reste sur l'arbre vertical. Le 20T à l'est, et l'essieu qui le suit, tournent à −3/5 sur l'autre axe.
+- Entraxe (12+20)/16 = 2 studs, une case. Crafts séparés. Aucun fichier de modèle.
+- QA : 23/23. `tsc` 0 erreur.
+
 ### Next move — UNCLAIMED
-**P5a, prochaine pièce : le couple conique 12T / 20T.** Entraxe 2 studs, l'axe tourne de 90°. Blocs **368** et **369**. Pas de `save.ts`, pas l'ID 400, pas la soudure. Avant P4, avant les sites de débris.
+**P5a, prochaine pièce : le vérin linéaire.** Il avance d'une case par tour de vis, et il tient la charge quand la vis s'arrête. Bloc **370**. Pas de `save.ts`, pas l'ID 400, pas la soudure. Avant P4, avant les sites de débris.
+
 
 
 
