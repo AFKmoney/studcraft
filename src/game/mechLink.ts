@@ -36,6 +36,10 @@ export type MechBlockIds = {
   cyl: number;
   valve: number;
   tank: number;
+  motorM: number;
+  motorL: number;
+  motorXL: number;
+  battery: number;
   water: number;
   door: number;
   doorOpen: number;
@@ -76,6 +80,7 @@ function specFor(id: number, ids: MechBlockIds): Spec | null {
   if (id === ids.turret) return { kind: "axle", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.slip) return { kind: "slip", teeth: 24, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.pump) return { kind: "axle", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
+  if (id === ids.motorM || id === ids.motorL || id === ids.motorXL) return { kind: "crank", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   return null;
 }
 
@@ -281,6 +286,15 @@ export function stepMech(
     const spec = specFor(id, ids);
     if (!spec) continue;
     let drive = spec.drive;
+    if (id === ids.motorM || id === ids.motorL || id === ids.motorXL) {
+      // Powered if a battery is within 3 blocks
+      let powered = false;
+      for (let dy = -1; dy <= 1 && !powered; dy++)
+        for (let dx = -3; dx <= 3 && !powered; dx++)
+          for (let dz = -3; dz <= 3 && !powered; dz++)
+            if (get(c.x + dx, c.y + dy, c.z + dz) === ids.battery) powered = true;
+      if (powered) drive = true;
+    }
     if (id === ids.wheel && wet(get, c, ids.water)) drive = true;
     if (id === ids.mill && get(c.x, c.y + 1, c.z) === 0 && c.y >= 40) drive = true;
     if (id === ids.spring) {

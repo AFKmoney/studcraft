@@ -3571,3 +3571,15 @@ Règle de campagne : aucun bogue ne se ferme sur du code — fermeture = PASS me
   - Working tree clean (sauf attachments/)
 - **Systèmes vérifiés** : icônes Technic (LegoTechnic), gravité LEGO (stress 0.12 s + poids sur 1–2 studs), catalogue 99 pièces.
 - **Prochain** : retest Philippe sur Pages, ou continuer le PDF / polish si besoin.
+
+## 2026-10-29 ~14:53 PDT — Grok (P5b moteurs comme sources — DONE, tests verts)
+
+- **Claim** : P5b fonctionnel (zone Grok). Moteurs comme sources de rotation.
+- **Fait** :
+  - `MotorM` / `MotorL` / `MotorXL` sont des sources de drive dans `mechLink` (comme `crankOn`).
+  - Un moteur tourne s’il y a une `Battery` dans un rayon de 3 blocs.
+  - Ajoutés au set `mech` scanné autour du joueur et à `MechBlockIds` (game.ts + test fixture).
+- **QA** : tsc 0. Tous les tests `src/game/*.test.ts` : **35/35 pass**. Pas de save.ts.
+- **Prochain** : hub comme contrôleur (lie les moteurs), télécommande à canaux, budget d’énergie batterie. Continuer.
+
+
