@@ -389,6 +389,22 @@ export const ID = {
   // P6 step 2 (Muse): plastic ingot — pellets smelted in the Kiln
   // (SMELT[401] = 402); the casting stock the colour moulds spend.
   PlasticIngot: 402,
+  // P6-2 Trempe (Muse): tempered ingot — a plastic ingot quenched in
+  // water (right-click water with 402 in hand). The grade is an ID, not
+  // metadata: inventory stores counts per ID only.
+  TemperedIngot: 403,
+  // P6-2: tempered colour bricks (410-418, same order as COLORS) — cast
+  // from tempered ingots; hard 1.5/tough vs 0.5, and their P1 stress
+  // threshold is doubled (stressMaxFor in game.ts).
+  TRed: 410,
+  TOrange: 411,
+  TYellow: 412,
+  TGreen: 413,
+  TBlue: 414,
+  TAzure: 415,
+  TPink: 416,
+  TWhite: 417,
+  TBlack: 418,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -544,6 +560,18 @@ put(b(ID.Orange, "Orange", "#f07820", "#ff9340", "#e06818", "#c45610", { hard: 0
 put(b(ID.Green, "Green", "#2f7d3a", "#3d9a4a", "#286e32", "#1d5526", { hard: 0.5 }));
 put(b(ID.Pink, "Pink", "#f2a2c0", "#ffc0d6", "#e48aaf", "#cc7098", { hard: 0.5 }));
 put(b(ID.Azure, "Azure", "#5eb0e5", "#8accf5", "#4ea0d6", "#3a88be", { hard: 0.5 }));
+// P6-2 Trempe (Muse): tempered colour bricks — same palette as the plain
+// colours, cast from tempered ingots. Grade = hard 1.5 + tough (vs 0.5)
+// and a doubled P1 stress threshold (stressMaxFor in game.ts).
+put(b(ID.TRed, "Tempered red", "#e23b2f", "#f25a46", "#d43228", "#b02620", { hard: 1.5, tough: true }));
+put(b(ID.TOrange, "Tempered orange", "#f07820", "#ff9340", "#e06818", "#c45610", { hard: 1.5, tough: true }));
+put(b(ID.TYellow, "Tempered yellow", "#f5c518", "#ffe14a", "#e6b40e", "#c8980a", { hard: 1.5, tough: true }));
+put(b(ID.TGreen, "Tempered green", "#2f7d3a", "#3d9a4a", "#286e32", "#1d5526", { hard: 1.5, tough: true }));
+put(b(ID.TBlue, "Tempered blue", "#1f5fbf", "#3d7ad4", "#1b56b0", "#154890", { hard: 1.5, tough: true }));
+put(b(ID.TAzure, "Tempered azure", "#5eb0e5", "#8accf5", "#4ea0d6", "#3a88be", { hard: 1.5, tough: true }));
+put(b(ID.TPink, "Tempered pink", "#f2a2c0", "#ffc0d6", "#e48aaf", "#cc7098", { hard: 1.5, tough: true }));
+put(b(ID.TWhite, "Tempered white", "#f4f1ea", "#ffffff", "#e7e2d8", "#d4cec3", { hard: 1.5, tough: true }));
+put(b(ID.TBlack, "Tempered black", "#2a2a2a", "#3d3d3d", "#242424", "#141414", { hard: 1.5, tough: true }));
 put(
   b(ID.Bedrock, "Baseplate core", "#1a1a1a", "#2a2a2a", "#161616", "#101010", {
     placeable: false,
@@ -836,6 +864,7 @@ item(ID.Shears, "Shears", "#c5ccd3", { maxUse: 80 });
 item(ID.Welder, "Welding torch", "#f07820", { maxUse: 120 });
 item(ID.Pellets, "Plastic pellets", "#e8dcc0");
 item(ID.PlasticIngot, "Plastic ingot", "#d9c58f");
+item(ID.TemperedIngot, "Tempered ingot", "#a8d8e8");
 item(ID.Bone, "Bone", "#f4f1ea");
 item(ID.Flint, "Spark", "#f07820", { maxUse: 40 });
 item(ID.Bottle, "Bottle", "#d5f3f6");
@@ -1419,6 +1448,10 @@ export const CATALOG = [
   ID.Welder,
   ID.Pellets,
   ID.PlasticIngot,
+  ID.TemperedIngot,
+  ID.TRed,
+  ID.TBlue,
+  ID.TWhite,
   ID.Flint,
   ID.Boat,
   ID.Cart,

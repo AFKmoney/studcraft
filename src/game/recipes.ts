@@ -964,6 +964,64 @@ export const RECIPES: Recipe[] = [
     h: 2,
     cat: "build",
   }),
+  // P6-2 Trempe (Muse) — the tempered moulds: same shape as cast-* but
+  // the stock is tempered ingots (403, quenched in water) and the pour is
+  // a TEMPERED colour brick (410-418): hard 1.5/tough, double P1 stress
+  // threshold. The donor still pays the pigment.
+  r("tcast-red", "Cast tempered red bricks", "4 tempered ingots + 1 red → 2 tempered", [[ID.TemperedIngot, 4], [ID.Red, 1]], ID.TRed, 2, {
+    shape: [ID.TemperedIngot, ID.TemperedIngot, ID.TemperedIngot, ID.TemperedIngot, ID.Red, 0],
+    w: 3,
+    h: 2,
+    cat: "build",
+  }),
+  r("tcast-orange", "Cast tempered orange bricks", "4 tempered ingots + 1 orange → 2 tempered", [[ID.TemperedIngot, 4], [ID.Orange, 1]], ID.TOrange, 2, {
+    shape: [ID.TemperedIngot, ID.TemperedIngot, ID.TemperedIngot, ID.TemperedIngot, ID.Orange, 0],
+    w: 3,
+    h: 2,
+    cat: "build",
+  }),
+  r("tcast-yellow", "Cast tempered yellow bricks", "4 tempered ingots + 1 yellow → 2 tempered", [[ID.TemperedIngot, 4], [ID.Yellow, 1]], ID.TYellow, 2, {
+    shape: [ID.TemperedIngot, ID.TemperedIngot, ID.TemperedIngot, ID.TemperedIngot, ID.Yellow, 0],
+    w: 3,
+    h: 2,
+    cat: "build",
+  }),
+  r("tcast-green", "Cast tempered green bricks", "4 tempered ingots + 1 green → 2 tempered", [[ID.TemperedIngot, 4], [ID.Green, 1]], ID.TGreen, 2, {
+    shape: [ID.TemperedIngot, ID.TemperedIngot, ID.TemperedIngot, ID.TemperedIngot, ID.Green, 0],
+    w: 3,
+    h: 2,
+    cat: "build",
+  }),
+  r("tcast-blue", "Cast tempered blue bricks", "4 tempered ingots + 1 blue → 2 tempered", [[ID.TemperedIngot, 4], [ID.Blue, 1]], ID.TBlue, 2, {
+    shape: [ID.TemperedIngot, ID.TemperedIngot, ID.TemperedIngot, ID.TemperedIngot, ID.Blue, 0],
+    w: 3,
+    h: 2,
+    cat: "build",
+  }),
+  r("tcast-azure", "Cast tempered azure bricks", "4 tempered ingots + 1 azure → 2 tempered", [[ID.TemperedIngot, 4], [ID.Azure, 1]], ID.TAzure, 2, {
+    shape: [ID.TemperedIngot, ID.TemperedIngot, ID.TemperedIngot, ID.TemperedIngot, ID.Azure, 0],
+    w: 3,
+    h: 2,
+    cat: "build",
+  }),
+  r("tcast-pink", "Cast tempered pink bricks", "4 tempered ingots + 1 pink → 2 tempered", [[ID.TemperedIngot, 4], [ID.Pink, 1]], ID.TPink, 2, {
+    shape: [ID.TemperedIngot, ID.TemperedIngot, ID.TemperedIngot, ID.TemperedIngot, ID.Pink, 0],
+    w: 3,
+    h: 2,
+    cat: "build",
+  }),
+  r("tcast-white", "Cast tempered white bricks", "4 tempered ingots + 1 white → 2 tempered", [[ID.TemperedIngot, 4], [ID.White, 1]], ID.TWhite, 2, {
+    shape: [ID.TemperedIngot, ID.TemperedIngot, ID.TemperedIngot, ID.TemperedIngot, ID.White, 0],
+    w: 3,
+    h: 2,
+    cat: "build",
+  }),
+  r("tcast-black", "Cast tempered black bricks", "4 tempered ingots + 1 black → 2 tempered", [[ID.TemperedIngot, 4], [ID.Black, 1]], ID.TBlack, 2, {
+    shape: [ID.TemperedIngot, ID.TemperedIngot, ID.TemperedIngot, ID.TemperedIngot, ID.Black, 0],
+    w: 3,
+    h: 2,
+    cat: "build",
+  }),
 ];
 
 export const SMELT: Record<number, number> = {

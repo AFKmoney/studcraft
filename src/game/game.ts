@@ -318,6 +318,8 @@ declare global {
       weldAt?: (sx1: number, sy1: number, sz1: number, sx2: number, sy2: number, sz2: number) => boolean;
       getWelds?: () => { count: number; pairs: string[]; welded: string[] };
       plasticYieldOf?: (id: number) => number;
+      stressMaxOf?: (id: number) => number;
+      quenchAt?: (x: number, y: number, z: number) => boolean;
       smeltOf?: (id: number) => number;
       stageFurnace?: (x: number, y: number, z: number, inId: number, inN: number, fuelId: number, fuelN: number) => { in: number; inN: number; fuel: number; fuelN: number; out: number; outN: number; cook: number; burn: number };
       getFurnace?: (x: number, y: number, z: number) => { in: number; inN: number; fuel: number; fuelN: number; out: number; outN: number; cook: number; burn: number } | null;
@@ -4913,10 +4915,23 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   const brickSagged = new Set<string>(); // brick keys currently rendered with sag > 0
   const BRICK_STRESS_MAX = 0.75;
   const BRICK_SAG_MAX = 0.15;
+  // P6-2 Trempe (Muse): tempered colour bricks (410-418) are the grade
+  // above plain cast bricks — they hold stress twice as long before
+  // letting go, and sag against their OWN threshold (same max sag,
+  // reached half as fast). One helper, read by tickBricks + brickSagY.
+  const TEMPERED_STRESS_MAX = 1.5;
+  function isTemperedBrick(id: number): boolean {
+    return id >= ID.TRed && id <= ID.TBlack;
+  }
+  function stressMaxFor(id: number): number {
+    return isTemperedBrick(id) ? TEMPERED_STRESS_MAX : BRICK_STRESS_MAX;
+  }
   function brickSagY(key: string): number {
     const s = brickStress.get(key) ?? 0;
     if (s <= 0) return 0;
-    return Math.min(s / BRICK_STRESS_MAX, 1) * BRICK_SAG_MAX;
+    const b = bricks.get(key);
+    const max = b ? stressMaxFor(b.id) : BRICK_STRESS_MAX;
+    return Math.min(s / max, 1) * BRICK_SAG_MAX;
   }
   let integrityAcc = 0;
   let lastIntegrity = { total: 0, supported: 0, stressed: [] as string[], falling: 0 };
@@ -5082,7 +5097,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const s = (brickStress.get(k) ?? 0) + step;
       brickStress.set(k, s);
       stressed.push(k);
-      if (s >= BRICK_STRESS_MAX) detachBrick(k);
+      if (s >= stressMaxFor(b.id)) detachBrick(k);
       else {
         brickSagged.add(k);
         sagIds.add(b.id); // sag grew this scan
@@ -5690,7 +5705,20 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // regression); the Kiln casting step is P6 step 2.
   function plasticYield(id: number): number {
     if (!isPlastic(id)) return 0;
-    return COLORS_OK(id) ? 2 : 1;
+    return COLORS_OK(id) || isTemperedBrick(id) ? 2 : 1;
+  }
+  // P6-2 Trempe (Muse): quench ONE held plastic ingot in the targeted
+  // water cell. The water is dipped in, never consumed. Returns false
+  // (and spends nothing) when the held item is not an ingot or the aim
+  // is not water. The right-click path and the QA hook share this.
+  function quenchHeldAt(hit: { id: number; x: number; y: number; z: number } | null): boolean {
+    if (!hit || hit.id !== ID.Water) return false;
+    if (!spend(ID.PlasticIngot, 1)) return false;
+    addInv(ID.TemperedIngot, 1);
+    audio.place();
+    say("Quenched — tempered ingot", 1600);
+    saveDirty = true;
+    return true;
   }
   function flamOf(id: number) {
     if (id === ID.Leaves) return 1;
@@ -6349,6 +6377,16 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         saveDirty = true;
       }
       return;
+    }
+    if (held === ID.PlasticIngot) {
+      // P6-2 Trempe (Muse): dip the ingot in water to quench it. The
+      // main target passes through fluids, so like the bucket this does
+      // its own fluid-inclusive cast. Water is never consumed.
+      const fh = hit.id === ID.Water || hit.id === ID.Lava
+        ? hit
+        : raycast(player.x, player.y + EYE, player.z, -Math.sin(player.yaw) * Math.cos(player.pitch), Math.sin(player.pitch), -Math.cos(player.yaw) * Math.cos(player.pitch), 6, false);
+      if (fh && quenchHeldAt(fh)) return;
+      if (fh && fh.id === ID.Water) return;
     }
     if (held === ID.Bucket) {
       // v4.18: the main target now passes through fluids (for placing IN
@@ -12151,6 +12189,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     },
     // P6 QA hook: the foundry yield table itself (inert in play).
     plasticYieldOf: (id: number) => plasticYield(id),
+    // P6-2 QA hooks (inert in play): the temper grade table, and the
+    // quench exercised through the SAME quenchHeldAt the right-click
+    // path uses, aimed at a staged cell.
+    stressMaxOf: (id: number) => stressMaxFor(id),
+    quenchAt: (x: number, y: number, z: number) => {
+      const fx = Math.floor(x), fy = Math.floor(y), fz = Math.floor(z);
+      return quenchHeldAt({ id: world.get(fx, fy, fz), x: fx, y: fy, z: fz });
+    },
     // P6 step 2 QA hooks (inert in play): the SMELT gate table, a furnace
     // staged through the same ensureFurnace the panel uses, a snapshot
     // witness, a deterministic tick of the REAL tickFurnaces (the
