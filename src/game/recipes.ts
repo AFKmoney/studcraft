@@ -1144,6 +1144,25 @@ export const RECIPES: Recipe[] = [
     cat: "build",
   }),
 
+  r("cylblock", "Cylinder block", "2 axles + 2 planks", [[ID.Axle, 2], [ID.Planks, 2]], ID.CylBlock, 1, {
+    shape: [ID.Planks, ID.Axle, ID.Planks, ID.Axle],
+    w: 2,
+    h: 2,
+    cat: "build",
+  }),
+  r("piston", "Piston", "1 axle + 1 bush", [[ID.Axle, 1], [ID.Bush, 1]], ID.EnginePiston, 1, {
+    shape: [ID.Axle, ID.Bush],
+    w: 1,
+    h: 2,
+    cat: "build",
+  }),
+  r("conrod", "Connecting rod", "1 piston + 1 thin liftarm", [[ID.EnginePiston, 1], [ID.Thin3, 1]], ID.ConRod, 1, {
+    shape: [ID.EnginePiston, ID.Thin3],
+    w: 1,
+    h: 2,
+    cat: "build",
+  }),
+
   // P6 step 2 (Muse) — Kiln casting: the colour moulds. The donor brick is
   // the pigment/master: it is consumed into the melt, 4 plastic ingots
   // (smelted pellets) join it, and the mould pours 2 bricks of its colour.

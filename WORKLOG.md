@@ -3420,3 +3420,13 @@ Le fichier `Catalogue_Complet_LEGO_Technic_et_Accessoires_Minifigurines.pdf` (35
 - **Prochain** : moteur à pistons (cylindre/piston/bielle) ou panneaux fairing, ou pneumatique tuyaux. Continuer sans arrêt.
 
 
+
+## 2026-10-29 ~14:25 PDT — Grok (moteur à pistons — DONE, tests verts)
+
+- **Claim** : moteur à pistons (CAT-04). IDs 434–436.
+- **Fait** : Cylinder block, EnginePiston (renommé pour éviter le conflit avec le piston Minecraft ID 45), Connecting rod. Placeables, recettes, CATALOG + TECHNIC. Géométrie math : bloc 2 cylindres, piston coulissant, bielle avec axes.
+- **Correction** : collision de nom `Piston` détectée au tsc (TS1117). Renommé en `EnginePiston` partout pour la nouvelle pièce ; l’ancien piston Minecraft (ID 45, redstone) restauré.
+- **QA** : tsc 0. Tous les tests `src/game/*.test.ts` : **35/35 pass**. Pas de save.ts.
+- **Prochain** : panneaux fairing ou tuyaux pneumatiques. Continuer.
+
+

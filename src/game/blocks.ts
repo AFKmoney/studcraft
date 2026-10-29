@@ -418,6 +418,10 @@ export const ID = {
   ActXL: 431,
   Turn28: 432,
   Turn56: 433,
+  // Piston engine (CAT-04)
+  CylBlock: 434,
+  EnginePiston: 435,
+  ConRod: 436,
   // Muse lane (P2 welding): IDs 400+ are reserved for the brick-layer
   // pillars so they can never collide with Grok's Technic catalogue.
   Welder: 400,
@@ -1378,6 +1382,10 @@ put(b(ID.ActMini, "Linear actuator mini", "#4a5058", "#e23b2f", "#2a2e32", "#d0d
 put(b(ID.ActXL, "Linear actuator XL", "#4a5058", "#e23b2f", "#2a2e32", "#d0d4da", { hard: 0.4 }));
 put(b(ID.Turn28, "Turntable 28T", "#2a2e32", "#f0c43a", "#1a1a1a", "#8e959c", { hard: 0.4 }));
 put(b(ID.Turn56, "Turntable 56T", "#2a2e32", "#f0c43a", "#1a1a1a", "#8e959c", { hard: 0.4 }));
+// Piston engine
+put(b(ID.CylBlock, "Cylinder block", "#4a5058", "#6e767e", "#2a2e32", "#1a1a1a", { hard: 0.4 }));
+put(b(ID.EnginePiston, "Piston", "#c5ccd3", "#e0e4e8", "#8e959c", "#4a5058", { hard: 0.4 }));
+put(b(ID.ConRod, "Connecting rod", "#8e959c", "#c5ccd3", "#4a5058", "#2a2e32", { hard: 0.4 }));
 
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];
@@ -1806,6 +1814,9 @@ export const CATALOG = [
   ID.ActXL,
   ID.Turn28,
   ID.Turn56,
+  ID.CylBlock,
+  ID.EnginePiston,
+  ID.ConRod,
 ];
 
 /** Parts the player can take from the Technic bin. Click-states stay out. */
@@ -1873,6 +1884,9 @@ export const TECHNIC = [
   ID.ActXL,
   ID.Turn28,
   ID.Turn56,
+  ID.CylBlock,
+  ID.EnginePiston,
+  ID.ConRod,
 ] as const;
 
 export const COLORS = [ID.Red, ID.Orange, ID.Yellow, ID.Green, ID.Blue, ID.Azure, ID.Pink, ID.White, ID.Black];

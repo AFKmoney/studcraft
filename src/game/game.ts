@@ -1880,6 +1880,23 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       addCylPart(group, r * 0.6, r * 0.6, s * 0.1, 0, 0, 0, skin(0xf0c43a), 20);
       return { group, isTool: false, flames };
     }
+    if (id === ID.CylBlock) {
+      addBoxPart(group, s * 0.5, s * 0.4, s * 0.5, 0, 0, 0, techMat);
+      addCylPart(group, s * 0.12, s * 0.12, s * 0.5, -s * 0.12, 0, 0, skin(0x2a2e32), 12);
+      addCylPart(group, s * 0.12, s * 0.12, s * 0.5, s * 0.12, 0, 0, skin(0x2a2e32), 12);
+      return { group, isTool: false, flames };
+    }
+    if (id === ID.EnginePiston) {
+      addCylPart(group, s * 0.1, s * 0.1, s * 0.2, 0, 0, 0, techMat, 12);
+      addBoxPart(group, s * 0.06, s * 0.3, s * 0.06, 0, -s * 0.15, 0, skin(0x1a1a1a));
+      return { group, isTool: false, flames };
+    }
+    if (id === ID.ConRod) {
+      addBoxPart(group, s * 0.08, s * 0.5, s * 0.08, 0, 0, 0, techMat);
+      addCylPart(group, s * 0.06, s * 0.06, s * 0.1, 0, s * 0.25, 0, skin(0xc5ccd3), 8);
+      addCylPart(group, s * 0.06, s * 0.06, s * 0.1, 0, -s * 0.25, 0, skin(0xc5ccd3), 8);
+      return { group, isTool: false, flames };
+    }
 
     if (id === ID.Brew) {
       const stoneMat = skin(0x70757d);
