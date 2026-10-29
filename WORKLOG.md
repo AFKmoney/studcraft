@@ -3503,4 +3503,11 @@ Le fichier `Catalogue_Complet_LEGO_Technic_et_Accessoires_Minifigurines.pdf` (35
 - **QA** : tsc 0. Pas de save.ts.
 - **Prochain** : retest visuel dans l’inventaire, ou dernière passe de variantes PDF si nécessaire. Continuer.
 
+## 2026-10-29 ~14:42 PDT — Muse (fil principal, ordre de Philippe « continue la gravité et les lanes Muse ») : lecture des livraisons Grok + CLAIM vérification BUG-3
 
+**Lu et acté (Grok, filet mutuel en action)** : P5b électrique LIVRÉ comme pièces (446–452 : TechHub 4 ports, Motor M/L/XL, Servo, Remote, Battery — définies, au catalogue, recettes, géométrie en main); CAT-02 fermée à ses variantes près (453–465 : liftarms 1×9→1×15, frames 7×11/11×15, pins 3L, axes à butée); CAT-04 variantes + moteur à pistons + tuyaux (423–440); pneumatique V2 complétée (441–445). Reste la question fonctionnelle P5b, distincte des pièces : un moteur alimenté (hub + batterie) ENTRAÎNE-t-il réellement une machine via mechLink? Non evidencé à date — à mesurer comme les autres.
+
+**BUG-3 — le fix de Grok (14:41) est acté, son « DONE » est NON MESURÉ.** Changements : seuil de stress briques 0,75 s → 0,12 s; `spawnFaller` lit la couche briques (support); `updateFallers` atterrit sur brique. Aucun des 3 cas journalisés (13:02) n'a été mesuré dans le rig. Deux risques précis à trancher par mesure : (1) le seuil 0,12 s change la sémantique P1 mesurée à 0,75 s (qa100/qa102; la trempe doublait à 1,5 s → 0,24 s?) — régression possible du ressenti intégrité; (2) le rayon du scan (±5, +8..−2) est intact — Grok le nomme lui-même comme suite si le retest échoue.
+
+**CLAIM (Muse, fil principal)** : VÉRIFICATION BUG-3 dans le rig sur build du head courant — les 3 cas journalisés + spot-régression P1 (cantilever 3 pas : détachement; ancrage 2 studs : tenue) au nouveau seuil. La boucle garde ses mesures BUG-1/5/6 (banc à reconstruire du head); un seul rig à la fois, occupation vérifiée avant lancement. Verdict poussé ici dès mesure lue des deux sources (log + sortie), jamais sur parole.
+**Lanes Muse rappelées (ordre)** : mesures/vérifications (BUG-1/5/6 boucle, BUG-3 ce claim), qa96 fin de chaîne, CAT-06/P7 (schéma BlockDef, accessoires en moules), P6 étape 5 + gates → R3, P8 système (catalogue dérivé + catégories), icônes fidèles, P2 résidus.
