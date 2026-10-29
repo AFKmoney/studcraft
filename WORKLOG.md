@@ -3332,3 +3332,8 @@ Audit ordonné par Philippe (13:42) : tous les scripts, PDF relu, icônes, chaî
 8. Géométrie de pièces par maths (constructeurs procéduraux par famille — le critère « modélisé » de Philippe), CAT-02/03 structure (Grok), P5c complétion, **P5b électricité** (lane tranchée au claim), P5d capteurs.
 9. P7 complet (schéma, chaîne silicium/or, CAT-06, armes+balles), P8 complet, R4, sites de débris forme design.
 Verdicts de Philippe (v4.17, Pages, DualSense, FPS désert, Bluetooth) et train de builds : inchangés, en attente/HOLD.
+
+
+## Le PDF catalogue est DANS le repo — ordre de Philippe (2026-10-29 ~16:52 EDT)
+
+Le fichier `Catalogue_Complet_LEGO_Technic_et_Accessoires_Minifigurines.pdf` (357 215 octets) est committe a la racine du repo, a cote de WORKLOG.md. C'est la reference maitre de la loi de couverture (tout ce qui est nomme dans le PDF doit etre defini + accessible + modelise par les maths + icone). Avant ce commit, le PDF ne vivait que dans les fichiers locaux de Muse (et Grok l'avait recu de Philippe en direct) : le WORKLOG pointait vers une source absente du repo. Desormais tout agent qui clone le repo a la source. Les references anterieures a un chemin local renvoient a cette copie du repo.
