@@ -3543,3 +3543,19 @@ Vérification par lecture au head courant (fichiers fetchés à l'API, pas l'arb
 - **QA** : tsc 0. Tous les tests `src/game/*.test.ts` : **35/35 pass**. TECHNIC.length = 99. Pas de save.ts.
 - **Couverture PDF (lane Grok)** : CAT-02/03/04/05 largement couverts. Les familles nommées sont définies, accessibles, modelisées et icônées. CAT-06 reste lane Muse.
 - **Prochain** : retest Philippe dans l’inventaire Technic, ou polish supplémentaire si une pièce manque encore visuellement. Continuer.
+
+## 2026-10-29 ~14:49 PDT — ORDRE DE PHILIPPE : « fixe tout les bugs, teste tout » — CAMPAGNE DE FERMETURE (tous agents)
+
+Règle de campagne : aucun bogue ne se ferme sur du code — fermeture = PASS mesuré au rig + retest Pages de Philippe. Tout fix : tsc 0 + suite de tests complète. Chaque item avance sous claim; le filet mutuel s'applique à tout item qui stagne.
+
+**File des bogues (état vérifié + geste dû)** :
+- **BUG-3 gravité** — fix Grok livré non mesuré; VÉRIFICATION EN COURS (claim fil principal) : 3 cas journalisés + spot-régression P1 au seuil 0,12 s. Si un cas échoue → correctif minimal prouvé au rig dans le même claim.
+- **BUG-1 éclairage briques** — mesure due (boucle, banc reconstruit du head) : pixels brique vs voxel même id, réaliste ON. Soupçon actif (2 lectures) : le passage `opaqueMat` de Grok rend les briques NOIRES (brickGeo sans attribut `color`, matériau vertexColors). Si confirmé → fix = attribut `color` blanc au merge brickGeo, re-mesure dans le même claim.
+- **BUG-5 drops en Créatif** — fix Grok livré non mesuré; dû : matrice de couverture des drops mesurée dans LES DEUX modes (le yield est sorti du `if (!creative)` — à prouver bloc par bloc, feuilles/cultures/Fortune/XP inclus).
+- **BUG-6 coffre cassé perd son contenu** — fix Grok livré non mesuré; dû : coffre rempli de N items connus → casse → N drops comptés → ramassage = +N.
+- **BUG-2 arc** — renommage « Arc / Bow » livré; dû : mesure rig (inventaire Créatif → recherche « arc » → prendre → tirer une flèche).
+- **BUG-4 forme système** — le catalogue reste tenu à la main; dû (lane Muse) : catalogue DÉRIVÉ du registre + assertion QA permanente defs↔catalogue.
+- **qa96 reste** : s3b (témoin rAF + budget long), s4 (relance Wither), verdict s5 à LIRE des deux sources avant toute conclusion; puis qa97 (perf, chiffres relatifs au rig seulement).
+- **Régression P1 au seuil 0,12 s** : qa100/qa102 rejoués ou équivalents mesurés (cantilever, ancrage, trempe ×2) — rattaché à la vérification BUG-3.
+
+**Hors bogues mais dans la campagne « teste tout »** : P5b fonctionnel (item précisé 14:45, claim ouvert zone Grok); présence en jeu de chaque étape cochée (loi d'alignement : visible + atteignable + utilisable, sinon rouverte).
