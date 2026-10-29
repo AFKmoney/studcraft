@@ -1,6 +1,7 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ID, TECHNIC, def, type BlockDef } from "./blocks";
 import { CUBE_ICONS } from "./cubeIcons";
+import { technicIcon } from "./technicIcons";
 
 // IDs that have bespoke multi-part 3D LEGO set-piece illustrations (workstations,
 // mechanisms, lighting, storage, special blocks) so they never fall back to an old
@@ -140,6 +141,12 @@ function IsoBrick({
 export function ItemIcon({ id, muted = false }: { id: number; muted?: boolean }) {
   if (id <= 0) return null;
   const block = def(id);
+  // Technic parts: the icon is the PNG rendered from the part's real
+  // geometry (technicIcons.ts), not the generic LegoTechnic glyph. Muted
+  // rendering keeps the grey SVG, like every other icon family.
+  if (!muted && TECHNIC_IDS.has(id)) {
+    return <TechnicItemIcon id={id} fill={block.color} />;
+  }
   const img = CUBE_ICONS[id];
   if (img && !muted && !BESPOKE_LEGO_SET_IDS.has(id)) {
     return (
@@ -307,6 +314,32 @@ function glyph(block: BlockDef, fill: string, muted = false): ReactNode {
       leftFill={fill}
       rightFill={shadeHex(fill, -26)}
       studFill={shadeHex(fill, 14)}
+    />
+  );
+}
+
+// A Technic part's inventory icon: the geometry-rendered PNG when it
+// loads; if the file is missing (part added after the last icon
+// regeneration) or fails to load, fall back to the generic SVG glyph —
+// the same graceful degradation the cube icons use, except the fallback
+// here is the old render instead of an empty slot.
+function TechnicItemIcon({ id, fill }: { id: number; fill: string }) {
+  const [failed, setFailed] = useState(false);
+  const src = technicIcon(id);
+  if (!src || failed) {
+    return (
+      <svg className="item-icon" viewBox="0 0 32 32" aria-hidden="true">
+        <LegoTechnic id={id} fill={fill} />
+      </svg>
+    );
+  }
+  return (
+    <img
+      className="item-icon"
+      src={src}
+      alt=""
+      style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 4 }}
+      onError={() => setFailed(true)}
     />
   );
 }
