@@ -150,6 +150,73 @@ export function technicGeo(id: number): THREE.BufferGeometry {
         parts.push(g);
         break;
       }
+      case "helix": {
+        const steps = Math.max(8, Math.floor(op.turns * 8));
+        for (let i = 0; i < steps; i++) {
+          const t = i / steps;
+          const along = op.c[op.ax] + (op.len * t - op.len / 2);
+          const a = t * op.turns * Math.PI * 2;
+          const off = [0, 0, 0];
+          const ax1 = (op.ax + 1) % 3;
+          const ax2 = (op.ax + 2) % 3;
+          off[op.ax] = along;
+          off[ax1] = op.c[ax1] + Math.cos(a) * op.r;
+          off[ax2] = op.c[ax2] + Math.sin(a) * op.r;
+          addCyl(parts, op.ax, off, op.tr, op.len / steps, op.col, 6);
+        }
+        break;
+      }
+      case "blade": {
+        for (let i = 0; i < op.n; i++) {
+          const a = (i / op.n) * Math.PI * 2 + op.pitch;
+          const x = Math.cos(a) * (op.r0 + op.r1) / 2;
+          const y = Math.sin(a) * (op.r0 + op.r1) / 2;
+          addBox(parts, [x - op.w0 / 2, y - op.t / 2, op.z], [x + op.w1 / 2, y + op.t / 2, op.z + 0.05], op.col);
+        }
+        break;
+      }
+      case "shell": {
+        const segs = 8;
+        for (let i = 0; i < segs; i++) {
+          const a = op.a0 + (op.a1 - op.a0) * (i / segs);
+          const x = (op.x0 + op.x1) / 2;
+          const y = op.y + Math.cos(a) * op.r;
+          const z = op.z + Math.sin(a) * op.r;
+          addBox(parts, [op.x0, y - 0.04, z - 0.04], [op.x1, y + 0.04, z + 0.04], op.col);
+        }
+        break;
+      }
+      case "lathe": {
+        for (let i = 0; i < op.pts.length - 1; i++) {
+          const [r0, z0] = op.pts[i];
+          const [r1, z1] = op.pts[i + 1];
+          const r = (r0 + r1) / 2;
+          const z = (z0 + z1) / 2;
+          const c = [...op.c] as number[];
+          c[op.ax] += z;
+          addCyl(parts, op.ax, c, r, Math.abs(z1 - z0), op.col, 10);
+        }
+        break;
+      }
+      case "studs": {
+        for (const x of op.xs) for (const y of op.ys) {
+          addCyl(parts, 2, [x, y, op.z], 0.12, 0.08, op.col, 8);
+        }
+        break;
+      }
+      case "arm": {
+        const dx = op.d[0], dy = op.d[1];
+        const steps = 6;
+        for (let i = 0; i < steps; i++) {
+          const t = (i + 0.5) / steps;
+          addCyl(parts, 0, [dx * op.len * t, dy * op.len * t, 0], op.r * 0.5, op.len / steps, op.col, 6);
+        }
+        break;
+      }
+      case "dot": {
+        addCyl(parts, op.ax, op.c, op.r, 0.04, op.col, 8);
+        break;
+      }
       case "plate": {
         // Approximate plate as a thin box spanning the segments
         let minX = 99, maxX = -99, minY = 99, maxY = -99;
