@@ -1571,6 +1571,24 @@ export const RECIPES: Recipe[] = [
     h: 2,
     cat: "tools",
   }),
+  // P6 step 5b (Muse) — armour moulds: same boss-mould law as the
+  // blades above, for the two boss armour uniques. Tempered plastic
+  // (403) carries the form, the boss signature charge stays in the
+  // need, gated by the same R1/R2 ranks. Classic recipes stay.
+  r("bmold-guardian", "Cast prismarine carapace (boss mould)", "3 tempered ingots + 2 guardian spikes + 1 scale · level 16", [[ID.TemperedIngot, 3], [ID.GuardianSpike, 2], [ID.Scale, 1]], ID.GuardianPlate, 1, {
+    lvl: 16,
+    shape: [ID.TemperedIngot, ID.GuardianSpike, ID.TemperedIngot, ID.GuardianSpike, ID.TemperedIngot, ID.Scale],
+    w: 3,
+    h: 2,
+    cat: "gear",
+  }),
+  r("bmold-pharaoh", "Cast nemes crown (boss mould)", "2 tempered ingots + 2 scarab relics + 1 gold · level 12", [[ID.TemperedIngot, 2], [ID.PharaohGold, 2], [ID.Gold, 1]], ID.PharaohCrown, 1, {
+    lvl: 12,
+    shape: [ID.TemperedIngot, ID.PharaohGold, ID.TemperedIngot, ID.PharaohGold, ID.Gold, 0],
+    w: 3,
+    h: 2,
+    cat: "gear",
+  }),
 ];
 
 export const SMELT: Record<number, number> = {

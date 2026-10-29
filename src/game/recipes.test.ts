@@ -19,6 +19,15 @@ const EXPECTED_USES: Record<number, number> = {
   [ID.TidalBlade]: 480,
   [ID.VoidBlade]: 620,
 };
+// P6 step 5b — armour moulds: same law, cat "gear".
+const BMOLDS_ARMOR: [string, number, number, [number, number][]][] = [
+  ["bmold-guardian", 16, ID.GuardianPlate, [[ID.TemperedIngot, 3], [ID.GuardianSpike, 2], [ID.Scale, 1]]],
+  ["bmold-pharaoh", 12, ID.PharaohCrown, [[ID.TemperedIngot, 2], [ID.PharaohGold, 2], [ID.Gold, 1]]],
+];
+const EXPECTED_USES_ARMOR: Record<number, number> = {
+  [ID.GuardianPlate]: 380,
+  [ID.PharaohCrown]: 340,
+};
 
 describe("foundry boss moulds", () => {
   it("each bmold exists exactly once, gated, with the designed need", () => {
@@ -48,6 +57,35 @@ describe("foundry boss moulds", () => {
 
   it("the classic boss-blade recipes stay (mould = second way)", () => {
     for (const rid of ["fang-blade", "cinder-blade", "tidal-blade", "void-blade"]) {
+      assert.equal(RECIPES.filter((x) => x.id === rid).length, 1, rid);
+    }
+  });
+
+  it("each armour bmold exists exactly once, gated, with the designed need", () => {
+    for (const [rid, lvl, out, need] of BMOLDS_ARMOR) {
+      const hits = RECIPES.filter((x) => x.id === rid);
+      assert.equal(hits.length, 1, rid + " must exist exactly once");
+      const r = hits[0];
+      assert.equal(r.lvl, lvl, rid + " lvl gate");
+      assert.equal(r.out, out, rid + " output");
+      assert.equal(r.n, 1, rid + " casts one");
+      assert.equal(r.cat, "gear", rid + " cat");
+      assert.deepEqual(r.need, need, rid + " need");
+      for (const [id] of need) assert.ok(BLOCKS[id], rid + " ingredient " + id);
+      assert.ok(BLOCKS[out], rid + " output def");
+      assert.equal(BLOCKS[out].maxUse, EXPECTED_USES_ARMOR[out], rid + " output maxUse");
+      assert.ok(BLOCKS[out].armor, rid + " output is armour");
+      if (r.shape) {
+        const counts = new Map<number, number>();
+        for (const c of r.shape) if (c) counts.set(c, (counts.get(c) ?? 0) + 1);
+        assert.deepEqual(counts, new Map(need), rid + " shape spends the need");
+        assert.equal(r.shape.length, (r.w ?? 0) * (r.h ?? 0), rid + " shape is w*h");
+      }
+    }
+  });
+
+  it("the classic boss-armour recipes stay (mould = second way)", () => {
+    for (const rid of ["guardian-plate", "pharaoh-crown"]) {
       assert.equal(RECIPES.filter((x) => x.id === rid).length, 1, rid);
     }
   });
