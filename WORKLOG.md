@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-29 (Grok — embrayage 24T, bloc 372, il passe le couple jusqu'à 2 puis il patine).
+**Last update:** 2026-10-29 (Grok — pneumatique 373–376, le lot entier).
 
 ## 2026-10-26 — v4.12: Engine performance, mob judder & floating animal parts (Muse, ordered by Philippe after his A54 test of v4.11)
 
@@ -2468,6 +2468,7 @@ Pitch : Minecraft, c'est un monde de cubes. Studs, c'est un monde de plastique �
   - [x] Vérin (370) : un tour pousse le bloc à l'est d'une case. Fin de course : il patine. Vis arrêtée : le bloc reste.
   - [x] Tourelle (371) : un tour fait passer le bloc du dessus à la case suivante, sens horaire : dessus, est, sud, ouest, nord, puis retour.
   - [x] Embrayage 24T (372) : sur l'arbre, couple 1, il entraîne. Mené par un 8T, couple 3, il patine et l'essieu derrière ne tourne pas.
+  - [x] Pneumatique, le lot (373 pompe, 374 cylindre, 375 valve, 376 réservoir) : valve fermée, l'air reste dans le réservoir (plafond 4). Valve ouverte, un tour pousse le cylindre et dépense 1. Un tour à l'envers le ramène. L'air n'est pas sauvé.
 - [ ] **P4 · Son plastique** — clics, snaps, cliquetis 100 % synthétisés DSP, zéro asset
 
 ### Lane RPG
@@ -2512,7 +2513,7 @@ Toutes les 10 minutes, l'agent qui se réveille lit CE fichier et prend le derni
 
 ## P5 — PORTÉE ÉLARGIE par Philippe (2026-10-29 03:52 EDT) : « TOUT ce que LEGO Technic offre »
 Philippe : pas juste la mécanique — **les pièces ÉLECTRIQUES aussi**, pour que l'utilisateur puisse TOUT faire : véhicules, pelle mécanique, tout l'espace des possibles Technic. Le nord de P5 = le kit Technic complet en jeu. Livraison en couches (la physique reste LÉGÈRE — graphe de rotation borné/local, machines endormies au loin, un véhicule = UN assemblage rigide sur roues, pas un corps rigide par brique) :
-- [ ] **P5a · Drivetrain** — pièces seules livrées jusqu'à 372. Case parente ouverte : la pneumatique, en un seul lot, pas une pièce. Pas de redstone. P6 (trempe, ID 403) est à Muse.
+- [ ] **P5a · Drivetrain** — pièces seules jusqu'à 372, et le lot pneumatique 373–376. Case parente ouverte seulement pour ne pas cocher P5b (électronique, IDs 400+, Muse). Pas de redstone.
 - [ ] **P5b · Électrique + conduite** : moteurs (tailles = couple/vitesse), hub/batterie, télécommande à canaux — le joueur LIE un hub et CONDUIT sa machine (véhicules qui roulent pour vrai sur le terrain)
 - [ ] **P5c · Pneumatique + vérins** : pompe (manuelle ou moteur), réservoir d'air, valves, cylindres V2 + vérins linéaires à vis — bras de pelle, flèches de grue, tourelles 28T/56T (une pelle qui CREUSE dans le monde voxel : le godet casse les blocs)
 - [ ] **P5d · Capteurs + automatisation** : capteurs (distance, inclinaison, couleur), logique simple sur hub — machines qui réagissent toutes seules
@@ -2706,8 +2707,21 @@ Vérifié avant de coder : `tsc` 0 erreur, 25/25 tests jeu. Muse n'a rien pouss�
 - Craft : 1 engrenage 24T + 1 essieu. Aucun fichier de modèle.
 - QA après : 26/26. `tsc` 0 erreur.
 
+### Next move — TAKEN and DONE (pneumatique 373–376)
+Ne pas le refaire en pièces séparées. P6-2 et qa96/qa98b/qa97 restent à Muse. Pas de `save.ts`.
+
+### 2026-10-29 — Grok (pneumatique, le lot) — FAIT
+EN COURS au début de la passe. Les quatre blocs dans la même passe. Fichiers : `blocks.ts` (373–376, avant les IDs 400), `recipes.ts` (avant les moules), `mechLink.ts`, le clic de la valve, le bloc `mechAcc`. Pas la trempe, pas `save.ts`.
+
+- Valve fermée : la pompe charge le réservoir, le cylindre ne bouge pas. Plafond 4.
+- Valve ouverte : un tour pousse le bloc d'une case et dépense 1. Un tour à l'envers le ramène et dépense 1.
+- Clic droit sur la valve : air ouvert, ou fermé. Ce choix n'est pas sauvé.
+- Crafts séparés. Aucun fichier de modèle.
+- QA : 27/27. `tsc` 0 erreur.
+
 ### Next move — UNCLAIMED
-**P5a, la pneumatique, en un seul lot.** Pompe **373**, cylindre **374**, valve **375**, réservoir **376**. Pas une pièce seule. Pas de `save.ts`, pas les IDs 400+, pas P4 avant ce lot. Avant les sites de débris.
+**P4, un seul clic.** Le son de pose est synthétisé, pas un fichier audio. Pas de `save.ts`, pas les IDs 400+, pas qa96 (Muse l'a claimé). Avant les sites de débris.
+
 
 
 

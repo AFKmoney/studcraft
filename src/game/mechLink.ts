@@ -32,6 +32,10 @@ export type MechBlockIds = {
   act: number;
   turret: number;
   slip: number;
+  pump: number;
+  cyl: number;
+  valve: number;
+  tank: number;
   water: number;
   door: number;
   doorOpen: number;
@@ -71,6 +75,7 @@ function specFor(id: number, ids: MechBlockIds): Spec | null {
   if (id === ids.act) return { kind: "axle", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.turret) return { kind: "axle", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.slip) return { kind: "slip", teeth: 24, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
+  if (id === ids.pump) return { kind: "axle", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   return null;
 }
 
@@ -143,6 +148,68 @@ export function clearTurrets() {
   turretAcc.clear();
 }
 
+const AIR_CAP = 4;
+const tankAir = new Map<string, number>();
+const valveOpen = new Set<string>();
+const pumpAcc = new Map<string, number>();
+
+export function clearAir() {
+  tankAir.clear();
+  valveOpen.clear();
+  pumpAcc.clear();
+}
+
+export function tankAt(x: number, y: number, z: number) {
+  return tankAir.get(skey(x, y, z)) ?? 0;
+}
+
+export function openValve(x: number, y: number, z: number, open = true) {
+  const k = skey(x, y, z);
+  if (open) valveOpen.add(k);
+  else valveOpen.delete(k);
+}
+
+export function toggleValve(x: number, y: number, z: number) {
+  const k = skey(x, y, z);
+  if (valveOpen.has(k)) {
+    valveOpen.delete(k);
+    return false;
+  }
+  valveOpen.add(k);
+  return true;
+}
+
+function isPipe(id: number, ids: MechBlockIds) {
+  return id === ids.pump || id === ids.cyl || id === ids.valve || id === ids.tank;
+}
+
+function reach(from: MechCell, get: (x: number, y: number, z: number) => number, ids: MechBlockIds) {
+  const seen = new Set<string>();
+  const tanks: MechCell[] = [];
+  const pumps: MechCell[] = [];
+  const q: MechCell[] = [from];
+  while (q.length) {
+    const c = q.pop()!;
+    const k = skey(c.x, c.y, c.z);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const id = get(c.x, c.y, c.z);
+    if (!isPipe(id, ids)) continue;
+    if (id === ids.tank) tanks.push(c);
+    if (id === ids.pump) pumps.push(c);
+    if (id === ids.valve && !valveOpen.has(k)) continue;
+    q.push(
+      { x: c.x + 1, y: c.y, z: c.z },
+      { x: c.x - 1, y: c.y, z: c.z },
+      { x: c.x, y: c.y + 1, z: c.z },
+      { x: c.x, y: c.y - 1, z: c.z },
+      { x: c.x, y: c.y, z: c.z + 1 },
+      { x: c.x, y: c.y, z: c.z - 1 },
+    );
+  }
+  return { tanks, pumps };
+}
+
 function isGear(id: number, ids: MechBlockIds) {
   return id === ids.g8 || id === ids.g16 || id === ids.g24 || id === ids.g40;
 }
@@ -198,6 +265,8 @@ export function stepMech(
   const bevels: MechCell[] = [];
   const acts: MechCell[] = [];
   const turrets: MechCell[] = [];
+  const pumps: MechCell[] = [];
+  const cyls: MechCell[] = [];
   for (const c of cells) {
     const id = get(c.x, c.y, c.z);
     if (id === ids.rack) racks.push(c);
@@ -207,6 +276,8 @@ export function stepMech(
     if (isBevel(id, ids)) bevels.push(c);
     if (id === ids.act) acts.push(c);
     if (id === ids.turret) turrets.push(c);
+    if (id === ids.pump) pumps.push(c);
+    if (id === ids.cyl) cyls.push(c);
     const spec = specFor(id, ids);
     if (!spec) continue;
     let drive = spec.drive;
@@ -405,6 +476,52 @@ export function stepMech(
     turretAcc.delete(k);
     const left = acc - step;
     if (left) turretAcc.set(k, left);
+  }
+  const pulse = new Map<string, number>();
+  for (const c of pumps) {
+    const sp = speedAt(c.x * 2, c.y * 2, c.z * 2);
+    if (!sp.n || !dt) continue;
+    const k = skey(c.x, c.y, c.z);
+    const acc = (pumpAcc.get(k) ?? 0) + (sp.n / sp.d) * dt;
+    const step = acc >= 1 ? 1 : acc <= -1 ? -1 : 0;
+    if (!step) {
+      pumpAcc.set(k, acc);
+      continue;
+    }
+    pumpAcc.delete(k);
+    const rest = acc - step;
+    if (rest) pumpAcc.set(k, rest);
+    pulse.set(k, step);
+    if (step > 0) {
+      const tank = reach(c, get, ids).tanks[0];
+      if (tank) {
+        const tk = skey(tank.x, tank.y, tank.z);
+        tankAir.set(tk, Math.min(AIR_CAP, (tankAir.get(tk) ?? 0) + 1));
+      }
+    }
+  }
+  for (const c of cyls) {
+    const net = reach(c, get, ids);
+    let push = 0;
+    let pull = 0;
+    for (const p of net.pumps) {
+      const step = pulse.get(skey(p.x, p.y, p.z)) ?? 0;
+      if (step > 0) push++;
+      if (step < 0) pull++;
+    }
+    const tank = net.tanks.find((t) => (tankAir.get(skey(t.x, t.y, t.z)) ?? 0) > 0);
+    if (!tank || (!push && !pull)) continue;
+    const dir = pull && !push ? -1 : 1;
+    const fromX = dir > 0 ? c.x + 1 : c.x + 2;
+    const toX = fromX + dir;
+    const load = get(fromX, c.y, c.z);
+    if (!load || get(toX, c.y, c.z) !== 0 || toX === c.x) continue;
+    edits.push({ x: fromX, y: c.y, z: c.z, id: 0 });
+    edits.push({ x: toX, y: c.y, z: c.z, id: load });
+    const tk = skey(tank.x, tank.y, tank.z);
+    const left = (tankAir.get(tk) ?? 0) - 1;
+    if (left > 0) tankAir.set(tk, left);
+    else tankAir.delete(tk);
   }
   return edits;
 }

@@ -1,7 +1,7 @@
 import { beforeEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { clearMech, speedAt, torqueAt } from "./mechState.ts";
-import { clearActs, clearBelts, clearRacks, clearSprings, clearTraps, clearTurrets, springLeft, stepMech, windSpring, type MechBlockIds } from "./mechLink.ts";
+import { clearActs, clearAir, clearBelts, clearRacks, clearSprings, clearTraps, clearTurrets, openValve, springLeft, stepMech, tankAt, windSpring, type MechBlockIds } from "./mechLink.ts";
 
 const ids: MechBlockIds = {
   axle: 1,
@@ -32,6 +32,10 @@ const ids: MechBlockIds = {
   act: 31,
   turret: 32,
   slip: 33,
+  pump: 34,
+  cyl: 35,
+  valve: 36,
+  tank: 37,
   water: 14,
   door: 15,
   doorOpen: 16,
@@ -48,6 +52,7 @@ describe("placed technic", () => {
     clearTraps();
     clearActs();
     clearTurrets();
+    clearAir();
   });
 
   it("turns a 16T gear backwards beside a crank", () => {
@@ -310,5 +315,54 @@ describe("placed technic", () => {
     assert.deepEqual(speedAt(0, 0, 0), { n: 1, d: 1 });
     assert.deepEqual(speedAt(2, 0, 0), { n: 0, d: 1 });
     assert.deepEqual(speedAt(2, 2, 0), { n: 0, d: 1 });
+  });
+
+  it("runs a pump, a valve, a tank and a cylinder as one set", () => {
+    const grid = new Map<string, number>([
+      ["0,1,0", ids.crankOn],
+      ["0,0,0", ids.pump],
+      ["1,0,0", ids.tank],
+      ["2,0,0", ids.valve],
+      ["3,0,0", ids.cyl],
+      ["4,0,0", 99],
+    ]);
+    const get = (x: number, y: number, z: number) => grid.get(x + "," + y + "," + z) ?? 0;
+    const cells = [
+      { x: 0, y: 1, z: 0 },
+      { x: 0, y: 0, z: 0 },
+      { x: 1, y: 0, z: 0 },
+      { x: 2, y: 0, z: 0 },
+      { x: 3, y: 0, z: 0 },
+      { x: 4, y: 0, z: 0 },
+    ];
+    assert.deepEqual(stepMech(get, cells, ids, 1), []);
+    assert.equal(tankAt(1, 0, 0), 1);
+    openValve(2, 0, 0, true);
+    assert.deepEqual(stepMech(get, cells, ids, 1), [
+      { x: 4, y: 0, z: 0, id: 0 },
+      { x: 5, y: 0, z: 0, id: 99 },
+    ]);
+    assert.equal(tankAt(1, 0, 0), 1);
+    grid.delete("4,0,0");
+    grid.set("5,0,0", 99);
+    openValve(2, 0, 0, false);
+    for (let i = 0; i < 5; i++) stepMech(get, cells, ids, 1);
+    assert.equal(tankAt(1, 0, 0), 4);
+    assert.deepEqual(stepMech(get, cells, ids, 0), []);
+    openValve(2, 0, 0, true);
+    grid.set("0,1,0", ids.g16);
+    grid.set("-1,1,0", ids.g16);
+    grid.set("-1,2,0", ids.crankOn);
+    const back = stepMech(
+      get,
+      [...cells, { x: -1, y: 1, z: 0 }, { x: -1, y: 2, z: 0 }],
+      ids,
+      1,
+    );
+    assert.deepEqual(back, [
+      { x: 5, y: 0, z: 0, id: 0 },
+      { x: 4, y: 0, z: 0, id: 99 },
+    ]);
+    assert.equal(tankAt(1, 0, 0), 3);
   });
 });
