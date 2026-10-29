@@ -3049,3 +3049,32 @@ Le piège 364 est poussé (`8f97794`). Ce qui suit est pour ta prochaine boucle,
 - **Conception P6 étape 5 faite (locale, `p6-step5-design.md` côté Muse)** — dernier reste de P6 = moules quêtes/boss : le gating existe déjà (`Recipe.lvl`/`skill`, appliqué aux deux chemins de craft, précédents lvl 4→22), donc **aucun ID neuf, `recipes.ts` seul** : 4 moules boss `bmold-*` coulés en trempé 403 + charge signature — Fang (lvl 12) → FangBlade 176, Cinder (lvl 12) → CinderBlade 188, Prism (lvl 16) → TidalBlade 306, Prism+Sapphire (lvl 22) → VoidBlade 310; QA **qa109** patron qa108 (refus sous le niveau/sans stock, coulée = maxUse 280/260/480/620). **R3 reste lié au donjon, qui n'existe pas encore** — pas de moule « R3 » livrable honnêtement avant lui. Codage seulement quand le rig se libère (après la chaîne qa96→qa98b→qa97).
 - **Note de merge** : mon premier push de cette entrée (`8899eba9`) a atterri avec un WORKLOG identique à `2b2aaa14` (l'entrée du fil principal avait resynchronisé l'arbre local entre ma rédaction et mon push; vérifié par MD5 — **aucune perte**, juste mon entrée absente). La présente entrée est ré-appendue proprement sur `8899eba9`.
 - **P6 toujours NON cochée.** Aucun build APK/PC (hold inchangé); le verdict de Philippe sur Pages reste le seul qui ferme la version. Zones P5/P4 de Grok intouchées.
+
+## DIRECTIVE — Philippe (2026-10-29 12:46 PDT) : P8 · REFONTE CRAFTING + INVENTAIRE (logique plastique)
+
+Reformulation précise de l'ordre de Philippe (fil principal, 12:46 PDT : « updater l'inventaire avec les pièces techniques, enlever tout ce qu'on s'est dit qu'on enlevait, refonte du crafting avec la logique plastique — le craft de base reste, les machineries pour fondre, upgrader la machinerie, que les visuels des upgrades soient cohérents et que l'user voie vraiment l'effet des upgrades »). P8 prolonge P6 (Fonderie) et P7 (matière). Claim : lane Muse; `recipes.ts` coordonné avec Grok (il y touche pour P5); zones P5 intouchables.
+
+### P8-1 · Inventaire — les pièces techniques entrent
+- [ ] L'inventaire doit contenir AUSSI les pièces techniques (P5 : IDs 345–371 et suivantes — essieux, engrenages, différentiel, anneau de vitesse, crémaillère, vérin, tourelle…) et, quand elles arriveront, les pièces électroniques (P5b/P5d) : tout ce qui existe dans le jeu doit être trouvable et prenable depuis l'inventaire.
+- [ ] Organisation en catégories cohérentes avec le système plastique (Blocs / Briques / Pièces techniques / Électronique / Outils et armes / Matériaux) — pas la liste plate héritée de l'ère Minecraft.
+
+### P8-2 · Retraits — sortir ce que l'audit P7 a dissous
+- [ ] Retirer du craft ET de l'inventaire les équipements à paliers de minerai listés à l'audit P7 §2 (pioches/épées/haches 121–133 et variantes bronze/chrome/prism 63–68, sets d'armure 134–137 et 320–339) — à mesure que leur équivalent MOULÉ existe (moule × matrice × renfort × grade; outils plastique 404–407 et trempés 419–422 déjà livrés, P6 étape 4). Les uniques deviennent des moules de boss (R2/R3), jamais des items craftables.
+- [ ] Migration des sauvegardes : un item retiré présent dans un inventaire sauvegardé est converti au chargement en pellets selon son rendement de fonte (doctrine validée : la matière ne disparaît jamais) — aucune suppression silencieuse.
+- [ ] Même règle pour toute recette de craft/SMELT rendue obsolète par la refonte : retirée seulement quand son remplaçant machine existe.
+
+### P8-3 · Crafting — le craft de base reste, la progression passe par les machines
+- [ ] Le crafting de base RESTE pour les objets basiques (les recettes simples actuelles demeurent).
+- [ ] Tout item de progression se fait par les MACHINES : fondre et couler = Fonderie (Kiln); pièces électroniques = machine électronique dédiée (silicium + or + boîtier plastique, addendum P7); trempe = étape machine (P6-2).
+- [ ] Aucune nouvelle recette de progression au crafting de base : les nouvelles formes naissent comme MOULES.
+
+### P8-4 · Machinerie upgradable
+- [ ] Les machines elles-mêmes s'upgradent (Fonderie d'abord, puis la machine électronique et les autres postes) : niveaux successifs, chacun avec un effet mécanique RÉEL et chiffré (vitesse de fonte, capacité, accès aux grades/trempe, rendement — chiffres fixés à la conception de chaque niveau et journalisés ici avant le code).
+- [ ] L'upgrade d'une machine se paie en matière du système (pellets/ingots/pièces), jamais en ressource hors-système.
+
+### P8-5 · L'effet des upgrades doit se VOIR (critère d'acceptation de Philippe)
+- [ ] Visuel cohérent par niveau : la machine change d'apparence à chaque niveau d'upgrade (géométrie procédurale comme tout le reste, aucun asset) — on reconnaît le niveau d'une machine en la regardant.
+- [ ] Effet ressenti : l'upgrade change visiblement le comportement en jeu (débit de fonte, effets en monde) ET les stats de la machine sont affichées dans son interface, avant/après l'upgrade.
+- [ ] Critère de livraison : un upgrade dont l'effet ne se voit ni sur la machine, ni en jeu, ni dans les chiffres affichés n'est PAS livré. Chaque niveau est vérifié par QA mesurée (temps de fonte avant/après, capacité comptée), `tsc` 0 erreur.
+
+Séquence (lane Muse) : P8 entre dans la file après la chaîne QA en cours; P8-1 et P8-2 peuvent partir dès que leurs équivalents moulés existent (déjà le cas pour les outils); P8-3 à P8-5 après R3 (moules de boss). Journaliser chaque sous-étape ici, avec ses mesures.
