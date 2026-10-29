@@ -4,7 +4,7 @@ import { CATALOG, ID, TECHNIC } from "./blocks.ts";
 
 describe("inventory", () => {
   it("lists every technic part in its own bin", () => {
-    assert.equal(TECHNIC.length, 29);
+    assert.equal(TECHNIC.length, 39);
     const listed: number[] = CATALOG;
     for (const id of TECHNIC) assert.equal(listed.includes(id), true);
     assert.equal(listed.includes(ID.CrankOn), false);

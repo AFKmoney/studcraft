@@ -380,6 +380,17 @@ export const ID = {
   Cylinder: 374,
   Valve: 375,
   Tank: 376,
+  // CAT-02 structure batch 1 (Grok, 2026-10-29): liftarms, bushes, pins, angle connectors, frame
+  Liftarm3: 377,
+  Liftarm5: 378,
+  Liftarm7: 379,
+  Bush: 380,
+  HalfBush: 381,
+  Pin2L: 382,
+  PinFree: 383,
+  Angle1: 384,
+  Angle2: 385,
+  Frame57: 386,
   // Muse lane (P2 welding): IDs 400+ are reserved for the brick-layer
   // pillars so they can never collide with Grok's Technic catalogue.
   Welder: 400,
@@ -1302,6 +1313,17 @@ put(b(ID.Pump, "Air pump", "#3a5560", "#8eb4c4", "#2a3e48", "#d0d4da", { hard: 0
 put(b(ID.Cylinder, "Air cylinder", "#4a5058", "#5a7d8c", "#2a2e32", "#e23b2f", { hard: 0.4 }));
 put(b(ID.Valve, "Air valve", "#f0c43a", "#4a5058", "#c4924a", "#1a1a1a", { hard: 0.4 }));
 put(b(ID.Tank, "Air tank", "#8eb4c4", "#d0d4da", "#5a7d8c", "#2a3e48", { hard: 0.4 }));
+// CAT-02 structure batch 1
+put(b(ID.Liftarm3, "Liftarm 1×3", "#4a5058", "#6e767e", "#2a2e32", "#1a1a1a", { hard: 0.4 }));
+put(b(ID.Liftarm5, "Liftarm 1×5", "#4a5058", "#6e767e", "#2a2e32", "#1a1a1a", { hard: 0.4 }));
+put(b(ID.Liftarm7, "Liftarm 1×7", "#4a5058", "#6e767e", "#2a2e32", "#1a1a1a", { hard: 0.4 }));
+put(b(ID.Bush, "Bush 1L", "#2a2e32", "#4a5058", "#1a1a1a", "#0e0e0e", { hard: 0.4 }));
+put(b(ID.HalfBush, "Half-bush 0.5L", "#4a5058", "#6e767e", "#2a2e32", "#1a1a1a", { hard: 0.4 }));
+put(b(ID.Pin2L, "Pin 2L friction", "#1a1a1a", "#2a2e32", "#0e0e0e", "#050505", { hard: 0.4 }));
+put(b(ID.PinFree, "Pin 2L free", "#c5ccd3", "#e0e4e8", "#8e959c", "#4a5058", { hard: 0.4 }));
+put(b(ID.Angle1, "Angle connector #1", "#f0c43a", "#ffe14a", "#c4924a", "#8a6428", { hard: 0.4 }));
+put(b(ID.Angle2, "Angle connector #2", "#e07a3d", "#f0a060", "#c45a20", "#8a3a10", { hard: 0.4 }));
+put(b(ID.Frame57, "Frame 5×7", "#3a3e44", "#4a5058", "#2a2e32", "#1a1a1a", { hard: 0.4 }));
 
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];
@@ -1696,6 +1718,16 @@ export const CATALOG = [
   ID.Cylinder,
   ID.Valve,
   ID.Tank,
+  ID.Liftarm3,
+  ID.Liftarm5,
+  ID.Liftarm7,
+  ID.Bush,
+  ID.HalfBush,
+  ID.Pin2L,
+  ID.PinFree,
+  ID.Angle1,
+  ID.Angle2,
+  ID.Frame57,
 ];
 
 /** Parts the player can take from the Technic bin. Click-states stay out. */
@@ -1729,6 +1761,16 @@ export const TECHNIC = [
   ID.Cylinder,
   ID.Valve,
   ID.Tank,
+  ID.Liftarm3,
+  ID.Liftarm5,
+  ID.Liftarm7,
+  ID.Bush,
+  ID.HalfBush,
+  ID.Pin2L,
+  ID.PinFree,
+  ID.Angle1,
+  ID.Angle2,
+  ID.Frame57,
 ] as const;
 
 export const COLORS = [ID.Red, ID.Orange, ID.Yellow, ID.Green, ID.Blue, ID.Azure, ID.Pink, ID.White, ID.Black];

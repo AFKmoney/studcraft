@@ -936,6 +936,67 @@ export const RECIPES: Recipe[] = [
     cat: "build",
   }),
 
+  r("liftarm3", "Liftarm 1×3", "3 planks", [[ID.Planks, 3]], ID.Liftarm3, 1, {
+    shape: [ID.Planks, ID.Planks, ID.Planks],
+    w: 3,
+    h: 1,
+    cat: "build",
+  }),
+  r("liftarm5", "Liftarm 1×5", "5 planks", [[ID.Planks, 5]], ID.Liftarm5, 1, {
+    shape: [ID.Planks, ID.Planks, ID.Planks, ID.Planks, ID.Planks],
+    w: 3,
+    h: 2,
+    cat: "build",
+  }),
+  r("liftarm7", "Liftarm 1×7", "1 liftarm5 + 2 planks", [[ID.Liftarm5, 1], [ID.Planks, 2]], ID.Liftarm7, 1, {
+    shape: [ID.Liftarm5, ID.Planks, ID.Planks],
+    w: 3,
+    h: 1,
+    cat: "build",
+  }),
+  r("bush", "Bush 1L", "1 plank", [[ID.Planks, 1]], ID.Bush, 4, {
+    shape: [ID.Planks],
+    w: 1,
+    h: 1,
+    cat: "build",
+  }),
+  r("halfbush", "Half-bush 0.5L", "1 bush", [[ID.Bush, 1]], ID.HalfBush, 2, {
+    shape: [ID.Bush],
+    w: 1,
+    h: 1,
+    cat: "build",
+  }),
+  r("pin2l", "Pin 2L friction", "1 stick", [[ID.Stick, 1]], ID.Pin2L, 2, {
+    shape: [ID.Stick],
+    w: 1,
+    h: 1,
+    cat: "build",
+  }),
+  r("pinfre", "Pin 2L free", "1 pin friction", [[ID.Pin2L, 1]], ID.PinFree, 1, {
+    shape: [ID.Pin2L],
+    w: 1,
+    h: 1,
+    cat: "build",
+  }),
+  r("angle1", "Angle connector #1", "2 planks + 1 axle", [[ID.Planks, 2], [ID.Axle, 1]], ID.Angle1, 1, {
+    shape: [ID.Planks, ID.Axle, ID.Planks],
+    w: 3,
+    h: 1,
+    cat: "build",
+  }),
+  r("angle2", "Angle connector #2", "2 planks + 1 stick", [[ID.Planks, 2], [ID.Stick, 1]], ID.Angle2, 1, {
+    shape: [ID.Planks, ID.Stick, ID.Planks],
+    w: 3,
+    h: 1,
+    cat: "build",
+  }),
+  r("frame57", "Frame 5×7", "4 liftarms + 2 axles", [[ID.Liftarm5, 2], [ID.Liftarm3, 2], [ID.Axle, 2]], ID.Frame57, 1, {
+    shape: [ID.Liftarm5, ID.Liftarm3, ID.Axle, ID.Axle, ID.Liftarm3, ID.Liftarm5],
+    w: 3,
+    h: 2,
+    cat: "build",
+  }),
+
   // P6 step 2 (Muse) — Kiln casting: the colour moulds. The donor brick is
   // the pigment/master: it is consumed into the melt, 4 plastic ingots
   // (smelted pellets) join it, and the mould pours 2 bricks of its colour.

@@ -3377,3 +3377,17 @@ Le fichier `Catalogue_Complet_LEGO_Technic_et_Accessoires_Minifigurines.pdf` (35
 - **tsc post-resync (arbre `ce0bf8f7`, fixes Grok BUG-1/5/6 inclus)** : `npx tsc --noEmit` **0 erreur** (44 s, roulé pendant s4 — c'était le tsc en attente depuis 13:37).
 - **BUG-1 — piège `vertexColors` CONFIRMÉ à la lecture (arbre `ce0bf8f7`)** : `brickGeo` (~4638) merge le clone de `fallerGeo` + les cylindres de studs avec **seulement position/normal/uv — aucun attribut `color`** (`fallerGeo` ~4460 n'en écrit pas non plus); `opaqueStd` porte `vertexColors:true` + l'injection `sirenizeWorld`; `opaqueLam` (sans vertexColors) masque le problème réaliste OFF; `relight()` re-swap `brickMeshes` sur `opaqueMat` (~3050); les briques qui tombent (`detachBrick` ~5052) restent en `opaqueLam` dans le fix de Grok. Même conclusion que l'audit du fil principal (§Écarts graves #2) par lecture indépendante. **Mesure rig toujours due AVANT tout fix** (reproduction d'abord) : brique posée vs voxel même id, réaliste ON, pixels comparés; si noir confirmé → fix de fond = attribut `color` blanc dans le merge de `brickGeo`. **Préalable** : rebuild du banc depuis l'arbre `ce0bf8f7`+ (le dist servi `BK2hPUq3` est antérieur aux fixes Grok — la chaîne qa96 continue dessus, les mesures BUG-1/5/6 exigent le nouveau build).
 - **Directive FINITION respectée** : aucun nouveau chantier. **Prochain geste, dans l'ordre** : (1) verdict s5 lu; (2) rebuild banc `ce0bf8f7`+ puis mesures rig **BUG-1** (pixels), **BUG-5** (créatif, bloc à `need` → drops comptés), **BUG-6** (coffre rempli de N items → casse → N drops); (3) **BUG-3 gravité** (3 cas journalisés); (4) sonde s3b settle avec témoin de frames, retry s4; (5) qa98b/qa97. Aucun build APK/PC (hold inchangé); le verdict de Philippe sur Pages reste le seul qui ferme ces bogues.
+
+## 2026-10-29 ~14:06 PDT — Grok (CAT-02 structure — DONE batch 1)
+
+- **Claim** : premier lot de CAT-02 (châssis & liaisons, page 2 du PDF). IDs 377–386.
+- **Fait** : 10 pièces placeables ajoutées (`blocks.ts` + `recipes.ts`) :
+  - Liftarm 1×3 (377), 1×5 (378), 1×7 (379)
+  - Bush 1L (380), Half-bush 0.5L (381)
+  - Pin 2L friction (382), Pin 2L free (383)
+  - Angle connector #1 (384), #2 (385)
+  - Frame 5×7 (386)
+  Toutes dans CATALOG + TECHNIC (bin technic). Recettes simples (planks/sticks/axles).
+- **QA** : `npx tsc --noEmit` exit 0. `catalog.test.ts` mis à jour (TECHNIC.length = 39) et **pass**. Pas de save.ts, zones Muse 400+ intouchées.
+- **Prochain** : continuer CAT-02 (liftarms fins, coudés L/T, autres angles #3–#6, panneaux fairing) ou CAT-03 suspension. Ou mesure rig de BUG-2 si le banc se libère.
+
