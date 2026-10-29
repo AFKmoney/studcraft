@@ -3298,3 +3298,37 @@ Philippe, verbatim de l'intention : vérifier tout le jeu et tous les scripts, p
 5. Icônes pour CHAQUE asset qui n'en a pas (décompte de l'audit), générées des vraies fonctions.
 6. Dettes QA : qa96 s3–s5, qa98b, qa97; P2 bourrelet visuel + chute de groupe soudé (non mesurés).
 7. Master plan : R3 (ferme P6), P7 schéma BlockDef, P8-2→5, sites de débris (design seulement à date).
+
+## BACKLOG CONSOLIDÉE — Audit complet du jeu (2026-10-29 ~13:49 PDT, lecture seule, head 36766fe9, tsc 0)
+
+Audit ordonné par Philippe (13:42) : tous les scripts, PDF relu, icônes, chaîne machinerie, écarts WORKLOG↔code. Rapport intégral LOCAL : `~/workspace/studcraft-work/full-audit-2026-10-29.md` (331 lignes, chaque affirmation étiquetée [CODE]/[TSC]/[WL]/[QA]). Cette entrée en est la synthèse opposable — elle REMPLACE l'entrée-cadre de 13:44 comme point de vérité de la backlog.
+
+### Chiffres clés [CODE sauf mention]
+- **398 IDs définis** (0–422); CATALOG = 354 entrées; plages libres **377–399 + 408/409** (la note « 358–399 presque pleine » était inexacte).
+- Après le fix Grok : Technic **29/32** au catalogue (les 3 absents = variantes d'état) et P6/P7 **21/21** — **BUG-4 fermé au niveau LISTE, pas au niveau SYSTÈME** (catalogue toujours maintenu à la main, aucune catégorie Technic dans GameView).
+- **Icônes : 86 rendus réels seulement, tous ≤ ID 267; Technic = 0/32 icônes fidèles** — `glyph()` n'a aucun cas mécanique : tout le Technic (+ Welder 400, Pellets 401) tombe sur le cube générique coloré. Le mécanisme est sain (rendu du vrai mesher, fond transparent, labo icons.ts). ~163 JPG de l'ancien système photo traînent dans `public/icons`, **zéro référence dans le code** (à purger).
+- **Modélisation : aucun constructeur de géométrie de pièce n'existe** — un engrenage posé = boîte `fallerGeo` texturée + studs. « Modélisé par les maths » n'est vrai qu'au niveau texture. Le critère durci de Philippe (modèle par maths) n'est donc PAS atteint pour les pièces.
+- **Couverture PDF** : CAT-02 structure **0 %**, CAT-03 suspension **0 %**, CAT-04 transmission = seul CAT substantiel (manquent : coniques doubles, diff. cadre 5×7, CV, moteur à pistons, crémaillères complètes), CAT-05 pneumatique **partiel mais fonctionnel** (Pump/Cylinder/Valve/Tank + air simulé; tuyaux et variantes manquants), **électrique 0 %** (Hub/Motor/Battery/Remote/Sensor/Silicon = 0 occurrence), CAT-06 partiel/manquant partout, aucun accessoire né comme moule.
+- **Électricité/conduite : rien.** Pas de moteur électrique, pas de batterie, pas de hub/télécommande/capteurs, aucun véhicule conduisible. Sources de mouvement actuelles : main, ressort, eau, vent.
+
+### Écarts graves (nouveaux ou confirmés par l'audit)
+1. **5 pièces Technic INOBTENABLES en Survie** : Clutch 351, Cam 354, Pulley 355, Wheel 356, Mill 357 — ni recette, ni débris, ni loot (Gear8/Gear24/Worm = débris seulement). Violation de la loi deux-voies, jamais signalée ici.
+2. **Fix BUG-1 de Grok probablement défectueux [CODE]** : `rebuildBrickMesh` utilise `opaqueMat`, mais `opaqueStd` a `vertexColors:true` et `brickGeo` n'écrit aucun attribut `color` → briques noires attendues en réaliste; fallers/briques tombantes restés en Lambert. Mesure rig toujours due — idem BUG-5/BUG-6 (fixes corrects à la lecture, tests Grok 2/2, zéro mesure rig).
+3. **P6 : les moules ne sont débloqués par RIEN** — les 26 recettes cast/mold sont de simples recettes d'établi (aucun `lvl`/`skill`/récompense); le cœur du design (déblocage quêtes/boss) n'existe pas; `bmold-*` (étape 5) non commencé.
+4. **BUG-3 confirmé [CODE]** : `spawnFaller` ne lit que le voxel du dessous; la couche briques est invisible au support/atterrissage.
+5. **P2 résidus confirmés [CODE]** : aucun rendu de bourrelet (welds = simple `Set` de paires); `detachBrick` détache brique par brique, pas de chute de groupe.
+6. **P8-1 non commencé au niveau système [CODE]** : GameView garde les 4 catégories ère Minecraft (all/bricks/tools/food/materials).
+7. **P7 schéma inexistant [CODE]** : `mat?`/`mold?` sur BlockDef = 0 occurrence; chaîne silicium/or absente.
+8. WORKLOG périmé par endroits : le texte P5 du master plan décrit comme « reste » du livré; les **sites de débris ont une v1 câblée et jouable** (3 pièces/chunk, pool de 6) alors que le journal les disait « à faire » — très en dessous du design, mais existants.
+
+### LISTE DE FERMETURE (ordre FINITION — exécutée par la boucle + Grok via claims)
+1. Mesures rig BUG-1/5/6 (+ fix attribut `color` de brickGeo si le noir se confirme) — boucle.
+2. BUG-3 gravité (3 cas journalisés; qa98b absorbée) — boucle. BUG-2 — Grok (claim en cours).
+3. qa96 s3→s5, puis qa97.
+4. Recettes pour les 5 pièces inobtenables + 2e voie Gear8/24/Worm — petit fix, loi violée en production.
+5. BUG-4 forme système : catalogue dérivé du registre + assertion QA (P8-1); icônes Technic fidèles (0/32 → 32/32); purge des JPG morts.
+6. P2 résidus : bourrelet visuel + chute de groupe soudé.
+7. P6 étape 5 (moules de boss) + gates de déblocage quêtes/boss → R3 (ferme P6).
+8. Géométrie de pièces par maths (constructeurs procéduraux par famille — le critère « modélisé » de Philippe), CAT-02/03 structure (Grok), P5c complétion, **P5b électricité** (lane tranchée au claim), P5d capteurs.
+9. P7 complet (schéma, chaîne silicium/or, CAT-06, armes+balles), P8 complet, R4, sites de débris forme design.
+Verdicts de Philippe (v4.17, Pages, DualSense, FPS désert, Bluetooth) et train de builds : inchangés, en attente/HOLD.
