@@ -1897,6 +1897,25 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       addCylPart(group, s * 0.06, s * 0.06, s * 0.1, 0, -s * 0.25, 0, skin(0xc5ccd3), 8);
       return { group, isTool: false, flames };
     }
+    if (id === ID.Pipe) {
+      addCylPart(group, s * 0.04, s * 0.04, s * 0.8, 0, 0, 0, techMat, 10);
+      addCylPart(group, s * 0.06, s * 0.06, s * 0.1, 0, s * 0.35, 0, skin(0x2a2e32), 8);
+      addCylPart(group, s * 0.06, s * 0.06, s * 0.1, 0, -s * 0.35, 0, skin(0x2a2e32), 8);
+      return { group, isTool: false, flames };
+    }
+    if (id === ID.PipeElbow) {
+      addCylPart(group, s * 0.04, s * 0.04, s * 0.4, 0, s * 0.15, 0, techMat, 10);
+      addCylPart(group, s * 0.04, s * 0.04, s * 0.4, s * 0.15, 0, 0, techMat, 10);
+      return { group, isTool: false, flames };
+    }
+    if (id === ID.Fairing1 || id === ID.Fairing2) {
+      addBoxPart(group, s * 0.6, s * 0.05, s * 0.5, 0, 0, 0, techMat);
+      addBoxPart(group, s * 0.05, s * 0.3, s * 0.5, -s * 0.25, s * 0.12, 0, techMat);
+      if (id === ID.Fairing2) {
+        addBoxPart(group, s * 0.05, s * 0.3, s * 0.5, s * 0.25, s * 0.12, 0, techMat);
+      }
+      return { group, isTool: false, flames };
+    }
 
     if (id === ID.Brew) {
       const stoneMat = skin(0x70757d);
