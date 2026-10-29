@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-29 (Grok — cardan 361, l'essieu de côté tourne avec l'arbre).
+**Last update:** 2026-10-29 (Grok — roue 362, elle tourne avec l'essieu, pas avec l'eau).
 
 ## 2026-10-26 — v4.12: Engine performance, mob judder & floating animal parts (Muse, ordered by Philippe after his A54 test of v4.11)
 
@@ -2459,7 +2459,8 @@ Pitch : Minecraft, c'est un monde de cubes. Studs, c'est un monde de plastique �
   - [x] Différentiel (359) : l'arbre en dessous et celui au-dessus, la sortie à l'est tourne à (A+B)/2
   - [x] Crémaillère (360) : un tour du pignon voisin la pousse d'une case vers +X, ou -X si le pignon tourne à l'envers
   - [x] Cardan (361) : l'arbre vertical passe dans les essieux à l'est, même sens, sans les aligner
-  - [ ] Roues, convoyeur, piège
+  - [x] Roue (362) : au bout de l'essieu elle tourne avec lui. L'eau ne la lance pas (ça, c'est la roue à eau)
+  - [ ] Convoyeur, piège
 - [ ] **P4 · Son plastique** — clics, snaps, cliquetis 100 % synthétisés DSP, zéro asset
 
 ### Lane RPG
@@ -2504,7 +2505,7 @@ Toutes les 10 minutes, l'agent qui se réveille lit CE fichier et prend le derni
 
 ## P5 — PORTÉE ÉLARGIE par Philippe (2026-10-29 03:52 EDT) : « TOUT ce que LEGO Technic offre »
 Philippe : pas juste la mécanique — **les pièces ÉLECTRIQUES aussi**, pour que l'utilisateur puisse TOUT faire : véhicules, pelle mécanique, tout l'espace des possibles Technic. Le nord de P5 = le kit Technic complet en jeu. Livraison en couches (la physique reste LÉGÈRE — graphe de rotation borné/local, machines endormies au loin, un véhicule = UN assemblage rigide sur roues, pas un corps rigide par brique) :
-- [ ] **P5a · Drivetrain** — livré par Grok jusqu'à 361 : essieux, engrenages 8/16/24, vis, embrayage, poulies, manivelle, roue à eau, moulin, came, ressort, différentiel (A+B)/2, crémaillère, cardan. Reste : roues, convoyeur, piège
+- [ ] **P5a · Drivetrain** — livré par Grok jusqu'à 362 : essieux, engrenages 8/16/24, vis, embrayage, poulies, manivelle, roue à eau, moulin, came, ressort, différentiel (A+B)/2, crémaillère, cardan, roue. Reste : convoyeur, piège
 - [ ] **P5b · Électrique + conduite** : moteurs (tailles = couple/vitesse), hub/batterie, télécommande à canaux — le joueur LIE un hub et CONDUIT sa machine (véhicules qui roulent pour vrai sur le terrain)
 - [ ] **P5c · Pneumatique + vérins** : pompe (manuelle ou moteur), réservoir d'air, valves, cylindres V2 + vérins linéaires à vis — bras de pelle, flèches de grue, tourelles 28T/56T (une pelle qui CREUSE dans le monde voxel : le godet casse les blocs)
 - [ ] **P5d · Capteurs + automatisation** : capteurs (distance, inclinaison, couleur), logique simple sur hub — machines qui réagissent toutes seules
@@ -2604,7 +2605,19 @@ EN COURS au début de la passe. Fichiers : `blocks.ts`, `recipes.ts`, `mechLink.
 - QA : 17/17. `tsc` 0 erreur.
 - Famille couverte : cardan. Pas encore : roues, convoyeur, piège.
 
+### Next move — TAKEN and DONE (roue 362)
+Ne pas la refaire. La roue à eau (356) reste celle qui a besoin d'eau.
+
+### 2026-10-29 — Grok (roue, 362) — FAIT
+EN COURS au début de la passe. Fichiers : `blocks.ts`, `recipes.ts`, `mechLink.ts`, bloc `mechAcc` seulement. Pas `save.ts`, pas les zones P0.
+
+- Bloc 362, « Road wheel ». Craft : 2 planches + 1 essieu. Aucun fichier de modèle.
+- Posée sur l'essieu, elle tourne à la même vitesse. À côté de l'eau, elle ne démarre pas.
+- QA : 18/18. `tsc` 0 erreur.
+- Famille couverte : roue menée. Pas encore : convoyeur, piège.
+
 ### Next move — UNCLAIMED
-**P5a, prochaine pièce : les roues.** Une roue au bout d'un essieu qui tourne. Bloc **362**. Pas un modèle : une fonction. Pas de `save.ts`, pas les zones P0 de Muse. Avant P4, avant les sites de débris.
+**P5a, prochaine pièce : le convoyeur.** Quand l'essieu tourne, il avance ce qui est dessus d'une case par tour. Bloc **363**. Pas de `save.ts`, pas les zones P0 de Muse. Avant P4, avant les sites de débris.
+
 
 

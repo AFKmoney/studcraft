@@ -21,6 +21,7 @@ const ids: MechBlockIds = {
   diff: 20,
   rack: 21,
   ujoint: 22,
+  road: 23,
   water: 14,
   door: 15,
   doorOpen: 16,
@@ -138,5 +139,22 @@ describe("placed technic", () => {
     stepMech(get, [{ x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, { x: 1, y: 1, z: 0 }, { x: 2, y: 1, z: 0 }], ids, 0);
     assert.deepEqual(speedAt(2, 2, 0), { n: 1, d: 1 });
     assert.deepEqual(speedAt(4, 2, 0), { n: 1, d: 1 });
+  });
+
+  it("spins a road wheel on the axle and ignores water", () => {
+    const spinning = new Map<string, number>([
+      ["0,0,0", ids.crankOn],
+      ["0,1,0", ids.road],
+    ]);
+    const getSpin = (x: number, y: number, z: number) => spinning.get(x + "," + y + "," + z) ?? 0;
+    stepMech(getSpin, [{ x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }], ids, 0);
+    assert.deepEqual(speedAt(0, 2, 0), { n: 1, d: 1 });
+    const wet = new Map<string, number>([
+      ["0,0,0", ids.road],
+      ["1,0,0", ids.water],
+    ]);
+    const getWet = (x: number, y: number, z: number) => wet.get(x + "," + y + "," + z) ?? 0;
+    stepMech(getWet, [{ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }], ids, 0);
+    assert.deepEqual(speedAt(0, 0, 0), { n: 0, d: 1 });
   });
 });

@@ -21,6 +21,7 @@ export type MechBlockIds = {
   diff: number;
   rack: number;
   ujoint: number;
+  road: number;
   water: number;
   door: number;
   doorOpen: number;
@@ -50,6 +51,7 @@ function specFor(id: number, ids: MechBlockIds): Spec | null {
   if (id === ids.spring) return { kind: "crank", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.diff) return { kind: "diff", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.ujoint) return { kind: "axle", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
+  if (id === ids.road) return { kind: "wheel", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   return null;
 }
 
@@ -114,9 +116,9 @@ function gearBeside(c: MechCell, get: (x: number, y: number, z: number) => numbe
 }
 
 /** An axle east of a universal joint, or further along that same row, turns on X. */
-function onJointRun(x: number, y: number, z: number, get: (x: number, y: number, z: number) => number, axle: number, ujoint: number) {
+function onJointRun(x: number, y: number, z: number, get: (x: number, y: number, z: number) => number, axle: number, road: number, ujoint: number) {
   let x0 = x - 1;
-  while (get(x0, y, z) === axle) x0--;
+  while (get(x0, y, z) === axle || get(x0, y, z) === road) x0--;
   return get(x0, y, z) === ujoint;
 }
 
@@ -154,7 +156,7 @@ export function stepMech(
     if (id === ids.cam) cams.push(c);
     if (id === ids.diff) diffs.push(c);
     if (id === ids.ujoint) joints.push(c);
-    const axis = id === ids.axle && onJointRun(c.x, c.y, c.z, get, ids.axle, ids.ujoint) ? "x" : spec.axis;
+    const axis = (id === ids.axle || id === ids.road) && onJointRun(c.x, c.y, c.z, get, ids.axle, ids.road, ids.ujoint) ? "x" : spec.axis;
     putMech({
       x: c.x * 2,
       y: c.y * 2,
