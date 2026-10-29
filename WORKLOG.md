@@ -3271,3 +3271,30 @@ Nouveau verdict de Philippe en jeu : « les blocs droppent aucun loot… quand t
 - **BUG-1 (fix de Grok, repris par le filet) — lu, NON mesuré, risque concret identifié** : `rebuildBrickMesh` passe à `opaqueMat` (~4701) et le toggle réaliste re-swap `brickMeshes` (~3050). Grok le dit lui-même : « Pas de mesure dans le rig » — donc **pas fermé** (loi finition : mesuré dans le rig + retest de Philippe). Le risque, lu dans le code : `opaqueStd` porte `vertexColors:true` + l'injection `sirenizeWorld`, alors que `brickGeo` n'a **aucun attribut `color`** (merge manuel position/normal/uv seulement, ~4629) — là où le mesher voxel écrit ses couleurs par sommet. Un attribut `color` absent peut valoir noir côté WebGL : les briques passeraient de « plates » à **noires** en réaliste. À trancher par **mesure** (brique posée, réaliste ON, pixels de la brique vs voxel du même id), pas par opinion; si noir confirmé, le fix de fond = attribut `color` blanc dans `brickGeo` avant le swap. Les briques qui tombent (`detachBrick`, ~5043) restent en `opaqueLam` dans le fix de Grok — à inclure dans la mesure.
 - **BUG-5/BUG-6 (Grok) — lus, tests unitaires 2/2 chez Grok, pas de mesure rig** : `yields.ts` (`mayYield` : le créatif ignore le palier `need`; `spillSlots`) + versement coffre/tonneau dans `breakBlock`. File de mesure Muse : QA créatif (casser un bloc à `need` → drops comptés) et coffre rempli de N items connus → casse → N drops comptés, après la chaîne qa96.
 - **Directive FINITION respectée** : aucun nouveau chantier ouvert ce run. **Prochain geste, dans l'ordre** : (1) verdict s3 lu (log + sortie), puis **s4 (Wither), s5 (FX)** en sessions courtes; (2) mesures rig **BUG-1** (pixels brique réaliste), **BUG-5**, **BUG-6** sur un build resynchronisé `ce0bf8f7`+ (rebuild + tsc d'abord, rig libre); (3) **BUG-3 gravité** — reproduction des 3 cas journalisés (Grok ne la touche pas; son claim en cours = BUG-2 arc, respecté); (4) qa98b/qa97. Aucun build APK/PC (hold inchangé); le verdict de Philippe sur Pages reste le seul qui ferme ces bogues.
+
+## AUDIT COMPLET + TECHNIC/ICÔNES — Directives Philippe (2026-10-29 13:42–13:44 PDT) : tout vérifier, toute la backlog, tout finaliser — tout en mathématiques
+
+Philippe, verbatim de l'intention : vérifier tout le jeu et tous les scripts, prendre toute la backlog et finaliser ce qui n'est pas fini; la refonte (inventaire et tout) doit être pensée **LEGO Technic** — que les gens puissent créer des machineries, l'électricité, les batteries, les pièces; relire le PDF et s'assurer que tout est là; **chaque asset a son image, chaque asset a son icône — créer les icônes**; et le tout **en mathématiques** : « mathématiquement faisable ». Rappel permanent de Philippe ensuite : « marque tout ce que tu fais et tout ce qui reste à faire dans le Worklog » — cette entrée est le point de vérité temporaire; l'audit la remplacera par la backlog consolidée chiffrée.
+
+### Doctrine confirmée — TOUT EST MATHÉMATIQUES, DONC FAISABLE
+- Une pièce = une FONCTION (géométrie procédurale SRN/math), générée une fois, cachée, instanciée — jamais un fichier asset. Le catalogue complet reste donc faisable : la couverture se mesure par familles, pas par poids de fichiers.
+- Un modèle et son icône viennent de la MÊME fonction : l'icône est un rendu mathématique de la vraie géométrie de la pièce (fidèle, fond transparent) — jamais une photo, jamais un fond blanc, jamais un placeholder (rupture icônes déjà vécue : la fidélité se juge en jeu, par Philippe).
+- Critère d'existence d'un asset, durci : DÉFINI + MODÉLISÉ par maths (monde et en main) + ICÔNE générée + ACCESSIBLE (inventaire + voie d'acquisition). Un des quatre manque = pas couvert.
+
+### FAIT (état au moment de l'entrée)
+- Directives de la journée écrites et poussées : P8 (12:46), bogues BUG-1→3 (13:02), couverture PDF (13:12), BUG-4 + lois accord master plan/filet mutuel (13:15), BUG-5/6 + directive FINITION (13:16).
+- Fixes de Grok poussés (ce0bf8f7) : BUG-1 éclairage, BUG-5 loot, BUG-6 coffre, visibilité inventaire Technic — **poussés, NON mesurés** (risque lu sur BUG-1 : chemin vertexColors, briques possiblement noires en réaliste — à trancher par mesure).
+- QA : qa96 = 2/5 étapes mesurées (étape 1 drops/aimant PASS; étape 2 pause→inventaire PASS, head 36766fe9).
+
+### EN COURS
+- **Audit complet lecture seule (Muse, chat principal)** : inventaire de tous les scripts + relecture du PDF + audit icônes (mécanisme actuel, décompte avec/sans icône) + chaîne machinerie de bout en bout + backlog consolidée chiffrée → fichier local `~/workspace/studcraft-work/full-audit-2026-10-29.md`, puis synthèse poussée ici.
+- Boucle dev : qa96-s3 (topple) en vol, puis s4/s5, puis MESURES des fixes Grok BUG-1/5/6, puis BUG-3 gravité. Grok : claim BUG-2 (arc) en cours selon la boucle.
+
+### RESTE À FAIRE (backlog connue — l'audit la chiffre et la réordonne, la FINITION garde la priorité)
+1. Fermer BUG-1→6 par mesure + retest de Philippe sur Pages (aucun ne se ferme sur parole).
+2. Couverture PDF complète par famille (CAT-02→CAT-06) au critère durci ci-dessus, icônes comprises.
+3. Inventaire repensé TECHNIC d'abord (P8-1 élargie) : catégories machinerie (structure, transmission, pneumatique, ÉLECTRIQUE — hub, moteurs, **batteries**, télécommande, capteurs —, outils/armes, matériaux), catalogue dérivé du registre, assertion de présence permanente.
+4. Chaîne machinerie jouable de bout en bout : transmission (faite), pneumatique complète, **P5b électricité** (le gros morceau manquant nommé par Philippe), capteurs/automatisation.
+5. Icônes pour CHAQUE asset qui n'en a pas (décompte de l'audit), générées des vraies fonctions.
+6. Dettes QA : qa96 s3–s5, qa98b, qa97; P2 bourrelet visuel + chute de groupe soudé (non mesurés).
+7. Master plan : R3 (ferme P6), P7 schéma BlockDef, P8-2→5, sites de débris (design seulement à date).
