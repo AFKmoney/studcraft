@@ -15,6 +15,7 @@ import { buildAtlas } from "./textures";
 import { CS, HEIGHT, SEA, World, decorate, folkLayout, inNether, penSheep, paintEndCrystals, END_PILLARS, type Decor, type FolkSpot } from "./world";
 import { debrisAt } from "./debris";
 import { stockChest } from "./loot";
+import { mayYield, spillSlots } from "./yields";
 import { Upscaler, upscaleScale } from "./upscale";
 import { BTN, PadEdges, activePad, padBusy, padLabel, rumble, stick } from "./gamepad";
 import { dsApply, dsRelease, dsRequest, dsState, dsTryReconnect, type TriggerFx } from "./dualsense";
@@ -3046,6 +3047,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     waterMat = settings.realistic ? waterStd : waterLam;
     plantMat = settings.realistic ? plantStd : plantLam;
     moltenMat = settings.realistic ? moltenStd : moltenLam;
+    for (const mesh of brickMeshes.values()) {
+      mesh.material = opaqueMat;
+      mesh.castShadow = settings.realistic;
+      mesh.receiveShadow = settings.realistic;
+    }
     for (const [k, list] of meshes.entries()) {
       const tier = chunkTier.get(k) ?? 0;
       for (const mesh of list) {
@@ -4228,6 +4234,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (disc) dropItem(disc, 1, x + 0.5, y + 0.8, z + 0.5);
       jukeDiscs.delete(key);
     }
+    if (id === ID.Chest || id === ID.Barrel) {
+      const key = x + "," + y + "," + z;
+      const bin = chests.get(key);
+      if (bin) {
+        for (const pile of spillSlots(bin.ids, bin.ns)) dropItem(pile.id, pile.n, x + 0.5, y + 0.8, z + 0.5);
+        chests.delete(key);
+      }
+    }
     if (id === ID.Beacon) beaconBuffs.delete(x + "," + y + "," + z);
     if (isComponent(id)) {
       const k = rsKey(x, y, z);
@@ -4237,43 +4251,38 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       power.delete(k);
       recompute(x, y, z);
     } else if (isComponent(world.get(x, y + 1, z))) recompute(x, y, z);
+    const held = def(hotbar[slot]);
+    const tier = held.tool === "pick" ? held.tier : 0;
+    const canDrop = mayYield(creative, block.need, tier);
+    // Yields fall in both modes. Creative used to swallow every drop.
+    const yieldAt = (dropId: number) => dropItem(dropId, 1, x + 0.5, y + 0.55, z + 0.5);
+    if (canDrop) for (let p = 0, py = plasticYield(id); p < py; p++) yieldAt(ID.Pellets);
+    if (canDrop && id === ID.Leaves) {
+      if (Math.random() < 0.08) yieldAt(ID.Apple);
+      if (Math.random() < 0.12) yieldAt(ID.Stick);
+    } else if (canDrop && id === ID.TallGrass) {
+      if (Math.random() < 0.4) yieldAt(ID.Seeds);
+    } else if (canDrop && (id === ID.Crop || id === ID.Crop1 || id === ID.Crop2 || id === ID.CarrotCrop || id === ID.PotatoCrop || id === ID.BeetCrop)) yieldAt(ID.Seeds);
+    else if (canDrop && id === ID.CropRipe) {
+      yieldAt(ID.Wheat);
+      yieldAt(ID.Seeds);
+    } else if (canDrop && id === ID.Gravel) yieldAt(Math.random() < 0.14 ? ID.Flint : ID.Gravel);
+    else if (canDrop && block.drop !== -1) yieldAt(enchLvl(hotbar[slot], "silk") > 0 ? id : block.drop || id);
+    if (canDrop && block.drop !== -1 && (ORE_XP[id] ?? 0) > 0 && enchLvl(hotbar[slot], "silk") === 0) {
+      const fort = held.tool === "pick" ? enchLvl(hotbar[slot], "fortune") : 0;
+      for (let f = 0; f < fort; f++) if (Math.random() < 0.35) yieldAt(block.drop || id);
+    }
+    if (canDrop && id === ID.PrismOre && Math.random() < 0.22) yieldAt(ID.Core);
     if (!creative) {
-      const held = def(hotbar[slot]);
-      const tier = held.tool === "pick" ? held.tier : 0;
-      const canDrop = !block.need || tier >= block.need;
-      // v4.18 (Philippe 2026-10-28): a fully broken block must be SEEN and
-      // picked up — yields spawn as world drops (magnet pickup adds them to
-      // the bag) instead of silently appearing in the inventory.
-      const yieldAt = (dropId: number) => dropItem(dropId, 1, x + 0.5, y + 0.55, z + 0.5);
-      // P6: broken plastic also yields foundry pellets (in addition to
-      // the normal drop below).
-      if (canDrop) for (let p = 0, py = plasticYield(id); p < py; p++) yieldAt(ID.Pellets);
-      if (canDrop && id === ID.Leaves) {
-        if (Math.random() < 0.08) yieldAt(ID.Apple);
-        if (Math.random() < 0.12) yieldAt(ID.Stick);
-      } else if (canDrop && id === ID.TallGrass) {
-        if (Math.random() < 0.4) yieldAt(ID.Seeds);
-      } else if (canDrop && (id === ID.Crop || id === ID.Crop1 || id === ID.Crop2 || id === ID.CarrotCrop || id === ID.PotatoCrop || id === ID.BeetCrop)) yieldAt(ID.Seeds);
-      else if (canDrop && id === ID.CropRipe) {
-        yieldAt(ID.Wheat);
-        yieldAt(ID.Seeds);
-      } else if (canDrop && id === ID.Gravel) yieldAt(Math.random() < 0.14 ? ID.Flint : ID.Gravel);
-      else if (canDrop && block.drop !== -1) yieldAt(enchLvl(hotbar[slot], "silk") > 0 ? id : block.drop || id);
-      // Fortune: extra ore drops, rolled per level (never with Silk Touch).
-      if (canDrop && block.drop !== -1 && (ORE_XP[id] ?? 0) > 0 && enchLvl(hotbar[slot], "silk") === 0) {
-        const fort = held.tool === "pick" ? enchLvl(hotbar[slot], "fortune") : 0;
-        for (let f = 0; f < fort; f++) if (Math.random() < 0.35) yieldAt(block.drop || id);
-      }
-      if (canDrop && id === ID.PrismOre && Math.random() < 0.22) yieldAt(ID.Core);
       const right =
         (held.tool === "pick" && (block.tough || block.need > 0)) ||
         (held.tool === "axe" && AXE_OK(id)) ||
         (held.tool === "shovel" && SHOVEL_OK(id));
       if (right) wearHeld();
       if (canDrop) gainXp(ORE_XP[id] ?? 0);
-      if (canDrop && skills.has("yield") && ORE_XP[id] && Math.random() < 0.3) yieldAt(block.drop || id);
       if (id === ID.Stone || id === ID.Cobble) oreEar(x, y, z);
     }
+    if (canDrop && skills.has("yield") && ORE_XP[id] && Math.random() < 0.3) yieldAt(block.drop || id);
     if (id === ID.Log) bumpQuest("break", "log");
     if (id === ID.Moss) bumpQuest("break", "moss");
     if (id === ID.Snow) bumpQuest("break", "snow");
@@ -4689,7 +4698,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const list: Brick[] = [];
     for (const b of bricks.values()) if (b.id === id) list.push(b);
     if (list.length === 0) return;
-    const mesh = new THREE.InstancedMesh(brickGeo(id), opaqueLam, list.length);
+    const mesh = new THREE.InstancedMesh(brickGeo(id), opaqueMat, list.length);
     list.forEach((b, i) => {
       // P1-2 sag: a stressed brick visibly sinks, proportional to its
       // accumulated stress (brickSagY lives in the P1 section below).

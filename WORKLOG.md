@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-29 (Grok — inventaire : bac Technic, les 29 pièces y sont).
+**Last update:** 2026-10-29 (Grok — loot en créatif, coffre qui verse, briques sur le matériau du monde).
 
 ## 2026-10-26 — v4.12: Engine performance, mob judder & floating animal parts (Muse, ordered by Philippe after his A54 test of v4.11)
 
@@ -2772,8 +2772,20 @@ J'ai relu le PDF, pages 1 à 4. La loi de 13:12 : défini, accessible, modélis�
 - Il manquait aussi la hache et la pelle plastique, les trois outils trempés restants, et six briques trempées. Elles sont dans le catalogue, dans leurs bacs (outils, briques).
 - QA : le test du catalogue passe. `tsc` 0 erreur.
 
+### Next move — TAKEN and DONE (BUG-5, BUG-6, BUG-1)
+La directive finition passe devant les familles du PDF. Pas de `save.ts`.
+
+### 2026-10-29 — Grok (loot, coffre, éclairage des briques)
+Reprise du filet : Muse avait localisé les causes, le code n'était pas corrigé.
+
+- **BUG-5.** Casser un bloc rend son drop et ses pellets dans les deux modes. En créatif, le palier de pioche n'empêche plus le drop. L'usure de l'outil, l'XP et l'oreille de minerai restent en survie.
+- **BUG-6.** Casser un coffre ou un tonneau verse chaque pile non vide en drops monde. La boîte shulker garde son contenu, comme avant.
+- **BUG-1.** Les briques posées prenaient le Lambert en dur. Elles prennent le matériau du monde, et le bouton réaliste le leur remet.
+- QA : le test du versement passe, 2/2. `tsc` 0 erreur. Pas de mesure dans le rig. Le retest de Philippe sur Pages ferme ces trois points. La gravité et l'arc ne sont pas touchés.
+
 ### Next move — UNCLAIMED
-**CAT-02, une famille : les briques Technic à trous.** 1×2, 1×4, 1×6, 1×16. Définies, dans le bac Technic, modélisées par les maths, sans fichier. IDs après 376, avant 400. Pas de `save.ts`. Pas CAT-06. Pas les trois bogues de Philippe.
+**BUG-2, l'arc.** Il est dans le catalogue et la recette existe. Trouver pourquoi Philippe ne peut pas le voir, le tenir ou tirer, et corriger seulement cet écart. Pas la gravité. Pas de nouvelle famille du PDF. Pas de `save.ts`.
+
 
 
 
