@@ -8,6 +8,7 @@ export type MechBlockIds = {
   g8: number;
   g16: number;
   g24: number;
+  g40: number;
   crank: number;
   crankOn: number;
   clutch: number;
@@ -43,6 +44,7 @@ function specFor(id: number, ids: MechBlockIds): Spec | null {
   if (id === ids.g8) return { kind: "gear", teeth: 8, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.g16) return { kind: "gear", teeth: 16, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.g24) return { kind: "gear", teeth: 24, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
+  if (id === ids.g40) return { kind: "gear", teeth: 40, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.crank) return { kind: "crank", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.crankOn) return { kind: "crank", teeth: 0, axis: "y", drive: true, open: false, belt: 0, pulley: 0 };
   if (id === ids.clutch) return { kind: "clutch", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
@@ -120,7 +122,7 @@ export function clearTraps() {
 }
 
 function isGear(id: number, ids: MechBlockIds) {
-  return id === ids.g8 || id === ids.g16 || id === ids.g24;
+  return id === ids.g8 || id === ids.g16 || id === ids.g24 || id === ids.g40;
 }
 
 function gearBeside(c: MechCell, get: (x: number, y: number, z: number) => number, ids: MechBlockIds): MechCell | null {

@@ -8,6 +8,7 @@ const ids: MechBlockIds = {
   g8: 2,
   g16: 3,
   g24: 4,
+  g40: 28,
   crank: 5,
   crankOn: 6,
   clutch: 7,
@@ -211,5 +212,18 @@ describe("placed technic", () => {
     grid.set("0,1,0", ids.ringLo);
     stepMech(get, cells, ids, 0);
     assert.deepEqual(speedAt(2, 2, 0), { n: 1, d: 2 });
+  });
+
+  it("meshes a 40T with a 24T two blocks away", () => {
+    const grid = new Map<string, number>([
+      ["0,1,0", ids.crankOn],
+      ["0,0,0", ids.g24],
+      ["2,0,0", ids.g40],
+      ["1,0,0", ids.g16],
+    ]);
+    const get = (x: number, y: number, z: number) => grid.get(x + "," + y + "," + z) ?? 0;
+    stepMech(get, [{ x: 0, y: 1, z: 0 }, { x: 0, y: 0, z: 0 }, { x: 2, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }], ids, 0);
+    assert.deepEqual(speedAt(4, 0, 0), { n: -3, d: 5 });
+    assert.deepEqual(speedAt(2, 0, 0), { n: 0, d: 1 });
   });
 });
