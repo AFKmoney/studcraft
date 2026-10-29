@@ -19,6 +19,7 @@ import { BTN, PadEdges, activePad, padBusy, padLabel, rumble, stick } from "./ga
 import { dsApply, dsRelease, dsRequest, dsState, dsTryReconnect, type TriggerFx } from "./dualsense";
 import { parseSeed } from "./noise";
 import { MobBatchRenderer } from "./mobBatch";
+import { stepMech } from "./mechLink";
 
 export type Phase = "title" | "play" | "pause" | "inventory" | "dead";
 export type EnterKind = "play" | "survival" | "flat" | "continue";
@@ -590,6 +591,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   // carrying it into a hamlet starts a three-wave raid. Victory makes the
   // player Hero of the Hamlet (cheaper trades) for a while.
   let omenT = 0;
+  let mechAcc = 0;
   let heroT = 0;
   let patrolT = 200;
   let raid: { cx: number; cz: number; wave: number; phase: "rest" | "fight"; t: number; total: number; awayT: number } | null = null;
@@ -5367,6 +5369,20 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       audio.place();
       return true;
     }
+    if (hit.id === ID.Crank || hit.id === ID.CrankOn) {
+      const on = hit.id === ID.Crank;
+      if (world.set(hit.x, hit.y, hit.z, on ? ID.CrankOn : ID.Crank)) markDirtyAt(hit.x, hit.z);
+      say(on ? "Cranking" : "Stopped");
+      audio.place();
+      return true;
+    }
+    if (hit.id === ID.Clutch || hit.id === ID.ClutchOpen) {
+      const open = hit.id === ID.Clutch;
+      if (world.set(hit.x, hit.y, hit.z, open ? ID.ClutchOpen : ID.Clutch)) markDirtyAt(hit.x, hit.z);
+      say(open ? "Free" : "Engaged");
+      audio.place();
+      return true;
+    }
     if (block.work === "bed") {
       const night = Math.sin(worldTime * Math.PI * 2) < 0.15;
       if (!night) {
@@ -6380,6 +6396,40 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       ensureLandmarkGuards();
     }
     stationTick(dt);
+    mechAcc += dt;
+    if (mechAcc >= 0.1) {
+      const step = mechAcc;
+      mechAcc = 0;
+      const gx = Math.floor(player.x);
+      const gy = Math.floor(player.y);
+      const gz = Math.floor(player.z);
+      const cells: { x: number; y: number; z: number }[] = [];
+      const mech = new Set<number>([
+        ID.Axle, ID.Gear8, ID.Gear16, ID.Gear24, ID.Crank, ID.CrankOn, ID.Clutch, ID.ClutchOpen,
+        ID.Worm, ID.Cam, ID.Pulley, ID.Wheel, ID.Mill,
+      ]);
+      for (let dy = -3; dy <= 3; dy++) {
+        for (let dz = -6; dz <= 6; dz++) {
+          for (let dx = -6; dx <= 6; dx++) {
+            const x = gx + dx;
+            const y = gy + dy;
+            const z = gz + dz;
+            if (mech.has(world.get(x, y, z))) cells.push({ x, y, z });
+          }
+        }
+      }
+      if (cells.length) {
+        const edits = stepMech(world.get.bind(world), cells, {
+          axle: ID.Axle, g8: ID.Gear8, g16: ID.Gear16, g24: ID.Gear24,
+          crank: ID.Crank, crankOn: ID.CrankOn, clutch: ID.Clutch, clutchOpen: ID.ClutchOpen,
+          worm: ID.Worm, cam: ID.Cam, pulley: ID.Pulley, wheel: ID.Wheel, mill: ID.Mill,
+          water: ID.Water, door: ID.Door, doorOpen: ID.DoorOpen, gate: ID.Gate, gateOpen: ID.GateOpen,
+        }, step);
+        for (const e of edits) {
+          if (world.set(e.x, e.y, e.z, e.id)) markDirtyAt(e.x, e.z);
+        }
+      }
+    }
     if (fireResT > 0) fireT = 0;
     if (regenT > 0) {
       healAcc += dt;

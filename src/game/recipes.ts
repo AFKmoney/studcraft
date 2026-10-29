@@ -773,6 +773,24 @@ export const RECIPES: Recipe[] = [
     h: 3,
     cat: "redstone",
   }),
+  r("axle", "Axle", "3 sticks", [[ID.Stick, 3]], ID.Axle, 1, {
+    shape: [0, ID.Stick, 0, 0, ID.Stick, 0, 0, ID.Stick, 0],
+    w: 3,
+    h: 3,
+    cat: "build",
+  }),
+  r("gear16", "Gear 16T", "4 sticks around a plank", [[ID.Stick, 4], [ID.Planks, 1]], ID.Gear16, 1, {
+    shape: [0, ID.Stick, 0, ID.Stick, ID.Planks, ID.Stick, 0, ID.Stick, 0],
+    w: 3,
+    h: 3,
+    cat: "build",
+  }),
+  r("crank", "Crank", "1 stick + 1 plank", [[ID.Stick, 1], [ID.Planks, 1]], ID.Crank, 1, {
+    shape: [ID.Stick, ID.Planks],
+    w: 1,
+    h: 2,
+    cat: "build",
+  }),
 ];
 
 export const SMELT: Record<number, number> = {

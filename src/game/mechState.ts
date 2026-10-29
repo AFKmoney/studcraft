@@ -77,6 +77,13 @@ export function clearMech() {
   angles.clear();
 }
 
+/** Drop the graph but keep cam angles, so a placed machine keeps turning. */
+export function resetParts() {
+  parts.clear();
+  speeds.clear();
+  torques.clear();
+}
+
 export function putMech(p: MechPart) {
   parts.set(mkey(p.x, p.y, p.z), p);
 }

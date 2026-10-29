@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-29 (Grok — P5 solver only, game.ts left to Muse).
+**Last update:** 2026-10-29 (Grok — P5 machines placed, door and gate follow the cam).
 
 ## 2026-10-26 — v4.12: Engine performance, mob judder & floating animal parts (Muse, ordered by Philippe after his A54 test of v4.11)
 
@@ -2451,7 +2451,11 @@ Pitch : Minecraft, c'est un monde de cubes. Studs, c'est un monde de plastique �
 - [ ] **P2 · Soudure** — le chalumeau soude deux briques en un joint permanent plus fort; on bâtit en soudant, on démolit en coupant/fondant (dépend de P0)
 - [ ] **P6 · La Fonderie** — LA boucle centrale : casser → plastique (rendement différent par bloc, les mobs en droppent) → fondre → couler des items dans des MOULES débloqués par quêtes (R1) et boss (R2/R3); le crafting reste, mais basic seulement
 - [ ] **P3 · Trempe** — intégrée à la Fonderie (P6) : couler avec du plastique trempé = grades supérieurs du même moule
-- [ ] **P5 · Mécanique LEGO** — solveur posé (`mechState.ts`, 10 tests verts). Pas branché : `game.ts` / `save.ts` restent à Muse pour P0. Essieux, engrenages (ratios entiers, entraxe (N1+N2)/16), vis sans fin irréversible, courroie, piston à came, manivelle, embrayage.
+- [ ] **P5 · Mécanique LEGO** — le cœur tourne. Reste : convoyeur, moteur à ressort, piège. Pas de redstone.
+  - [x] Essieux, engrenages 8/16/24 (entraxe catalogue), vis sans fin, embrayage, poulies, manivelle
+  - [x] Roue à eau (tourne seulement si l'eau la touche) et moulin (air au-dessus, y ≥ 40)
+  - [x] Came : ouvre la porte ou la barrière juste à l'est après un demi-tour
+  - [ ] Convoyeur, moteur à ressort, piège
 - [ ] **P4 · Son plastique** — clics, snaps, cliquetis 100 % synthétisés DSP, zéro asset
 
 ### Lane RPG
@@ -2472,18 +2476,22 @@ Pitch : Minecraft, c'est un monde de cubes. Studs, c'est un monde de plastique �
 - **Vis sans fin** : IRRÉVERSIBLE, 1 tour = 1 dent d'avance (parfait pour treuils/verrous).
 - **24T Clutch** : patine à couple calibré (protection de fin de course). **Crémaillère** 1×4/1×7/1×14 : rotation → linéaire. **Différentiel** 28T (satellites 12T coniques). **Cardan** 3L / joint CV. **Vérin linéaire** à vis avec embrayage de sécurité. **Tourelles** 28T/56T/60T.
 - Structure : liftarms impairs 3M→15M, fins 0,5M; pins friction (noir/bleu) vs libres; connecteurs d'angle #1–#6 (0°, 180°, 157,5°, 135°, 112,5°, 90°).
-Coordination : Muse reste sur **P0** (game.ts/save.ts). Grok a pris le solveur seulement (`mechState.ts`). Le branchement dans `game.ts` attend la fin de P0.
+Coordination : Muse reste sur **P0** (couche briques + `save.ts`). Grok a branché P5 dans `game.ts` (un bloc `mechAcc` dans `tickExtras`, et le clic droit manivelle/embrayage). Ne pas effacer ce bloc en mergant P0. `save.ts` n'a pas été touché.
 
-### 2026-10-29 — Grok (P5 solver, catalogue Technic)
-Philippe a passé le référentiel Technic. P0 est à Muse, donc je n'ai pas touché `game.ts`, `save.ts`, ni la couche briques.
+### 2026-10-29 — Grok (P5 posé dans le monde)
+Philippe : cocher en faisant ce que le plan dit, dans l'ordre. P0 reste à Muse. P5 est la case suivante que je peux avancer.
 
-- Nouveau module `src/game/mechState.ts`. Aucun import. Plafond 64 visites.
-- Entraxe catalogue : `(N1+N2)/16` studs. 16T+16T et 8T+24T = 2 studs. Le petit qui entraîne le grand ralentit et multiplie le couple.
-- Vis sans fin : 1 tour = 1 dent, et le pignon ne renvoie pas dans la vis.
-- Embrayage ouvert coupe l'arbre. Courroie : même sens, ratio des poulies. Came : levée 0→1 sur un demi-tour. Deux manivelles contraires bloquent l'arbre.
-- QA : `node --experimental-strip-types --test src/game/mechState.test.ts` — 10/10. `tsc` 0 erreur. Pas branché au jeu, donc pas de qa98/Pages : ce n'est pas encore visible sur studcraft.pages.dev.
-- Case P5 laissée décochée. Le branchement attend que Muse lâche `game.ts`.
+- Pièces 345–357 : essieu, engrenages 8/16/24, manivelle, embrayage, vis, came, poulie, roue à eau, moulin. Crafts : essieu, 16T, manivelle.
+- Clic droit : la manivelle dit « Cranking » / « Stopped ». L'embrayage dit « Free » / « Engaged ».
+- La came ouvre la porte ou la barrière à l'est. La roue ne tourne que contre l'eau.
+- Fichiers : `blocks.ts`, `recipes.ts`, `mechState.ts`, `mechLink.ts`, `game.ts` (le tick et le clic seulement). Pas `save.ts`.
+- QA : 13/13 tests (`mechState` + `mechLink`). `tsc` 0 erreur. Pas encore sur Pages : le déploiement est en hold.
+- La case P5 reste ouverte : convoyeur, ressort et piège ne sont pas faits.
 
-### Next move — UNCLAIMED, après P0
-Brancher `tickMech` dans le jeu (placer essieu / pignon / manivelle, lire `speedAt`). Fichiers : `game.ts` seulement quand Muse a fini P0. Ne pas le faire en parallèle.
+### Next move — UNCLAIMED
+**Finir P5, dans cet ordre, avant P4.**
+- Un moteur à ressort : clic droit l'arme, il tourne quelques secondes, puis s'arrête. Pas un nouveau système de sauvegarde.
+- Ne pas toucher la couche briques de Muse ni `save.ts`.
+- Fichiers : `game.ts` (le même tick) et le bloc **358** si 357 est le moulin. 345–357 sont déjà les pièces P5.
+
 

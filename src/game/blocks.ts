@@ -348,6 +348,19 @@ export const ID = {
   Spark: 342,
   Fire: 343,
   Melted: 344,
+  Axle: 345,
+  Gear8: 346,
+  Gear16: 347,
+  Gear24: 348,
+  Crank: 349,
+  CrankOn: 350,
+  Clutch: 351,
+  ClutchOpen: 352,
+  Worm: 353,
+  Cam: 354,
+  Pulley: 355,
+  Wheel: 356,
+  Mill: 357,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -1175,6 +1188,19 @@ item(ID.Spark, "Spark", "#ffc46b");
 // source block via fireState.puddleSrc — the gray here is only a fallback).
 put(b(ID.Fire, "Fire", "#ff7a1a", "#ffd23e", "#ff7a1a", "#e83e0c", { hard: 0, solid: false, placeable: false, light: 1 }));
 put(b(ID.Melted, "Melted plastic", "#8a8f98", "#9aa0a8", "#83888f", "#757a82", { hard: 0.5, placeable: false }));
+put(b(ID.Axle, "Axle", "#4a4e55", "#6a7078", "#3a3e44", "#2a2e32", { hard: 0.4 }));
+put(b(ID.Gear8, "Gear 8T", "#f0c43a", "#ffe14a", "#c4924a", "#8a6428", { hard: 0.4 }));
+put(b(ID.Gear16, "Gear 16T", "#f5c518", "#ffe268", "#d9a010", "#a07010", { hard: 0.4 }));
+put(b(ID.Gear24, "Gear 24T", "#e07a3d", "#f0a060", "#c45a20", "#8a3a10", { hard: 0.4 }));
+put(b(ID.Crank, "Crank", "#c4924a", "#e0b15a", "#8d5a34", "#6d4426", { hard: 0.4 }));
+put(b(ID.CrankOn, "Crank (turning)", "#e23b2f", "#ff6a3d", "#b02620", "#8a1c18", { hard: 0.4, drop: ID.Crank }));
+put(b(ID.Clutch, "Clutch", "#3b96e4", "#5eb0e5", "#1d4f91", "#163a6b", { hard: 0.4 }));
+put(b(ID.ClutchOpen, "Clutch (open)", "#9ad0f5", "#d5f3f6", "#3b96e4", "#1d4f91", { hard: 0.4, drop: ID.Clutch }));
+put(b(ID.Worm, "Worm gear", "#8e959c", "#c5ccd3", "#6e767e", "#4a5058", { hard: 0.4 }));
+put(b(ID.Cam, "Cam piston", "#cd7f32", "#e0a050", "#8a5420", "#5c3814", { hard: 0.4 }));
+put(b(ID.Pulley, "Pulley", "#2a2a2a", "#4a4a4a", "#1a1a1a", "#101010", { hard: 0.4 }));
+put(b(ID.Wheel, "Water wheel", "#3b96e4", "#5eb0e5", "#c4924a", "#8d5a34", { hard: 0.4 }));
+put(b(ID.Mill, "Windmill", "#f4f1ea", "#ffffff", "#c5ccd3", "#8e959c", { hard: 0.4 }));
 
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];
