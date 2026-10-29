@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-29 (Grok — cliquetis de casse P4, deux tons graves quand une brique casse).
+**Last update:** 2026-10-29 (Grok — débris Technic, un tas de briques par chunk, tiré de la graine).
 
 ## 2026-10-26 — v4.12: Engine performance, mob judder & floating animal parts (Muse, ordered by Philippe after his A54 test of v4.11)
 
@@ -2751,8 +2751,20 @@ EN COURS au début de la passe. Fichiers : `audio.ts`, une ligne dans `breakBric
 - Ça joue quand une brique casse. Aucun fichier audio.
 - QA : le test du son passe, 3/3. `tsc` 0 erreur. P4 est cochée.
 
+### Next move — TAKEN and DONE (sites de débris)
+Ne pas le refaire. P8 et qa96 restent à Muse. Pas de `save.ts`.
+
+### 2026-10-29 — Grok (sites de débris) — FAIT
+EN COURS au début de la passe. Les cases du chunk sont un octet. Les pièces Technic sont au-dessus de 255 : les écrire dans le chunk les enroule (347 devient 91) et abîme le terrain. Elles sont donc des briques, pas des voxels.
+
+- Un tas par chunk de terre, toujours le même pour une graine. Trois pièces : essieu, engrenages, manivelle ou vis. Pas une table de butin.
+- Pas en monde plat, pas dans le Nether, pas sous la mer, pas si la place est prise.
+- Un edit de bedrock à y = 0, le même bloc que le vrai socle, marque le chunk. Il passe par la sauvegarde des edits qui existe déjà. Le tas ne revient pas.
+- QA : le test du tirage passe, 2/2. `tsc` 0 erreur.
+
 ### Next move — UNCLAIMED
-**Sites de débris.** Un site par chunk, tiré de la graine du monde. Un petit tas de pièces Technic, pas une table de butin. Pas de `save.ts`, pas les IDs 400+, pas P8, pas qa96.
+**Rien de P5a n'est ouvert.** P8 (inventaire, retraits, machines) est à Muse, ne pas le prendre. qa96 non plus. Pas de `save.ts`.
+
 
 
 

@@ -12,7 +12,8 @@ import { QUESTS, CHAINS, chainStepOf, questActive, traderOf, tradeLevelFor, TIER
 import { MpClient } from "./mp";
 import { clearSave, deleteWorld, hasSave, listWorlds, loadLatest, loadSettings, loadWorld, writeSettings, writeWorld, type SaveV1, type WorldSlot } from "./save";
 import { buildAtlas } from "./textures";
-import { CS, HEIGHT, World, decorate, folkLayout, penSheep, paintEndCrystals, END_PILLARS, type Decor, type FolkSpot } from "./world";
+import { CS, HEIGHT, SEA, World, decorate, folkLayout, inNether, penSheep, paintEndCrystals, END_PILLARS, type Decor, type FolkSpot } from "./world";
+import { debrisAt } from "./debris";
 import { stockChest } from "./loot";
 import { Upscaler, upscaleScale } from "./upscale";
 import { BTN, PadEdges, activePad, padBusy, padLabel, rumble, stick } from "./gamepad";
@@ -3815,7 +3816,41 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     meshes.delete(key);
   }
 
+  const debrisChunks = new Set<string>();
+  function seedChunkDebris(cx: number, cz: number) {
+    const key = cx + "," + cz;
+    if (debrisChunks.has(key)) return;
+    debrisChunks.add(key);
+    if (world.flat || inNether(cx * CS)) return;
+    const spot = debrisAt(world.seed, cx, cz);
+    const x = cx * CS + spot.lx;
+    const z = cz * CS + spot.lz;
+    const mark = x + ",0," + z;
+    if (world.edits.get(mark) === ID.Bedrock) return;
+    const h = world.heightAt(x, z);
+    if (h <= SEA || h >= HEIGHT - 3) return;
+    const cells = [
+      { x, y: h + 1, z, id: spot.ids[0] },
+      { x: x + 1, y: h + 1, z, id: spot.ids[1] },
+      { x, y: h + 2, z, id: spot.ids[2] },
+    ];
+    for (const c of cells) {
+      const cur = world.get(c.x, c.y, c.z);
+      if (cur !== ID.Air && cur !== ID.TallGrass && cur !== ID.Flower && cur !== ID.FlowerRed && cur !== ID.Reed && cur !== ID.Bloom) return;
+    }
+    const seen = new Set<number>();
+    for (const c of cells) {
+      if (!brickSpaceFree(c.x * 2, c.y, c.z * 2)) continue;
+      addBrick(c.id, c.x * 2, c.y, c.z * 2);
+      seen.add(c.id);
+    }
+    for (const id of seen) rebuildBrickMesh(id);
+    world.edits.set(mark, ID.Bedrock);
+    saveDirty = true;
+  }
+
   function rebuild(cx: number, cz: number, key: string, tier: number) {
+    seedChunkDebris(cx, cz);
     dropChunk(key);
     const built = buildChunk(world, cx, cz, tier === 0 ? settings.studs : false, tier < 2);
     FS.emitters.set(key, built.emitters); // v4.15: campfires / exposed lava for the fire tick
