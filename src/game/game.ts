@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { ATLAS_COLS, ATLAS_ROWS, BLOCKS, CREATIVE_BAR, ID, def, faceTile, stairsVariant } from "./blocks";
+import { ATLAS_COLS, ATLAS_ROWS, BLOCKS, CREATIVE_BAR, ID, def, faceTile, stairsVariant, type BlockDef } from "./blocks";
 import { createAudio } from "./audio";
 import { STUD_H, STUD_OFFSETS, STUD_R, buildChunk, type Surface } from "./mesher";
 import * as FS from "./fireState";
@@ -309,6 +309,9 @@ declare global {
       setHeldPose?: (v: Record<string, number>) => boolean;
       setMcHeld?: (v: Record<string, number>) => boolean;
       setPos?: (x: number, y: number, z: number) => boolean;
+      placeBrickAt?: (id: number, sx: number, sy: number, sz: number) => boolean;
+      getBricks?: () => [number, number, number, number][];
+      getMineState?: () => { mine: number; time: number; key: string; target: string };
     };
   }
 }
@@ -3542,6 +3545,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     signs.clear();
     FS.clearFireState(); // v4.15
     CH.clearChips(); // v4.17
+    clearBricks(); // P0
     fireAge.clear();
     fireFxDirty = true;
     ench.clear();
@@ -3713,6 +3717,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // v4.17: restore damaged (partially carved) blocks
     CH.clearChips();
     for (const [x, y, z, v] of data.chips ?? []) CH.chipMap.set(CH.ckey(x, y, z), v);
+    // P0: restore the stud-grid brick layer.
+    clearBricks();
+    for (const [id, sx, sy, sz] of data.bricks ?? []) addBrick(id, sx, sy, sz);
+    rebuildAllBrickMeshes();
     for (const [x, y, z] of data.tufts ?? []) TS.tuftGone.add(TS.tkey(x, y, z));
     ench.clear();
     for (const [id, list] of data.ench ?? []) ench.set(id, Object.fromEntries(list));
@@ -3887,6 +3895,19 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         }
       }
     }
+    // P0: bricks collide as exact AABBs (their box can straddle cells, so
+    // scan the player footprint widened by one cell on every side).
+    if (bricks.size > 0) {
+      const near: Brick[] = [];
+      for (let cy = minY - 1; cy <= maxY; cy++)
+        for (let cz = minZ - 1; cz <= maxZ + 1; cz++)
+          for (let cx = minX - 1; cx <= maxX + 1; cx++) bricksNearCell(cx, cy, cz, near);
+      for (const b of near) {
+        const bx = b.sx / 2;
+        const bz = b.sz / 2;
+        if (px + HW > bx && px - HW < bx + 1 && py + BODY > b.sy && py < b.sy + 1 && pz + HW > bz && pz - HW < bz + 1) return true;
+      }
+    }
     return false;
   }
 
@@ -3943,6 +3964,20 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
               const t = colTopAt(cx, cy, cz, player.x, player.z);
               if (t > 0 && t <= prevY + 1e-3 && t > land) land = t;
             }
+          }
+        }
+        // P0: brick tops are integers (sy + 1) — land on them too.
+        if (bricks.size > 0) {
+          const near: Brick[] = [];
+          for (let cy = Math.floor(player.y) - 1; cy <= Math.floor(prevY) + 1; cy++)
+            for (let cz = minZ - 1; cz <= maxZ + 1; cz++)
+              for (let cx = minX - 1; cx <= maxX + 1; cx++) bricksNearCell(cx, cy, cz, near);
+          for (const b of near) {
+            const bx = b.sx / 2;
+            const bz = b.sz / 2;
+            if (player.x + HW <= bx || player.x - HW >= bx + 1 || player.z + HW <= bz || player.z - HW >= bz + 1) continue;
+            const t = b.sy + 1;
+            if (t <= prevY + 1e-3 && t > land) land = t;
           }
         }
         player.y = (land > -Infinity ? land : Math.floor(player.y) + 1) + 1e-3;
@@ -4430,6 +4465,438 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       f.mesh.position.set(f.x, f.y + 0.5, f.z);
     }
+  }
+
+  // ---- P0: the stud grid — offset bricks (Muse, master plan P0) --------
+  // Terrain stays voxel. A plain full-cube block placed with the aim point
+  // in the FAR half of the target cell (tangent axes) snaps to the stud
+  // lattice instead: half-block offsets in x/z, y cell-aligned, stored in
+  // this dedicated layer as a 2×2-stud BRICK. Aligned aim = classic voxel
+  // placement, 100 % legacy behaviour. Bricks render as one InstancedMesh
+  // per block id (box + 4 studs, atlas UVs like the fallers), collide via
+  // an explicit AABB pass in overlapAt/moveAxis, and persist in the save.
+  // v1 limits (WORKLOG): invisible to fire/melt/faller scans and mob
+  // physics; no net sync; sand can rest-fall through a brick.
+  type Brick = { id: number; sx: number; sy: number; sz: number };
+  const bricks = new Map<string, Brick>(); // key "sx,sy,sz" (stud coords)
+  const brickGrid = new Map<string, Set<string>>(); // voxel cell key -> brick keys
+  const brickMeshes = new Map<number, THREE.InstancedMesh>();
+  const brickGeos = new Map<number, THREE.BufferGeometry>();
+  const aimPt = { x: 0, y: 0, z: 0 }; // frame aim point (face point of the current target)
+
+  const brickKey = (sx: number, sy: number, sz: number) => sx + "," + sy + "," + sz;
+  const cellKey3 = (x: number, y: number, z: number) => x + "," + y + "," + z;
+
+  function brickCells(b: Brick) {
+    const bx = b.sx / 2;
+    const bz = b.sz / 2;
+    const out: string[] = [];
+    for (let cx = Math.floor(bx); cx <= Math.floor(bx + 0.999); cx++)
+      for (let cz = Math.floor(bz); cz <= Math.floor(bz + 0.999); cz++) out.push(cellKey3(cx, b.sy, cz));
+    return out;
+  }
+
+  function addBrick(id: number, sx: number, sy: number, sz: number) {
+    const b: Brick = { id, sx, sy, sz };
+    const k = brickKey(sx, sy, sz);
+    bricks.set(k, b);
+    for (const ck of brickCells(b)) {
+      let s = brickGrid.get(ck);
+      if (!s) brickGrid.set(ck, (s = new Set()));
+      s.add(k);
+    }
+    return b;
+  }
+
+  function removeBrick(key: string) {
+    const b = bricks.get(key);
+    if (!b) return;
+    bricks.delete(key);
+    for (const ck of brickCells(b)) {
+      const s = brickGrid.get(ck);
+      if (s) {
+        s.delete(key);
+        if (s.size === 0) brickGrid.delete(ck);
+      }
+    }
+    rebuildBrickMesh(b.id);
+  }
+
+  function clearBricks() {
+    bricks.clear();
+    brickGrid.clear();
+    for (const m of brickMeshes.values()) {
+      scene.remove(m);
+      m.dispose();
+    }
+    brickMeshes.clear();
+  }
+
+  function brickGeo(id: number) {
+    let g = brickGeos.get(id);
+    if (g) return g;
+    const parts: THREE.BufferGeometry[] = [fallerGeo(id).clone()];
+    // Studs wear the TOP tile, remapped like fallerGeo remaps its faces.
+    const tile = faceTile(id, 0);
+    const c = tile % ATLAS_COLS;
+    const r = Math.floor(tile / ATLAS_COLS);
+    const du = 1 / ATLAS_COLS;
+    const dv = 1 / ATLAS_ROWS;
+    const u0 = c * du + du * 0.08;
+    const u1 = (c + 1) * du - du * 0.08;
+    const vTop = 1 - r * dv - dv * 0.08;
+    const vBot = 1 - (r + 1) * dv + dv * 0.08;
+    for (const [ox, oz] of STUD_OFFSETS) {
+      const cyl = new THREE.CylinderGeometry(STUD_R, STUD_R, STUD_H, 16);
+      const uv = cyl.getAttribute("uv") as THREE.BufferAttribute;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, u0 + uv.getX(i) * (u1 - u0), vBot + uv.getY(i) * (vTop - vBot));
+      cyl.translate(ox - 0.5, 0.49 + STUD_H / 2, oz - 0.5);
+      parts.push(cyl);
+    }
+    // Manual indexed merge (positions/normals/uvs + offset indices).
+    let vtx = 0;
+    let idx = 0;
+    for (const p of parts) {
+      vtx += p.getAttribute("position").count;
+      idx += p.getIndex()!.count;
+    }
+    const pos = new Float32Array(vtx * 3);
+    const nor = new Float32Array(vtx * 3);
+    const uvA = new Float32Array(vtx * 2);
+    const index = new Uint32Array(idx);
+    let vo = 0;
+    let io = 0;
+    for (const p of parts) {
+      pos.set(p.getAttribute("position").array as Float32Array, vo * 3);
+      nor.set(p.getAttribute("normal").array as Float32Array, vo * 3);
+      uvA.set(p.getAttribute("uv").array as Float32Array, vo * 2);
+      const pi = p.getIndex()!;
+      for (let i = 0; i < pi.count; i++) index[io + i] = pi.getX(i) + vo;
+      vo += p.getAttribute("position").count;
+      io += pi.count;
+    }
+    g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    g.setAttribute("normal", new THREE.BufferAttribute(nor, 3));
+    g.setAttribute("uv", new THREE.BufferAttribute(uvA, 2));
+    g.setIndex(new THREE.BufferAttribute(index, 1));
+    brickGeos.set(id, g);
+    return g;
+  }
+
+  const _brickM4 = new THREE.Matrix4();
+  function rebuildBrickMesh(id: number) {
+    const old = brickMeshes.get(id);
+    if (old) {
+      scene.remove(old);
+      old.dispose();
+      brickMeshes.delete(id);
+    }
+    const list: Brick[] = [];
+    for (const b of bricks.values()) if (b.id === id) list.push(b);
+    if (list.length === 0) return;
+    const mesh = new THREE.InstancedMesh(brickGeo(id), opaqueLam, list.length);
+    list.forEach((b, i) => {
+      _brickM4.makeTranslation(b.sx / 2 + 0.5, b.sy + 0.5, b.sz / 2 + 0.5);
+      mesh.setMatrixAt(i, _brickM4);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.frustumCulled = false;
+    if (plasticOn) {
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+    }
+    scene.add(mesh);
+    brickMeshes.set(id, mesh);
+  }
+
+  function rebuildAllBrickMeshes() {
+    const ids = new Set<number>();
+    for (const b of bricks.values()) ids.add(b.id);
+    for (const id of ids) rebuildBrickMesh(id);
+  }
+
+  function bricksNearCell(cx: number, cy: number, cz: number, out: Brick[]) {
+    const s = brickGrid.get(cellKey3(cx, cy, cz));
+    if (!s) return;
+    for (const k of s) {
+      const b = bricks.get(k);
+      if (b && !out.includes(b)) out.push(b);
+    }
+  }
+
+  // Does any brick's AABB intersect this voxel cell's box?
+  function brickCellBlocked(cx: number, cy: number, cz: number) {
+    const near: Brick[] = [];
+    bricksNearCell(cx, cy, cz, near);
+    for (const b of near) {
+      const bx = b.sx / 2;
+      const bz = b.sz / 2;
+      if (bx < cx + 1 && bx + 1 > cx && bz < cz + 1 && bz + 1 > cz && b.sy < cy + 1 && b.sy + 1 > cy) return true;
+    }
+    return false;
+  }
+
+  function brickHitsPlayer(bx: number, by: number, bz: number) {
+    return (
+      player.x + HW > bx &&
+      player.x - HW < bx + 1 &&
+      player.y + BODY > by &&
+      player.y < by + 1 &&
+      player.z + HW > bz &&
+      player.z - HW < bz + 1
+    );
+  }
+
+  // Space check for a candidate brick at stud coords: every overlapped
+  // voxel cell must be Air/plant (fluids BLOCK), no brick AABB overlap,
+  // and (checked by callers that care) no player intersection.
+  function brickSpaceFree(sx: number, sy: number, sz: number) {
+    const cand: Brick = { id: 0, sx, sy, sz };
+    const bx = sx / 2;
+    const bz = sz / 2;
+    for (const ck of brickCells(cand)) {
+      const [cx, cy, cz] = ck.split(",").map(Number);
+      const cellId = world.get(cx, cy, cz);
+      if (cellId !== ID.Air && !def(cellId).plant) return false;
+      if (def(cellId).fluid) return false;
+    }
+    const near: Brick[] = [];
+    for (const ck of brickCells(cand)) {
+      const [cx, cy, cz] = ck.split(",").map(Number);
+      bricksNearCell(cx, cy, cz, near);
+    }
+    for (const b of near) {
+      const ox = b.sx / 2;
+      const oz = b.sz / 2;
+      if (bx < ox + 1 && bx + 1 > ox && bz < oz + 1 && bz + 1 > oz && sy < b.sy + 1 && sy + 1 > b.sy) return false;
+    }
+    return true;
+  }
+
+  // Snap a classic destination cell to the stud lattice using the aim
+  // point A on the target face: on each tangent axis the brick STARTS at
+  // the stud the player points at (origin = floor(A×2)/2). Aiming at the
+  // near half of the cell → origin = the cell itself (aligned → classic
+  // voxel, null); aiming at the far half → origin = cell + 0.5 (the brick
+  // straddles the seam). Returns stud coords or null.
+  function brickSnap(px: number, py: number, pz: number, nx: number, ny: number, nz: number) {
+    const snapAxis = (a: number) => Math.floor(a * 2) / 2;
+    const bx = nx !== 0 ? px : snapAxis(aimPt.x);
+    const bz = nz !== 0 ? pz : snapAxis(aimPt.z);
+    if (bx === px && bz === pz) return null;
+    return { sx: Math.round(bx * 2), sy: py, sz: Math.round(bz * 2) };
+  }
+
+  function brickEligible(id: number, d: BlockDef) {
+    return (
+      d.placeable &&
+      d.solid &&
+      !d.slab &&
+      !d.stairs &&
+      !d.sign &&
+      !d.torch &&
+      !d.door &&
+      !d.flat &&
+      !d.fall &&
+      !d.plant &&
+      !d.fluid &&
+      !d.crop &&
+      !d.rail &&
+      !d.plate &&
+      !d.gate &&
+      !d.lever &&
+      !d.ladder &&
+      !d.work &&
+      id !== ID.ShulkerBox &&
+      id !== ID.RedTorch &&
+      !isComponent(id)
+    );
+  }
+
+  type BrickHit = { brick: Brick; key: string; t: number; nx: number; ny: number; nz: number };
+  function raycastBricks(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxD: number): BrickHit | null {
+    const len = Math.hypot(dx, dy, dz) || 1;
+    dx /= len;
+    dy /= len;
+    dz /= len;
+    let x = Math.floor(ox);
+    let y = Math.floor(oy);
+    let z = Math.floor(oz);
+    const stepX = dx >= 0 ? 1 : -1;
+    const stepY = dy >= 0 ? 1 : -1;
+    const stepZ = dz >= 0 ? 1 : -1;
+    const tDeltaX = dx === 0 ? 1e12 : Math.abs(1 / dx);
+    const tDeltaY = dy === 0 ? 1e12 : Math.abs(1 / dy);
+    const tDeltaZ = dz === 0 ? 1e12 : Math.abs(1 / dz);
+    let tMaxX = dx === 0 ? 1e12 : (dx > 0 ? x + 1 - ox : ox - x) * tDeltaX;
+    let tMaxY = dy === 0 ? 1e12 : (dy > 0 ? y + 1 - oy : oy - y) * tDeltaY;
+    let tMaxZ = dz === 0 ? 1e12 : (dz > 0 ? z + 1 - oz : oz - z) * tDeltaZ;
+    let best: BrickHit | null = null;
+    const seen = new Set<string>();
+    const near: Brick[] = [];
+    for (let i = 0; i < 48; i++) {
+      near.length = 0;
+      bricksNearCell(x, y, z, near);
+      for (const b of near) {
+        const k = brickKey(b.sx, b.sy, b.sz);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        const bx = b.sx / 2;
+        const bz = b.sz / 2;
+        const t = rayBox(ox, oy, oz, dx, dy, dz, bx, b.sy, bz, bx + 1, b.sy + 1, bz + 1);
+        if (t === null || t <= 0.02 || t > maxD) continue;
+        if (best && t >= best.t) continue;
+        // Face normal: the axis whose scaled local hit coord is largest.
+        const hx = ox + dx * t;
+        const hy = oy + dy * t;
+        const hz = oz + dz * t;
+        const lx = Math.abs((hx - (bx + 0.5)) / 0.5);
+        const ly = Math.abs((hy - (b.sy + 0.5)) / 0.5);
+        const lz = Math.abs((hz - (bz + 0.5)) / 0.5);
+        let nx = 0;
+        let ny = 0;
+        let nz = 0;
+        if (lx >= ly && lx >= lz) nx = hx > bx + 0.5 ? 1 : -1;
+        else if (ly >= lz) ny = hy > b.sy + 0.5 ? 1 : -1;
+        else nz = hz > bz + 0.5 ? 1 : -1;
+        best = { brick: b, key: k, t, nx, ny, nz };
+      }
+      // A hit found in this cell can only be beaten by another brick whose
+      // entry lies in this same cell (already checked) — once the ray's
+      // exit distance from this cell passes best.t, nothing later can win.
+      const exitT = Math.min(tMaxX, tMaxY, tMaxZ);
+      if (best && exitT >= best.t) return best;
+      if (tMaxX < tMaxY && tMaxX < tMaxZ) {
+        if (tMaxX > maxD) return best;
+        x += stepX;
+        tMaxX += tDeltaX;
+      } else if (tMaxY < tMaxZ) {
+        if (tMaxY > maxD) return best;
+        y += stepY;
+        tMaxY += tDeltaY;
+      } else {
+        if (tMaxZ > maxD) return best;
+        z += stepZ;
+        tMaxZ += tDeltaZ;
+      }
+    }
+    return best;
+  }
+
+  // Mirror of breakBlock's yield rules against a brick (v1: no chips /
+  // crack overlay — burst particles + hud.mine carry the feedback).
+  function breakBrick(key: string) {
+    const b = bricks.get(key);
+    if (!b) return;
+    const block = def(b.id);
+    if (block.hard === Infinity) return;
+    const bx = b.sx / 2;
+    const bz = b.sz / 2;
+    removeBrick(key);
+    if (!creative) {
+      const held = def(hotbar[slot]);
+      const tier = held.tool === "pick" ? held.tier : 0;
+      const canDrop = !block.need || tier >= block.need;
+      const yieldAt = (dropId: number) => dropItem(dropId, 1, bx + 0.5, b.sy + 0.55, bz + 0.5);
+      if (canDrop && block.drop !== -1) yieldAt(enchLvl(hotbar[slot], "silk") > 0 ? b.id : block.drop || b.id);
+      if (canDrop && block.drop !== -1 && (ORE_XP[b.id] ?? 0) > 0 && enchLvl(hotbar[slot], "silk") === 0) {
+        const fort = held.tool === "pick" ? enchLvl(hotbar[slot], "fortune") : 0;
+        for (let f = 0; f < fort; f++) if (Math.random() < 0.35) yieldAt(block.drop || b.id);
+      }
+      const right =
+        (held.tool === "pick" && (block.tough || block.need > 0)) ||
+        (held.tool === "axe" && AXE_OK(b.id)) ||
+        (held.tool === "shovel" && SHOVEL_OK(b.id));
+      if (right) wearHeld();
+      if (canDrop) gainXp(ORE_XP[b.id] ?? 0);
+    }
+    if (block.plant || !block.solid) burst(bx + 0.5, b.sy + 0.5, bz + 0.5, block.color, 7);
+    else if (block.glass) burst(bx + 0.5, b.sy + 0.5, bz + 0.5, "#dff2ff", 12);
+    else if (chippable(b.id)) {
+      const col = block.side || block.color;
+      for (let p = 0; p < 12; p++) {
+        const [cx, cy, cz] = CH.pieceCentre(p);
+        spawnPiece(bx + cx, b.sy + cy, bz + cz, col, (cx - 0.5) * 3.4 + (Math.random() - 0.5) * 0.8, 1.2 + cy * 2.2 + Math.random() * 1.1, (cz - 0.5) * 3.4 + (Math.random() - 0.5) * 0.8);
+      }
+    } else burstModularBlock(bx + 0.5, b.sy + 0.5, bz + 0.5, block);
+    padRumble(0.12, 0.25, 45);
+    audio.break();
+    swing = 1;
+    saveDirty = true;
+    mineTime = 0;
+    mineKey = "";
+    hideCrack();
+  }
+
+  function placeBrickNow(id: number, sx: number, sy: number, sz: number) {
+    // Plants in overlapped cells are cleared (classic placement overwrites
+    // them via world.set; the brick layer has to do it explicitly).
+    for (const ck of brickCells({ id, sx, sy, sz })) {
+      const [cx, cy, cz] = ck.split(",").map(Number);
+      const cid = world.get(cx, cy, cz);
+      if (cid !== ID.Air && def(cid).plant) {
+        world.set(cx, cy, cz, ID.Air);
+        markDirtyAt(cx, cz);
+      }
+    }
+    addBrick(id, sx, sy, sz);
+    rebuildBrickMesh(id);
+    if (!creative) spend(id, 1);
+    burst(sx / 2 + 0.5, sy + 0.8, sz / 2 + 0.5, def(id).color, 6);
+    audio.place();
+    swing = 1;
+    saveDirty = true;
+  }
+
+  // Placement against a brick face (the voxel tryPlace can't express a
+  // half-offset target): food + generic placement only, v1.
+  function tryPlaceBrick(bh: BrickHit) {
+    const held = hotbar[slot];
+    const heldDef = def(held);
+    if (heldDef.food) {
+      eat();
+      return;
+    }
+    if (!held || !heldDef.placeable) {
+      say(held ? "That doesn't place" : "Empty hand");
+      return;
+    }
+    if (!creative && (inv[held] ?? 0) <= 0) {
+      say("Out of those bricks");
+      return;
+    }
+    const b = bh.brick;
+    // Destination cell: the voxel cell just beyond the struck face.
+    const dx = Math.floor(b.sx / 2 + 0.5 + bh.nx * 1.01);
+    const dy = Math.floor(b.sy + 0.5 + bh.ny * 1.01);
+    const dz = Math.floor(b.sz / 2 + 0.5 + bh.nz * 1.01);
+    if (brickEligible(held, heldDef)) {
+      const cand = brickSnap(dx, dy, dz, bh.nx, bh.ny, bh.nz);
+      if (cand && brickSpaceFree(cand.sx, cand.sy, cand.sz) && !brickHitsPlayer(cand.sx / 2, cand.sy, cand.sz / 2)) {
+        placeBrickNow(held, cand.sx, cand.sy, cand.sz);
+        return;
+      }
+    }
+    // Classic voxel placement against the brick face.
+    if (dy <= 0 || dy >= HEIGHT - 1) return;
+    const dest = world.get(dx, dy, dz);
+    const destDef = def(dest);
+    if (dest !== ID.Air && !destDef.plant && !destDef.fluid) return;
+    if (brickCellBlocked(dx, dy, dz)) return;
+    if (heldDef.solid && hitsPlayer(dx, dy, dz)) {
+      say("Can't snap a brick into yourself");
+      return;
+    }
+    if (!world.set(dx, dy, dz, held)) return;
+    CH.setRemoved(dx, dy, dz, held, 0);
+    markDirtyAt(dx, dz);
+    netSendEdit(dx, dy, dz, held);
+    if (!creative) spend(held, 1);
+    burst(dx + 0.5, dy + 0.8, dz + 0.5, heldDef.color, 6);
+    audio.place();
+    swing = 1;
+    saveDirty = true;
   }
 
   function bumpQuest(kind: "break" | "place" | "kill", tag: string) {
@@ -5613,6 +6080,18 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const dest = world.get(px, py, pz);
     const destDef = def(dest);
     if (dest !== ID.Air && !destDef.plant && !destDef.fluid) return;
+    // P0 stud grid: an eligible full cube aimed at the far half of the
+    // target cell snaps into the brick layer at a half-stud offset.
+    // Fluids block brick placement even though classic placement allows
+    // filling them (brickSpaceFree enforces it).
+    if (brickEligible(held, heldDef)) {
+      const cand = brickSnap(px, py, pz, hit.nx, hit.ny, hit.nz);
+      if (cand && brickSpaceFree(cand.sx, cand.sy, cand.sz) && !brickHitsPlayer(cand.sx / 2, cand.sy, cand.sz / 2)) {
+        placeBrickNow(held, cand.sx, cand.sy, cand.sz);
+        return;
+      }
+    }
+    if (brickCellBlocked(px, py, pz)) return; // a snapped brick already occupies part of this cell
     if (heldDef.solid && hitsPlayer(px, py, pz)) {
       say("Can't snap a brick into yourself");
       return;
@@ -9435,6 +9914,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         const [x, y, z] = key.split(",").map(Number);
         return [x, y, z, v] as [number, number, number, number];
       }),
+      bricks: [...bricks.values()].map((b) => [b.id, b.sx, b.sy, b.sz] as [number, number, number, number]),
       beacons: [...beaconBuffs.entries()].map(([key, buff]) => {
         const [x, y, z] = key.split(",").map(Number);
         return { x, y, z, buff };
@@ -9659,7 +10139,23 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // third person: aim along the camera ray (it is parallel to the look
     // direction and passes through the crosshair), reach measured from the eye
     const tp = settings.third && thirdAim.ok;
+    const rox = tp ? thirdAim.x : player.x;
+    const roy = tp ? thirdAim.y : eyeY;
+    const roz = tp ? thirdAim.z : player.z;
     const hit = tp ? raycast(thirdAim.x, thirdAim.y, thirdAim.z, rdx, rdy, rdz, reach + thirdAim.back, true) : raycast(player.x, eyeY, player.z, rdx, rdy, rdz, reach, true);
+    // P0: bricks are a separate layer — raycast them too; the nearer of
+    // (voxel hit, brick hit) owns the crosshair this frame.
+    const bHit = bricks.size > 0 ? raycastBricks(rox, roy, roz, rdx, rdy, rdz, reach + (tp ? thirdAim.back : 0)) : null;
+    const useBrick = !!bHit && (!hit || bHit.t < hit.dist);
+    if (useBrick && bHit) {
+      aimPt.x = rox + rdx * bHit.t;
+      aimPt.y = roy + rdy * bHit.t;
+      aimPt.z = roz + rdz * bHit.t;
+    } else if (hit) {
+      aimPt.x = rox + rdx * hit.dist;
+      aimPt.y = roy + rdy * hit.dist;
+      aimPt.z = roz + rdz * hit.dist;
+    }
     let mobT = 99;
     let mob: Mob | null = null;
     for (const m of mobs) {
@@ -9683,7 +10179,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         mob = m;
       }
     }
-    const blockFirst = !mob || (hit !== null && hit.dist < mobT);
+    const nearBlock = Math.min(hit ? hit.dist : Infinity, bHit ? bHit.t : Infinity);
+    const blockFirst = !mob || nearBlock < mobT;
     hud.targetName = "";
     hud.mine = 0;
     highlight.visible = false;
@@ -9844,6 +10341,78 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         swing = 1;
         if (mob.hp <= 0) killMob(mob);
       }
+    } else if (useBrick && bHit) {
+      // P0: the crosshair is on a snapped brick.
+      const bk = bHit.brick;
+      const block = def(bk.id);
+      hud.targetName = block.name;
+      highlight.visible = !hud.hidden;
+      highlight.position.set(bk.sx / 2 + 0.5, bk.sy + 0.5, bk.sz / 2 + 0.5);
+      studOutline.visible = false;
+      const key = "B:" + bHit.key;
+      if (sample.mine && block.hard !== Infinity) {
+        if (mineKey !== key) {
+          mineKey = key;
+          mineTime = 0;
+        }
+        mineTime += dt;
+        const held = def(hotbar[slot]);
+        // Same Minecraft mining model as voxel blocks (v4.18), against the brick's def.
+        const cls = AXE_OK(bk.id) ? "axe" : SHOVEL_OK(bk.id) ? "shovel" : block.tough || block.need > 0 ? "pick" : "";
+        const rightTool = cls !== "" && held.tool === cls;
+        const TIER_SPEED = [1, 2, 4, 6, 8, 9];
+        const speed = rightTool ? (TIER_SPEED[held.tier] ?? 1) : 1;
+        const pickTier = held.tool === "pick" ? held.tier : 0;
+        const canHarvest = !block.need || pickTier >= block.need;
+        const slowRate = cls === "pick" && (!rightTool || !canHarvest);
+        let need = creative ? 0.05 : (block.hard * (slowRate ? 5 : 1.5)) / speed;
+        const eff = enchLvl(hotbar[slot], "efficiency");
+        if (eff > 0 && rightTool) need = (block.hard * (slowRate ? 5 : 1.5)) / (speed + eff * eff + 1);
+        if (rankLv >= 2) need /= 1.15;
+        if (hammer && block.tough) need *= 0.38;
+        hud.mine = Math.min(1, mineTime / Math.max(need, 0.01));
+        hideCrack(); // v1: no crack overlay on bricks — hud.mine + sound carry it
+        if (mineTime >= need) breakBrick(bHit.key);
+      } else if (!sample.mine) {
+        mineTime = 0;
+        mineKey = "";
+        hideCrack();
+      }
+      const heldId = hotbar[slot];
+      if (heldId && def(heldId).placeable) {
+        const hd = def(heldId);
+        const dx = Math.floor(bk.sx / 2 + 0.5 + bHit.nx * 1.01);
+        const dy = Math.floor(bk.sy + 0.5 + bHit.ny * 1.01);
+        const dz = Math.floor(bk.sz / 2 + 0.5 + bHit.nz * 1.01);
+        const cand = brickEligible(heldId, hd) ? brickSnap(dx, dy, dz, bHit.nx, bHit.ny, bHit.nz) : null;
+        if (cand) {
+          const ok = brickSpaceFree(cand.sx, cand.sy, cand.sz) && !brickHitsPlayer(cand.sx / 2, cand.sy, cand.sz / 2) && (creative || (inv[heldId] ?? 0) > 0);
+          ghost.visible = true;
+          ghost.position.set(cand.sx / 2 + 0.5, cand.sy + 0.5, cand.sz / 2 + 0.5);
+          tmp.set(ok ? hd.color : "#e23b2f");
+          ghostMat.color.copy(tmp);
+          ghostMat.opacity = ok ? 0.42 : 0.28;
+        } else {
+          const dest = world.get(dx, dy, dz);
+          const ok =
+            dy > 0 &&
+            dy < HEIGHT - 1 &&
+            (dest === ID.Air || def(dest).plant || def(dest).fluid) &&
+            !brickCellBlocked(dx, dy, dz) &&
+            (!hd.solid || !hitsPlayer(dx, dy, dz)) &&
+            (creative || (inv[heldId] ?? 0) > 0);
+          ghost.visible = true;
+          ghost.position.set(dx + 0.5, dy + 0.5, dz + 0.5);
+          tmp.set(ok ? hd.color : "#e23b2f");
+          ghostMat.color.copy(tmp);
+          ghostMat.opacity = ok ? 0.42 : 0.28;
+        }
+      }
+      const placeDown = sample.place;
+      if ((sample.first && placeDown && !prevPlace) || (placeDown && placeCool <= 0 && prevPlace)) {
+        placeCool = 0.18;
+        tryPlaceBrick(bHit);
+      }
     } else if (hit) {
       const block = def(hit.id);
       if (block.sign) {
@@ -9945,18 +10514,30 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         const px = hit.x + hit.nx;
         const py = hit.y + hit.ny;
         const pz = hit.z + hit.nz;
-        const dest = world.get(px, py, pz);
-        const ok =
-          py > 0 &&
-          py < HEIGHT - 1 &&
-          (dest === ID.Air || def(dest).plant || def(dest).fluid) &&
-          (!def(held).solid || !hitsPlayer(px, py, pz)) &&
-          (creative || (inv[held] ?? 0) > 0);
-        ghost.visible = true;
-        ghost.position.set(px + 0.5, py + 0.5, pz + 0.5);
-        tmp.set(ok ? def(held).color : "#e23b2f");
-        ghostMat.color.copy(tmp);
-        ghostMat.opacity = ok ? 0.42 : 0.28;
+        // P0: when the aim snaps to the stud lattice, the ghost shows the BRICK.
+        const cand = brickEligible(held, def(held)) ? brickSnap(px, py, pz, hit.nx, hit.ny, hit.nz) : null;
+        if (cand) {
+          const ok = brickSpaceFree(cand.sx, cand.sy, cand.sz) && !brickHitsPlayer(cand.sx / 2, cand.sy, cand.sz / 2) && (creative || (inv[held] ?? 0) > 0);
+          ghost.visible = true;
+          ghost.position.set(cand.sx / 2 + 0.5, cand.sy + 0.5, cand.sz / 2 + 0.5);
+          tmp.set(ok ? def(held).color : "#e23b2f");
+          ghostMat.color.copy(tmp);
+          ghostMat.opacity = ok ? 0.42 : 0.28;
+        } else {
+          const dest = world.get(px, py, pz);
+          const ok =
+            py > 0 &&
+            py < HEIGHT - 1 &&
+            (dest === ID.Air || def(dest).plant || def(dest).fluid) &&
+            !brickCellBlocked(px, py, pz) &&
+            (!def(held).solid || !hitsPlayer(px, py, pz)) &&
+            (creative || (inv[held] ?? 0) > 0);
+          ghost.visible = true;
+          ghost.position.set(px + 0.5, py + 0.5, pz + 0.5);
+          tmp.set(ok ? def(held).color : "#e23b2f");
+          ghostMat.color.copy(tmp);
+          ghostMat.opacity = ok ? 0.42 : 0.28;
+        }
       }
       const placeDown = sample.place;
       if ((sample.first && placeDown && !prevPlace) || (placeDown && placeCool <= 0 && prevPlace)) {
@@ -11140,6 +11721,18 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     getPos: () => ({ x: player.x, y: player.y, z: player.z }),
     // v4.17 QA hook (Claude): place the camera for staged photos. Inert in play.
     setPos: (x: number, y: number, z: number) => { player.x = x; player.y = y; player.z = z; player.vx = player.vz = 0; return true; },
+    // P0 QA hooks: place/list stud-grid bricks directly (inert in play).
+    placeBrickAt: (id: number, sx: number, sy: number, sz: number) => {
+      if (!brickSpaceFree(sx, sy, sz)) return false;
+      addBrick(id, sx, sy, sz);
+      rebuildBrickMesh(id);
+      saveDirty = true;
+      return true;
+    },
+    getBricks: () => [...bricks.values()].map((b) => [b.id, b.sx, b.sy, b.sz] as [number, number, number, number]),
+    // P0 QA witness (qa99b11): mining progress on the current target —
+    // key "B:…" = brick branch, voxel key = classic branch, "" = no mining.
+    getMineState: () => ({ mine: hud.mine, time: mineTime, key: mineKey, target: hud.targetName }),
     setKeys: (codes: string[]) => {
       keys.clear();
       for (const code of codes) keys.add(code);

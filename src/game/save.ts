@@ -69,6 +69,7 @@ export type SaveV1 = {
   // v4.16: torn grass tufts [x,y,z] (tuft presence itself is derived).
   tufts?: [number, number, number][];
   chips?: [number, number, number, number][]; // v4.17 Teardown: [x, y, z, (id << 12) | removedMask]
+  bricks?: [number, number, number, number][]; // P0 stud grid: [id, sx, sy, sz] — stud coords (sx = 2 × block x), y stays cell-aligned
   worldDays?: number;
 };
 
