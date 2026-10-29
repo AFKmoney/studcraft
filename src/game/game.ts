@@ -317,6 +317,7 @@ declare global {
       stepBricks?: (dt: number) => { total: number; supported: number; stressed: string[]; falling: number; stress: Record<string, number> };
       weldAt?: (sx1: number, sy1: number, sz1: number, sx2: number, sy2: number, sz2: number) => boolean;
       getWelds?: () => { count: number; pairs: string[]; welded: string[] };
+      plasticYieldOf?: (id: number) => number;
     };
   }
 }
@@ -4201,6 +4202,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       // picked up — yields spawn as world drops (magnet pickup adds them to
       // the bag) instead of silently appearing in the inventory.
       const yieldAt = (dropId: number) => dropItem(dropId, 1, x + 0.5, y + 0.55, z + 0.5);
+      // P6: broken plastic also yields foundry pellets (in addition to
+      // the normal drop below).
+      if (canDrop) for (let p = 0, py = plasticYield(id); p < py; p++) yieldAt(ID.Pellets);
       if (canDrop && id === ID.Leaves) {
         if (Math.random() < 0.08) yieldAt(ID.Apple);
         if (Math.random() < 0.12) yieldAt(ID.Stick);
@@ -4848,6 +4852,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const tier = held.tool === "pick" ? held.tier : 0;
       const canDrop = !block.need || tier >= block.need;
       const yieldAt = (dropId: number) => dropItem(dropId, 1, bx + 0.5, b.sy + 0.55, bz + 0.5);
+      // P6: a broken brick yields foundry pellets too (same table as voxel).
+      if (canDrop) for (let p = 0, py = plasticYield(b.id); p < py; p++) yieldAt(ID.Pellets);
       if (canDrop && block.drop !== -1) yieldAt(enchLvl(hotbar[slot], "silk") > 0 ? b.id : block.drop || b.id);
       if (canDrop && block.drop !== -1 && (ORE_XP[b.id] ?? 0) > 0 && enchLvl(hotbar[slot], "silk") === 0) {
         const fort = held.tool === "pick" ? enchLvl(hotbar[slot], "fortune") : 0;
@@ -5670,6 +5676,16 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     if (d.slab || d.stairs || d.sign || d.flat || d.door || d.gate || d.torch || d.dust || d.lever || d.plate || d.rail || d.cactus) return false;
     if (AXE_OK(id)) return false; // wood burns instead of melting
     return true;
+  }
+  // P6 · La Fonderie (Muse): plastic yield of a broken block. The plastic
+  // family IS isPlastic (the v4.15 melt family — no second registry):
+  // colour bricks are the rich feedstock (2 pellets), every other plastic
+  // solid gives 1, non-plastic gives 0 and keeps its normal drop only.
+  // Pellets spawn IN ADDITION to the normal drop in v1 (no economy
+  // regression); the Kiln casting step is P6 step 2.
+  function plasticYield(id: number): number {
+    if (!isPlastic(id)) return 0;
+    return COLORS_OK(id) ? 2 : 1;
   }
   function flamOf(id: number) {
     if (id === ID.Leaves) return 1;
@@ -8962,6 +8978,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
                                                               : [ID.Green];
     if (!creative) {
       for (const drop of drops) dropItem(drop, 1, mob.x, mob.y + 0.4, mob.z);
+      // P6: every mob is a plastic toy — foundry pellets on every kill,
+      // 1 guaranteed + 50% a second (hard cap 2 per kill, by construction).
+      for (let p = 0, pn = 1 + (Math.random() < 0.5 ? 1 : 0); p < pn; p++) dropItem(ID.Pellets, 1, mob.x, mob.y + 0.4, mob.z);
       // Looting on the held blade: bonus copies of the base drops.
       const lootLvl = def(hotbar[slot]).tool === "sword" ? enchLvl(hotbar[slot], "looting") : 0;
       for (const drop of drops) for (let f = 0; f < lootLvl; f++) if (Math.random() < 0.35) dropItem(drop, 1, mob.x, mob.y + 0.4, mob.z);
@@ -12111,6 +12130,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       saveDirty = true;
       return true;
     },
+    // P6 QA hook: the foundry yield table itself (inert in play).
+    plasticYieldOf: (id: number) => plasticYield(id),
     getWelds: () => {
       const welded = new Set<string>();
       for (const w of welds) {

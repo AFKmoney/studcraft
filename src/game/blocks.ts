@@ -377,6 +377,9 @@ export const ID = {
   // Muse lane (P2 welding): IDs 400+ are reserved for the brick-layer
   // pillars so they can never collide with Grok's Technic catalogue.
   Welder: 400,
+  // P6 La Fonderie (Muse): plastic pellets — the foundry feedstock that
+  // broken plastic blocks and mobs yield (see plasticYield in game.ts).
+  Pellets: 401,
 } as const;
 
 export type ToolKind = "" | "pick" | "axe" | "shovel" | "sword" | "hoe" | "bow";
@@ -822,6 +825,7 @@ item(ID.Arrow, "Arrow", "#d9dde2");
 item(ID.Rod, "Rod", "#6b3e22", { maxUse: 40 });
 item(ID.Shears, "Shears", "#c5ccd3", { maxUse: 80 });
 item(ID.Welder, "Welding torch", "#f07820", { maxUse: 120 });
+item(ID.Pellets, "Plastic pellets", "#e8dcc0");
 item(ID.Bone, "Bone", "#f4f1ea");
 item(ID.Flint, "Spark", "#f07820", { maxUse: 40 });
 item(ID.Bottle, "Bottle", "#d5f3f6");
@@ -1397,6 +1401,7 @@ export const CATALOG = [
   ID.Rod,
   ID.Shears,
   ID.Welder,
+  ID.Pellets,
   ID.Flint,
   ID.Boat,
   ID.Cart,
