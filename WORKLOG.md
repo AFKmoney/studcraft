@@ -3150,3 +3150,55 @@ Verdict utilisateur, donc faits à reproduire avant tout : trois problèmes de c
 - **Ce qui s'est réellement passé** : la sortie complète du process `qa96-s2` (livrée après coup, et lisible dans `qa96-s2.log`, local) montre **`Error: EV-TIMEOUT` à la ligne 82** — le `evLong` de l'étape pause/inventaire (budget 180 s) n'a jamais résolu après `ready:true` + `spawn` écrits; process sorti en erreur, **aucune valeur `pauseInventory` produite, aucun `done`**. Mon entrée de 13:12 a déclaré cette étape « MESURÉE ok:true » avec les valeurs `pause/inventory/pause` — **c'était faux** : le poll de complétion m'avait retourné un statut `completed` sans le stdout, et j'ai écrit le verdict sans lire le log du process. Les valeurs citées étaient la forme attendue du script, pas une mesure. Mea culpa, sans détour.
 - **Corrections faites** : `qa96-out.json` (local) restauré à l'état réellement écrit par les sessions (`steps:{}`, `errors:[]`, `appUp/ready:true`, spawn) — les champs `pauseInventory`/`qa96s2` que j'avais réinjectés sont **retirés**; `qa96-out-s2-merged.json` est marqué `invalid:true` avec la raison. **État qa96 corrigé : 1/5 étapes mesurées** (l'étape 1 drops/ramassage, par le fil principal), étapes **2–5 NON mesurées**. Le reste de l'entrée de 13:12 tient : mort de run3 après ready (partiel préservé), mort de s3 en `Target crashed` dans le ready (sa sortie, elle, était complète et relue), resync sur `dec361b8`, cause BUG-1 localisée par lecture (à reproduire, toujours non corrigée).
 - **Leçon écrite (règle de boucle, à appliquer dès le prochain run)** : un statut `completed` sans stdout relu ne vaut **jamais** verdict — toujours lire le `.log` du process ET le fichier de sortie avant d'écrire « mesuré ». Prochain geste inchangé dans l'ordre : fenêtre calme → retry **s2**, s3, s4, s5 → bogues BUG-1/2/3 (reproduction d'abord) → qa98b/qa97 → P6 étape 5 / P8-1/2.
+
+## DIRECTIVE — Philippe (2026-10-29 ~13:12 PDT) : COUVERTURE COMPLÈTE DU PDF — tout ce qui est nommé entre dans le jeu
+
+Ordre de Philippe (fil principal, 13:12–13:13 PDT) : « Il faut que tout ce qui est nommé dans le PDF soit mis et accessible dans le jeu et les objets modélisés — par math bien sûr. » Le PDF = `Catalogue_Complet_LEGO_Technic_et_Accessoires_Minifigurines.pdf` (4 pages, CAT-01 à CAT-07), relu en entier par Muse ce run. **La loi** : chaque pièce/objet NOMMÉ dans le PDF doit remplir TROIS conditions pour compter comme couvert : **(1) défini** dans le jeu, **(2) accessible** (inventaire P8-1 + un chemin d'obtention : craft/moule/débris, règle des deux voies), **(3) modélisé PAR LES MATHS** (géométrie procédurale SRN, générée une fois, cachée, instanciée — ZÉRO fichier asset, constitution règle 1; le modèle vaut pour le monde ET l'objet tenu en main). Couverture mesurée famille par famille contre le tableau ci-dessous, jamais au feeling.
+
+### État de couverture (relu 2026-10-29, registre actuel 0–376 + 400–422)
+
+**CAT-02 · Structure & liaisons (p. 2) — lane Grok (P5)**
+- [ ] Briques Technic à trous 1×2→1×16 (3700/3701/3894/3703) — MANQUANT
+- [ ] Liftarms droits 1×2→1×15, Liftarms fins 1×2→1×7, Liftarms coudés (L 3×5, L 2×4, T 3×3, 53,5°/45°) — MANQUANT
+- [ ] Cadres Technic 5×7, 7×11, 11×15 (64179/39790/39794) — MANQUANT
+- [ ] Pins : 2L/3L friction et libres, Axle Pins (friction/libre/3L), Pin 1/2, Towball, Pin with Bush — MANQUANT (les liaisons actuelles sont implicites dans mechLink, pas des pièces)
+- [ ] Axes : longueurs 2L→32L et axes à butée/tenon — PARTIEL (un seul Axle 345 générique)
+- [ ] Bagues d'arrêt 1L et demi-bagues — MANQUANT
+- [ ] Connecteurs d'angle #1→#6 et Cross Blocks — MANQUANT
+- [ ] Panneaux Technic Fairing #1→#50 (paires G/D) — MANQUANT
+
+**CAT-03 · Suspension, direction, moyeux (p. 2) — lane Grok**
+- [ ] Amortisseurs à ressort 6,5L (731c01/76537), triangles de suspension (57515/32294), moyeux et porte-fusées (hubs, incl. portail) — MANQUANT
+
+**CAT-04 · Transmission (p. 3) — lane Grok**
+- [x] Pignons droits 8T/16T/24T/40T; [x] Clutch 24T; [x] Coniques simples 12T/20T; [x] Vis sans fin (variantes 1L/2L à compléter)
+- [ ] Coniques doubles 12T/20T/36T — MANQUANT
+- [ ] Crémaillères 1×4, 1×7, 1×14 et courbe 11×11 — PARTIEL (Rack 360, un seul type)
+- [x] Driving Ring (365/366); [ ] pignons de boîte 16T/20T + sélecteur à came (35188) comme pièces — PARTIEL
+- [x] Différentiel 3L 28T (359); [ ] différentiel cadre 5×7 28T — MANQUANT
+- [ ] Tourelles vraies 28T / 56T / 60T (denture interne/externe) — PARTIEL (371 = tourelle simplifiée, pas la pièce catalogue)
+- [x] Cardan (361); [ ] joint CV — MANQUANT; [ ] moteur à pistons (cylindres 2850, pistons 2853, bielles 2854) — MANQUANT
+- [x] Vérin linéaire (370); [ ] variantes Mini et XL — MANQUANT
+
+**CAT-05 · Puissance (p. 3) — lane Grok**
+- [ ] Pneumatique V2 COMPLET : pompe manuelle à ressort 6L (19482), petite pompe motorisable, cylindres, valve, réservoir d'air, tuyaux — PARTIEL (lot 373–376 commencé; le sous-système se livre complet ou pas du tout, règle recherche)
+- [ ] Électrique : Hub Technic 4 ports (gyro 6 axes), moteurs M/L/XL, servo/angulaire, télécommande — MANQUANT (= P5b, gabarits Power Functions de la recherche)
+
+**CAT-06 · Accessoires minifig (p. 4) — lane Muse (P7, IDs 400+; objets tenus/équipés, nés comme moules)**
+- [ ] Outils d'atelier : clé plate/tournevis, perceuse, marteau, pied-de-biche, burette d'huile — PARTIEL
+- [ ] Chantier & secours : pelle, pioche, balai, extincteur, tronçonneuse, hache de pompier — PARTIEL (pelle/pioche/hache existent en logique Minecraft; balai/extincteur/tronçonneuse MANQUANT)
+- [ ] Communication : talkie-walkie, mégaphone, caméra TV, jumelles, loupe, téléphone — MANQUANT
+- [ ] Contenants : tasse, calice, valise ouvrante, coffre au trésor, tonneau, sac — PARTIEL (coffre/tonneau existent comme blocs; les objets tenus MANQUENT)
+- [ ] Nourriture : croissant, pomme, banane, cuisse de dinde, hot-dog, glace, pizza — PARTIEL (pomme 117 existe; formes LEGO tenues MANQUANTES)
+- [ ] Armes médiévales : épée courte, épée longue, katana, hallebarde, arc + flèche, arbalète — PARTIEL (plan P7 §4; arc/flèche/arbalète existent en logique Minecraft, à renaître en moules; katana/hallebarde MANQUANT)
+- [ ] Boucliers : triangulaire, écu ovoïde, rond — PARTIEL (Shield 158 générique; les 3 moules MANQUENT)
+- [ ] Pirates & western : cutlass, pistolet à silex, mousquet, revolver, menottes — MANQUANT (plan P7 §4 sauf menottes, ajoutées ici)
+- [ ] Sci-fi : poignée sabre laser + lame 4L, blasters court/moyen/long, lanceur — MANQUANT (plan P7 §4)
+- [ ] Magie & musique : baguette magique, chaudron, guitare électrique, guitare acoustique, saxophone — MANQUANT
+- [ ] Casques & coiffes : casque de chantier, casque intégral/espace, visière, casquette, bicorne — PARTIEL
+- [ ] Épaules & dos : sac à dos ouvrant, bouteilles d'air/jetpack, carquois, armure d'épaule, cape — MANQUANT
+
+### Conditions de mise en œuvre
+- **Espace d'IDs** : la plage Grok 358–399 est presque pleine (376 atteint) — nouvelles plages à trancher au claim dans ce WORKLOG avant de coder (structure/transmission = nouvelle plage à réserver; accessoires = 400+ lane Muse, suite de l'audit P7).
+- **Accessibilité** : P8-1 (inventaire par catégories) est le juge de paix — un item non visible dans l'inventaire ne compte pas comme couvert.
+- **Séquence** : lane Muse — après les 3 bogues de Philippe (éclairage briques, arc, gravité); lane Grok — selon ses claims, en parallèle. Chaque famille livrée est cochée ici avec sa mesure (def + inventaire + rendu vérifiés).
