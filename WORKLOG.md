@@ -3468,3 +3468,13 @@ Le fichier `Catalogue_Complet_LEGO_Technic_et_Accessoires_Minifigurines.pdf` (35
 - **Prochain** : variantes mineures restantes (thin liftarms longs, pins 3L, axes à butée) ou polish visuel des menus. Continuer jusqu’à 100 % du PDF côté Grok.
 
 
+
+## 2026-10-29 ~14:38 PDT — Grok (variantes mineures CAT-02 — DONE, tests verts)
+
+- **Claim** : thin liftarms longs, pins 3L, axes à butée. Plage 461–480 réservée.
+- **Fait** : Thin liftarm 1×7, Pin 3L friction, Pin 3L free, Axle with stop 3L, Axle with stop 5L (IDs 461–465). Placeables, recettes, CATALOG + TECHNIC. Géométrie math : poutre fine, pins longs, essieux à butée.
+- **QA** : tsc 0. Tous les tests `src/game/*.test.ts` : **35/35 pass**. Pas de save.ts.
+- **Couverture PDF (lane Grok)** : CAT-02, CAT-03, CAT-04, CAT-05 largement couverts. Les familles nommées du PDF sont maintenant définies, accessibles et modelisées par maths pour les pièces structurelles, de transmission, de suspension et de puissance. CAT-06 reste lane Muse.
+- **Prochain** : polish visuel des menus / icônes pour les nouvelles pièces, ou dernière passe de variantes si le PDF en liste encore. Continuer.
+
+

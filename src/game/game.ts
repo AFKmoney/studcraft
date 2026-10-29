@@ -1982,6 +1982,25 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       return { group, isTool: false, flames };
     }
+    if (id === ID.Thin7) {
+      const len = 7 * s * 0.1;
+      addBoxPart(group, s * 0.2, s * 0.1, len, 0, 0, 0, techMat);
+      for (let i = 0; i < 5; i++) {
+        const z = (i - 2) * s * 0.12;
+        addCylPart(group, s * 0.035, s * 0.035, s * 0.12, 0, 0, z, skin(0x1a1a1a), 6);
+      }
+      return { group, isTool: false, flames };
+    }
+    if (id === ID.Pin3L || id === ID.Pin3LFree) {
+      addCylPart(group, s * 0.045, s * 0.045, s * 0.4, 0, 0, 0, techMat, 8);
+      return { group, isTool: false, flames };
+    }
+    if (id === ID.AxleStop3 || id === ID.AxleStop5) {
+      const len = id === ID.AxleStop3 ? s * 0.4 : s * 0.65;
+      addBoxPart(group, s * 0.06, len, s * 0.06, 0, 0, 0, techMat);
+      addBoxPart(group, s * 0.12, s * 0.06, s * 0.12, 0, len / 2 - s * 0.03, 0, skin(0x2a2e32));
+      return { group, isTool: false, flames };
+    }
 
     if (id === ID.Brew) {
       const stoneMat = skin(0x70757d);
