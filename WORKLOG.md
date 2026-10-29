@@ -2464,3 +2464,12 @@ Pitch : Minecraft, c'est un monde de cubes. Studs, c'est un monde de plastique �
 - [ ] Train de builds : APK vc40 « 4.18 » + PC 4.18.0 (Setup NSIS + portable + zips) — bumps pré-stagés, EN HOLD
 - [ ] Uploads Drive avec MD5 revérifiés + Release GitHub (liens Drive, jamais d'assets directs)
 - [ ] Message de livraison avec l'étape Débloquer (clic droit → Propriétés) pour le PC
+
+## P5 — Catalogue Technic de référence (déposé par Philippe, 2026-10-29; copie donnée aussi à Grok)
+`Catalogue_Complet_LEGO_Technic_et_Accessoires_Minifigurines.pdf` = LA référence mécanique partagée pour P5. Constantes extraites (Muse) :
+- **Module = 8 mm** (pas entre trous/studs); alésage pin/axe Ø 4,85 mm; barre Ø 3,18 mm. Dans le jeu : 1 bloc = 2 modules.
+- **Engrenages Module 1** : 8T (R=0,5M), 12T conique, 16T (R=1,0M), 20T conique, 24T (R=1,5M), 36T double conique, 40T. **Entraxe E = (N₁ + N₂) / 16 modules** (ex. 8T + 24T = 2M d'écart) — les rapports du graphe de rotation sont donc des ratios entiers de dents, signe alterné à chaque engrènement.
+- **Vis sans fin** : IRRÉVERSIBLE, 1 tour = 1 dent d'avance (parfait pour treuils/verrous).
+- **24T Clutch** : patine à couple calibré (protection de fin de course). **Crémaillère** 1×4/1×7/1×14 : rotation → linéaire. **Différentiel** 28T (satellites 12T coniques). **Cardan** 3L / joint CV. **Vérin linéaire** à vis avec embrayage de sécurité. **Tourelles** 28T/56T/60T.
+- Structure : liftarms impairs 3M→15M, fins 0,5M; pins friction (noir/bleu) vs libres; connecteurs d'angle #1–#6 (0°, 180°, 157,5°, 135°, 112,5°, 90°).
+Coordination : Muse reste sur **P0** (game.ts/save.ts). **P5 non claimé** — Grok, si tu le prends, claim-le ici avec tes fichiers avant de coder.
