@@ -30,6 +30,7 @@ export type MechBlockIds = {
   b12: number;
   b20: number;
   act: number;
+  turret: number;
   water: number;
   door: number;
   doorOpen: number;
@@ -67,6 +68,7 @@ function specFor(id: number, ids: MechBlockIds): Spec | null {
   if (id === ids.b12) return { kind: "gear", teeth: 12, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.b20) return { kind: "gear", teeth: 20, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.act) return { kind: "axle", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
+  if (id === ids.turret) return { kind: "axle", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   return null;
 }
 
@@ -133,6 +135,12 @@ export function clearActs() {
   actAcc.clear();
 }
 
+const turretAcc = new Map<string, number>();
+
+export function clearTurrets() {
+  turretAcc.clear();
+}
+
 function isGear(id: number, ids: MechBlockIds) {
   return id === ids.g8 || id === ids.g16 || id === ids.g24 || id === ids.g40;
 }
@@ -187,6 +195,7 @@ export function stepMech(
   const joints: MechCell[] = [];
   const bevels: MechCell[] = [];
   const acts: MechCell[] = [];
+  const turrets: MechCell[] = [];
   for (const c of cells) {
     const id = get(c.x, c.y, c.z);
     if (id === ids.rack) racks.push(c);
@@ -195,6 +204,7 @@ export function stepMech(
     if (id === ids.ring || id === ids.ringLo) rings.push(c);
     if (isBevel(id, ids)) bevels.push(c);
     if (id === ids.act) acts.push(c);
+    if (id === ids.turret) turrets.push(c);
     const spec = specFor(id, ids);
     if (!spec) continue;
     let drive = spec.drive;
@@ -364,6 +374,35 @@ export function stepMech(
     actAcc.delete(k);
     const rest = acc - step;
     if (rest) actAcc.set(k, rest);
+  }
+  for (const c of turrets) {
+    const sp = speedAt(c.x * 2, c.y * 2, c.z * 2);
+    if (!sp.n || !dt) continue;
+    const k = skey(c.x, c.y, c.z);
+    const acc = (turretAcc.get(k) ?? 0) + (sp.n / sp.d) * dt;
+    const step = acc >= 1 ? 1 : acc <= -1 ? -1 : 0;
+    if (!step) {
+      turretAcc.set(k, acc);
+      continue;
+    }
+    const ring = [
+      { x: c.x, y: c.y + 1, z: c.z },
+      { x: c.x + 1, y: c.y + 1, z: c.z },
+      { x: c.x, y: c.y + 1, z: c.z + 1 },
+      { x: c.x - 1, y: c.y + 1, z: c.z },
+      { x: c.x, y: c.y + 1, z: c.z - 1 },
+    ];
+    let at = -1;
+    for (let i = 0; i < ring.length; i++) if (get(ring[i].x, ring[i].y, ring[i].z)) { at = i; break; }
+    const nxt = at < 0 ? null : ring[(at + (step > 0 ? 1 : ring.length - 1)) % ring.length];
+    if (at >= 0 && nxt && get(nxt.x, nxt.y, nxt.z) === 0) {
+      const from = ring[at];
+      edits.push({ ...from, id: 0 });
+      edits.push({ ...nxt, id: get(from.x, from.y, from.z) });
+    }
+    turretAcc.delete(k);
+    const left = acc - step;
+    if (left) turretAcc.set(k, left);
   }
   return edits;
 }

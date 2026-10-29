@@ -374,6 +374,7 @@ export const ID = {
   Bevel12: 368,
   Bevel20: 369,
   Actuator: 370,
+  Turret: 371,
   // Muse lane (P2 welding): IDs 400+ are reserved for the brick-layer
   // pillars so they can never collide with Grok's Technic catalogue.
   Welder: 400,
@@ -1239,6 +1240,7 @@ put(b(ID.Gear40, "Gear 40T", "#c45a20", "#e07a3d", "#8a3a10", "#f0c43a", { hard:
 put(b(ID.Bevel12, "Bevel 12T", "#5a7d8c", "#8eb4c4", "#3a5560", "#d0d4da", { hard: 0.4 }));
 put(b(ID.Bevel20, "Bevel 20T", "#3a5560", "#5a7d8c", "#2a3e48", "#f0c43a", { hard: 0.4 }));
 put(b(ID.Actuator, "Linear actuator", "#4a5058", "#e23b2f", "#2a2e32", "#d0d4da", { hard: 0.4 }));
+put(b(ID.Turret, "Turntable", "#2a2e32", "#f0c43a", "#1a1a1a", "#8e959c", { hard: 0.4 }));
 
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];
