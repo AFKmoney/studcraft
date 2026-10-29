@@ -997,6 +997,61 @@ export const RECIPES: Recipe[] = [
     cat: "build",
   }),
 
+  r("thin3", "Thin liftarm 1×3", "2 planks + 1 stick", [[ID.Planks, 2], [ID.Stick, 1]], ID.Thin3, 1, {
+    shape: [ID.Planks, ID.Stick, ID.Planks],
+    w: 3,
+    h: 1,
+    cat: "build",
+  }),
+  r("thin5", "Thin liftarm 1×5", "1 thin3 + 2 sticks", [[ID.Thin3, 1], [ID.Stick, 2]], ID.Thin5, 1, {
+    shape: [ID.Thin3, ID.Stick, ID.Stick],
+    w: 3,
+    h: 1,
+    cat: "build",
+  }),
+  r("bentl", "Bent liftarm L", "1 liftarm3 + 1 liftarm5", [[ID.Liftarm3, 1], [ID.Liftarm5, 1]], ID.BentL, 1, {
+    shape: [ID.Liftarm3, ID.Liftarm5],
+    w: 2,
+    h: 1,
+    cat: "build",
+  }),
+  r("bentt", "Bent liftarm T", "1 liftarm5 + 2 liftarm3", [[ID.Liftarm5, 1], [ID.Liftarm3, 2]], ID.BentT, 1, {
+    shape: [ID.Liftarm3, ID.Liftarm5, ID.Liftarm3],
+    w: 3,
+    h: 1,
+    cat: "build",
+  }),
+  r("angle3", "Angle connector #3", "2 planks + 1 axle", [[ID.Planks, 2], [ID.Axle, 1]], ID.Angle3, 1, {
+    shape: [ID.Planks, ID.Axle, ID.Planks],
+    w: 1,
+    h: 3,
+    cat: "build",
+  }),
+  r("angle4", "Angle connector #4", "2 sticks + 1 axle", [[ID.Stick, 2], [ID.Axle, 1]], ID.Angle4, 1, {
+    shape: [ID.Stick, ID.Axle, ID.Stick],
+    w: 1,
+    h: 3,
+    cat: "build",
+  }),
+  r("angle5", "Angle connector #5", "2 planks + 1 stick", [[ID.Planks, 2], [ID.Stick, 1]], ID.Angle5, 1, {
+    shape: [ID.Planks, ID.Stick, ID.Planks],
+    w: 1,
+    h: 3,
+    cat: "build",
+  }),
+  r("angle6", "Angle connector #6", "2 sticks + 1 plank", [[ID.Stick, 2], [ID.Planks, 1]], ID.Angle6, 1, {
+    shape: [ID.Stick, ID.Planks, ID.Stick],
+    w: 1,
+    h: 3,
+    cat: "build",
+  }),
+  r("crossblock", "Cross block", "2 axles + 1 plank", [[ID.Axle, 2], [ID.Planks, 1]], ID.CrossBlock, 1, {
+    shape: [ID.Axle, ID.Planks, ID.Axle],
+    w: 3,
+    h: 1,
+    cat: "build",
+  }),
+
   // P6 step 2 (Muse) — Kiln casting: the colour moulds. The donor brick is
   // the pigment/master: it is consumed into the melt, 4 plastic ingots
   // (smelted pellets) join it, and the mould pours 2 bricks of its colour.

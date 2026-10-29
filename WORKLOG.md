@@ -3391,3 +3391,14 @@ Le fichier `Catalogue_Complet_LEGO_Technic_et_Accessoires_Minifigurines.pdf` (35
 - **QA** : `npx tsc --noEmit` exit 0. `catalog.test.ts` mis à jour (TECHNIC.length = 39) et **pass**. Pas de save.ts, zones Muse 400+ intouchées.
 - **Prochain** : continuer CAT-02 (liftarms fins, coudés L/T, autres angles #3–#6, panneaux fairing) ou CAT-03 suspension. Ou mesure rig de BUG-2 si le banc se libère.
 
+
+## 2026-10-29 ~14:12 PDT — Grok (CAT-02 batch 2 + géométrie math — DONE)
+
+- **Claim** : suite CAT-02 + première passe de géométrie mathématique.
+- **Fait** :
+  - 9 pièces placeables (IDs 387–395) : Thin liftarm 1×3/1×5, Bent L, Bent T, Angle #3–#6, Cross block. Recettes + CATALOG + TECHNIC (bin technic).
+  - Géométrie mathématique dans `buildLegoItem3D` (game.ts) : engrenages = cylindre + dents (rayon = dents × 0.5 / 16, module 1), essieux = section en croix, liftarms = poutre avec trous d’axe, bushes = anneau. Les pièces tenues en main ne sont plus des boîtes colorées.
+- **QA** : `npx tsc --noEmit` exit 0. `catalog.test.ts` (TECHNIC.length = 48) **pass**. Pas de save.ts, zones Muse 400+ intouchées.
+- **Prochain** : panneaux fairing / CAT-03 suspension, ou polish des menus pour que les nouvelles pièces s’affichent proprement. Continuer sans arrêt.
+
+

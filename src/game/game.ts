@@ -1777,6 +1777,48 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return { group, isTool: false, flames };
     }
 
+    // Mathematical Technic geometry (module 1, radius = teeth * 0.5 / 16 for visual scale)
+    const techMat = skin(baseHex);
+    if (id === ID.Gear8 || id === ID.Gear16 || id === ID.Gear24 || id === ID.Gear40 || id === ID.Bevel12 || id === ID.Bevel20) {
+      const teeth = id === ID.Gear8 ? 8 : id === ID.Gear16 ? 16 : id === ID.Gear24 ? 24 : id === ID.Gear40 ? 40 : id === ID.Bevel12 ? 12 : 20;
+      const r = (teeth * 0.5) / 16 * s * 2.2;
+      const thick = s * 0.18;
+      addCylPart(group, r * 0.72, r * 0.72, thick, 0, 0, 0, techMat, 24);
+      for (let i = 0; i < teeth; i++) {
+        const a = (i / teeth) * Math.PI * 2;
+        const tx = Math.cos(a) * r;
+        const tz = Math.sin(a) * r;
+        addBoxPart(group, thick * 0.55, thick, thick * 0.55, tx, 0, tz, techMat);
+      }
+      addCylPart(group, s * 0.06, s * 0.06, thick * 1.4, 0, 0, 0, skin(0x2a2e32), 10);
+      return { group, isTool: false, flames };
+    }
+    if (id === ID.Axle || id === ID.Worm) {
+      const len = s * 0.9;
+      addBoxPart(group, s * 0.07, len, s * 0.07, 0, 0, 0, techMat);
+      addBoxPart(group, s * 0.14, len, s * 0.04, 0, 0, 0, techMat);
+      addBoxPart(group, s * 0.04, len, s * 0.14, 0, 0, 0, techMat);
+      return { group, isTool: false, flames };
+    }
+    if (id === ID.Liftarm3 || id === ID.Liftarm5 || id === ID.Liftarm7 || id === ID.Thin3 || id === ID.Thin5) {
+      const holes = id === ID.Liftarm3 || id === ID.Thin3 ? 3 : id === ID.Liftarm5 || id === ID.Thin5 ? 5 : 7;
+      const thin = id === ID.Thin3 || id === ID.Thin5;
+      const w = thin ? s * 0.22 : s * 0.42;
+      const len = holes * s * 0.28;
+      addBoxPart(group, w, s * 0.16, len, 0, 0, 0, techMat);
+      for (let i = 0; i < holes; i++) {
+        const z = (i - (holes - 1) / 2) * s * 0.28;
+        addCylPart(group, s * 0.055, s * 0.055, s * 0.18, 0, 0, z, skin(0x1a1a1a), 8);
+      }
+      return { group, isTool: false, flames };
+    }
+    if (id === ID.Bush || id === ID.HalfBush) {
+      const h = id === ID.HalfBush ? s * 0.08 : s * 0.16;
+      addCylPart(group, s * 0.12, s * 0.12, h, 0, 0, 0, techMat, 12);
+      addCylPart(group, s * 0.045, s * 0.045, h * 1.2, 0, 0, 0, skin(0x1a1a1a), 8);
+      return { group, isTool: false, flames };
+    }
+
     if (id === ID.Brew) {
       const stoneMat = skin(0x70757d);
       const rodMat = skin(0xffb82e);

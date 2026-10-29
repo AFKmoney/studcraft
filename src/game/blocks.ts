@@ -391,6 +391,16 @@ export const ID = {
   Angle1: 384,
   Angle2: 385,
   Frame57: 386,
+  // CAT-02 batch 2: thin liftarms, bent, more angles
+  Thin3: 387,
+  Thin5: 388,
+  BentL: 389,
+  BentT: 390,
+  Angle3: 391,
+  Angle4: 392,
+  Angle5: 393,
+  Angle6: 394,
+  CrossBlock: 395,
   // Muse lane (P2 welding): IDs 400+ are reserved for the brick-layer
   // pillars so they can never collide with Grok's Technic catalogue.
   Welder: 400,
@@ -1324,6 +1334,16 @@ put(b(ID.PinFree, "Pin 2L free", "#c5ccd3", "#e0e4e8", "#8e959c", "#4a5058", { h
 put(b(ID.Angle1, "Angle connector #1", "#f0c43a", "#ffe14a", "#c4924a", "#8a6428", { hard: 0.4 }));
 put(b(ID.Angle2, "Angle connector #2", "#e07a3d", "#f0a060", "#c45a20", "#8a3a10", { hard: 0.4 }));
 put(b(ID.Frame57, "Frame 5×7", "#3a3e44", "#4a5058", "#2a2e32", "#1a1a1a", { hard: 0.4 }));
+// CAT-02 batch 2
+put(b(ID.Thin3, "Thin liftarm 1×3", "#6e767e", "#8e959c", "#4a5058", "#2a2e32", { hard: 0.4 }));
+put(b(ID.Thin5, "Thin liftarm 1×5", "#6e767e", "#8e959c", "#4a5058", "#2a2e32", { hard: 0.4 }));
+put(b(ID.BentL, "Bent liftarm L", "#4a5058", "#6e767e", "#2a2e32", "#1a1a1a", { hard: 0.4 }));
+put(b(ID.BentT, "Bent liftarm T", "#4a5058", "#6e767e", "#2a2e32", "#1a1a1a", { hard: 0.4 }));
+put(b(ID.Angle3, "Angle connector #3", "#f0c43a", "#ffe14a", "#c4924a", "#8a6428", { hard: 0.4 }));
+put(b(ID.Angle4, "Angle connector #4", "#e07a3d", "#f0a060", "#c45a20", "#8a3a10", { hard: 0.4 }));
+put(b(ID.Angle5, "Angle connector #5", "#3b96e4", "#5eb0e5", "#1d4f91", "#163a6b", { hard: 0.4 }));
+put(b(ID.Angle6, "Angle connector #6", "#2a2e32", "#4a5058", "#1a1a1a", "#0e0e0e", { hard: 0.4 }));
+put(b(ID.CrossBlock, "Cross block", "#c5ccd3", "#e0e4e8", "#8e959c", "#4a5058", { hard: 0.4 }));
 
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];
@@ -1728,6 +1748,15 @@ export const CATALOG = [
   ID.Angle1,
   ID.Angle2,
   ID.Frame57,
+  ID.Thin3,
+  ID.Thin5,
+  ID.BentL,
+  ID.BentT,
+  ID.Angle3,
+  ID.Angle4,
+  ID.Angle5,
+  ID.Angle6,
+  ID.CrossBlock,
 ];
 
 /** Parts the player can take from the Technic bin. Click-states stay out. */
@@ -1771,6 +1800,15 @@ export const TECHNIC = [
   ID.Angle1,
   ID.Angle2,
   ID.Frame57,
+  ID.Thin3,
+  ID.Thin5,
+  ID.BentL,
+  ID.BentT,
+  ID.Angle3,
+  ID.Angle4,
+  ID.Angle5,
+  ID.Angle6,
+  ID.CrossBlock,
 ] as const;
 
 export const COLORS = [ID.Red, ID.Orange, ID.Yellow, ID.Green, ID.Blue, ID.Azure, ID.Pink, ID.White, ID.Black];
