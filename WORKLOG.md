@@ -3448,3 +3448,13 @@ Le fichier `Catalogue_Complet_LEGO_Technic_et_Accessoires_Minifigurines.pdf` (35
 - **Prochain** : plus de panneaux ou pièces restantes du PDF (moteurs électriques = P5b, ou structure restante). Continuer.
 
 
+
+## 2026-10-29 ~14:34 PDT — Grok (électrique P5b — DONE, tests verts)
+
+- **Claim** : CAT-05 électrique. IDs 446–452.
+- **Fait** : TechHub 4 ports (renommé pour éviter le conflit avec le Hub suspension 398), Motor M/L/XL, Servo, Remote, Battery. Placeables, recettes, CATALOG + TECHNIC. Géométrie math : boîtiers avec ports, moteurs cylindriques, télécommande.
+- **Correction** : collision de nom `Hub` détectée au tsc. Renommé en `TechHub` pour l’électrique ; l’ancien Hub suspension (398) intact.
+- **QA** : tsc 0. Tous les tests `src/game/*.test.ts` : **35/35 pass**. Pas de save.ts.
+- **Prochain** : structure restante (liftarms longs, frames 7×11/11×15, pins hybrides) ou CAT-06 si lane Muse libre. Continuer jusqu’à couverture PDF.
+
+

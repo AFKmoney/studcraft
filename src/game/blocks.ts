@@ -433,6 +433,14 @@ export const ID = {
   FairLeft: 443,
   FairRight: 444,
   FairLarge: 445,
+  // Electric P5b (CAT-05)
+  TechHub: 446,
+  MotorM: 447,
+  MotorL: 448,
+  MotorXL: 449,
+  Servo: 450,
+  Remote: 451,
+  Battery: 452,
   // Muse lane (P2 welding): IDs 400+ are reserved for the brick-layer
   // pillars so they can never collide with Grok's Technic catalogue.
   Welder: 400,
@@ -1408,6 +1416,14 @@ put(b(ID.SmallPump, "Small motorized pump", "#3a5560", "#5a7d8c", "#2a3e48", "#1
 put(b(ID.FairLeft, "Fairing left", "#f4f1ea", "#ffffff", "#c5ccd3", "#8e959c", { hard: 0.4 }));
 put(b(ID.FairRight, "Fairing right", "#f4f1ea", "#ffffff", "#c5ccd3", "#8e959c", { hard: 0.4 }));
 put(b(ID.FairLarge, "Fairing large", "#e0e4e8", "#f4f6f8", "#c5ccd3", "#8e959c", { hard: 0.4 }));
+// Electric P5b
+put(b(ID.TechHub, "Technic Hub 4 ports", "#1a1a1a", "#2a2e32", "#0e0e0e", "#050505", { hard: 0.4 }));
+put(b(ID.MotorM, "Motor M", "#e23b2f", "#ff6a3d", "#b02620", "#8a1c18", { hard: 0.4 }));
+put(b(ID.MotorL, "Motor L", "#e23b2f", "#ff6a3d", "#b02620", "#8a1c18", { hard: 0.4 }));
+put(b(ID.MotorXL, "Motor XL", "#e23b2f", "#ff6a3d", "#b02620", "#8a1c18", { hard: 0.4 }));
+put(b(ID.Servo, "Servo", "#f0c43a", "#ffe14a", "#c4924a", "#8a6428", { hard: 0.4 }));
+put(b(ID.Remote, "Remote control", "#3b96e4", "#5eb0e5", "#1d4f91", "#163a6b", { hard: 0.4 }));
+put(b(ID.Battery, "Battery box", "#2a2e32", "#4a5058", "#1a1a1a", "#0e0e0e", { hard: 0.4 }));
 
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];
@@ -1848,6 +1864,13 @@ export const CATALOG = [
   ID.FairLeft,
   ID.FairRight,
   ID.FairLarge,
+  ID.TechHub,
+  ID.MotorM,
+  ID.MotorL,
+  ID.MotorXL,
+  ID.Servo,
+  ID.Remote,
+  ID.Battery,
 ];
 
 /** Parts the player can take from the Technic bin. Click-states stay out. */
@@ -1927,6 +1950,13 @@ export const TECHNIC = [
   ID.FairLeft,
   ID.FairRight,
   ID.FairLarge,
+  ID.TechHub,
+  ID.MotorM,
+  ID.MotorL,
+  ID.MotorXL,
+  ID.Servo,
+  ID.Remote,
+  ID.Battery,
 ] as const;
 
 export const COLORS = [ID.Red, ID.Orange, ID.Yellow, ID.Green, ID.Blue, ID.Azure, ID.Pink, ID.White, ID.Black];

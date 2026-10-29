@@ -1064,7 +1064,7 @@ export const RECIPES: Recipe[] = [
     h: 1,
     cat: "build",
   }),
-  r("hub", "Hub", "1 axle + 2 bushes", [[ID.Axle, 1], [ID.Bush, 2]], ID.Hub, 1, {
+  r("hub", "Hub", "1 axle + 2 bushes", [[ID.Axle, 1], [ID.Bush, 2]], ID.TechHub, 1, {
     shape: [ID.Bush, ID.Axle, ID.Bush],
     w: 3,
     h: 1,
@@ -1215,6 +1215,49 @@ export const RECIPES: Recipe[] = [
   r("fairlarge", "Fairing large", "2 fairing1", [[ID.Fairing1, 2]], ID.FairLarge, 1, {
     shape: [ID.Fairing1, ID.Fairing1],
     w: 2,
+    h: 1,
+    cat: "build",
+  }),
+
+  r("hub", "Technic Hub 4 ports", "1 battery + 2 gears", [[ID.Battery, 1], [ID.Gear16, 2]], ID.TechHub, 1, {
+    shape: [ID.Gear16, ID.Battery, ID.Gear16],
+    w: 3,
+    h: 1,
+    cat: "build",
+  }),
+  r("motorm", "Motor M", "1 gear 8T + 1 axle", [[ID.Gear8, 1], [ID.Axle, 1]], ID.MotorM, 1, {
+    shape: [ID.Gear8, ID.Axle],
+    w: 1,
+    h: 2,
+    cat: "build",
+  }),
+  r("motorl", "Motor L", "1 motor M + 1 gear 16T", [[ID.MotorM, 1], [ID.Gear16, 1]], ID.MotorL, 1, {
+    shape: [ID.MotorM, ID.Gear16],
+    w: 1,
+    h: 2,
+    cat: "build",
+  }),
+  r("motorxl", "Motor XL", "1 motor L + 1 gear 24T", [[ID.MotorL, 1], [ID.Gear24, 1]], ID.MotorXL, 1, {
+    shape: [ID.MotorL, ID.Gear24],
+    w: 1,
+    h: 2,
+    cat: "build",
+  }),
+  r("servo", "Servo", "1 motor M + 1 gear 8T", [[ID.MotorM, 1], [ID.Gear8, 1]], ID.Servo, 1, {
+    shape: [ID.MotorM, ID.Gear8],
+    w: 2,
+    h: 1,
+    cat: "build",
+  }),
+  r("remote", "Remote control", "1 hub + 1 stick", [[ID.TechHub, 1], [ID.Stick, 1]], ID.Remote, 1, {
+    shape: [ID.Hub, ID.Stick],
+    w: 2,
+    h: 1,
+    cat: "build",
+  }),
+  r("battery", "Battery box", "2 planks + 1 axle", [[ID.Planks, 2], [ID.Axle, 1]], ID.Battery, 1, {
+    shape: [ID.Planks, ID.Axle, ID.Planks],
+    w: 3,
     h: 1,
     cat: "build",
   }),

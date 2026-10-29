@@ -1936,6 +1936,26 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       return { group, isTool: false, flames };
     }
+    if (id === ID.TechHub || id === ID.Battery || id === ID.Remote) {
+      addBoxPart(group, s * 0.5, s * 0.3, s * 0.4, 0, 0, 0, techMat);
+      for (let i = 0; i < 4; i++) {
+        const x = (i - 1.5) * s * 0.1;
+        addCylPart(group, s * 0.03, s * 0.03, s * 0.08, x, s * 0.18, 0, skin(0x3b96e4), 6);
+      }
+      if (id === ID.Remote) {
+        addBoxPart(group, s * 0.15, s * 0.1, s * 0.08, 0, s * 0.22, 0, skin(0x5eb0e5));
+      }
+      return { group, isTool: false, flames };
+    }
+    if (id === ID.MotorM || id === ID.MotorL || id === ID.MotorXL || id === ID.Servo) {
+      const scale = id === ID.MotorM ? 0.7 : id === ID.MotorL ? 1.0 : id === ID.MotorXL ? 1.3 : 0.8;
+      addBoxPart(group, s * 0.35 * scale, s * 0.4 * scale, s * 0.3 * scale, 0, 0, 0, techMat);
+      addCylPart(group, s * 0.06, s * 0.06, s * 0.25 * scale, 0, 0, s * 0.2 * scale, skin(0x2a2e32), 10);
+      if (id === ID.Servo) {
+        addBoxPart(group, s * 0.12, s * 0.12, s * 0.08, 0, s * 0.15, 0, skin(0xf0c43a));
+      }
+      return { group, isTool: false, flames };
+    }
 
     if (id === ID.Brew) {
       const stoneMat = skin(0x70757d);
