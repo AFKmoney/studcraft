@@ -3202,3 +3202,21 @@ Ordre de Philippe (fil principal, 13:12–13:13 PDT) : « Il faut que tout ce qu
 - **Espace d'IDs** : la plage Grok 358–399 est presque pleine (376 atteint) — nouvelles plages à trancher au claim dans ce WORKLOG avant de coder (structure/transmission = nouvelle plage à réserver; accessoires = 400+ lane Muse, suite de l'audit P7).
 - **Accessibilité** : P8-1 (inventaire par catégories) est le juge de paix — un item non visible dans l'inventaire ne compte pas comme couvert.
 - **Séquence** : lane Muse — après les 3 bogues de Philippe (éclairage briques, arc, gravité); lane Grok — selon ses claims, en parallèle. Chaque famille livrée est cochée ici avec sa mesure (def + inventaire + rendu vérifiés).
+
+## BUG-4 + LOIS — Philippe (2026-10-29 ~13:15 PDT) : l'inventaire créatif ne montre pas le contenu livré; le jeu doit s'accorder au master plan
+
+Verdict de Philippe en jeu (Créatif) : « je vois aucun bloc technique, aucun rien » — confirmé par la mesure du registre ce run : le catalogue créatif est la liste **maintenue à la main** `CATALOG` (blocks.ts ~1342), filtrée par GameView.tsx (~1674) pour l'inventaire. État mesuré :
+- **Pièces Technic 345–376 : 0 / 32 dans CATALOG.** Aucune pièce de Grok n'apparaît dans l'inventaire créatif.
+- **Items P6/P7 400–422 : 10 / 23 seulement** — manquent 406, 407, 408, 409, 411, 412, 413, 415, 416, 418, 420, 421, 422 (outils et briques trempées).
+- (Vérifié au passage : l'arc 138 EST dans CATALOG — BUG-2 reste un écart distinct, à localiser ailleurs.)
+
+**Cause racine** : une liste à la main qui dérive du registre à chaque livraison. **Fix de fond (pas un patch de liste)** : le catalogue doit se DÉRIVER du registre par catégories du système plastique (P8-1), avec une assertion QA permanente — tout item défini est dans le catalogue ou exempté explicitement dans ce WORKLOG; le diff defs↔catalogue est publié à chaque livraison d'items.
+
+### Escalade de Philippe — P8-1 devient REFONTE COMPLÈTE DES INVENTAIRES
+« Toutes les inventaires doivent être repensés » : pas seulement ajouter les pièces manquantes — repenser l'organisation complète (Créatif ET Survie) autour du système plastique (catégories P8-1 : Blocs / Briques / Pièces techniques / Électronique / Outils et armes / Matériaux), pour que tout le contenu du jeu soit visible, trouvable et prenable.
+
+### LOI — LE JEU DOIT S'ACCORDER AU MASTER PLAN (Philippe, 13:15 PDT)
+Une étape n'est « faite » que lorsque le joueur peut la VOIR, l'ATTEINDRE et l'UTILISER en jeu (inventaire, UI, monde). Du code livré mais invisible ne compte pas. Conséquences : (1) chaque QA de livraison inclut désormais une assertion de présence en jeu (l'item apparaît au catalogue/inventaire et peut être pris); (2) les étapes déjà cochées qui échouent ce test sont ROUVERTES jusqu'à conformité (à date : visibilité P5 = 0/32, visibilité P6/P7 = 10/23).
+
+### LOI DE COORDINATION — LE FILET MUTUEL (Philippe, 13:15 PDT)
+« Grok est sur le cas, mais ce qu'il oublie, toi tu dois le faire, et vice versa. » Les lanes et les claims restent la règle d'ordre, mais **aucun item du master plan ne meurt d'un oubli** : ce que l'agent propriétaire oublie, laisse tomber ou ne voit pas, l'autre le ramasse, le fait et le journalise ici (en nommant la reprise). Vaut dans les deux sens, Muse ↔ Grok.
