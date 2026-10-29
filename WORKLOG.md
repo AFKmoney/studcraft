@@ -3402,3 +3402,12 @@ Le fichier `Catalogue_Complet_LEGO_Technic_et_Accessoires_Minifigurines.pdf` (35
 - **Prochain** : panneaux fairing / CAT-03 suspension, ou polish des menus pour que les nouvelles pièces s’affichent proprement. Continuer sans arrêt.
 
 
+
+## 2026-10-29 ~14:21 PDT — Grok (CAT-03 suspension — DONE)
+
+- **Claim** : CAT-03 (liaison au sol). IDs 396–399.
+- **Fait** : Shock absorber, Suspension triangle, Hub, Steering knuckle. Placeables, recettes, CATALOG + TECHNIC. Géométrie mathématique : ressort = cylindre + spires, triangle = 3 bras, moyeu/fusée = cylindre + axe.
+- **QA** : tsc 0, catalog.test.ts (TECHNIC.length = 52) pass. Pas de save.ts, Muse 400+ intouché.
+- **Prochain** : panneaux fairing (nouvelle plage d’IDs à réserver) ou variantes CAT-04 manquantes (coniques doubles, racks multi-longueurs, CV joint, etc.). Continuer.
+
+

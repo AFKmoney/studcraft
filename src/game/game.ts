@@ -1818,6 +1818,28 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       addCylPart(group, s * 0.045, s * 0.045, h * 1.2, 0, 0, 0, skin(0x1a1a1a), 8);
       return { group, isTool: false, flames };
     }
+    if (id === ID.Shock) {
+      addCylPart(group, s * 0.06, s * 0.06, s * 0.7, 0, 0, 0, skin(0x8d5a34), 10);
+      for (let i = 0; i < 6; i++) {
+        const y = (i - 2.5) * s * 0.1;
+        addCylPart(group, s * 0.09, s * 0.09, s * 0.03, 0, y, 0, techMat, 8);
+      }
+      return { group, isTool: false, flames };
+    }
+    if (id === ID.Triangle) {
+      addBoxPart(group, s * 0.7, s * 0.08, s * 0.1, 0, 0, 0, techMat);
+      addBoxPart(group, s * 0.1, s * 0.08, s * 0.5, -s * 0.3, 0, -s * 0.2, techMat);
+      addBoxPart(group, s * 0.1, s * 0.08, s * 0.5, s * 0.3, 0, -s * 0.2, techMat);
+      return { group, isTool: false, flames };
+    }
+    if (id === ID.Hub || id === ID.Knuckle) {
+      addCylPart(group, s * 0.14, s * 0.14, s * 0.2, 0, 0, 0, techMat, 16);
+      addCylPart(group, s * 0.05, s * 0.05, s * 0.35, 0, 0, 0, skin(0x1a1a1a), 8);
+      if (id === ID.Knuckle) {
+        addBoxPart(group, s * 0.08, s * 0.3, s * 0.08, s * 0.18, 0, 0, techMat);
+      }
+      return { group, isTool: false, flames };
+    }
 
     if (id === ID.Brew) {
       const stoneMat = skin(0x70757d);

@@ -401,6 +401,11 @@ export const ID = {
   Angle5: 393,
   Angle6: 394,
   CrossBlock: 395,
+  // CAT-03 suspension (Grok, end of 377-399 range)
+  Shock: 396,
+  Triangle: 397,
+  Hub: 398,
+  Knuckle: 399,
   // Muse lane (P2 welding): IDs 400+ are reserved for the brick-layer
   // pillars so they can never collide with Grok's Technic catalogue.
   Welder: 400,
@@ -1344,6 +1349,11 @@ put(b(ID.Angle4, "Angle connector #4", "#e07a3d", "#f0a060", "#c45a20", "#8a3a10
 put(b(ID.Angle5, "Angle connector #5", "#3b96e4", "#5eb0e5", "#1d4f91", "#163a6b", { hard: 0.4 }));
 put(b(ID.Angle6, "Angle connector #6", "#2a2e32", "#4a5058", "#1a1a1a", "#0e0e0e", { hard: 0.4 }));
 put(b(ID.CrossBlock, "Cross block", "#c5ccd3", "#e0e4e8", "#8e959c", "#4a5058", { hard: 0.4 }));
+// CAT-03
+put(b(ID.Shock, "Shock absorber", "#c4924a", "#e0b15a", "#8d5a34", "#6d4426", { hard: 0.4 }));
+put(b(ID.Triangle, "Suspension triangle", "#4a5058", "#6e767e", "#2a2e32", "#1a1a1a", { hard: 0.4 }));
+put(b(ID.Hub, "Hub", "#2a2e32", "#4a5058", "#1a1a1a", "#0e0e0e", { hard: 0.4 }));
+put(b(ID.Knuckle, "Steering knuckle", "#3a3e44", "#5a5e66", "#2a2e32", "#1a1a1a", { hard: 0.4 }));
 
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];
@@ -1757,6 +1767,10 @@ export const CATALOG = [
   ID.Angle5,
   ID.Angle6,
   ID.CrossBlock,
+  ID.Shock,
+  ID.Triangle,
+  ID.Hub,
+  ID.Knuckle,
 ];
 
 /** Parts the player can take from the Technic bin. Click-states stay out. */
@@ -1809,6 +1823,10 @@ export const TECHNIC = [
   ID.Angle5,
   ID.Angle6,
   ID.CrossBlock,
+  ID.Shock,
+  ID.Triangle,
+  ID.Hub,
+  ID.Knuckle,
 ] as const;
 
 export const COLORS = [ID.Red, ID.Orange, ID.Yellow, ID.Green, ID.Blue, ID.Azure, ID.Pink, ID.White, ID.Black];
