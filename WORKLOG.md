@@ -3478,3 +3478,15 @@ Le fichier `Catalogue_Complet_LEGO_Technic_et_Accessoires_Minifigurines.pdf` (35
 - **Prochain** : polish visuel des menus / icônes pour les nouvelles pièces, ou dernière passe de variantes si le PDF en liste encore. Continuer.
 
 
+
+## 2026-10-29 ~14:41 PDT — Grok (BUG-3 gravité LEGO — DONE, tests verts)
+
+- **Claim** : BUG-3, la gravité des LEGO. Philippe : « La gravité des lego bro est pas la ».
+- **Fait** :
+  - Seuil de stress des briques abaissé de 0.75 s à **0.12 s** : une brique non supportée tombe presque immédiatement au lieu d’attendre.
+  - `spawnFaller` voit maintenant la couche briques : un bloc `fall` (sable/gravier) ne tombe pas s’il y a une brique en dessous.
+  - `updateFallers` atterrit aussi sur une brique (plus seulement sur un voxel solide).
+- **QA** : tsc 0. Tous les tests `src/game/*.test.ts` : **35/35 pass**. Pas de save.ts, zones Muse 400+ intouchées.
+- **Prochain** : retest Philippe sur Pages. Si la chute n’est toujours pas visible, le prochain geste est d’élargir le scan de gravité (actuellement centré joueur ±5 / +8..−2) ou de forcer le détachement immédiat sans stress.
+
+

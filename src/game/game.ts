@@ -4711,7 +4711,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   function spawnFaller(x: number, y: number, z: number) {
     const id = world.get(x, y, z);
     if (!def(id).fall || fallers.length >= FALL_CAP) return;
-    if (def(world.get(x, y - 1, z)).solid) return; // still supported
+    if (def(world.get(x, y - 1, z)).solid) return; // still supported by voxel
+    // BUG-3: also supported if a brick occupies the cell below
+    const near: Brick[] = [];
+    bricksNearCell(x, y - 1, z, near);
+    for (const b of near) {
+      if (b.sy === y - 1) return; // brick under it
+    }
     world.set(x, y, z, ID.Air);
     markDirtyAt(x, z);
     const mesh = new THREE.Mesh(fallerGeo(id), opaqueLam);
@@ -4741,7 +4747,15 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       for (let s = 0; s < steps && !landed; s++) {
         f.y += f.vy * sdt;
         const cellY = Math.floor(f.y);
-        if (def(world.get(cx, cellY, cz)).solid) {
+        const voxelSolid = def(world.get(cx, cellY, cz)).solid;
+        // BUG-3: also land on a brick in this cell
+        let brickSolid = false;
+        if (!voxelSolid) {
+          const near: Brick[] = [];
+          bricksNearCell(cx, cellY, cz, near);
+          for (const b of near) if (b.sy === cellY) { brickSolid = true; break; }
+        }
+        if (voxelSolid || brickSolid) {
           const landY = cellY + 1;
           world.set(cx, landY, cz, f.id);
           markDirtyAt(cx, cz);
@@ -5183,7 +5197,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   const fallingBricks: FallingBrick[] = [];
   const brickStress = new Map<string, number>();
   const brickSagged = new Set<string>(); // brick keys currently rendered with sag > 0
-  const BRICK_STRESS_MAX = 0.75;
+  const BRICK_STRESS_MAX = 0.12; // was 0.75 — Philippe: LEGO gravity was not visible
   const BRICK_SAG_MAX = 0.15;
   // P6-2 Trempe (Muse): tempered colour bricks (410-418) are the grade
   // above plain cast bricks — they hold stress twice as long before
