@@ -2621,3 +2621,10 @@ EN COURS au début de la passe. Fichiers : `blocks.ts`, `recipes.ts`, `mechLink.
 
 
 
+
+## P7 — ADDENDUM ÉLECTRONIQUE (Philippe, 2026-10-29 ~01:26 PDT)
+La chaîne matière de l'électronique suit la vraie logique, comme tout le reste :
+- **Le silicium vient du SABLE chauffé** (le sable est déjà dans le monde) : sable → haute température → silicium → les puces. C'est la tête de chaîne de TOUTE l'électronique (P5b/P5d).
+- **L'or = le conducteur** : contacts et pistes dans les pièces électroniques. Le silicone/plastique = l'isolant et le boîtier.
+- **Une MACHINE À PIÈCES ÉLECTRONIQUES dédiée** (distincte de la Fonderie) : silicium + or + boîtier plastique → moteurs, hubs, capteurs. Pas de silicium, pas d'or = pas d'électronique.
+- Et comme tout le reste : une pièce électronique refondue REND ses matériaux (séparation à la fonte) — la matière circule, elle ne disparaît jamais.
