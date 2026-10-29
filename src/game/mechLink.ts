@@ -29,6 +29,7 @@ export type MechBlockIds = {
   ringLo: number;
   b12: number;
   b20: number;
+  act: number;
   water: number;
   door: number;
   doorOpen: number;
@@ -65,6 +66,7 @@ function specFor(id: number, ids: MechBlockIds): Spec | null {
   if (id === ids.ring || id === ids.ringLo) return { kind: "axle", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.b12) return { kind: "gear", teeth: 12, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.b20) return { kind: "gear", teeth: 20, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
+  if (id === ids.act) return { kind: "axle", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   return null;
 }
 
@@ -125,6 +127,12 @@ export function clearTraps() {
   trapAcc.clear();
 }
 
+const actAcc = new Map<string, number>();
+
+export function clearActs() {
+  actAcc.clear();
+}
+
 function isGear(id: number, ids: MechBlockIds) {
   return id === ids.g8 || id === ids.g16 || id === ids.g24 || id === ids.g40;
 }
@@ -178,6 +186,7 @@ export function stepMech(
   const rings: MechCell[] = [];
   const joints: MechCell[] = [];
   const bevels: MechCell[] = [];
+  const acts: MechCell[] = [];
   for (const c of cells) {
     const id = get(c.x, c.y, c.z);
     if (id === ids.rack) racks.push(c);
@@ -185,6 +194,7 @@ export function stepMech(
     if (id === ids.trap) traps.push(c);
     if (id === ids.ring || id === ids.ringLo) rings.push(c);
     if (isBevel(id, ids)) bevels.push(c);
+    if (id === ids.act) acts.push(c);
     const spec = specFor(id, ids);
     if (!spec) continue;
     let drive = spec.drive;
@@ -333,6 +343,27 @@ export function stepMech(
     trapAcc.delete(k);
     const left = acc - step;
     if (left) trapAcc.set(k, left);
+  }
+  for (const c of acts) {
+    const sp = speedAt(c.x * 2, c.y * 2, c.z * 2);
+    if (!sp.n || !dt) continue;
+    const k = skey(c.x, c.y, c.z);
+    const acc = (actAcc.get(k) ?? 0) + (sp.n / sp.d) * dt;
+    const step = acc >= 1 ? 1 : acc <= -1 ? -1 : 0;
+    if (!step) {
+      actAcc.set(k, acc);
+      continue;
+    }
+    const fromX = step > 0 ? c.x + 1 : c.x + 2;
+    const toX = fromX + step;
+    const load = get(fromX, c.y, c.z);
+    if (load && get(toX, c.y, c.z) === 0 && toX !== c.x) {
+      edits.push({ x: fromX, y: c.y, z: c.z, id: 0 });
+      edits.push({ x: toX, y: c.y, z: c.z, id: load });
+    }
+    actAcc.delete(k);
+    const rest = acc - step;
+    if (rest) actAcc.set(k, rest);
   }
   return edits;
 }
