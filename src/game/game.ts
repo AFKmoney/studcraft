@@ -312,6 +312,7 @@ declare global {
       placeBrickAt?: (id: number, sx: number, sy: number, sz: number) => boolean;
       getBricks?: () => [number, number, number, number][];
       getMineState?: () => { mine: number; time: number; key: string; target: string };
+      getIntegrity?: () => { total: number; supported: number; stressed: string[]; falling: number; stress: Record<string, number> };
     };
   }
 }
@@ -4525,6 +4526,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   function clearBricks() {
     bricks.clear();
     brickGrid.clear();
+    brickStress.clear();
+    for (const f of fallingBricks) scene.remove(f.mesh);
+    fallingBricks.length = 0;
     for (const m of brickMeshes.values()) {
       scene.remove(m);
       m.dispose();
@@ -4827,6 +4831,179 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     mineTime = 0;
     mineKey = "";
     hideCrack();
+  }
+
+  // ---- P1: structural integrity (Muse, master plan P1) -----------------
+  // A brick holds by the studs it actually covers. Studs covered from
+  // below (voxel ground quadrants + bricks underneath, per 1x1-stud
+  // quadrant, cap 4): >= 2 covered = ANCHORED. Support then propagates:
+  // stacked on a supported brick (any stud overlap) inherits its
+  // cantilever count; a purely horizontal side-clutch step adds 1, max 2
+  // steps — the 3rd brick of a free cantilever is unsupported.
+  // Unsupported bricks accumulate stress on a 0.25 s scan; at 0.75 s of
+  // game time they let go and fall as real entities, re-landing as
+  // bricks where they stop (or dropping as items if the spot is taken).
+  // Scans are periodic, so cutting a voxel support is caught within one
+  // scan. Cost: zero when no bricks exist; O(bricks^2) worst per scan
+  // (brick counts are player-scale). Sag visual = next P1 slice.
+  type FallingBrick = { id: number; x: number; z: number; y: number; vy: number; mesh: THREE.Mesh };
+  const fallingBricks: FallingBrick[] = [];
+  const brickStress = new Map<string, number>();
+  let integrityAcc = 0;
+  let lastIntegrity = { total: 0, supported: 0, stressed: [] as string[], falling: 0 };
+
+  function studQuadrantCovered(b: Brick, qx: number, qz: number): boolean {
+    const wx = Math.floor((b.sx + qx) * 0.5 + 0.25);
+    const wz = Math.floor((b.sz + qz) * 0.5 + 0.25);
+    const below = world.get(wx, b.sy - 1, wz);
+    if (below !== ID.Air && def(below).solid) return true;
+    const near: Brick[] = [];
+    bricksNearCell(wx, b.sy - 1, wz, near);
+    for (const ob of near) {
+      if (ob.sy !== b.sy - 1) continue;
+      if (b.sx + qx >= ob.sx && b.sx + qx < ob.sx + 2 && b.sz + qz >= ob.sz && b.sz + qz < ob.sz + 2) return true;
+    }
+    return false;
+  }
+
+  function studsCoveredBelow(b: Brick): number {
+    let n = 0;
+    for (let qx = 0; qx < 2; qx++) for (let qz = 0; qz < 2; qz++) if (studQuadrantCovered(b, qx, qz)) n++;
+    return n;
+  }
+
+  function computeIntegrity() {
+    const cant = new Map<string, number>();
+    const all = [...bricks.values()];
+    for (const b of all) if (studsCoveredBelow(b) >= 2) cant.set(brickKey(b.sx, b.sy, b.sz), 0);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const b of all) {
+        const k = brickKey(b.sx, b.sy, b.sz);
+        if (cant.has(k)) continue;
+        let best = -1;
+        for (const ob of all) {
+          if (ob === b) continue;
+          const oc = cant.get(brickKey(ob.sx, ob.sy, ob.sz));
+          if (oc === undefined) continue;
+          const ox = Math.min(b.sx + 2, ob.sx + 2) - Math.max(b.sx, ob.sx);
+          const oz = Math.min(b.sz + 2, ob.sz + 2) - Math.max(b.sz, ob.sz);
+          if (ob.sy === b.sy - 1 && ox > 0 && oz > 0) best = best < 0 ? oc : Math.min(best, oc);
+          else if (ob.sy === b.sy && ((ox === 0 && oz > 0) || (oz === 0 && ox > 0)) && oc + 1 <= 2)
+            best = best < 0 ? oc + 1 : Math.min(best, oc + 1);
+        }
+        if (best >= 0) {
+          cant.set(k, best);
+          changed = true;
+        }
+      }
+    }
+    return cant;
+  }
+
+  function detachBrick(key: string) {
+    const b = bricks.get(key);
+    if (!b) return;
+    removeBrick(key);
+    brickStress.delete(key);
+    if (fallingBricks.length >= FALL_CAP) {
+      dropItem(b.id, 1, b.sx / 2 + 0.5, b.sy + 0.55, b.sz / 2 + 0.5);
+      return;
+    }
+    const mesh = new THREE.Mesh(brickGeo(b.id), opaqueLam);
+    mesh.position.set(b.sx / 2 + 0.5, b.sy + 0.5, b.sz / 2 + 0.5);
+    if (plasticOn) {
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+    }
+    scene.add(mesh);
+    fallingBricks.push({ id: b.id, x: b.sx / 2, z: b.sz / 2, y: b.sy, vy: 0, mesh });
+    burst(b.sx / 2 + 0.5, b.sy + 0.4, b.sz / 2 + 0.5, def(b.id).color, 6);
+    audio.break();
+    saveDirty = true;
+  }
+
+  function updateFallingBricks(dt: number) {
+    for (let i = fallingBricks.length - 1; i >= 0; i--) {
+      const f = fallingBricks[i];
+      f.vy -= FALL_G * dt;
+      if (f.vy < FALL_TERM) f.vy = FALL_TERM;
+      const steps = Math.max(1, Math.ceil((Math.abs(f.vy) * dt) / 0.45));
+      const sdt = dt / steps;
+      let landY = -1;
+      for (let s = 0; s < steps && landY < 0; s++) {
+        const prevY = f.y;
+        f.y += f.vy * sdt;
+        const cy = Math.floor(f.y);
+        const probe: Brick = { id: f.id, sx: Math.round(f.x * 2), sy: cy, sz: Math.round(f.z * 2) };
+        for (const ck of brickCells(probe)) {
+          const [cx, , cz] = ck.split(",").map(Number);
+          if (def(world.get(cx, cy, cz)).solid) {
+            landY = cy + 1;
+            break;
+          }
+          const near: Brick[] = [];
+          bricksNearCell(cx, cy, cz, near);
+          bricksNearCell(cx, cy - 1, cz, near);
+          for (const ob of near) {
+            const ox = Math.min(f.x + 1, ob.sx / 2 + 1) - Math.max(f.x, ob.sx / 2);
+            const oz = Math.min(f.z + 1, ob.sz / 2 + 1) - Math.max(f.z, ob.sz / 2);
+            if (ox > 0 && oz > 0 && ob.sy + 1 <= prevY + 0.001 && ob.sy + 1 > f.y) {
+              landY = ob.sy + 1;
+              break;
+            }
+          }
+          if (landY >= 0) break;
+        }
+      }
+      if (landY >= 0) {
+        const sx = Math.round(f.x * 2);
+        const sz = Math.round(f.z * 2);
+        scene.remove(f.mesh);
+        fallingBricks.splice(i, 1);
+        if (brickSpaceFree(sx, landY, sz) && !brickHitsPlayer(f.x, landY, f.z)) {
+          addBrick(f.id, sx, landY, sz);
+          rebuildBrickMesh(f.id);
+        } else dropItem(f.id, 1, f.x + 0.5, landY + 0.55, f.z + 0.5);
+        burst(f.x + 0.5, landY + 0.1, f.z + 0.5, def(f.id).color, 5);
+        saveDirty = true;
+        continue;
+      }
+      if (f.y < -12) {
+        scene.remove(f.mesh);
+        fallingBricks.splice(i, 1);
+        continue;
+      }
+      f.mesh.position.set(f.x + 0.5, f.y + 0.5, f.z + 0.5);
+    }
+  }
+
+  function tickBricks(dt: number) {
+    if (fallingBricks.length) updateFallingBricks(dt);
+    if (bricks.size === 0) {
+      if (brickStress.size) brickStress.clear();
+      lastIntegrity = { total: 0, supported: 0, stressed: [], falling: fallingBricks.length };
+      return;
+    }
+    integrityAcc += dt;
+    if (integrityAcc < 0.25) return;
+    const step = integrityAcc;
+    integrityAcc = 0;
+    const cant = computeIntegrity();
+    const stressed: string[] = [];
+    for (const b of [...bricks.values()]) {
+      const k = brickKey(b.sx, b.sy, b.sz);
+      if (cant.has(k)) {
+        brickStress.delete(k);
+        continue;
+      }
+      const s = (brickStress.get(k) ?? 0) + step;
+      brickStress.set(k, s);
+      stressed.push(k);
+      if (s >= 0.75) detachBrick(k);
+    }
+    lastIntegrity = { total: bricks.size, supported: cant.size, stressed, falling: fallingBricks.length };
   }
 
   function placeBrickNow(id: number, sx: number, sy: number, sz: number) {
@@ -11450,6 +11627,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     updateFireFx();
     updateTopples(dt);
     updateFallers(dt);
+    tickBricks(dt);
     // DualSense adaptive triggers (v4.18): R2 stiffens as the block cracks
     // while you mine; L2 gets a weapon "wall" while a bow is in hand.
     if (settings.adaptive) {
@@ -11733,6 +11911,16 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // P0 QA witness (qa99b11): mining progress on the current target —
     // key "B:…" = brick branch, voxel key = classic branch, "" = no mining.
     getMineState: () => ({ mine: hud.mine, time: mineTime, key: mineKey, target: hud.targetName }),
+    // P1 QA hook: fresh integrity classification on demand (inert in play).
+    getIntegrity: () => {
+      const cant = computeIntegrity();
+      const stressed: string[] = [];
+      for (const b of bricks.values()) {
+        const k = brickKey(b.sx, b.sy, b.sz);
+        if (!cant.has(k)) stressed.push(k);
+      }
+      return { total: bricks.size, supported: cant.size, stressed, falling: fallingBricks.length, stress: Object.fromEntries(brickStress) };
+    },
     setKeys: (codes: string[]) => {
       keys.clear();
       for (const code of codes) keys.add(code);
