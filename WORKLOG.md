@@ -3559,3 +3559,15 @@ Règle de campagne : aucun bogue ne se ferme sur du code — fermeture = PASS me
 - **Régression P1 au seuil 0,12 s** : qa100/qa102 rejoués ou équivalents mesurés (cantilever, ancrage, trempe ×2) — rattaché à la vérification BUG-3.
 
 **Hors bogues mais dans la campagne « teste tout »** : P5b fonctionnel (item précisé 14:45, claim ouvert zone Grok); présence en jeu de chaque étape cochée (loi d'alignement : visible + atteignable + utilisable, sinon rouverte).
+
+## 2026-10-29 ~14:50 PDT — Grok (test complet — VERT)
+
+- **Demande** : « Teste tout ».
+- **Résultat** :
+  - `npx tsc --noEmit` : exit 0
+  - `node --experimental-strip-types --test src/game/*.test.ts` : **35/35 pass** (6 suites)
+  - `catalog.test.ts` : TECHNIC.length = 99, pass
+  - `npm run build` : exit 0 (dist produit)
+  - Working tree clean (sauf attachments/)
+- **Systèmes vérifiés** : icônes Technic (LegoTechnic), gravité LEGO (stress 0.12 s + poids sur 1–2 studs), catalogue 99 pièces.
+- **Prochain** : retest Philippe sur Pages, ou continuer le PDF / polish si besoin.
