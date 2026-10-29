@@ -40,6 +40,8 @@ const ids: MechBlockIds = {
   motorL: 39,
   motorXL: 40,
   battery: 41,
+  hub: 42,
+  remote: 43,
   water: 14,
   door: 15,
   doorOpen: 16,

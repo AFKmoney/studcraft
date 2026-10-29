@@ -40,6 +40,8 @@ export type MechBlockIds = {
   motorL: number;
   motorXL: number;
   battery: number;
+  hub: number;
+  remote: number;
   water: number;
   door: number;
   doorOpen: number;
@@ -155,6 +157,18 @@ export function clearTurrets() {
 
 const AIR_CAP = 4;
 const tankAir = new Map<string, number>();
+const batteryEnergy = new Map<string, number>(); // key -> remaining energy (starts at 100)
+const remoteChannel = new Map<string, number>(); // key -> channel 1-4 (default 1)
+export function batteryAt(x: number, y: number, z: number) {
+  return batteryEnergy.get(skey(x, y, z)) ?? 100;
+}
+export function setRemoteChannel(x: number, y: number, z: number, ch: number) {
+  remoteChannel.set(skey(x, y, z), Math.max(1, Math.min(4, ch)));
+}
+export function remoteChAt(x: number, y: number, z: number) {
+  return remoteChannel.get(skey(x, y, z)) ?? 1;
+}
+
 const valveOpen = new Set<string>();
 const pumpAcc = new Map<string, number>();
 
@@ -287,13 +301,24 @@ export function stepMech(
     if (!spec) continue;
     let drive = spec.drive;
     if (id === ids.motorM || id === ids.motorL || id === ids.motorXL) {
-      // Powered if a battery is within 3 blocks
-      let powered = false;
-      for (let dy = -1; dy <= 1 && !powered; dy++)
-        for (let dx = -3; dx <= 3 && !powered; dx++)
-          for (let dz = -3; dz <= 3 && !powered; dz++)
-            if (get(c.x + dx, c.y + dy, c.z + dz) === ids.battery) powered = true;
-      if (powered) drive = true;
+      // Needs: a Hub nearby (controller), a Battery with energy, and matching Remote channel
+      let hubNear = false, batNear: { x: number; y: number; z: number } | null = null, remCh = 0;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -3; dx <= 3; dx++)
+          for (let dz = -3; dz <= 3; dz++) {
+            const nid = get(c.x + dx, c.y + dy, c.z + dz);
+            if (nid === ids.hub) hubNear = true;
+            if (nid === ids.battery && !batNear) batNear = { x: c.x + dx, y: c.y + dy, z: c.z + dz };
+            if (nid === ids.remote) remCh = remoteChAt(c.x + dx, c.y + dy, c.z + dz);
+          }
+      const motorCh = id === ids.motorM ? 1 : id === ids.motorL ? 2 : 3;
+      const energy = batNear ? batteryAt(batNear.x, batNear.y, batNear.z) : 0;
+      if (hubNear && batNear && energy > 0 && (remCh === 0 || remCh === motorCh)) {
+        drive = true;
+        // Drain battery
+        const bk = skey(batNear.x, batNear.y, batNear.z);
+        batteryEnergy.set(bk, Math.max(0, energy - dt * 2));
+      }
     }
     if (id === ids.wheel && wet(get, c, ids.water)) drive = true;
     if (id === ids.mill && get(c.x, c.y + 1, c.z) === 0 && c.y >= 40) drive = true;

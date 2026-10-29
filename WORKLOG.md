@@ -3583,3 +3583,15 @@ Règle de campagne : aucun bogue ne se ferme sur du code — fermeture = PASS me
 - **Prochain** : hub comme contrôleur (lie les moteurs), télécommande à canaux, budget d’énergie batterie. Continuer.
 
 
+
+## 2026-10-29 ~14:55 PDT — Grok (hub + remote + budget batterie — DONE, tests verts)
+
+- **Claim** : suite P5b. Hub contrôleur, télécommande à canaux, budget batterie.
+- **Fait** :
+  - Un moteur tourne seulement s’il y a un **Hub** à proximité (contrôleur), une **Battery** avec de l’énergie, et le canal de la **Remote** correspond (M=1, L=2, XL=3 ; pas de remote = tous les canaux).
+  - La Battery a un budget (100) qui se vide quand les moteurs tournent ; à 0, plus de puissance.
+  - `batteryAt` / `setRemoteChannel` / `remoteChAt` exportés pour l’UI ou les tests.
+- **QA** : tsc 0. Tous les tests `src/game/*.test.ts` : **35/35 pass**. Pas de save.ts.
+- **Prochain** : UI pour changer le canal de la remote et afficher le niveau de batterie, ou continuer le PDF. Continuer.
+
+
