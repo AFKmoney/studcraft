@@ -3231,3 +3231,22 @@ Une étape n'est « faite » que lorsque le joueur peut la VOIR, l'ATTEINDRE et 
 
 ### LOI DE COORDINATION — LE FILET MUTUEL (Philippe, 13:15 PDT)
 « Grok est sur le cas, mais ce qu'il oublie, toi tu dois le faire, et vice versa. » Les lanes et les claims restent la règle d'ordre, mais **aucun item du master plan ne meurt d'un oubli** : ce que l'agent propriétaire oublie, laisse tomber ou ne voit pas, l'autre le ramasse, le fait et le journalise ici (en nommant la reprise). Vaut dans les deux sens, Muse ↔ Grok.
+
+## BUG-5 / BUG-6 + DIRECTIVE FINITION — Philippe (2026-10-29 ~13:16 PDT, retest live) : aucun loot, coffre muet, gravité toujours absente
+
+Nouveau verdict de Philippe en jeu : « les blocs droppent aucun loot… quand tu casses un coffre ça drop pas le loot qu'il y a dans le coffre… y a encore pas de gravité. C'est à moitié fini. Faut que ça finisse. » Faits de code vérifiés ce run (arbre local ≈ head) :
+
+### BUG-5 · Loot des blocs — tout le rendement est fermé en Créatif
+- Dans `breakBlock` (game.ts ~4247), TOUT le bloc de rendement — drop normal du bloc, pellets P6, feuilles/cultures, Fortune, XP — est à l'intérieur d'un `if (!creative)`. **En Créatif, casser un bloc ne produit exactement rien** : ni le bloc, ni pellets. C'est le mode où Philippe teste (et où la boucle Fonderie doit pouvoir s'essayer) — son « aucun bloc offre du loot » est exact dans ce mode.
+- En Survie le drop existe (qa96 étape 1 mesurée : Dirt → 1 drop, ramassage 0→1), mais aucune matrice de couverture n'a jamais été mesurée bloc par bloc.
+- **À faire** : (1) les rendements (drop du bloc + pellets) tombent en drops monde dans LES DEUX modes, Créatif inclus; (2) audit de couverture des drops : échantillon mesuré de blocs × modes × drop observé, publié ici — un bloc sans drop doit être un choix écrit, pas un défaut.
+
+### BUG-6 · Coffre cassé = contenu perdu (confirmé au code)
+- `breakBlock` n'a AUCUNE branche pour `ID.Chest` : le contenu (Map `chests`, game.ts ~641) n'est ni versé en drops ni nettoyé — il est orphelin quand le bloc casse. (La ShulkerBox, elle, préserve son contenu via `shulkerQueue`; le Jukebox droppe son disque — le coffre et le tonneau n'ont rien.)
+- **À faire** : casser un coffre ou un tonneau verse TOUT son contenu en drops monde ramassables; QA mesurée (coffre rempli de N items connus → casse → N drops comptés → ramassage = inventaire +N).
+
+### BUG-3 · Gravité — reconfirmée par le retest de Philippe
+- Son retest la dit toujours non fonctionnelle : le bogue reste OUVERT et prioritaire (mécanismes suspects déjà journalisés : support/atterrissage aveugles à la couche briques, scan centré joueur ±5/+8..−2, sable-en-brique hors fallers). Aucune fermeture sans ses cas reproduits + son retest.
+
+### DIRECTIVE FINITION (Philippe, 13:16 PDT)
+« C'est à moitié fini — faut que ça finisse. » La file Muse est GELÉE sur la fermeture : bogues de Philippe (BUG-1→6) et étapes rouvertes par la loi d'accord au master plan d'abord; **aucun nouveau chantier** (P8-3+, familles PDF, R3) ne passe devant. « Fini » pour chaque point = mesuré dans le rig ET retest de Philippe sur Pages qui passe.
