@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-29 (Grok — convoyeur 363, un tour avance le bloc du dessus).
+**Last update:** 2026-10-29 (Grok — piège 364, un tour fait tomber le bloc du dessus).
 
 ## 2026-10-26 — v4.12: Engine performance, mob judder & floating animal parts (Muse, ordered by Philippe after his A54 test of v4.11)
 
@@ -2461,7 +2461,7 @@ Pitch : Minecraft, c'est un monde de cubes. Studs, c'est un monde de plastique �
   - [x] Cardan (361) : l'arbre vertical passe dans les essieux à l'est, même sens, sans les aligner
   - [x] Roue (362) : au bout de l'essieu elle tourne avec lui. L'eau ne la lance pas (ça, c'est la roue à eau)
   - [x] Convoyeur (363) : un tour de l'essieu avance le bloc posé dessus d'une case. Case prise : il attend
-  - [ ] Piège
+  - [x] Piège (364) : un tour de l'essieu fait tomber le bloc posé dessus, à travers, si la case en dessous est libre
 - [ ] **P4 · Son plastique** — clics, snaps, cliquetis 100 % synthétisés DSP, zéro asset
 
 ### Lane RPG
@@ -2506,7 +2506,7 @@ Toutes les 10 minutes, l'agent qui se réveille lit CE fichier et prend le derni
 
 ## P5 — PORTÉE ÉLARGIE par Philippe (2026-10-29 03:52 EDT) : « TOUT ce que LEGO Technic offre »
 Philippe : pas juste la mécanique — **les pièces ÉLECTRIQUES aussi**, pour que l'utilisateur puisse TOUT faire : véhicules, pelle mécanique, tout l'espace des possibles Technic. Le nord de P5 = le kit Technic complet en jeu. Livraison en couches (la physique reste LÉGÈRE — graphe de rotation borné/local, machines endormies au loin, un véhicule = UN assemblage rigide sur roues, pas un corps rigide par brique) :
-- [ ] **P5a · Drivetrain** — livré par Grok jusqu'à 363 : essieux, engrenages 8/16/24, vis, embrayage, poulies, manivelle, roue à eau, moulin, came, ressort, différentiel (A+B)/2, crémaillère, cardan, roue, convoyeur. Reste : piège
+- [ ] **P5a · Drivetrain** — la liste courte est livrée (345–364), case parente ouverte : il manque encore l'anneau de vitesse (driving ring) pour qu'une boîte existe. Pas de redstone.
 - [ ] **P5b · Électrique + conduite** : moteurs (tailles = couple/vitesse), hub/batterie, télécommande à canaux — le joueur LIE un hub et CONDUIT sa machine (véhicules qui roulent pour vrai sur le terrain)
 - [ ] **P5c · Pneumatique + vérins** : pompe (manuelle ou moteur), réservoir d'air, valves, cylindres V2 + vérins linéaires à vis — bras de pelle, flèches de grue, tourelles 28T/56T (une pelle qui CREUSE dans le monde voxel : le godet casse les blocs)
 - [ ] **P5d · Capteurs + automatisation** : capteurs (distance, inclinaison, couleur), logique simple sur hub — machines qui réagissent toutes seules
@@ -2628,8 +2628,20 @@ EN COURS au début de la passe. Fichiers : `blocks.ts`, `recipes.ts`, `mechLink.
 - QA : 19/19. `tsc` 0 erreur.
 - Famille couverte : convoyeur. Reste sur P5a : le piège.
 
+### Next move — TAKEN and DONE (piège 364)
+Ne pas le refaire. P1-2 (sag) et P2 (soudure) restent à Muse. IDs 400+ aussi.
+
+### 2026-10-29 — Grok (piège, 364) — FAIT
+EN COURS au début de la passe. Fichiers : `blocks.ts`, `recipes.ts`, `mechLink.ts`, et deux lignes du bloc `mechAcc`. Pas `save.ts`, pas les zones briques, pas P7.
+
+- Bloc 364. Craft : 2 bâtons + 1 planche, en colonne. Aucun fichier de modèle.
+- Un tour de l'essieu fait tomber le bloc posé dessus dans la case sous le piège, si elle est libre. Sinon il attend. Le compteur n'est pas sauvé.
+- QA : 20/20. `tsc` 0 erreur.
+- La liste courte P5a est finie. La case parente reste ouverte : sans anneau de vitesse, pas de boîte.
+
 ### Next move — UNCLAIMED
-**P5a, dernière pièce de la liste : le piège.** Un tour de l'essieu fait tomber le bloc posé dessus. Bloc **364**. Pas de `save.ts`, pas les zones P0, pas les IDs 400+. Avant P4, avant les sites de débris.
+**P5a, prochaine pièce : l'anneau de vitesse (driving ring).** Clic droit : rapport 1 ou rapport 2. Bloc **365**. Sans lui, pas de boîte de vitesses (conclusion de recherche). Pas de `save.ts`, pas les zones briques de Muse, pas les IDs 400+. Avant P4, avant les sites de débris.
+
 
 
 

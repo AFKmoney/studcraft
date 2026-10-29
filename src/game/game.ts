@@ -7068,7 +7068,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const cells: { x: number; y: number; z: number }[] = [];
       const mech = new Set<number>([
         ID.Axle, ID.Gear8, ID.Gear16, ID.Gear24, ID.Crank, ID.CrankOn, ID.Clutch, ID.ClutchOpen,
-        ID.Worm, ID.Cam, ID.Pulley, ID.Wheel, ID.Mill, ID.Spring, ID.Diff, ID.Rack, ID.UJoint, ID.Road, ID.Belt,
+        ID.Worm, ID.Cam, ID.Pulley, ID.Wheel, ID.Mill, ID.Spring, ID.Diff, ID.Rack, ID.UJoint, ID.Road, ID.Belt, ID.Trap,
       ]);
       for (let dy = -3; dy <= 3; dy++) {
         for (let dz = -6; dz <= 6; dz++) {
@@ -7084,7 +7084,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         const edits = stepMech(world.get.bind(world), cells, {
           axle: ID.Axle, g8: ID.Gear8, g16: ID.Gear16, g24: ID.Gear24,
           crank: ID.Crank, crankOn: ID.CrankOn, clutch: ID.Clutch, clutchOpen: ID.ClutchOpen,
-          worm: ID.Worm, cam: ID.Cam, pulley: ID.Pulley, wheel: ID.Wheel, mill: ID.Mill, spring: ID.Spring, diff: ID.Diff, rack: ID.Rack, ujoint: ID.UJoint, road: ID.Road, belt: ID.Belt,
+          worm: ID.Worm, cam: ID.Cam, pulley: ID.Pulley, wheel: ID.Wheel, mill: ID.Mill, spring: ID.Spring, diff: ID.Diff, rack: ID.Rack, ujoint: ID.UJoint, road: ID.Road, belt: ID.Belt, trap: ID.Trap,
           water: ID.Water, door: ID.Door, doorOpen: ID.DoorOpen, gate: ID.Gate, gateOpen: ID.GateOpen,
         }, step);
         for (const e of edits) {

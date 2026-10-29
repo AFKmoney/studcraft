@@ -23,6 +23,7 @@ export type MechBlockIds = {
   ujoint: number;
   road: number;
   belt: number;
+  trap: number;
   water: number;
   door: number;
   doorOpen: number;
@@ -54,6 +55,7 @@ function specFor(id: number, ids: MechBlockIds): Spec | null {
   if (id === ids.ujoint) return { kind: "axle", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.road) return { kind: "wheel", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.belt) return { kind: "axle", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
+  if (id === ids.trap) return { kind: "axle", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   return null;
 }
 
@@ -108,6 +110,12 @@ export function clearBelts() {
   beltAcc.clear();
 }
 
+const trapAcc = new Map<string, number>();
+
+export function clearTraps() {
+  trapAcc.clear();
+}
+
 function isGear(id: number, ids: MechBlockIds) {
   return id === ids.g8 || id === ids.g16 || id === ids.g24;
 }
@@ -142,11 +150,13 @@ export function stepMech(
   const diffs: MechCell[] = [];
   const racks: MechCell[] = [];
   const belts: MechCell[] = [];
+  const traps: MechCell[] = [];
   const joints: MechCell[] = [];
   for (const c of cells) {
     const id = get(c.x, c.y, c.z);
     if (id === ids.rack) racks.push(c);
     if (id === ids.belt) belts.push(c);
+    if (id === ids.trap) traps.push(c);
     const spec = specFor(id, ids);
     if (!spec) continue;
     let drive = spec.drive;
@@ -252,6 +262,27 @@ export function stepMech(
     beltAcc.delete(k);
     const rest = acc - step;
     if (rest) beltAcc.set(k, rest);
+  }
+  for (const c of traps) {
+    const sp = speedAt(c.x * 2, c.y * 2, c.z * 2);
+    if (!sp.n || !dt) continue;
+    const k = skey(c.x, c.y, c.z);
+    const acc = (trapAcc.get(k) ?? 0) + (sp.n / sp.d) * dt;
+    const step = acc >= 1 ? 1 : acc <= -1 ? -1 : 0;
+    if (!step) {
+      trapAcc.set(k, acc);
+      continue;
+    }
+    const above = get(c.x, c.y + 1, c.z);
+    if (!above || get(c.x, c.y - 1, c.z) !== 0) {
+      trapAcc.set(k, above ? step : acc - step);
+      continue;
+    }
+    edits.push({ x: c.x, y: c.y + 1, z: c.z, id: 0 });
+    edits.push({ x: c.x, y: c.y - 1, z: c.z, id: above });
+    trapAcc.delete(k);
+    const left = acc - step;
+    if (left) trapAcc.set(k, left);
   }
   return edits;
 }
