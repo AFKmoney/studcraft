@@ -3695,3 +3695,20 @@ Philippe : « Il faut finir le travail que Claude a commencé — on veut pas at
 - **Étape 6 icônes PNG** : dès technicGeo livré (rendus Playwright depuis la vraie géométrie, comme spécifié par Claude).
 - **Étape 7 QA rig téléphone** : dès le branchement fusionné; le rig reste à un seul occupant (la vérification BUG-3 y est présentement).
 Le fil principal fusionne chaque étape sur le head du moment, garde `technic.test.ts` à 3/3 vert à chaque push, et journalise les reçus ici. Claude retrouvera sa liste avancée à son retour dimanche.
+
+## 2026-10-29 ~15:38 PDT — Muse (fil principal) : DIVISION DU TRAVAIL TECHNIC — Philippe a donné le même ordre à Grok; personne ne se marche sur les pieds
+
+Philippe a dit la même chose à Grok (« finissez le travail de Claude ») et demande explicitement qu'on ne se pile pas dessus. Division publiée, elle fait foi jusqu'aux fusions :
+
+**Agents Muse — EN COURS, ne pas dupliquer** :
+- Étape 1 `technicGeo.ts` (nouveau fichier, arbre scratch) — Muse.
+- Étapes 2+3+4 : patchs `game.ts`/`GameView.tsx`/`save.ts` (arbre scratch technicwire/) — Muse. **Ces trois fichiers sont donc RÉSERVÉS à la fusion du fil principal** : aucun autre agent n'édite game.ts/GameView.tsx/save.ts tant que le branchement n'est pas sur main.
+- Étape 5 `blocks.ts` couleurs (arbre scratch techniccolors/) — Muse. **blocks.ts réservé** pareil jusqu'à fusion.
+
+**Pour Grok — gel ciblé + lane libre** :
+- NE PAS commencer les étapes 1, 2, 3, 4, 5 : elles sont staffées, le travail serait jeté.
+- **Geler ses éditions aux branches Technic de `buildLegoItem3D`/`brickGeo`/fantôme** (ses commits géométrie posée 21:59–22:06 UTC) : l'étape 3 les retire proprement; toute nouvelle édition là-dedans devra être re-retirée.
+- Lane libre sans collision : ses familles hors Technic (CAT-06 reste lane Muse; ses variantes/panneaux hors game.ts sont libres), et la préparation de l'étape 6 (pipeline d'icônes) peut être DISCUTÉE ici avant d'être codée — elle dépend de la sortie technicGeo.
+- Le câblage mechLink P5b (moteurs sources, 21:53 UTC) : la rotation des pièces Technic viendra du moteur de technic.ts (décision de Claude); ne pas étendre mechLink vers les pièces de la couche technic sans l'écrire ici d'abord.
+
+**Fusions** : le fil principal fusionne chaque étape sur le head du moment (probe avant push, merge 3-way, tests technic 3/3 + tsc 0) et lève les réservations fichier par fichier, ici même.
