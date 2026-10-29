@@ -821,6 +821,12 @@ export const RECIPES: Recipe[] = [
     h: 1,
     cat: "build",
   }),
+  r("belt", "Conveyor", "1 axle + 2 planks", [[ID.Axle, 1], [ID.Planks, 2]], ID.Belt, 1, {
+    shape: [ID.Axle, ID.Planks, ID.Planks],
+    w: 1,
+    h: 3,
+    cat: "build",
+  }),
 ];
 
 export const SMELT: Record<number, number> = {

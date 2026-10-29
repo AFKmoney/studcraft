@@ -1,7 +1,7 @@
 import { beforeEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { clearMech, speedAt } from "./mechState.ts";
-import { clearRacks, clearSprings, springLeft, stepMech, windSpring, type MechBlockIds } from "./mechLink.ts";
+import { clearBelts, clearRacks, clearSprings, springLeft, stepMech, windSpring, type MechBlockIds } from "./mechLink.ts";
 
 const ids: MechBlockIds = {
   axle: 1,
@@ -22,6 +22,7 @@ const ids: MechBlockIds = {
   rack: 21,
   ujoint: 22,
   road: 23,
+  belt: 24,
   water: 14,
   door: 15,
   doorOpen: 16,
@@ -34,6 +35,7 @@ describe("placed technic", () => {
     clearMech();
     clearSprings();
     clearRacks();
+    clearBelts();
   });
 
   it("turns a 16T gear backwards beside a crank", () => {
@@ -156,5 +158,22 @@ describe("placed technic", () => {
     const getWet = (x: number, y: number, z: number) => wet.get(x + "," + y + "," + z) ?? 0;
     stepMech(getWet, [{ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }], ids, 0);
     assert.deepEqual(speedAt(0, 0, 0), { n: 0, d: 1 });
+  });
+
+  it("carries the block on a conveyor one cell per turn", () => {
+    const grid = new Map<string, number>([
+      ["0,0,0", ids.crankOn],
+      ["0,1,0", ids.belt],
+      ["0,2,0", 99],
+    ]);
+    const get = (x: number, y: number, z: number) => grid.get(x + "," + y + "," + z) ?? 0;
+    const edits = stepMech(get, [{ x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, { x: 0, y: 2, z: 0 }], ids, 1);
+    assert.deepEqual(edits, [
+      { x: 0, y: 2, z: 0, id: 0 },
+      { x: 1, y: 2, z: 0, id: 99 },
+    ]);
+    grid.set("1,2,0", 40);
+    const blocked = stepMech(get, [{ x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, { x: 0, y: 2, z: 0 }], ids, 1);
+    assert.deepEqual(blocked, []);
   });
 });

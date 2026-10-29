@@ -22,6 +22,7 @@ export type MechBlockIds = {
   rack: number;
   ujoint: number;
   road: number;
+  belt: number;
   water: number;
   door: number;
   doorOpen: number;
@@ -52,6 +53,7 @@ function specFor(id: number, ids: MechBlockIds): Spec | null {
   if (id === ids.diff) return { kind: "diff", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.ujoint) return { kind: "axle", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.road) return { kind: "wheel", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
+  if (id === ids.belt) return { kind: "axle", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   return null;
 }
 
@@ -100,6 +102,12 @@ export function clearRacks() {
   rackAcc.clear();
 }
 
+const beltAcc = new Map<string, number>();
+
+export function clearBelts() {
+  beltAcc.clear();
+}
+
 function isGear(id: number, ids: MechBlockIds) {
   return id === ids.g8 || id === ids.g16 || id === ids.g24;
 }
@@ -133,10 +141,12 @@ export function stepMech(
   const cams: MechCell[] = [];
   const diffs: MechCell[] = [];
   const racks: MechCell[] = [];
+  const belts: MechCell[] = [];
   const joints: MechCell[] = [];
   for (const c of cells) {
     const id = get(c.x, c.y, c.z);
     if (id === ids.rack) racks.push(c);
+    if (id === ids.belt) belts.push(c);
     const spec = specFor(id, ids);
     if (!spec) continue;
     let drive = spec.drive;
@@ -220,6 +230,28 @@ export function stepMech(
     rackAcc.delete(k);
     const rest = acc - step;
     if (rest) rackAcc.set(skey(dest.x, dest.y, dest.z), rest);
+  }
+  for (const c of belts) {
+    const sp = speedAt(c.x * 2, c.y * 2, c.z * 2);
+    if (!sp.n || !dt) continue;
+    const k = skey(c.x, c.y, c.z);
+    const acc = (beltAcc.get(k) ?? 0) + (sp.n / sp.d) * dt;
+    const step = acc >= 1 ? 1 : acc <= -1 ? -1 : 0;
+    if (!step) {
+      beltAcc.set(k, acc);
+      continue;
+    }
+    const above = get(c.x, c.y + 1, c.z);
+    const destX = c.x + step;
+    if (!above || get(destX, c.y + 1, c.z) !== 0) {
+      beltAcc.set(k, above ? step : acc - step);
+      continue;
+    }
+    edits.push({ x: c.x, y: c.y + 1, z: c.z, id: 0 });
+    edits.push({ x: destX, y: c.y + 1, z: c.z, id: above });
+    beltAcc.delete(k);
+    const rest = acc - step;
+    if (rest) beltAcc.set(k, rest);
   }
   return edits;
 }
