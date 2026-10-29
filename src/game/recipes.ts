@@ -1,4 +1,4 @@
-import { ID } from "./blocks";
+import { ID } from "./blocks.ts";
 
 export type Recipe = {
   id: string;
@@ -1535,6 +1535,40 @@ export const RECIPES: Recipe[] = [
     shape: [ID.TemperedIngot, S, S],
     w: 1,
     h: 3,
+    cat: "tools",
+  }),
+  // P6 step 5 (Muse) — boss moulds: the plastic way to the uniques.
+  // Cast the FORM of a boss unique in tempered plastic (403) + its
+  // signature charge, gated by the rank the R1/R2 progression gives
+  // (Recipe.lvl, enforced on both craft paths). The classic recipes
+  // (fang-blade, cinder-blade, …) stay — the mould is a second way,
+  // never a replacement. No new IDs: the outputs already exist.
+  r("bmold-fang", "Cast fang blade (boss mould)", "2 tempered ingots + 2 fangs + 1 bone · level 12", [[ID.TemperedIngot, 2], [ID.Fang, 2], [ID.Bone, 1]], ID.FangBlade, 1, {
+    lvl: 12,
+    shape: [0, ID.TemperedIngot, 0, 0, ID.Fang, 0, ID.TemperedIngot, ID.Fang, ID.Bone],
+    w: 3,
+    h: 3,
+    cat: "tools",
+  }),
+  r("bmold-cinder", "Cast cinder blade (boss mould)", "2 tempered ingots + 2 cinders + 1 stick · level 12", [[ID.TemperedIngot, 2], [ID.Cinder, 2], [S, 1]], ID.CinderBlade, 1, {
+    lvl: 12,
+    shape: [0, ID.TemperedIngot, 0, 0, ID.Cinder, 0, ID.TemperedIngot, ID.Cinder, S],
+    w: 3,
+    h: 3,
+    cat: "tools",
+  }),
+  r("bmold-tidal", "Cast tidal blade (boss mould)", "3 tempered ingots + 1 prism · level 16", [[ID.TemperedIngot, 3], [ID.Prism, 1]], ID.TidalBlade, 1, {
+    lvl: 16,
+    shape: [ID.TemperedIngot, ID.TemperedIngot, ID.TemperedIngot, ID.Prism],
+    w: 2,
+    h: 2,
+    cat: "tools",
+  }),
+  r("bmold-void", "Cast void blade (boss mould)", "3 tempered ingots + 1 prism + 1 sapphire · level 22", [[ID.TemperedIngot, 3], [ID.Prism, 1], [ID.Sapphire, 1]], ID.VoidBlade, 1, {
+    lvl: 22,
+    shape: [ID.TemperedIngot, ID.Prism, ID.TemperedIngot, ID.TemperedIngot, ID.Sapphire, 0],
+    w: 3,
+    h: 2,
     cat: "tools",
   }),
 ];
