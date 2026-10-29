@@ -2426,3 +2426,41 @@ Philippe's standing orders tonight: **(1) NO builds (APK/PC) until the MASTER PL
 ### Held / awaiting Philippe
 - Release train v4.18 (APK + PC + Drive + GitHub Release): HELD until master plan done (his order).
 - His live verdicts on v4.18 (fixes, gravity, Wither, logo) pending via Pages testing.
+
+## MASTER PLAN — STUDS · Plastic Edition (cases à cocher — cocher au fur et à mesure, tout agent)
+Pitch : Minecraft, c'est un monde de cubes. Studs, c'est un monde de plastique — ça snap, ça fond, ça casse, pis ça tourne. Marché : builders adultes (AFOL), « le vrai jeu LEGO que LEGO a jamais fait ». Aucune publication commerciale tant que Philippe n'est pas satisfait du jeu (règle permanente) — le banc d'essai officiel est https://studcraft.pages.dev/.
+
+### Identité
+- [x] Nouveau nom : STUDS · Plastic Edition (« craft » = suffixe de clone; le stud est l'unité du jeu)
+- [x] Key art officiel approuvé par Philippe (explosif, fond transparent — pas de fond noir)
+- [x] Logo intégré au menu titre (flotte sur le monde en direct) + titres « Studs — Plastic Edition »
+- [ ] Renommage technique (repo, package ids, domaine) — seulement si Philippe l'ordonne
+
+### Train v4.18 (LIVE sur Pages, main b154183a)
+- [x] R2 : Wither refait en vrai boss + dragon poli
+- [x] Passe FX (explosions, flammes/fumée v2)
+- [x] 7 fixes rapportés par Philippe (drops ramassables, pause→inventaire, arbres qui tombent, lag snapshot, placer dans l'eau, minage modèle MC, sortie de nage)
+- [x] Manette : dead zones réglables, vibration complète, gâchettes adaptatives DualSense (WebHID)
+- [x] Gravité réelle des blocs (entités faller, fini la téléportation cellule par cellule)
+- [ ] Verdicts live de Philippe sur Pages (fixes, gravité, Wither, logo)
+- [ ] Batteries QA Muse : qa98 gravité → qa96 fixes → qa97 perf (en cours)
+
+### Le pilier Plastique (LE master plan — à terminer AVANT les builds)
+- [ ] **P0 · Grille de studs** — EN COURS (Muse) : placer décalé d'un stud, briques à cheval sur les joints, running bond; couche « brick layer » sur lattice de studs, terrain voxel intact
+- [ ] **P1 · Intégrité structurelle** — les constructions tiennent par les studs réellement couverts; surplombs qui craquent/s'affaissent/tombent (dépend de P0)
+- [ ] **P2 · Soudure** — le chalumeau soude deux briques en un joint permanent plus fort; on bâtit en soudant, on démolit en coupant/fondant (dépend de P0)
+- [ ] **P6 · La Fonderie** — LA boucle centrale : casser → plastique (rendement différent par bloc, les mobs en droppent) → fondre → couler des items dans des MOULES débloqués par quêtes (R1) et boss (R2/R3); le crafting reste, mais basic seulement
+- [ ] **P3 · Trempe** — intégrée à la Fonderie (P6) : couler avec du plastique trempé = grades supérieurs du même moule
+- [ ] **P5 · Mécanique LEGO** — à la place de redstone : essieux, engrenages (ratios entiers), courroies/chaînes, piston à came, manivelle/moulin/roue à eau/moteur à ressort, levier/embrayage → portes, ponts-levis, convoyeurs, pièges qui marchent
+- [ ] **P4 · Son plastique** — clics, snaps, cliquetis 100 % synthétisés DSP, zéro asset
+
+### Lane RPG
+- [x] R1 : 4 chaînes de quêtes, 38 quêtes, journal par chaîne
+- [x] R2 : boss (dans v4.18)
+- [ ] R3 : le donjon (site souterrain, moules rares de la Fonderie cachés dedans)
+- [ ] R4 : identité de construction + loot nommé rare
+
+### Sortie (SEULEMENT quand le master plan est terminé et Philippe satisfait)
+- [ ] Train de builds : APK vc40 « 4.18 » + PC 4.18.0 (Setup NSIS + portable + zips) — bumps pré-stagés, EN HOLD
+- [ ] Uploads Drive avec MD5 revérifiés + Release GitHub (liens Drive, jamais d'assets directs)
+- [ ] Message de livraison avec l'étape Débloquer (clic droit → Propriétés) pour le PC
