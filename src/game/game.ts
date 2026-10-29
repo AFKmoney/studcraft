@@ -19,7 +19,7 @@ import { BTN, PadEdges, activePad, padBusy, padLabel, rumble, stick } from "./ga
 import { dsApply, dsRelease, dsRequest, dsState, dsTryReconnect, type TriggerFx } from "./dualsense";
 import { parseSeed } from "./noise";
 import { MobBatchRenderer } from "./mobBatch";
-import { stepMech } from "./mechLink";
+import { springsJustSpent, stepMech, windSpring } from "./mechLink";
 
 export type Phase = "title" | "play" | "pause" | "inventory" | "dead";
 export type EnterKind = "play" | "survival" | "flat" | "continue";
@@ -5383,6 +5383,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       audio.place();
       return true;
     }
+    if (hit.id === ID.Spring) {
+      windSpring(hit.x, hit.y, hit.z);
+      say("Wound");
+      audio.place();
+      return true;
+    }
     if (block.work === "bed") {
       const night = Math.sin(worldTime * Math.PI * 2) < 0.15;
       if (!night) {
@@ -6406,7 +6412,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const cells: { x: number; y: number; z: number }[] = [];
       const mech = new Set<number>([
         ID.Axle, ID.Gear8, ID.Gear16, ID.Gear24, ID.Crank, ID.CrankOn, ID.Clutch, ID.ClutchOpen,
-        ID.Worm, ID.Cam, ID.Pulley, ID.Wheel, ID.Mill,
+        ID.Worm, ID.Cam, ID.Pulley, ID.Wheel, ID.Mill, ID.Spring,
       ]);
       for (let dy = -3; dy <= 3; dy++) {
         for (let dz = -6; dz <= 6; dz++) {
@@ -6422,12 +6428,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         const edits = stepMech(world.get.bind(world), cells, {
           axle: ID.Axle, g8: ID.Gear8, g16: ID.Gear16, g24: ID.Gear24,
           crank: ID.Crank, crankOn: ID.CrankOn, clutch: ID.Clutch, clutchOpen: ID.ClutchOpen,
-          worm: ID.Worm, cam: ID.Cam, pulley: ID.Pulley, wheel: ID.Wheel, mill: ID.Mill,
+          worm: ID.Worm, cam: ID.Cam, pulley: ID.Pulley, wheel: ID.Wheel, mill: ID.Mill, spring: ID.Spring,
           water: ID.Water, door: ID.Door, doorOpen: ID.DoorOpen, gate: ID.Gate, gateOpen: ID.GateOpen,
         }, step);
         for (const e of edits) {
           if (world.set(e.x, e.y, e.z, e.id)) markDirtyAt(e.x, e.z);
         }
+        if (springsJustSpent().length) say("Spring spent");
       }
     }
     if (fireResT > 0) fireT = 0;

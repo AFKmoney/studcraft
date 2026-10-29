@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-29 (Grok — P5 machines placed, door and gate follow the cam).
+**Last update:** 2026-10-29 (Grok — spring motor 358 winds, runs, stops).
 
 ## 2026-10-26 — v4.12: Engine performance, mob judder & floating animal parts (Muse, ordered by Philippe after his A54 test of v4.11)
 
@@ -2451,11 +2451,12 @@ Pitch : Minecraft, c'est un monde de cubes. Studs, c'est un monde de plastique �
 - [ ] **P2 · Soudure** — le chalumeau soude deux briques en un joint permanent plus fort; on bâtit en soudant, on démolit en coupant/fondant (dépend de P0)
 - [ ] **P6 · La Fonderie** — LA boucle centrale : casser → plastique (rendement différent par bloc, les mobs en droppent) → fondre → couler des items dans des MOULES débloqués par quêtes (R1) et boss (R2/R3); le crafting reste, mais basic seulement
 - [ ] **P3 · Trempe** — intégrée à la Fonderie (P6) : couler avec du plastique trempé = grades supérieurs du même moule
-- [ ] **P5 · Mécanique LEGO** — le cœur tourne. Reste : convoyeur, moteur à ressort, piège. Pas de redstone.
+- [ ] **P5 · Mécanique LEGO** — le cœur tourne. Reste : convoyeur, piège, puis le kit élargi. Pas de redstone.
   - [x] Essieux, engrenages 8/16/24 (entraxe catalogue), vis sans fin, embrayage, poulies, manivelle
   - [x] Roue à eau (tourne seulement si l'eau la touche) et moulin (air au-dessus, y ≥ 40)
   - [x] Came : ouvre la porte ou la barrière juste à l'est après un demi-tour
-  - [ ] Convoyeur, moteur à ressort, piège
+  - [x] Moteur à ressort (358) : clic droit l'arme, il tourne, il s'arrête. Pas sauvé.
+  - [ ] Convoyeur, piège
 - [ ] **P4 · Son plastique** — clics, snaps, cliquetis 100 % synthétisés DSP, zéro asset
 
 ### Lane RPG
@@ -2488,15 +2489,25 @@ Philippe : cocher en faisant ce que le plan dit, dans l'ordre. P0 reste à Muse.
 - QA : 13/13 tests (`mechState` + `mechLink`). `tsc` 0 erreur. Pas encore sur Pages : le déploiement est en hold.
 - La case P5 reste ouverte : convoyeur, ressort et piège ne sont pas faits.
 
+### Next move — TAKEN and DONE (ressort, voir la session en bas)
+Le moteur à ressort est livré. Ne pas le refaire.
+
+### 2026-10-29 — Grok (moteur à ressort, 358)
+Move pris dans le worklog. Muse avait fini la recherche (51 sources) ; elle ne change pas ce move.
+
+- Bloc 358, couleur procédurale, aucun fichier de modèle. Craft : 2 planches + 1 bâton.
+- Clic droit : « Wound ». Il entraîne l'arbre pendant quelques secondes (6, plafond 8), puis « Spring spent » et il s'arrête.
+- Le temps restant vit en mémoire dans `mechLink.ts`. Pas de champ dans `save.ts`. Loin du joueur, il ne s'écoule pas (la machine dort).
+- QA : 14/14 (`mechState` + `mechLink`, dont le ressort qui tourne puis s'arrête). `tsc` 0 erreur.
+- Famille couverte : source d'énergie à ressort. Pas encore : différentiel, crémaillère, cardans, roues, convoyeur, piège, électrique, pneumatique.
+
 ### Next move — UNCLAIMED
-**Finir P5, dans cet ordre, avant P4.**
-- Un moteur à ressort : clic droit l'arme, il tourne quelques secondes, puis s'arrête. Pas un nouveau système de sauvegarde.
-- Ne pas toucher la couche briques de Muse ni `save.ts`.
-- Fichiers : `game.ts` (le même tick) et le bloc **358** si 357 est le moulin. 345–357 sont déjà les pièces P5.
+**P5a, prochaine pièce : le différentiel 28T.** Deux arbres d'entrée, la sortie tourne à (A+B)/2, comme la conclusion de recherche. Bloc **359**. Pas de `save.ts`, pas la couche briques de Muse. Avant P4, avant les sites de débris.
+
 
 ## P5 — PORTÉE ÉLARGIE par Philippe (2026-10-29 03:52 EDT) : « TOUT ce que LEGO Technic offre »
 Philippe : pas juste la mécanique — **les pièces ÉLECTRIQUES aussi**, pour que l'utilisateur puisse TOUT faire : véhicules, pelle mécanique, tout l'espace des possibles Technic. Le nord de P5 = le kit Technic complet en jeu. Livraison en couches (la physique reste LÉGÈRE — graphe de rotation borné/local, machines endormies au loin, un véhicule = UN assemblage rigide sur roues, pas un corps rigide par brique) :
-- [ ] **P5a · Drivetrain** — cœur LIVRÉ par Grok (pièces 345–357, voir son journal ci-dessus) : essieux, engrenages 8/16/24 (entraxe catalogue), vis sans fin, embrayage, poulies, manivelle, roue à eau, moulin, came. Reste : différentiel 28T, crémaillère (direction), cardans, roues, convoyeur, moteur à ressort, piège
+- [ ] **P5a · Drivetrain** — cœur LIVRÉ par Grok (pièces 345–358) : essieux, engrenages 8/16/24, vis sans fin, embrayage, poulies, manivelle, roue à eau, moulin, came, moteur à ressort. Reste : différentiel 28T, crémaillère (direction), cardans, roues, convoyeur, piège
 - [ ] **P5b · Électrique + conduite** : moteurs (tailles = couple/vitesse), hub/batterie, télécommande à canaux — le joueur LIE un hub et CONDUIT sa machine (véhicules qui roulent pour vrai sur le terrain)
 - [ ] **P5c · Pneumatique + vérins** : pompe (manuelle ou moteur), réservoir d'air, valves, cylindres V2 + vérins linéaires à vis — bras de pelle, flèches de grue, tourelles 28T/56T (une pelle qui CREUSE dans le monde voxel : le godet casse les blocs)
 - [ ] **P5d · Capteurs + automatisation** : capteurs (distance, inclinaison, couleur), logique simple sur hub — machines qui réagissent toutes seules

@@ -17,6 +17,7 @@ export type MechBlockIds = {
   pulley: number;
   wheel: number;
   mill: number;
+  spring: number;
   water: number;
   door: number;
   doorOpen: number;
@@ -43,6 +44,7 @@ function specFor(id: number, ids: MechBlockIds): Spec | null {
   if (id === ids.pulley) return { kind: "pulley", teeth: 0, axis: "y", drive: false, open: false, belt: 1, pulley: 16 };
   if (id === ids.wheel) return { kind: "wheel", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   if (id === ids.mill) return { kind: "wheel", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
+  if (id === ids.spring) return { kind: "crank", teeth: 0, axis: "y", drive: false, open: false, belt: 0, pulley: 0 };
   return null;
 }
 
@@ -54,6 +56,35 @@ function wet(get: (x: number, y: number, z: number) => number, c: MechCell, wate
     get(c.x, c.y, c.z - 1) === water ||
     get(c.x, c.y - 1, c.z) === water
   );
+}
+
+const WIND_CAP = 8;
+const wind = new Map<string, number>();
+let justSpent: MechCell[] = [];
+
+function skey(x: number, y: number, z: number) {
+  return x + "," + y + "," + z;
+}
+
+export function clearSprings() {
+  wind.clear();
+  justSpent = [];
+}
+
+/** Right-click. Adds a few seconds, never past eight. Not saved. */
+export function windSpring(x: number, y: number, z: number, seconds = 6) {
+  const k = skey(x, y, z);
+  wind.set(k, Math.min(WIND_CAP, (wind.get(k) ?? 0) + seconds));
+}
+
+export function springLeft(x: number, y: number, z: number) {
+  return wind.get(skey(x, y, z)) ?? 0;
+}
+
+export function springsJustSpent(): MechCell[] {
+  const out = justSpent;
+  justSpent = [];
+  return out;
 }
 
 /** Rebuild the local machine and return door/gate edits the cam is asking for. */
@@ -72,6 +103,17 @@ export function stepMech(
     let drive = spec.drive;
     if (id === ids.wheel && wet(get, c, ids.water)) drive = true;
     if (id === ids.mill && get(c.x, c.y + 1, c.z) === 0 && c.y >= 40) drive = true;
+    if (id === ids.spring) {
+      const left = wind.get(skey(c.x, c.y, c.z)) ?? 0;
+      if (left > 0) {
+        drive = true;
+        const next = left - dt;
+        if (next <= 1e-6) {
+          wind.delete(skey(c.x, c.y, c.z));
+          justSpent.push(c);
+        } else wind.set(skey(c.x, c.y, c.z), next);
+      }
+    }
     if (id === ids.cam) cams.push(c);
     putMech({
       x: c.x * 2,
