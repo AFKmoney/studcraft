@@ -312,7 +312,8 @@ declare global {
       placeBrickAt?: (id: number, sx: number, sy: number, sz: number) => boolean;
       getBricks?: () => [number, number, number, number][];
       getMineState?: () => { mine: number; time: number; key: string; target: string };
-      getIntegrity?: () => { total: number; supported: number; stressed: string[]; falling: number; stress: Record<string, number> };
+      getIntegrity?: () => { total: number; supported: number; stressed: string[]; falling: number; stress: Record<string, number>; sag: Record<string, number> };
+      getBrickMeshY?: (sx: number, sy: number, sz: number) => number | null;
       stepBricks?: (dt: number) => { total: number; supported: number; stressed: string[]; falling: number; stress: Record<string, number> };
     };
   }
@@ -4528,6 +4529,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     bricks.clear();
     brickGrid.clear();
     brickStress.clear();
+    brickSagged.clear();
     for (const f of fallingBricks) scene.remove(f.mesh);
     fallingBricks.length = 0;
     for (const m of brickMeshes.values()) {
@@ -4602,7 +4604,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     if (list.length === 0) return;
     const mesh = new THREE.InstancedMesh(brickGeo(id), opaqueLam, list.length);
     list.forEach((b, i) => {
-      _brickM4.makeTranslation(b.sx / 2 + 0.5, b.sy + 0.5, b.sz / 2 + 0.5);
+      // P1-2 sag: a stressed brick visibly sinks, proportional to its
+      // accumulated stress (brickSagY lives in the P1 section below).
+      _brickM4.makeTranslation(b.sx / 2 + 0.5, b.sy + 0.5 - brickSagY(brickKey(b.sx, b.sy, b.sz)), b.sz / 2 + 0.5);
       mesh.setMatrixAt(i, _brickM4);
     });
     mesh.instanceMatrix.needsUpdate = true;
@@ -4846,10 +4850,23 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // bricks where they stop (or dropping as items if the spot is taken).
   // Scans are periodic, so cutting a voxel support is caught within one
   // scan. Cost: zero when no bricks exist; O(bricks^2) worst per scan
-  // (brick counts are player-scale). Sag visual = next P1 slice.
+  // (brick counts are player-scale).
+  // P1-2 sag: while a brick accumulates stress it visibly sinks —
+  // offset = (stress / 0.75) * 0.15 blocks, linear, applied to the
+  // instance matrix in rebuildBrickMesh. tickBricks rebuilds ONLY the
+  // block ids whose sag state changed on that scan (stressed ids, plus
+  // ids whose bricks recovered support and must rise back to 0).
   type FallingBrick = { id: number; x: number; z: number; y: number; vy: number; mesh: THREE.Mesh };
   const fallingBricks: FallingBrick[] = [];
   const brickStress = new Map<string, number>();
+  const brickSagged = new Set<string>(); // brick keys currently rendered with sag > 0
+  const BRICK_STRESS_MAX = 0.75;
+  const BRICK_SAG_MAX = 0.15;
+  function brickSagY(key: string): number {
+    const s = brickStress.get(key) ?? 0;
+    if (s <= 0) return 0;
+    return Math.min(s / BRICK_STRESS_MAX, 1) * BRICK_SAG_MAX;
+  }
   let integrityAcc = 0;
   let lastIntegrity = { total: 0, supported: 0, stressed: [] as string[], falling: 0 };
 
@@ -4908,6 +4925,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     if (!b) return;
     removeBrick(key);
     brickStress.delete(key);
+    brickSagged.delete(key);
     if (fallingBricks.length >= FALL_CAP) {
       dropItem(b.id, 1, b.sx / 2 + 0.5, b.sy + 0.55, b.sz / 2 + 0.5);
       return;
@@ -4984,6 +5002,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     if (fallingBricks.length) updateFallingBricks(dt);
     if (bricks.size === 0) {
       if (brickStress.size) brickStress.clear();
+      if (brickSagged.size) brickSagged.clear();
       lastIntegrity = { total: 0, supported: 0, stressed: [], falling: fallingBricks.length };
       return;
     }
@@ -4993,17 +5012,24 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     integrityAcc = 0;
     const cant = computeIntegrity();
     const stressed: string[] = [];
+    const sagIds = new Set<number>(); // ids to rebuild for sag changes only
     for (const b of [...bricks.values()]) {
       const k = brickKey(b.sx, b.sy, b.sz);
       if (cant.has(k)) {
         brickStress.delete(k);
+        if (brickSagged.delete(k)) sagIds.add(b.id); // recovered: rise back to 0
         continue;
       }
       const s = (brickStress.get(k) ?? 0) + step;
       brickStress.set(k, s);
       stressed.push(k);
-      if (s >= 0.75) detachBrick(k);
+      if (s >= BRICK_STRESS_MAX) detachBrick(k);
+      else {
+        brickSagged.add(k);
+        sagIds.add(b.id); // sag grew this scan
+      }
     }
+    for (const id of sagIds) rebuildBrickMesh(id);
     lastIntegrity = { total: bricks.size, supported: cant.size, stressed, falling: fallingBricks.length };
   }
 
@@ -11920,7 +11946,36 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         const k = brickKey(b.sx, b.sy, b.sz);
         if (!cant.has(k)) stressed.push(k);
       }
-      return { total: bricks.size, supported: cant.size, stressed, falling: fallingBricks.length, stress: Object.fromEntries(brickStress) };
+      return {
+        total: bricks.size,
+        supported: cant.size,
+        stressed,
+        falling: fallingBricks.length,
+        stress: Object.fromEntries(brickStress),
+        sag: Object.fromEntries([...brickStress.keys()].map((k) => [k, brickSagY(k)])),
+      };
+    },
+    // P1-2 QA witness: the ACTUAL instance-matrix Y of a brick (sag is
+    // only real if the rendered matrix moved, not just the stress map).
+    getBrickMeshY: (sx: number, sy: number, sz: number) => {
+      const b = bricks.get(brickKey(sx, sy, sz));
+      if (!b) return null;
+      const mesh = brickMeshes.get(b.id);
+      if (!mesh) return null;
+      let idx = -1;
+      let i = 0;
+      for (const ob of bricks.values()) {
+        if (ob.id !== b.id) continue;
+        if (ob === b) {
+          idx = i;
+          break;
+        }
+        i++;
+      }
+      if (idx < 0) return null;
+      const m = new THREE.Matrix4();
+      mesh.getMatrixAt(idx, m);
+      return m.elements[13];
     },
     // One evaluate can advance brick stress and the fall. The rig's frames
     // are ~700× slower than game time, so waiting on requestAnimationFrame
