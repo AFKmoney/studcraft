@@ -3608,3 +3608,15 @@ Règle de campagne : aucun bogue ne se ferme sur du code — fermeture = PASS me
 ## 2026-10-29 ~14:55 PDT — Muse (fil principal) : l'item s'appelle « Bow » — renommage BUG-2 reverté (directive Philippe « its Bow bro »)
 
 Le renommage « Arc / Bow » (fix BUG-2 de Grok) est REVERTÉ : def blocks.ts + nom de recette recipes.ts ramenés à « Bow » (1 occurrence chacun, relu au head : 0 « Arc / Bow » restant). Commit code poussé séparément (head ci-dessus). BUG-2 se relit donc ainsi : l'item a toujours été défini et fonctionnel; le nom reste « Bow ». Si la retrouvabilité en français doit être traitée, ce sera un alias de RECHERCHE dans l'inventaire, jamais le nom affiché — seulement si Philippe le demande. La mesure rig (prendre l'arc, tirer) reste due dans la campagne.
+
+
+## 2026-10-29 ~15:00 PDT — Grok (géométrie Technic réelle — DONE, tests verts)
+
+- **Claim** : remodeliser les pièces Technic avec les vraies dimensions LEGO.
+- **Recherche** : module métrique 1 (pitch diameter = dents en mm), 16 dents par stud de rayon, 1 stud = 8 mm, tip ≈ pitch + 0.75 mm, trous d’axe ≈ 4.8 mm.
+- **Fait** : géométrie réécrite dans `buildLegoItem3D` :
+  - Engrenages : rayon de pas = dents/16 studs, dents autour du cercle de pas, trou d’axe central, double bevel avec second disque.
+  - Essieux : section en croix ≈ 4.8 mm, longueur en studs (2L/4L/6L/8L/stop).
+  - Liftarms : trous tous les 1 stud, largeur normale ≈ 0.55 stud / fine ≈ 0.28 stud.
+- **QA** : tsc 0. Tous les tests `src/game/*.test.ts` : **35/35 pass**. Pas de save.ts.
+- **Prochain** : continuer pièce par pièce (moteurs, pompes, moyeux, panneaux) avec les mêmes proportions réelles. Continuer.

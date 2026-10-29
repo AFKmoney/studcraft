@@ -1777,38 +1777,58 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return { group, isTool: false, flames };
     }
 
-    // Mathematical Technic geometry (module 1, radius = teeth * 0.5 / 16 for visual scale)
+    // Real LEGO Technic geometry (module 1 metric, 1 stud = 8 mm)
+    // Pitch radius in studs = teeth / 16. Tip radius ≈ pitch + 0.75 mm (0.094 stud).
+    // Axle cross ≈ 4.8 mm wide. Liftarm holes spaced 1 stud apart.
     const techMat = skin(baseHex);
-    if (id === ID.Gear8 || id === ID.Gear16 || id === ID.Gear24 || id === ID.Gear40 || id === ID.Bevel12 || id === ID.Bevel20) {
-      const teeth = id === ID.Gear8 ? 8 : id === ID.Gear16 ? 16 : id === ID.Gear24 ? 24 : id === ID.Gear40 ? 40 : id === ID.Bevel12 ? 12 : 20;
-      const r = (teeth * 0.5) / 16 * s * 2.2;
-      const thick = s * 0.18;
-      addCylPart(group, r * 0.72, r * 0.72, thick, 0, 0, 0, techMat, 24);
+    const STUD = s; // 1 block visual unit ≈ 1 stud
+    if (id === ID.Gear8 || id === ID.Gear16 || id === ID.Gear24 || id === ID.Gear40 || id === ID.Bevel12 || id === ID.Bevel20 || id === ID.DBevel12 || id === ID.DBevel20 || id === ID.DBevel36) {
+      const teeth = id === ID.Gear8 ? 8 : id === ID.Gear16 ? 16 : id === ID.Gear24 ? 24 : id === ID.Gear40 ? 40 : id === ID.Bevel12 || id === ID.DBevel12 ? 12 : id === ID.Bevel20 || id === ID.DBevel20 ? 20 : 36;
+      const pitchR = (teeth / 16) * STUD;          // real pitch radius
+      const tipR = pitchR + 0.094 * STUD;          // tip ≈ pitch + 0.75 mm
+      const rootR = pitchR - 0.12 * STUD;
+      const thick = 0.22 * STUD;                   // face width ≈ 1.8 mm
+      // Web
+      addCylPart(group, rootR, rootR, thick * 0.6, 0, 0, 0, techMat, 20);
+      // Teeth as boxes around the pitch circle
       for (let i = 0; i < teeth; i++) {
-        const a = (i / teeth) * Math.PI * 2;
-        const tx = Math.cos(a) * r;
-        const tz = Math.sin(a) * r;
-        addBoxPart(group, thick * 0.55, thick, thick * 0.55, tx, 0, tz, techMat);
+        const a = (i / teeth) * Math.PI * 2 - Math.PI / 2;
+        const tx = Math.cos(a) * (pitchR + 0.04 * STUD);
+        const tz = Math.sin(a) * (pitchR + 0.04 * STUD);
+        addBoxPart(group, 0.08 * STUD, thick, 0.12 * STUD, tx, 0, tz, techMat);
       }
-      addCylPart(group, s * 0.06, s * 0.06, thick * 1.4, 0, 0, 0, skin(0x2a2e32), 10);
+      // Axle hole
+      addCylPart(group, 0.06 * STUD, 0.06 * STUD, thick * 1.3, 0, 0, 0, skin(0x1a1a1a), 8);
+      // Double bevel: second disk
+      if (id === ID.DBevel12 || id === ID.DBevel20 || id === ID.DBevel36) {
+        addCylPart(group, rootR * 0.9, rootR * 0.9, thick * 0.5, 0, thick * 0.4, 0, techMat, 16);
+      }
       return { group, isTool: false, flames };
     }
-    if (id === ID.Axle || id === ID.Axle2 || id === ID.Axle4 || id === ID.Axle6 || id === ID.Axle8 || id === ID.Worm) {
-      const len = s * 0.9;
-      addBoxPart(group, s * 0.07, len, s * 0.07, 0, 0, 0, techMat);
-      addBoxPart(group, s * 0.14, len, s * 0.04, 0, 0, 0, techMat);
-      addBoxPart(group, s * 0.04, len, s * 0.14, 0, 0, 0, techMat);
+    if (id === ID.Axle || id === ID.Axle2 || id === ID.Axle4 || id === ID.Axle6 || id === ID.Axle8 || id === ID.Worm || id === ID.AxleStop3 || id === ID.AxleStop5) {
+      const studs = id === ID.Axle2 ? 2 : id === ID.Axle4 ? 4 : id === ID.Axle6 ? 6 : id === ID.Axle8 ? 8 : id === ID.AxleStop3 ? 3 : id === ID.AxleStop5 ? 5 : 3;
+      const len = studs * STUD * 0.5;              // visual length in studs
+      // Cross section: two intersecting rectangles ≈ 4.8 mm
+      const t = 0.06 * STUD;
+      const w = 0.15 * STUD;
+      addBoxPart(group, w, len, t, 0, 0, 0, techMat);
+      addBoxPart(group, t, len, w, 0, 0, 0, techMat);
+      if (id === ID.AxleStop3 || id === ID.AxleStop5) {
+        addBoxPart(group, 0.22 * STUD, 0.08 * STUD, 0.22 * STUD, 0, len / 2 - 0.04 * STUD, 0, skin(0x2a2e32));
+      }
       return { group, isTool: false, flames };
     }
-    if (id === ID.Liftarm3 || id === ID.Liftarm5 || id === ID.Liftarm7 || id === ID.Thin3 || id === ID.Thin5) {
-      const holes = id === ID.Liftarm3 || id === ID.Thin3 ? 3 : id === ID.Liftarm5 || id === ID.Thin5 ? 5 : 7;
-      const thin = id === ID.Thin3 || id === ID.Thin5;
-      const w = thin ? s * 0.22 : s * 0.42;
-      const len = holes * s * 0.28;
-      addBoxPart(group, w, s * 0.16, len, 0, 0, 0, techMat);
+    if (id === ID.Liftarm3 || id === ID.Liftarm5 || id === ID.Liftarm7 || id === ID.Liftarm9 || id === ID.Liftarm11 || id === ID.Liftarm13 || id === ID.Liftarm15 || id === ID.Thin3 || id === ID.Thin5 || id === ID.Thin7) {
+      const holes = id === ID.Liftarm3 || id === ID.Thin3 ? 3 : id === ID.Liftarm5 || id === ID.Thin5 ? 5 : id === ID.Liftarm7 || id === ID.Thin7 ? 7 : id === ID.Liftarm9 ? 9 : id === ID.Liftarm11 ? 11 : id === ID.Liftarm13 ? 13 : 15;
+      const thin = id === ID.Thin3 || id === ID.Thin5 || id === ID.Thin7;
+      const beamW = thin ? 0.28 * STUD : 0.55 * STUD;   // thin ≈ 2.2 mm, normal ≈ 4.4 mm
+      const beamH = 0.18 * STUD;                        // height ≈ 1.4 mm
+      const len = (holes - 1) * STUD + beamW;           // end-to-end
+      addBoxPart(group, beamW, beamH, len, 0, 0, 0, techMat);
+      // Axle holes every stud
       for (let i = 0; i < holes; i++) {
-        const z = (i - (holes - 1) / 2) * s * 0.28;
-        addCylPart(group, s * 0.055, s * 0.055, s * 0.18, 0, 0, z, skin(0x1a1a1a), 8);
+        const z = (i - (holes - 1) / 2) * STUD;
+        addCylPart(group, 0.06 * STUD, 0.06 * STUD, beamH * 1.4, 0, 0, z, skin(0x1a1a1a), 8);
       }
       return { group, isTool: false, flames };
     }
