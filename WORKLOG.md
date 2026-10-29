@@ -3631,4 +3631,12 @@ Le renommage « Arc / Bow » (fix BUG-2 de Grok) est REVERTÉ : def blocks.ts + 
 - **QA** : tsc 0. Tous les tests `src/game/*.test.ts` : **35/35 pass**. Pas de save.ts.
 - **Prochain** : retest Philippe. L’Axle 8L doit maintenant apparaître comme un essieu (croix) en main et au placement.
 
+## 2026-10-29 ~15:11 PDT — Muse (fil principal, relais du run de boucle 14:00 interrompu par timeout) : BUG-1 CORRIGÉ + BUG-5/BUG-6 PASS — MESURÉS au rig, push EN ATTENTE de merge
 
+Le run de boucle de 14:00 PDT a été interrompu par timeout (1 h) AVANT son push, mais son travail local est complet et mesuré :
+- **BUG-1 (éclairage briques) : CORRIGÉ et VÉRIFIÉ au rig (qa109c)** — mesures pixels brique vs voxel, réaliste ON : `similar:true`. Le soupçon (matériau vertexColors sans attribut color) était le bon; le correctif est dans le game.ts LOCAL.
+- **BUG-5 (drops en Créatif) : PASS mesuré.**
+- **BUG-6 (coffre cassé) : PASS mesuré.**
+- Leçon carte Survival/Créative documentée par le run (fichiers locaux).
+
+**RESTE À FAIRE (claim ouvert, prochain run de boucle ou fil principal)** : l'arbre local est à `4e023b7b`, le head a avancé (59d6f1ed+) pendant le run — merge 3-way du game.ts local sur le head courant, tsc 0, puis push game.ts + WORKLOG. Fichiers préparés par le run : `~/workspace/studcraft-work/game-4e.ts` et `game-59.ts`; scripts et sorties `qa109*.mjs`/`qa109*.json` en local (jamais dans le repo). AUCUN push n'a été fait par ce run; ne pas considérer BUG-1/5/6 comme fermés tant que le fix n'est pas sur main + redéployé + retest Philippe.
