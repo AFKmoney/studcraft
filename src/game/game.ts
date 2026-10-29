@@ -1793,7 +1793,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       addCylPart(group, s * 0.06, s * 0.06, thick * 1.4, 0, 0, 0, skin(0x2a2e32), 10);
       return { group, isTool: false, flames };
     }
-    if (id === ID.Axle || id === ID.Worm) {
+    if (id === ID.Axle || id === ID.Axle2 || id === ID.Axle4 || id === ID.Axle6 || id === ID.Axle8 || id === ID.Worm) {
       const len = s * 0.9;
       addBoxPart(group, s * 0.07, len, s * 0.07, 0, 0, 0, techMat);
       addBoxPart(group, s * 0.14, len, s * 0.04, 0, 0, 0, techMat);

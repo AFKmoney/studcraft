@@ -335,7 +335,7 @@ function LegoTechnic({ id, fill }: { id: number; fill: string }) {
     );
   }
   // Axles and pins
-  if (id === ID.Axle || id === ID.Worm || id === ID.AxleStop3 || id === ID.AxleStop5 || id === ID.AxlePin || id === ID.Pin2L || id === ID.PinFree || id === ID.Pin3L || id === ID.Pin3LFree || id === ID.Towball) {
+  if (id === ID.Axle || id === ID.Axle2 || id === ID.Axle4 || id === ID.Axle6 || id === ID.Axle8 || id === ID.Worm || id === ID.AxleStop3 || id === ID.AxleStop5 || id === ID.AxlePin || id === ID.Pin2L || id === ID.PinFree || id === ID.Pin3L || id === ID.Pin3LFree || id === ID.Towball) {
     return (
       <g>
         <rect x="14" y="4" width="4" height="24" rx="1" fill={fill} />

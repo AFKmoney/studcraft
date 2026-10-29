@@ -3533,3 +3533,13 @@ Vérification par lecture au head courant (fichiers fetchés à l'API, pas l'arb
 **Conclusion** : P5b livré = pièces + modèles. **Aucune fonction** : pas de flux d'énergie, aucun couple moteur dans le graphe de rotation, pas de liaison hub, pas de conduite à la télécommande, pas de décharge de batterie. Un moteur posé à côté d'un engrenage ne fait rien. C'est exactement le cœur de la demande de Philippe (créer des machineries, l'électricité) qui reste à construire AU NIVEAU SYSTÈME.
 
 **Item précis, claim ouvert (zone Grok : mechLink/mechState)** : le moteur comme SOURCE dans le graphe de rotation, taillé sur les gabarits Power Functions mesurés de la recherche (M 405 rpm/11 Ncm, L 390/18, XL 220/40, servo ±90°); le hub comme contrôleur qui lie les moteurs; la batterie comme budget d'énergie; la télécommande à canaux pour conduire; surcharge = arrêt expliqué (loi des limites). Si non claimé au prochain passage, le filet mutuel s'applique (Muse le prend).
+
+## 2026-10-29 ~14:46 PDT — Grok (retest icônes + axes longueurs — DONE, tests verts)
+
+- **Claim** : retest visuel icônes Technic + axes de longueurs.
+- **Fait** :
+  - Icônes : LegoTechnic couvre engrenages, essieux/pins, liftarms/frames, moteurs/hub, pompes/tuyaux. Les nouvelles longueurs d’axe sont incluses.
+  - Axes 2L / 4L / 6L / 8L (IDs 466–469) ajoutés : placeables, recettes, CATALOG + TECHNIC, géométrie math (section en croix) et icône tige.
+- **QA** : tsc 0. Tous les tests `src/game/*.test.ts` : **35/35 pass**. TECHNIC.length = 99. Pas de save.ts.
+- **Couverture PDF (lane Grok)** : CAT-02/03/04/05 largement couverts. Les familles nommées sont définies, accessibles, modelisées et icônées. CAT-06 reste lane Muse.
+- **Prochain** : retest Philippe dans l’inventaire Technic, ou polish supplémentaire si une pièce manque encore visuellement. Continuer.

@@ -456,6 +456,11 @@ export const ID = {
   Pin3LFree: 463,
   AxleStop3: 464,
   AxleStop5: 465,
+  // Axle lengths (PDF p. 2)
+  Axle2: 466,
+  Axle4: 467,
+  Axle6: 468,
+  Axle8: 469,
   // Muse lane (P2 welding): IDs 400+ are reserved for the brick-layer
   // pillars so they can never collide with Grok's Technic catalogue.
   Welder: 400,
@@ -1454,6 +1459,11 @@ put(b(ID.Pin3L, "Pin 3L friction", "#1a1a1a", "#2a2e32", "#0e0e0e", "#050505", {
 put(b(ID.Pin3LFree, "Pin 3L free", "#c5ccd3", "#e0e4e8", "#8e959c", "#4a5058", { hard: 0.4 }));
 put(b(ID.AxleStop3, "Axle with stop 3L", "#4a4e55", "#6a7078", "#3a3e44", "#2a2e32", { hard: 0.4 }));
 put(b(ID.AxleStop5, "Axle with stop 5L", "#4a4e55", "#6a7078", "#3a3e44", "#2a2e32", { hard: 0.4 }));
+// Axle lengths
+put(b(ID.Axle2, "Axle 2L", "#4a4e55", "#6a7078", "#3a3e44", "#2a2e32", { hard: 0.4 }));
+put(b(ID.Axle4, "Axle 4L", "#4a4e55", "#6a7078", "#3a3e44", "#2a2e32", { hard: 0.4 }));
+put(b(ID.Axle6, "Axle 6L", "#4a4e55", "#6a7078", "#3a3e44", "#2a2e32", { hard: 0.4 }));
+put(b(ID.Axle8, "Axle 8L", "#4a4e55", "#6a7078", "#3a3e44", "#2a2e32", { hard: 0.4 }));
 
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];
@@ -1914,6 +1924,10 @@ export const CATALOG = [
   ID.Pin3LFree,
   ID.AxleStop3,
   ID.AxleStop5,
+  ID.Axle2,
+  ID.Axle4,
+  ID.Axle6,
+  ID.Axle8,
 ];
 
 /** Parts the player can take from the Technic bin. Click-states stay out. */
@@ -2013,6 +2027,10 @@ export const TECHNIC = [
   ID.Pin3LFree,
   ID.AxleStop3,
   ID.AxleStop5,
+  ID.Axle2,
+  ID.Axle4,
+  ID.Axle6,
+  ID.Axle8,
 ] as const;
 
 export const COLORS = [ID.Red, ID.Orange, ID.Yellow, ID.Green, ID.Blue, ID.Azure, ID.Pink, ID.White, ID.Black];
