@@ -471,10 +471,10 @@ function put(def: BlockDef) {
 }
 
 put(b(ID.Air, "Air", "#000000", "#000", "#000", "#000", { solid: false, placeable: false, hard: 0 }));
-put(b(ID.Grass, "Grass", "#3aaa4c", "#3aaa4c", "#8d5a34", "#6d4426", { hard: 0.35 }));
-put(b(ID.Dirt, "Dirt", "#8d5a34", "#8d5a34", "#7a4e2e", "#5c3a22", { hard: 0.35 }));
-put(b(ID.Stone, "Stone", "#9aa1a8", "#a7aeb4", "#8e959c", "#7a8188", { hard: 1.45, tough: true }));
-put(b(ID.Sand, "Sand", "#e4d0a2", "#ead7aa", "#d7c392", "#c6b07e", { hard: 0.3 }));
+put(b(ID.Grass, "Grass", "#3aaa4c", "#3aaa4c", "#8d5a34", "#6d4426", { hard: 0.6 }));
+put(b(ID.Dirt, "Dirt", "#8d5a34", "#8d5a34", "#7a4e2e", "#5c3a22", { hard: 0.5 }));
+put(b(ID.Stone, "Stone", "#9aa1a8", "#a7aeb4", "#8e959c", "#7a8188", { hard: 1.5, tough: true, need: 1, drop: ID.Cobble }));
+put(b(ID.Sand, "Sand", "#e4d0a2", "#ead7aa", "#d7c392", "#c6b07e", { hard: 0.5 }));
 put(
   b(ID.Water, "Water", "#2f86d6", "#3b96e4", "#2a78c4", "#1d5fa3", {
     solid: false,
@@ -482,18 +482,18 @@ put(
     hard: 0.15,
   }),
 );
-put(b(ID.Log, "Wood", "#6b3e22", "#a56b3c", "#6b3e22", "#4e2c18", { hard: 0.7 }));
-put(b(ID.Leaves, "Leaf brick", "#2f8f3b", "#37a146", "#2a7d34", "#22662b", { hard: 0.25 }));
-put(b(ID.Planks, "Plank", "#e0b15a", "#f0c36e", "#d7a44e", "#c09040", { hard: 0.55 }));
+put(b(ID.Log, "Wood", "#6b3e22", "#a56b3c", "#6b3e22", "#4e2c18", { hard: 2 }));
+put(b(ID.Leaves, "Leaf brick", "#2f8f3b", "#37a146", "#2a7d34", "#22662b", { hard: 0.2 }));
+put(b(ID.Planks, "Plank", "#e0b15a", "#f0c36e", "#d7a44e", "#c09040", { hard: 2 }));
 put(
   b(ID.Glass, "Window", "#d5f3f6", "#e7fbff", "#d5f3f6", "#c5e6ea", {
     glass: true,
     hard: 0.25,
   }),
 );
-put(b(ID.Coal, "Coal", "#2b2b2b", "#3a3a3a", "#2b2b2b", "#1a1a1a", { hard: 1.6, tough: true, need: 1 }));
-put(b(ID.Gold, "Gold", "#f0c43a", "#ffd86a", "#e2b12e", "#c89620", { hard: 1.7, tough: true, need: 3 }));
-put(b(ID.Diamond, "Aqua gem", "#3ec8c8", "#7ee0e0", "#2eb4b4", "#1e9494", { hard: 1.9, tough: true, need: 3 }));
+put(b(ID.Coal, "Coal", "#2b2b2b", "#3a3a3a", "#2b2b2b", "#1a1a1a", { hard: 3, tough: true, need: 1 }));
+put(b(ID.Gold, "Gold", "#f0c43a", "#ffd86a", "#e2b12e", "#c89620", { hard: 3, tough: true, need: 3 }));
+put(b(ID.Diamond, "Aqua gem", "#3ec8c8", "#7ee0e0", "#2eb4b4", "#1e9494", { hard: 3, tough: true, need: 3 }));
 put(b(ID.Red, "Red", "#e23b2f", "#f25a46", "#d43228", "#b02620", { hard: 0.5 }));
 put(b(ID.Blue, "Blue", "#1f5fbf", "#3d7ad4", "#1b56b0", "#154890", { hard: 0.5 }));
 put(b(ID.Yellow, "Yellow", "#f5c518", "#ffe14a", "#e6b40e", "#c8980a", { hard: 0.5 }));
@@ -542,9 +542,9 @@ function item(
   put(b(id, name, color, color, color, color, { solid: false, placeable: false, hard: 0.1, ...extra }));
 }
 
-put(b(ID.Cobble, "Cobble", "#8e959c", "#9aa1a8", "#7e868e", "#6e767e", { hard: 1.3, tough: true, need: 1 }));
-put(b(ID.IronOre, "Iron ore", "#c4b49a", "#d7c6a8", "#b4532a", "#8d5a34", { hard: 1.7, tough: true, need: 2, drop: ID.RawIron }));
-put(b(ID.IronBlock, "Iron brick", "#d9dde2", "#f2f4f6", "#c5ccd3", "#aeb6be", { hard: 2.2, tough: true, need: 2 }));
+put(b(ID.Cobble, "Cobble", "#8e959c", "#9aa1a8", "#7e868e", "#6e767e", { hard: 2, tough: true, need: 1 }));
+put(b(ID.IronOre, "Iron ore", "#c4b49a", "#d7c6a8", "#b4532a", "#8d5a34", { hard: 3, tough: true, need: 2, drop: ID.RawIron }));
+put(b(ID.IronBlock, "Iron brick", "#d9dde2", "#f2f4f6", "#c5ccd3", "#aeb6be", { hard: 5, tough: true, need: 2 }));
 put(b(ID.Bench, "Bench", "#e0b15a", "#f0c36e", "#c49040", "#a07830", { hard: 0.7, work: "bench" }));
 put(b(ID.Furnace, "Kiln", "#6e645c", "#8a8076", "#5c534c", "#3e3834", { hard: 1.6, tough: true, need: 1, work: "furnace" }));
 put(b(ID.Chest, "Crate", "#c4924a", "#e0b15a", "#a67c3a", "#8a6428", { hard: 0.7, work: "chest" }));
@@ -715,7 +715,7 @@ put(
     hard: 0.2,
   }),
 );
-put(b(ID.Obsidian, "Void brick", "#2a1848", "#3d2868", "#1a1030", "#100818", { hard: 8, tough: true, need: 4 }));
+put(b(ID.Obsidian, "Void brick", "#2a1848", "#3d2868", "#1a1030", "#100818", { hard: 50, tough: true, need: 4 }));
 put(
   b(ID.Portal, "Gate void", "#7a4ad4", "#c084fc", "#5b32a8", "#3d2278", {
     solid: false,
@@ -735,7 +735,7 @@ put(
     light: 1,
   }),
 );
-put(b(ID.EndStone, "Pale brick", "#efe6b8", "#f7f1cc", "#ddd4a4", "#c8be8e", { hard: 1.5, tough: true, need: 1 }));
+put(b(ID.EndStone, "Pale brick", "#efe6b8", "#f7f1cc", "#ddd4a4", "#c8be8e", { hard: 3, tough: true, need: 1 }));
 put(b(ID.EndFrame, "End frame", "#2a1848", "#3d2868", "#1a1030", "#100818", { hard: 6, tough: true, need: 4 }));
 put(b(ID.EndFrameEye, "End frame (eye)", "#7a4ad4", "#c084fc", "#2a1848", "#1a1030", { hard: 6, tough: true, need: 4, drop: ID.EndFrame }));
 item(ID.DragonEgg, "Dragon egg", "#1a1030");
@@ -745,10 +745,10 @@ put(b(ID.Enchanter, "Rune table", "#2a1848", "#7a4ad4", "#6b3e22", "#c4924a", { 
 put(b(ID.Anvil, "Anvil", "#6e767e", "#c5ccd3", "#4a4038", "#2a2a2a", { hard: 2, tough: true, need: 1, work: "anvil" }));
 put(b(ID.Brew, "Kettle", "#6e645c", "#8a8076", "#3d2868", "#2a2a2a", { hard: 0.8, work: "brew" }));
 put(b(ID.Ice, "Ice", "#d5f3f6", "#f4fbff", "#8ec8f5", "#3b96e4", { hard: 0.35, slip: true }));
-put(b(ID.Gravel, "Gravel", "#7a756c", "#948e84", "#6a655c", "#524e48", { hard: 0.35, fall: true }));
+put(b(ID.Gravel, "Gravel", "#7a756c", "#948e84", "#6a655c", "#524e48", { hard: 0.6, fall: true }));
 put(b(ID.Campfire, "Campfire", "#f07820", "#ffe14a", "#6b3e22", "#4e2c18", { hard: 0.4, light: 1 }));
 put(b(ID.Note, "Chime", "#e0b15a", "#f0c36e", "#c4924a", "#8a6428", { hard: 0.4, note: true }));
-put(b(ID.Soul, "Slow sand", "#6a5848", "#8a7460", "#4a3c30", "#3a2e24", { hard: 0.4, slow: true }));
+put(b(ID.Soul, "Slow sand", "#6a5848", "#8a7460", "#4a3c30", "#3a2e24", { hard: 0.5, slow: true }));
 put(b(ID.Dispenser, "Launcher", "#8e959c", "#c5ccd3", "#6e645c", "#4a4038", { hard: 1.2, tough: true, need: 1 }));
 put(b(ID.Hopper, "Funnel", "#6e767e", "#aeb6be", "#4a4038", "#2a2a2a", { hard: 1.4, tough: true, need: 1 }));
 
@@ -894,9 +894,9 @@ BLOCKS[ID.ResinBoots].armor = 0.12;
 
 put(b(ID.Mud, "Mud", "#4a3424", "#5c4030", "#3a2818", "#2a1c12", { hard: 0.4 }));
 put(b(ID.Moss, "Moss", "#2f6a32", "#3f8a44", "#4a3428", "#3a281c", { hard: 0.4 }));
-put(b(ID.Clay, "Clay", "#b7a090", "#d2c2b0", "#a09080", "#8a7868", { hard: 0.45 }));
-put(b(ID.Snow, "Snow", "#f4f7fb", "#ffffff", "#e4eaf2", "#d0d8e4", { hard: 0.25 }));
-put(b(ID.Ash, "Ash brick", "#c45a32", "#e07a48", "#a84828", "#7a3018", { hard: 0.7, tough: true }));
+put(b(ID.Clay, "Clay", "#b7a090", "#d2c2b0", "#a09080", "#8a7868", { hard: 0.6 }));
+put(b(ID.Snow, "Snow", "#f4f7fb", "#ffffff", "#e4eaf2", "#d0d8e4", { hard: 0.2 }));
+put(b(ID.Ash, "Ash brick", "#c45a32", "#e07a48", "#a84828", "#7a3018", { hard: 2, tough: true }));
 put(b(ID.AshSoil, "Ash soil", "#a84828", "#c45a32", "#6a3018", "#4a2010", { hard: 0.4 }));
 put(b(ID.CrystalOre, "Crystal ore", "#d8c8ff", "#f4e8ff", "#8e959c", "#6e767e", { hard: 1.8, tough: true, need: 2, drop: ID.Crystal }));
 put(

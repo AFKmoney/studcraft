@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { BLOCKS, CREATIVE_BAR, ID, def, stairsVariant } from "./blocks";
+import { ATLAS_COLS, ATLAS_ROWS, BLOCKS, CREATIVE_BAR, ID, def, faceTile, stairsVariant } from "./blocks";
 import { createAudio } from "./audio";
 import { STUD_H, STUD_OFFSETS, STUD_R, buildChunk, type Surface } from "./mesher";
 import * as FS from "./fireState";
@@ -16,6 +16,7 @@ import { CS, HEIGHT, World, decorate, folkLayout, penSheep, paintEndCrystals, EN
 import { stockChest } from "./loot";
 import { Upscaler, upscaleScale } from "./upscale";
 import { BTN, PadEdges, activePad, padBusy, padLabel, rumble, stick } from "./gamepad";
+import { dsApply, dsRelease, dsRequest, dsState, dsTryReconnect, type TriggerFx } from "./dualsense";
 import { parseSeed } from "./noise";
 import { MobBatchRenderer } from "./mobBatch";
 
@@ -146,6 +147,9 @@ export type GameApi = {
     sfx: number;
     haptics: boolean;
     invertY: boolean;
+    deadL: number;
+    deadR: number;
+    adaptive: boolean;
     mods: { hard: boolean; generous: boolean; peaceful: boolean; spells: boolean };
   };
   phase: Phase;
@@ -211,6 +215,11 @@ export type GameApi = {
   setSfx: (n: number) => void;
   setHaptics: (on: boolean) => void;
   setInvertY: (on: boolean) => void;
+  setDead: (side: "left" | "right", v: number) => void;
+  /** DualSense adaptive triggers (WebHID). Enabling triggers the browser's
+   *  device picker — call from a click. State via dsState(). */
+  setAdaptive: (on: boolean) => void;
+  dsState: () => "unavailable" | "off" | "ready" | "connected";
   /** Resolve the in-game text prompt (replaces window.prompt). null = cancelled. */
   answer: (text: string | null) => void;
   /** Short UI feedback sound for menus. */
@@ -274,6 +283,16 @@ declare global {
       mobAudit?: () => Record<string, { h: number; minY: number; w: number; d: number }>;
       getQuests?: () => { id: string; chain?: string; step: number; steps: number; n: number; done: boolean; active: boolean }[];
       questAudit?: () => Record<string, boolean>;
+      getBoss?: () => { kind: string; hp: number; maxHp: number; shield: boolean; spawnT: number; phaseN: number; breathZones: number } | null;
+      hitMob?: (kind: string, dmg: number) => boolean;
+      getFx?: () => { booms: number; flames: number; smoke: number };
+      boom?: (dx: number, dz: number) => void;
+      breakAt?: (x: number, y: number, z: number) => number;
+      toppleCount?: () => number;
+      dropList?: () => { id: number; n: number }[];
+      phaseNow?: () => string;
+      pauseGame?: () => void;
+      toggleInv?: () => void;
       getHamlet?: () => { x: number; y: number; z: number } | null;
       getChunks?: () => number;
       /** QA: stop/restart the frame loop so a capture sees a still frame. */
@@ -326,6 +345,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     sfx: savedSettings?.sfx ?? 0.9,
     haptics: savedSettings?.haptics ?? true,
     invertY: savedSettings?.invertY ?? false,
+    deadL: savedSettings?.deadL ?? 0.16,
+    deadR: savedSettings?.deadR ?? 0.14,
+    adaptive: savedSettings?.adaptive ?? false,
     mods: {
       hard: savedSettings?.mods?.hard ?? false,
       generous: savedSettings?.mods?.generous ?? false,
@@ -453,8 +475,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       padSprint = false;
       return;
     }
-    const mv = stick(p.axes[0] ?? 0, p.axes[1] ?? 0, 0.16, 1);
-    const lk = stick(p.axes[2] ?? 0, p.axes[3] ?? 0, 0.14, 1.6);
+    // v4.18: per-stick dead zones, adjustable in Settings (Philippe).
+    const mv = stick(p.axes[0] ?? 0, p.axes[1] ?? 0, settings.deadL, 1);
+    const lk = stick(p.axes[2] ?? 0, p.axes[3] ?? 0, settings.deadR, 1.6);
     padIn.x = mv.x;
     padIn.y = -mv.y;
     padIn.lx = lk.x;
@@ -579,6 +602,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let grid = [0, 0, 0, 0, 0, 0, 0, 0, 0];
   let cursor = 0;
   let panel: "bag" | "bench" | "furnace" | "chest" | "enchant" | "anvil" | "brew" | "trade" | "beacon" = "bag";
+  let invReturn: "play" | "pause" = "play"; // where closing the inventory returns to
   let focus = { x: 0, y: 0, z: 0 };
   type Furn = {
     x: number;
@@ -2636,6 +2660,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     mode?: string;
     modeT?: number;
     bossT?: number;
+    spawnT?: number;
+    biteT?: number;
+    shield?: boolean;
+    phaseN?: number;
     maxHp?: number;
     captain?: boolean;
     raidMob?: boolean;
@@ -3095,11 +3123,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   let gillT = 0;
   let invisT = 0;
   let poisonT = 0;
+  let witherT = 0;
   let slowT = 0;
   let healAcc = 0;
   let mendAcc = 0;
   const frostIce = new Map<string, number>();
   let poisonAcc = 0;
+  let witherAcc = 0;
   let fireT = 0;
   let realm = 0;
   let portalCd = 0;
@@ -3125,6 +3155,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     friendly: boolean;
     mesh: THREE.Mesh;
     fire?: boolean;
+    skull?: boolean;
+    fromDragon?: boolean;
     pow?: number;
     flame?: boolean;
     punch?: number;
@@ -3135,8 +3167,22 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   };
   const rockets: { mesh: THREE.Mesh; t: number; color: string; trail: number }[] = [];
   const shots: Shot[] = [];
+  const breathZones: { x: number; y: number; z: number; t: number; puff: number; acc: number }[] = [];
   type Drop = { id: number; n: number; x: number; y: number; z: number; vy: number; mesh: THREE.Object3D };
   const drops: Drop[] = [];
+  // v4.18 tree topples (Teardown gravity): a felled tree falls as ONE rigid
+  // instanced group rotating about its cut base; on impact the lowest cells
+  // shatter and the rest land as blocks or pickable drops.
+  type Topple = {
+    mesh: THREE.InstancedMesh;
+    cells: { dx: number; dy: number; dz: number; id: number }[];
+    px: number; py: number; pz: number;
+    axis: THREE.Vector3;
+    angle: number; vel: number;
+  };
+  const topples: Topple[] = [];
+  const toppleGeo = new THREE.BoxGeometry(0.98, 0.98, 0.98);
+  const toppleMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
   let jumpTap = -10;
   let elapsed = 0;
   const tmp = new THREE.Color();
@@ -3183,11 +3229,17 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       sfx: settings.sfx,
       haptics: settings.haptics,
       invertY: settings.invertY,
+      deadL: settings.deadL,
+      deadR: settings.deadR,
+      adaptive: settings.adaptive,
       mods: { ...settings.mods },
     });
   }
 
   const pub = { phase: "title" as Phase, hasSave: hasSaveFlag };
+  let foundCacheSize = -1;
+  let gridCacheKey = "";
+  let gridCacheOut: { id: number; n: number } | null = null;
 
   function snapshot() {
     hud.fps = fpsShown;
@@ -3202,7 +3254,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     hud.level = rankLv;
     hud.rank = rankTitle(rankLv);
     hud.nextPerk = nextPerk(rankLv)?.name ?? "";
-    hud.found = [...found];
+    // v4.18 perf diet: snapshot() runs ~8×/s — don't re-spread the catalogue
+    // (hundreds of ids late-game) unless it actually grew.
+    if (foundCacheSize !== found.size) { foundCacheSize = found.size; hud.found = [...found]; }
     hud.oxygen = oxygen;
     hud.rain = raining;
     hud.weather = wx;
@@ -3210,22 +3264,34 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     hud.grid = [...grid];
     hud.cursor = cursor;
     hud.panel = panel;
-    const matched = matchGrid(grid, panel === "bench");
-    hud.craftOut = matched && matched.out ? { id: matched.out, n: matched.n } : null;
+    // v4.18 perf diet: the recipe match only changes when the grid does.
+    const gridKey = panel + "|" + grid.join(",");
+    if (gridKey !== gridCacheKey) {
+      gridCacheKey = gridKey;
+      const matched = matchGrid(grid, panel === "bench");
+      gridCacheOut = matched && matched.out ? { id: matched.out, n: matched.n } : null;
+    }
+    hud.craftOut = gridCacheOut;
     const furn = furnaces.get(focus.x + "," + focus.y + "," + focus.z);
     hud.furnace = furn
       ? { in: furn.in, inN: furn.inN, fuel: furn.fuel, fuelN: furn.fuelN, out: furn.out, outN: furn.outN, cook: furn.cook / 5 }
       : { in: 0, inN: 0, fuel: 0, fuelN: 0, out: 0, outN: 0, cook: 0 };
-    const bin = chests.get(focus.x + "," + focus.y + "," + focus.z);
-    hud.chest = bin ? bin.ids.map((id, i) => ({ id, n: bin.ns[i] ?? 0 })) : Array.from({ length: 27 }, () => ({ id: 0, n: 0 }));
+    // v4.18 perf diet: the 27-slot chest map is only read by the chest panel.
+    if (panel === "chest") {
+      const bin = chests.get(focus.x + "," + focus.y + "," + focus.z);
+      hud.chest = bin ? bin.ids.map((id, i) => ({ id, n: bin.ns[i] ?? 0 })) : Array.from({ length: 27 }, () => ({ id: 0, n: 0 }));
+    }
     const dxs = spawnPoint.x - player.x;
     const dzs = spawnPoint.z - player.z;
     hud.compass = Math.atan2(-dxs, -dzs);
     hud.realm = realm === 1 ? "Nether" : realm === 2 ? "End" : "Overworld";
     const wyrm = mobs.find((m) => m.kind === "dragon" && !m.dead);
-    hud.boss = wyrm ? "End Wyrm" : raid ? "Raid — wave " + raid.wave + " of 3" : "";
+    const witherBoss = mobs.find((m) => m.kind === "wither" && !m.dead);
+    hud.boss = wyrm ? "End Wyrm" : witherBoss ? "The Wither" : raid ? "Raid — wave " + raid.wave + " of 3" : "";
     hud.bossHp = wyrm
       ? Math.max(0, Math.min(1, wyrm.hp / (wyrm.maxHp ?? wyrm.hp)))
+      : witherBoss
+        ? Math.max(0, Math.min(1, witherBoss.hp / (witherBoss.maxHp ?? witherBoss.hp)))
       : raid && raid.total > 0
         ? Math.max(0, Math.min(1, mobs.filter((m) => m.raidMob && !m.dead).length / raid.total))
         : 0;
@@ -3238,6 +3304,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       gillT > 0 ? "Gill" : "",
       invisT > 0 ? "Veil" : "",
       poisonT > 0 ? "Venom" : "",
+      witherT > 0 ? "Wither" : "",
       slowT > 0 ? "Tar" : "",
       fireT > 0 ? "Fire" : "",
       enchSummary(hotbar[slot]) ? "Rune" : "",
@@ -3850,6 +3917,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (stepped) return;
     }
     if (axis === "y") {
+      if (delta < 0 && player.vy < -8) padRumble(Math.min(0.6, (-player.vy - 8) / 18 + 0.15), 0.25, 90); // hard landing thud
       if (delta < 0 && player.vy < -13 && !creative && !inWaterNow()) {
         let dmg = Math.round((-player.vy - 13) * 1.5);
         if (rankLv >= 15) dmg = Math.round(dmg * 0.55);
@@ -3950,7 +4018,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     emit();
   }
 
-  function raycast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxD: number) {
+  function raycast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxD: number, throughFluid = false) {
     const len = Math.hypot(dx, dy, dz) || 1;
     dx /= len;
     dy /= len;
@@ -3973,7 +4041,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     let dist = 0;
     for (let i = 0; i < 48; i++) {
       const id = world.get(x, y, z);
-      if (id !== ID.Air && dist > 0.02) return { x, y, z, nx, ny, nz, dist, id };
+      // v4.18 (Philippe): targeting passes THROUGH water/lava like Minecraft —
+      // aiming into a lake targets the solid under it, so blocks are placed
+      // IN the water (filling the fluid cell), never on top of it.
+      if (id !== ID.Air && dist > 0.02 && !(throughFluid && def(id).fluid)) return { x, y, z, nx, ny, nz, dist, id };
       if (tMaxX < tMaxY && tMaxX < tMaxZ) {
         if (tMaxX > maxD) return null;
         x += stepX;
@@ -4078,30 +4149,34 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const held = def(hotbar[slot]);
       const tier = held.tool === "pick" ? held.tier : 0;
       const canDrop = !block.need || tier >= block.need;
+      // v4.18 (Philippe 2026-10-28): a fully broken block must be SEEN and
+      // picked up — yields spawn as world drops (magnet pickup adds them to
+      // the bag) instead of silently appearing in the inventory.
+      const yieldAt = (dropId: number) => dropItem(dropId, 1, x + 0.5, y + 0.55, z + 0.5);
       if (canDrop && id === ID.Leaves) {
-        if (Math.random() < 0.08) addInv(ID.Apple, 1);
-        if (Math.random() < 0.12) addInv(ID.Stick, 1);
+        if (Math.random() < 0.08) yieldAt(ID.Apple);
+        if (Math.random() < 0.12) yieldAt(ID.Stick);
       } else if (canDrop && id === ID.TallGrass) {
-        if (Math.random() < 0.4) addInv(ID.Seeds, 1);
-      } else if (canDrop && (id === ID.Crop || id === ID.Crop1 || id === ID.Crop2 || id === ID.CarrotCrop || id === ID.PotatoCrop || id === ID.BeetCrop)) addInv(ID.Seeds, 1);
+        if (Math.random() < 0.4) yieldAt(ID.Seeds);
+      } else if (canDrop && (id === ID.Crop || id === ID.Crop1 || id === ID.Crop2 || id === ID.CarrotCrop || id === ID.PotatoCrop || id === ID.BeetCrop)) yieldAt(ID.Seeds);
       else if (canDrop && id === ID.CropRipe) {
-        addInv(ID.Wheat, 1);
-        addInv(ID.Seeds, 1);
-      } else if (canDrop && id === ID.Gravel) addInv(Math.random() < 0.14 ? ID.Flint : ID.Gravel, 1);
-      else if (canDrop && block.drop !== -1) addInv(enchLvl(hotbar[slot], "silk") > 0 ? id : block.drop || id, 1);
+        yieldAt(ID.Wheat);
+        yieldAt(ID.Seeds);
+      } else if (canDrop && id === ID.Gravel) yieldAt(Math.random() < 0.14 ? ID.Flint : ID.Gravel);
+      else if (canDrop && block.drop !== -1) yieldAt(enchLvl(hotbar[slot], "silk") > 0 ? id : block.drop || id);
       // Fortune: extra ore drops, rolled per level (never with Silk Touch).
       if (canDrop && block.drop !== -1 && (ORE_XP[id] ?? 0) > 0 && enchLvl(hotbar[slot], "silk") === 0) {
         const fort = held.tool === "pick" ? enchLvl(hotbar[slot], "fortune") : 0;
-        for (let f = 0; f < fort; f++) if (Math.random() < 0.35) addInv(block.drop || id, 1);
+        for (let f = 0; f < fort; f++) if (Math.random() < 0.35) yieldAt(block.drop || id);
       }
-      if (canDrop && id === ID.PrismOre && Math.random() < 0.22) addInv(ID.Core, 1);
+      if (canDrop && id === ID.PrismOre && Math.random() < 0.22) yieldAt(ID.Core);
       const right =
         (held.tool === "pick" && (block.tough || block.need > 0)) ||
         (held.tool === "axe" && AXE_OK(id)) ||
         (held.tool === "shovel" && SHOVEL_OK(id));
       if (right) wearHeld();
       if (canDrop) gainXp(ORE_XP[id] ?? 0);
-      if (canDrop && skills.has("yield") && ORE_XP[id] && Math.random() < 0.3) addInv(block.drop || id, 1);
+      if (canDrop && skills.has("yield") && ORE_XP[id] && Math.random() < 0.3) yieldAt(block.drop || id);
       if (id === ID.Stone || id === ID.Cobble) oreEar(x, y, z);
     }
     if (id === ID.Log) bumpQuest("break", "log");
@@ -4131,12 +4206,228 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         spawnPiece(x + cx, y + cy, z + cz, col, (cx - 0.5) * 3.4 + (Math.random() - 0.5) * 0.8, 1.2 + cy * 2.2 + Math.random() * 1.1, (cz - 0.5) * 3.4 + (Math.random() - 0.5) * 0.8);
       }
     } else burstModularBlock(x + 0.5, y + 0.5, z + 0.5, block);
+    if (id === ID.Log) tryTopple(x, y, z);
+    padRumble(0.12, 0.25, 45);
     audio.break();
     swing = 1;
     saveDirty = true;
     mineTime = 0;
     mineKey = "";
     hideCrack();
+  }
+
+  // v4.18 — Teardown gravity for trees (Philippe 2026-10-28: « tu coupes un
+  // arbre, il tombe, et ce qui touche au sol en premier casse »). When a log
+  // is cut, the connected log+leaves component above it topples as one rigid
+  // body if nothing else holds it up and it really is a tree (canopy ≥ 6
+  // leaves — log cabins with beams do not fall). Light by doctrine: one
+  // InstancedMesh, analytic rotation, no physics engine.
+  function tryTopple(x: number, y: number, z: number) {
+    if (world.get(x, y + 1, z) !== ID.Log) return;
+    const key = (cx: number, cy: number, cz: number) => cx + "," + cy + "," + cz;
+    const cells: { dx: number; dy: number; dz: number; id: number }[] = [];
+    const seen = new Set<string>([key(x, y + 1, z)]);
+    const stack: [number, number, number][] = [[x, y + 1, z]];
+    let leaves = 0;
+    let logs = 0;
+    while (stack.length) {
+      const [cx, cy, cz] = stack.pop()!;
+      const id = world.get(cx, cy, cz);
+      if (id !== ID.Log && id !== ID.Leaves) continue;
+      if (id === ID.Leaves) leaves++;
+      else logs++;
+      cells.push({ dx: cx - x, dy: cy - y, dz: cz - z, id });
+      if (cells.length > 320) return; // not a tree — a forest/build: leave it
+      for (const [ox, oy, oz] of NEIGHBORS6) {
+        const nx = cx + ox, ny = cy + oy, nz = cz + oz, k = key(nx, ny, nz);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        stack.push([nx, ny, nz]);
+      }
+    }
+    if (leaves < 6 || logs < 2) return;
+    const inTree = new Set(cells.map((c) => key(x + c.dx, y + c.dy, z + c.dz)));
+    for (const c of cells) {
+      if (c.id !== ID.Log) continue;
+      const bx = x + c.dx, by = y + c.dy - 1, bz = z + c.dz;
+      if (bx === x && by === y && bz === z) continue; // the cut cell (now air)
+      const below = world.get(bx, by, bz);
+      if (below && def(below).solid && !inTree.has(key(bx, by, bz))) return; // held up by something else
+    }
+    // Fall away from the player, snapped to the nearest axis.
+    let ax = x + 0.5 - player.x;
+    let az = z + 0.5 - player.z;
+    if (Math.abs(ax) > Math.abs(az)) { ax = Math.sign(ax) || 1; az = 0; } else { az = Math.sign(az) || 1; ax = 0; }
+    const mesh = new THREE.InstancedMesh(toppleGeo, toppleMat, cells.length);
+    const m4 = new THREE.Matrix4();
+    const col = new THREE.Color();
+    cells.forEach((c, i) => {
+      m4.makeTranslation(c.dx, c.dy + 0.5, c.dz);
+      mesh.setMatrixAt(i, m4);
+      mesh.setColorAt(i, col.set(def(c.id).side || def(c.id).color));
+    });
+    mesh.castShadow = true;
+    mesh.position.set(x + 0.5, y, z + 0.5);
+    scene.add(mesh);
+    for (const c of cells) {
+      const wx = x + c.dx, wy = y + c.dy, wz = z + c.dz;
+      CH.setRemoved(wx, wy, wz, c.id, 0);
+      world.set(wx, wy, wz, ID.Air);
+      netSendEdit(wx, wy, wz, ID.Air);
+      markDirtyAt(wx, wz);
+    }
+    saveDirty = true;
+    // Rotation axis: horizontal, perpendicular to the fall direction, so the
+    // up vector tips toward (ax, az) as the angle grows.
+    const axis = new THREE.Vector3(az, 0, -ax).normalize();
+    topples.push({ mesh, cells, px: x + 0.5, py: y, pz: z + 0.5, axis, angle: 0, vel: 0 });
+    say("Timber!", 1200);
+  }
+
+  const _topV = new THREE.Vector3();
+  function updateTopples(dt: number) {
+    for (let i = topples.length - 1; i >= 0; i--) {
+      const t = topples[i];
+      t.vel += dt * 2.4 * (0.35 + t.angle); // gravity bite grows as it tips
+      t.angle = Math.min(t.angle + t.vel * dt, Math.PI / 2);
+      t.mesh.quaternion.setFromAxisAngle(t.axis, t.angle);
+      // Impact: the first cell whose underside reaches the ground.
+      let hit = t.angle >= Math.PI / 2 - 0.001;
+      if (!hit) {
+        for (const c of t.cells) {
+          _topV.set(c.dx, c.dy, c.dz).applyAxisAngle(t.axis, t.angle);
+          const wy = t.py + _topV.y;
+          if (wy - 0.02 <= groundY(Math.floor(t.px + _topV.x), Math.floor(t.pz + _topV.z))) { hit = true; break; }
+        }
+      }
+      if (!hit) continue;
+      // Settle: measure each cell's resting height; the lowest band touched
+      // first and shatters (Philippe: « ce qui touche au sol en premier casse »).
+      const placed: { c: (typeof t.cells)[0]; x: number; y: number; z: number; h: number }[] = [];
+      let minH = Infinity;
+      for (const c of t.cells) {
+        _topV.set(c.dx, c.dy, c.dz).applyAxisAngle(t.axis, t.angle);
+        const wx = Math.floor(t.px + _topV.x), wy = Math.floor(t.py + _topV.y), wz = Math.floor(t.pz + _topV.z);
+        placed.push({ c, x: wx, y: wy, z: wz, h: _topV.y });
+        if (_topV.y < minH) minH = _topV.y;
+      }
+      let debris = 42;
+      for (const p of placed) {
+        const col = def(p.c.id).side || def(p.c.id).color;
+        if (p.h <= minH + 0.85) {
+          for (let k = 0; k < 3 && debris > 0; k++, debris--) spawnPiece(p.x + 0.5, p.y + 0.5, p.z + 0.5, col, (Math.random() - 0.5) * 2.4, 1 + Math.random() * 2, (Math.random() - 0.5) * 2.4);
+          if (!creative && p.c.id === ID.Log && Math.random() < 0.35) dropItem(ID.Log, 1, p.x + 0.5, p.y + 0.6, p.z + 0.5);
+          if (p.c.id === ID.Leaves && Math.random() < 0.05) dropItem(ID.Apple, 1, p.x + 0.5, p.y + 0.6, p.z + 0.5);
+          continue;
+        }
+        const targetFree = world.get(p.x, p.y, p.z) === ID.Air;
+        const belowId = world.get(p.x, p.y - 1, p.z);
+        if (targetFree && belowId && def(belowId).solid) {
+          world.set(p.x, p.y, p.z, p.c.id);
+          netSendEdit(p.x, p.y, p.z, p.c.id);
+          markDirtyAt(p.x, p.z);
+        } else if (!creative && p.c.id === ID.Log) {
+          dropItem(ID.Log, 1, p.x + 0.5, p.y + 0.6, p.z + 0.5);
+        }
+      }
+      scene.remove(t.mesh);
+      t.mesh.dispose();
+      topples.splice(i, 1);
+      if (Math.hypot(player.x - t.px, player.z - t.pz) < 22) padRumble(0.5, 0.3, 160); // the trunk slams down
+      audio.break();
+      saveDirty = true;
+    }
+  }
+
+  // ---- Falling blocks: real gravity, kept light (v4.18, Philippe) ----
+  // Sand / Gravel / Soul (def().fall) used to teleport one cell per tick —
+  // steppy and fake. Now an unsupported one becomes a true falling entity:
+  // gravity acceleration, terminal velocity, water drag, dust + a pad thud
+  // on landing. One shared textured geometry per block id, a hard cap of
+  // entities, sub-stepped integration so a frame hitch can't tunnel it
+  // through the floor. No physics engine, no per-frame allocation.
+  type Faller = { id: number; x: number; z: number; y: number; vy: number; mesh: THREE.Mesh };
+  const fallers: Faller[] = [];
+  const fallerGeos = new Map<number, THREE.BufferGeometry>();
+  const FALL_CAP = 64;
+  const FALL_G = 30;
+  const FALL_TERM = -38;
+
+  function fallerGeo(id: number) {
+    let g = fallerGeos.get(id);
+    if (g) return g;
+    g = new THREE.BoxGeometry(0.98, 0.98, 0.98);
+    const uv = g.getAttribute("uv") as THREE.BufferAttribute;
+    const kinds = [1, 1, 0, 2, 1, 1] as const; // +x −x +y −y +z −z → side side top bottom side side
+    for (let f = 0; f < 6; f++) {
+      const tile = faceTile(id, kinds[f]);
+      const c = tile % ATLAS_COLS;
+      const r = Math.floor(tile / ATLAS_COLS);
+      const du = 1 / ATLAS_COLS;
+      const dv = 1 / ATLAS_ROWS;
+      const u0 = c * du + du * 0.02;
+      const u1 = (c + 1) * du - du * 0.02;
+      const vTop = 1 - r * dv - dv * 0.02;
+      const vBot = 1 - (r + 1) * dv + dv * 0.02;
+      for (let k = 0; k < 4; k++) {
+        const i = f * 4 + k;
+        uv.setXY(i, u0 + uv.getX(i) * (u1 - u0), vBot + uv.getY(i) * (vTop - vBot));
+      }
+    }
+    uv.needsUpdate = true;
+    fallerGeos.set(id, g);
+    return g;
+  }
+
+  function spawnFaller(x: number, y: number, z: number) {
+    const id = world.get(x, y, z);
+    if (!def(id).fall || fallers.length >= FALL_CAP) return;
+    if (def(world.get(x, y - 1, z)).solid) return; // still supported
+    world.set(x, y, z, ID.Air);
+    markDirtyAt(x, z);
+    const mesh = new THREE.Mesh(fallerGeo(id), opaqueLam);
+    mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
+    if (plasticOn) {
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+    }
+    scene.add(mesh);
+    fallers.push({ id, x: x + 0.5, z: z + 0.5, y, vy: 0, mesh });
+  }
+
+  function updateFallers(dt: number) {
+    for (let i = fallers.length - 1; i >= 0; i--) {
+      const f = fallers[i];
+      const cx = Math.floor(f.x);
+      const cz = Math.floor(f.z);
+      const here = world.get(cx, Math.floor(f.y), cz);
+      const inFluid = here === ID.Water || here === ID.Lava;
+      f.vy -= (inFluid ? 9 : FALL_G) * dt;
+      const term = inFluid ? -5 : FALL_TERM;
+      if (f.vy < term) f.vy = term;
+      // Sub-step so a hitched frame can't tunnel through a 1-block floor.
+      const steps = Math.max(1, Math.ceil((Math.abs(f.vy) * dt) / 0.45));
+      const sdt = dt / steps;
+      let landed = false;
+      for (let s = 0; s < steps && !landed; s++) {
+        f.y += f.vy * sdt;
+        const cellY = Math.floor(f.y);
+        if (def(world.get(cx, cellY, cz)).solid) {
+          const landY = cellY + 1;
+          world.set(cx, landY, cz, f.id);
+          markDirtyAt(cx, cz);
+          burst(f.x, landY + 0.1, f.z, def(f.id).color, 5);
+          if (Math.hypot(player.x - f.x, player.z - f.z) < 10) padRumble(0.12, 0.08, 40);
+          landed = true;
+        }
+      }
+      if (landed || f.y < -12) {
+        scene.remove(f.mesh);
+        fallers.splice(i, 1);
+        continue;
+      }
+      f.mesh.position.set(f.x, f.y + 0.5, f.z);
+    }
   }
 
   function bumpQuest(kind: "break" | "place" | "kill", tag: string) {
@@ -4769,6 +5060,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const t = t0 - step;
       if (t > 0) {
         FS.burningMap.set(k, t);
+        // v4.18: live fires throw the odd ember (near fires only — budget).
+        if (Math.random() < 0.1) {
+          const [ex, ey, ez] = FS.funkey(k);
+          if (Math.hypot(ex - player.x, ez - player.z) < 24) burst(ex + 0.5, ey + 1.1, ez + 0.5, "#ff9a3c", 1);
+        }
         continue;
       }
       FS.burningMap.delete(k);
@@ -5225,16 +5521,23 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       return;
     }
-    if (held === ID.Bucket && (hit.id === ID.Water || hit.id === ID.Lava)) {
-      const fill = hit.id === ID.Lava ? ID.LavaBucket : ID.WaterBucket;
-      if (world.set(hit.x, hit.y, hit.z, ID.Air)) {
-        markDirtyAt(hit.x, hit.z);
-        spend(ID.Bucket, 1);
-        addInv(fill, 1);
-        audio.place();
-        saveDirty = true;
+    if (held === ID.Bucket) {
+      // v4.18: the main target now passes through fluids (for placing IN
+      // water), so scooping does its own fluid-inclusive cast.
+      const fh = hit.id === ID.Water || hit.id === ID.Lava
+        ? hit
+        : raycast(player.x, player.y + EYE, player.z, -Math.sin(player.yaw) * Math.cos(player.pitch), Math.sin(player.pitch), -Math.cos(player.yaw) * Math.cos(player.pitch), 6, false);
+      if (fh && (fh.id === ID.Water || fh.id === ID.Lava)) {
+        const fill = fh.id === ID.Lava ? ID.LavaBucket : ID.WaterBucket;
+        if (world.set(fh.x, fh.y, fh.z, ID.Air)) {
+          markDirtyAt(fh.x, fh.z);
+          spend(ID.Bucket, 1);
+          addInv(fill, 1);
+          audio.place();
+          saveDirty = true;
+        }
+        return;
       }
-      return;
     }
     if (held === ID.WaterBucket || held === ID.LavaBucket) {
       const px = hit.x + hit.nx;
@@ -5366,11 +5669,18 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     shots.push({ x, y, z, vx: (dx / len) * 18, vy: (dy / len) * 18, vz: (dz / len) * 18, life: 2.4, friendly, mesh, pow, flame, punch, pierce });
   }
 
-  function launchFireball(x: number, y: number, z: number, dx: number, dy: number, dz: number) {
+  function launchFireball(x: number, y: number, z: number, dx: number, dy: number, dz: number, fromDragon = false) {
     const len = Math.hypot(dx, dy, dz) || 1;
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.36, 0.36), skin(0xff7a2a));
     scene.add(mesh);
-    shots.push({ x, y, z, vx: (dx / len) * 11, vy: (dy / len) * 11, vz: (dz / len) * 11, life: 3.6, friendly: false, mesh, fire: true });
+    shots.push({ x, y, z, vx: (dx / len) * 11, vy: (dy / len) * 11, vz: (dz / len) * 11, life: 3.6, friendly: false, mesh, fire: true, fromDragon });
+  }
+
+  function launchSkull(x: number, y: number, z: number, dx: number, dy: number, dz: number) {
+    const len = Math.hypot(dx, dy, dz) || 1;
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), skin(0x2a2733));
+    scene.add(mesh);
+    shots.push({ x, y, z, vx: (dx / len) * 13, vy: (dy / len) * 13, vz: (dz / len) * 13, life: 3.6, friendly: false, mesh, skull: true });
   }
 
   function launchSplash(x: number, y: number, z: number, dx: number, dy: number, dz: number, splash: number) {
@@ -5606,6 +5916,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       gillT = 0;
       invisT = 0;
       poisonT = 0;
+      witherT = 0;
       slowT = 0;
       if (!creative) spend(id, 1);
       say("Cleared");
@@ -6086,6 +6397,35 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         if (health > 1) hurt(1);
       }
     }
+    if (witherT > 0) {
+      witherT = Math.max(0, witherT - dt);
+      witherAcc += dt;
+      while (witherAcc >= 1) {
+        witherAcc -= 1;
+        // Wither decay keeps the same house rule: it withers, it does not finish you.
+        if (health > 1) hurt(1);
+      }
+    }
+    for (let i = breathZones.length - 1; i >= 0; i--) {
+      const zn = breathZones[i];
+      zn.t -= dt;
+      if (zn.t <= 0) {
+        breathZones.splice(i, 1);
+        continue;
+      }
+      zn.puff -= dt;
+      if (zn.puff <= 0) {
+        zn.puff = 0.45;
+        burst(zn.x, zn.y, zn.z, "#b45ae8", 3);
+      }
+      if (!creative && Math.hypot(player.x - zn.x, player.z - zn.z) < 2.4 && Math.abs(player.y + 1 - zn.y) < 2) {
+        zn.acc += dt;
+        while (zn.acc >= 0.8) {
+          zn.acc -= 0.8;
+          hurt(1);
+        }
+      }
+    }
     if (fireT > 0) {
       fireT -= dt;
       if (Math.floor(fireT * 2) !== Math.floor((fireT + dt) * 2)) hurt(1);
@@ -6163,18 +6503,16 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const gy = Math.floor(player.y);
     const gz = Math.floor(player.z);
     if ((elapsed * 4) % 1 < dt * 4) {
-      for (let dz = -4; dz <= 4; dz++) {
-        for (let dx = -4; dx <= 4; dx++) {
-          for (let dy = 4; dy >= -2; dy--) {
+      // Gravity spawner: unsupported `fall` blocks (sand, gravel, soul)
+      // become real falling entities — see updateFallers. The old code
+      // teleported them one cell per tick; this only spawns now.
+      for (let dz = -5; dz <= 5; dz++) {
+        for (let dx = -5; dx <= 5; dx++) {
+          for (let dy = 8; dy >= -2; dy--) {
             const x = gx + dx;
             const y = gy + dy;
             const z = gz + dz;
-            const id = world.get(x, y, z);
-            if (!def(id).fall) continue;
-            if (world.get(x, y - 1, z) !== ID.Air) continue;
-            world.set(x, y, z, ID.Air);
-            world.set(x, y - 1, z, id);
-            markDirtyAt(x, z);
+            if (def(world.get(x, y, z)).fall) spawnFaller(x, y, z);
           }
         }
       }
@@ -6316,6 +6654,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const hitBlockId = world.get(bx, by, bz);
       if (def(hitBlockId).solid) {
         dead = true;
+        if (s.skull) burst(s.x, s.y, s.z, "#3a3548", 10);
+        if (s.fromDragon && breathZones.length < 6) {
+          const wyrm = mobs.find((mm) => mm.kind === "dragon" && !mm.dead);
+          if (wyrm && wyrm.hp < (wyrm.maxHp ?? wyrm.hp) * 0.65) breathZones.push({ x: bx + 0.5, y: by + 1.2, z: bz + 0.5, t: 6, puff: 0, acc: 0 });
+        }
         if (s.fire) {
           // v4.15: a fireball sets the world alight — the struck block
           // catches, or a ground fire starts on one of its faces.
@@ -6347,6 +6690,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
             }
             let hit = s.trident ? 9 : 4 + (strengthT > 0 ? 2 : 0) + (s.pow ?? 0);
             if (m.kind === "dragon" && crystalsLeft() > 0) hit = Math.max(1, Math.ceil(hit * 0.5));
+            if (m.kind === "wither" && ((m.spawnT ?? 0) > 0 || m.shield)) {
+              if (m.shield && (m.spawnT ?? 0) <= 0) burst(s.x, s.y, s.z, "#9a97ad", 5);
+              hit = 0;
+            }
             m.hp -= hit;
             if (m.kind === "villager" || m.kind === "golem") {
               m.byPlayerT = 6;
@@ -6364,8 +6711,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           }
         }
       } else if (!dead && !s.friendly && Math.hypot(player.x - s.x, player.z - s.z) < 0.6 && Math.abs(player.y + 1 - s.y) < 1.2) {
-        bite(s.fire ? 6 : 3);
-        if (s.fire) fireT = Math.max(fireT, 3);
+        if (s.skull) {
+          bite(4);
+          witherT = Math.max(witherT, 8);
+        } else {
+          bite(s.fire ? 6 : 3);
+          if (s.fire) fireT = Math.max(fireT, 3);
+        }
         dead = true;
       }
       if (dead && s.splash) applySplash(s.splash, s.x, s.y, s.z);
@@ -6824,7 +7176,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       float t = uTime;
       vec2 uv = vUv;
       float rise = uv.y;
-      vec2 fp = vec2(uv.x * 6.8 + vPhase * 31.0, uv.y * 9.5 - t * 2.6 + vPhase * 17.0);
+      vec2 fp = vec2(uv.x * 6.8 + vPhase * 31.0, uv.y * 9.5 - t * 3.1 + vPhase * 17.0);
       float n = snoise(fp) * 0.5 + 0.5;
       float n2 = snoise(fp * 2.3 + vec2(3.7, 1.3) - vec2(0.0, t * 1.7)) * 0.5 + 0.5;
       // Physics rework (Philippe: flames read as flat "cards"): ragged
@@ -6834,15 +7186,15 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       float d = abs(uv.x - 0.5 + (n - 0.5) * 0.42 * rise);
       float body = smoothstep(w, w - 0.15, d);
       float lick = smoothstep(0.35, 0.9, n2 + (1.0 - rise) * 0.55);
-      float a = clamp(body * (0.35 + lick), 0.0, 1.0);
+      float a = clamp(body * (0.35 + lick), 0.0, 1.0) * (0.9 + 0.18 * sin(t * 13.0 + vPhase * 57.0));
       a *= smoothstep(0.10, 0.42, n + (1.0 - rise) * 0.38);
       a *= 1.0 - smoothstep(0.72, 1.0, rise) * 0.9;
       if (a < 0.012) discard;
       float heat = clamp((1.0 - rise) * 0.75 + n * 0.38, 0.0, 1.0);
       vec3 col = mix(vec3(0.85, 0.16, 0.02), vec3(1.0, 0.45, 0.05), smoothstep(0.05, 0.45, heat));
       col = mix(col, vec3(1.0, 0.83, 0.25), smoothstep(0.45, 0.75, heat));
-      col = mix(col, vec3(1.0, 0.98, 0.88), smoothstep(0.75, 0.97, heat));
-      gl_FragColor = vec4(col * (1.35 + heat), a * 0.92);
+      col = mix(col, vec3(1.0, 0.98, 0.88), smoothstep(0.62, 0.92, heat));
+      gl_FragColor = vec4(col * (1.45 + heat * 1.25), a * 0.92);
     }`;
   const smokeVert = `
     attribute vec3 aPos; attribute float aPhase; attribute float aScale;
@@ -6853,9 +7205,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       vLife = lt;
       vec3 center = aPos + vec3(
         sin(aPhase * 40.0 + uTime * 0.7 + lt * 2.2) * 0.38 * (0.4 + lt),
-        lt * 3.4 * aScale,
+        lt * 4.3 * aScale,
         cos(aPhase * 31.0 + lt * 1.9) * 0.32 * (0.4 + lt));
-      float sz = aScale * mix(0.55, 1.9, lt);
+      float sz = aScale * mix(0.55, 2.3, lt);
       vec3 right = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
       vec3 up = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
       vec3 wp = center + right * position.x * sz + up * position.y * sz;
@@ -6874,7 +7226,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     void main(){
       float d = length(vUv - 0.5) * 2.0;
       float n = snoise(vUv * 6.0 + vPhase * 19.0 + vec2(0.0, -uTime * 0.15)) * 0.5 + 0.5;
-      float a = smoothstep(1.0, 0.25, d + n * 0.45) * sin(3.14159 * vLife) * 0.17;
+      float a = smoothstep(1.0, 0.25, d + n * 0.45) * sin(3.14159 * vLife) * 0.23;
       if (a < 0.004) discard;
       gl_FragColor = vec4(mix(vec3(0.13, 0.13, 0.14), vec3(0.33, 0.33, 0.35), n), a);
     }`;
@@ -6936,6 +7288,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     fx.count = 0;
   }
   let fireFxDirty = true;
+  // v4.18: transient explosion emitters (fireball + smoke column + dust ring),
+  // aged in updateFireFx and folded into the same instanced sync.
+  const boomFx: { x: number; y: number; z: number; r: number; age: number }[] = [];
   function syncFireFx() {
     // v4.16.1 Minecraft-style flames (Claude): every flame is ANCHORED to
     // a surface — nothing floats. A fire cell on solid ground burns tall
@@ -6983,6 +7338,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       if (openAt(x, y + 1, z)) fxPush(flameFx, x + 0.5, y + 1 - 0.8 * st.m, z + 0.5, h + 0.4, 0.45);
     }
+    // v4.18: explosion fireballs — a fat, short-lived flame cluster.
+    for (const b of boomFx) {
+      if (b.age >= 0.45) continue;
+      const h = fxHash("boom" + b.x + "," + b.z);
+      fxPush(flameFx, b.x, b.y - 0.4, b.z, h, 2.7);
+      fxPush(flameFx, b.x + 0.7, b.y - 0.5, b.z + 0.3, h + 0.33, 1.9);
+      fxPush(flameFx, b.x - 0.6, b.y - 0.5, b.z - 0.5, h + 0.66, 1.7);
+    }
     fxCommit(flameFx);
     // Smoke: fires, burning blocks, campfires, exposed lava.
     const puff = (x: number, y: number, z: number, k: string, s: number) => {
@@ -7008,13 +7371,31 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (id === ID.Campfire) puff(x + 0.5, y + 1.0, z + 0.5, k, 0.8);
       else if (id === ID.Lava) puff(x + 0.5, y + 1.05, z + 0.5, k, 1.1);
     }
+    // v4.18: explosion smoke — a fat column over the crater, dust at the rim.
+    for (const b of boomFx) {
+      puff(b.x, b.y + 0.8, b.z, "boomc" + b.x + "," + b.z, 3.1);
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 + b.x;
+        puff(b.x + Math.cos(a) * b.r * 0.85, b.y - 0.2, b.z + Math.sin(a) * b.r * 0.85, "boomr" + i + "," + b.x, 1.4);
+      }
+    }
     fxCommit(smokeFx);
     fireFxDirty = false;
   }
+  let fxLastT = 0;
   function updateFireFx() {
     const t = performance.now() / 1000;
     flameFx.mat.uniforms.uTime.value = t;
     smokeFx.mat.uniforms.uTime.value = t;
+    if (boomFx.length) {
+      const dt = Math.min(0.1, fxLastT ? t - fxLastT : 0.016);
+      for (let i = boomFx.length - 1; i >= 0; i--) {
+        boomFx[i].age += dt;
+        if (boomFx[i].age > 7) boomFx.splice(i, 1);
+      }
+      fireFxDirty = true;
+    }
+    fxLastT = t;
     if (fireFxDirty) syncFireFx();
   }
   // ================= end v4.15 fire FX =================
@@ -7427,7 +7808,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
                     : kind === "ghast"
                       ? 10
                       : kind === "wither"
-                        ? 40
+                        ? 120
                         : kind === "slime"
                         ? scale < 0.5
                           ? 2
@@ -7460,6 +7841,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       mob.maxHp = mob.hp;
       mob.mode = "circle";
       mob.modeT = 4;
+    }
+    if (kind === "wither") {
+      mob.maxHp = mob.hp;
+      mob.spawnT = 3;
+      mob.phaseN = 0;
     }
     scene.add(body.group);
     mobs.push(mob);
@@ -7770,6 +8156,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       saveDirty = true;
     }
     burst(mob.x, mob.y + 0.5, mob.z, drops.length ? def(drops[0]).color : "#3aaa4c", 12);
+    padRumble(0.3, 0.2, 70); // kill thump
     audio.break();
     gainXp(MOB_XP[mob.kind] ?? 2);
     if (mob.kind === "walker" || mob.kind === "creeper" || mob.kind === "skelly" || mob.kind === "husk" || mob.kind === "stray" || mob.kind === "pillager" || mob.kind === "vindicator" || mob.kind === "evoker" || mob.kind === "vex" || mob.kind === "ravager") bumpQuest("kill", "host");
@@ -7864,6 +8251,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (id === ID.Bedrock || fell >= 160) continue;
       fell++;
       const col = def(id).side || def(id).color;
+      // v4.18: a collapsed block is not vaporized — most of them land as
+      // pickable drops among the rubble (the rest is the debris below).
+      if (!creative && def(id).drop !== -1 && Math.random() < 0.6) dropItem(def(id).drop || id, 1, x + 0.5, y + 0.4, z + 0.5);
       // the hanging block breaks into its pieces as it drops
       for (let k = 0; k < 3 && debrisBudget.n > 0; k++) {
         debrisBudget.n--;
@@ -7928,7 +8318,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       player.vz += ((player.z - z) / (d || 1)) * k;
       player.vy += 5;
     }
-    burst(x, y, z, "#f07820", 22); // fireball sparks; the rubble is the real LEGO pieces above
+    boomFx.push({ x: x + 0.5, y: y + 0.6, z: z + 0.5, r, age: 0 });
+    if (boomFx.length > 4) boomFx.splice(0, boomFx.length - 4);
+    burst(x, y, z, "#f07820", 30); // fireball sparks; the rubble is the real LEGO pieces above
+    if (d < 16) padRumble(Math.max(0.15, 0.9 - d / 16), 0.4, 200); // felt through the pad, fades with distance
     shake = 0.55;
     audio.explode();
     saveDirty = true;
@@ -8046,9 +8439,78 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // Circles the player, rains fireballs, then swoops in to bite.
   // Living crystals mend it, so the pillars come first. Under 35%
   // health it enrages: faster, meaner, swoops twice as often.
+  function witherTick(m: Mob, dt: number, d: number) {
+    const maxHp = m.maxHp ?? m.hp;
+    // Summoning: it rises, untouchable, gathering itself — then it bursts.
+    if ((m.spawnT ?? 0) > 0) {
+      m.spawnT = (m.spawnT ?? 0) - dt;
+      m.y += dt * 0.55;
+      if ((m.spawnT ?? 0) <= 0) {
+        explode(Math.floor(m.x), Math.floor(m.y), Math.floor(m.z), 3);
+        say("The Wither rages!");
+      }
+      return;
+    }
+    // Phase 2: the shell — ranged damage turns aside, melee still bites.
+    if (!m.shield && m.hp <= maxHp * 0.5) {
+      m.shield = true;
+      m.phaseN = 1;
+      burst(m.x, m.y + 1, m.z, "#8f8fa8", 18);
+      say("The Wither's shell turns arrows aside — get in close!");
+    }
+    m.bossT = (m.bossT ?? 0) - dt;
+    m.biteT = Math.max(0, (m.biteT ?? 0) - dt);
+    const gy = groundY(m.x, m.z);
+    let wantY = gy + 4;
+    let sp = 2.2;
+    let targetYaw = Math.atan2(-(player.x - m.x), -(player.z - m.z));
+    if (m.mode === "charge") {
+      m.modeT = (m.modeT ?? 0) - dt;
+      wantY = player.y + 0.9;
+      sp = 8.5;
+      if ((m.modeT ?? 0) <= 0) m.mode = "hover";
+    } else {
+      m.mode = "hover";
+      if (m.shield && (m.bossT ?? 0) <= 0 && d < 15 && d > 3 && phase === "play") {
+        m.bossT = 6;
+        m.mode = "charge";
+        m.modeT = 0.85;
+      }
+    }
+    let diff = targetYaw - m.yaw;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    const turn = 2.2 * dt;
+    m.yaw += Math.max(-turn, Math.min(turn, diff));
+    const advance = m.mode === "charge" || d > 5 ? 1 : 0.2;
+    m.x += -Math.sin(m.yaw) * sp * dt * advance;
+    m.z += -Math.cos(m.yaw) * sp * dt * advance;
+    m.y += (wantY - m.y) * Math.min(1, dt * 2);
+    if (m.cool <= 0 && phase === "play" && d < 19) {
+      launchSkull(m.x, m.y + 0.5, m.z, player.x - m.x, player.y + 0.9 - m.y, player.z - m.z);
+      if (m.shield) launchSkull(m.x, m.y + 0.5, m.z, player.x - m.x + 1.7, player.y + 0.9 - m.y, player.z - m.z + 1.7);
+      m.cool = m.shield ? 1.5 : 1.9;
+      audio.note(3);
+    }
+    if (d < 2.7 && phase === "play" && (m.biteT ?? 0) <= 0) {
+      bite(m.shield ? 7 : 5);
+      if (m.shield) witherT = Math.max(witherT, 5);
+      m.biteT = 1.1;
+      audio.hit();
+    }
+  }
+
   function dragonTick(m: Mob, dt: number, d: number) {
     const maxHp = m.maxHp ?? m.hp;
     const enraged = m.hp < maxHp * 0.35;
+    if ((m.phaseN ?? 0) === 0 && m.hp < maxHp * 0.5) {
+      m.phaseN = 1;
+      say("The End Wyrm falters!");
+    }
+    if ((m.phaseN ?? 0) === 1 && enraged) {
+      m.phaseN = 2;
+      say("The End Wyrm rages!");
+    }
     if (crystalsLeft() > 0 && phase === "play") m.hp = Math.min(maxHp, m.hp + 1.1 * dt);
     m.modeT = (m.modeT ?? 0) - dt;
     m.bossT = (m.bossT ?? 0) - dt;
@@ -8084,7 +8546,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       if ((m.bossT ?? 0) <= 0 && phase === "play" && d < 30) {
         m.bossT = enraged ? 2.3 : 3.4;
-        launchFireball(m.x, m.y - 0.4, m.z, player.x - m.x, player.y + 0.8 - m.y, player.z - m.z);
+        launchFireball(m.x, m.y - 0.4, m.z, player.x - m.x, player.y + 0.8 - m.y, player.z - m.z, true);
         audio.note(4);
       }
     }
@@ -8577,6 +9039,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       if (flyer && m.kind === "dragon") {
         dragonTick(m, dt, d);
+      } else if (flyer && m.kind === "wither") {
+        witherTick(m, dt, d);
       } else if (flyer) {
         const alt = m.kind === "dragon" ? 7 : 4;
         const sp = (m.kind === "dragon" ? 3.4 : 2.1) * ((m.slowT ?? 0) > 0 ? 0.45 : 1);
@@ -8592,11 +9056,6 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
             launchArrow(m.x, m.y, m.z, dx, player.y + 1 - m.y, dz, false);
             m.cool = m.kind === "ghast" ? 2.5 : 1.5;
           }
-        }
-        if (m.kind === "wither" && m.cool <= 0 && d < 18 && phase === "play") {
-          launchArrow(m.x, m.y, m.z, dx, player.y + 1 - m.y, dz, false);
-          bite(2);
-          m.cool = 1.8;
         }
         if (m.kind === "dragon" && d < 2.8 && phase === "play" && m.cool <= 0) {
           bite(5);
@@ -9088,7 +9547,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const oy = player.y;
     const oz = player.z;
     player.grounded = false;
-    const stepping = wasGrounded && !flying && !sample.sneak;
+    // v4.18 (Philippe): stepping also applies while swimming — at the
+    // surface your feet ride ~0.4 under the bank's top, and without the
+    // step assist you could NEVER climb out of the water onto a shore.
+    const stepping = (wasGrounded || bodyWater) && !flying && !sample.sneak;
     moveAxis("x", player.vx * dt, stepping);
     moveAxis("z", player.vz * dt, stepping);
     if (sample.sneak && wasGrounded && !flying) {
@@ -9140,7 +9602,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // third person: aim along the camera ray (it is parallel to the look
     // direction and passes through the crosshair), reach measured from the eye
     const tp = settings.third && thirdAim.ok;
-    const hit = tp ? raycast(thirdAim.x, thirdAim.y, thirdAim.z, rdx, rdy, rdz, reach + thirdAim.back) : raycast(player.x, eyeY, player.z, rdx, rdy, rdz, reach);
+    const hit = tp ? raycast(thirdAim.x, thirdAim.y, thirdAim.z, rdx, rdy, rdz, reach + thirdAim.back, true) : raycast(player.x, eyeY, player.z, rdx, rdy, rdz, reach, true);
     let mobT = 99;
     let mob: Mob | null = null;
     for (const m of mobs) {
@@ -9300,7 +9762,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         if (skills.has("mark") && blade.tool === "sword" && hostile) dmg += 1;
         if (player.vy < -0.2 && !player.grounded) dmg = Math.ceil(dmg * 1.5);
         if (mob.kind === "dragon" && crystalsLeft() > 0) dmg = Math.max(1, Math.ceil(dmg * 0.5));
+        if (mob.kind === "wither" && (mob.spawnT ?? 0) > 0) dmg = 0;
         mob.hp -= dmg;
+        if (dmg > 0) padRumble(0.3, 0.15, 55);
         if (mob.kind === "villager" || mob.kind === "golem") {
           mob.byPlayerT = 6;
           addRep(repKeyFor(mob.homeX ?? mob.x, mob.homeZ ?? mob.z), mob.kind === "villager" ? -3 : -2);
@@ -9355,20 +9819,27 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         }
         mineTime += dt;
         const held = def(hotbar[slot]);
-        // v4.14 — Minecraft mining model: every block belongs to a tool
-        // class. The right class multiplies speed by tool tier; bare
-        // hands or the WRONG tool on a tool-class block are heavily
-        // penalized (stone-like x3.5, wood x3, earth x1.8), and drops
-        // stay gated by block.need (pick tier) inside breakBlock.
-        const cls = block.tough || block.need > 0 || block.hard >= 1 ? "pick" : AXE_OK(hit.id) ? "axe" : SHOVEL_OK(hit.id) ? "shovel" : "";
+        // v4.18 — mining reworked on Minecraft's exact model (Philippe
+        // 2026-10-28: « la résistance des blocs retravaillée selon l'outil,
+        // comme dans Minecraft »): break seconds = hardness × rate / speed,
+        // rate 1.5 (the ÷30 tick rate) normally, rate 5 (÷100) when the
+        // block REQUIRES a pick and you lack the right class — or your pick
+        // tier is too low to harvest it (that slow break drops nothing,
+        // gated in breakBlock). Tool class comes from the block: axe
+        // blocks, shovel blocks, pick blocks. Tier speeds are MC's:
+        // hand 1, wood 2, stone 4, iron 6, diamond 8.
+        const cls = AXE_OK(hit.id) ? "axe" : SHOVEL_OK(hit.id) ? "shovel" : block.tough || block.need > 0 ? "pick" : "";
         const rightTool = cls !== "" && held.tool === cls;
-        let mult = rightTool ? 1 + held.tier * 1.7 : 1;
-        if (hotbar[slot] === ID.Shears && (hit.id === ID.Leaves || hit.id === ID.TallGrass)) mult = 6;
-        if (rankLv >= 2) mult *= 1.15;
-        let need = creative ? 0.08 : block.hard / mult;
-        if (!creative && cls !== "" && !rightTool) need *= cls === "pick" ? 3.5 : cls === "axe" ? 3 : 1.8;
+        const TIER_SPEED = [1, 2, 4, 6, 8, 9];
+        let speed = rightTool ? (TIER_SPEED[held.tier] ?? 1) : 1;
+        if (hotbar[slot] === ID.Shears && (hit.id === ID.Leaves || hit.id === ID.TallGrass || hit.id === ID.Web)) speed = 8;
+        const pickTier = held.tool === "pick" ? held.tier : 0;
+        const canHarvest = !block.need || pickTier >= block.need;
+        const slowRate = cls === "pick" && (!rightTool || !canHarvest);
+        let need = creative ? 0.05 : (block.hard * (slowRate ? 5 : 1.5)) / speed;
         const eff = enchLvl(hotbar[slot], "efficiency");
-        if (eff > 0 && mult > 1) need /= 1 + 0.3 * eff;
+        if (eff > 0 && rightTool) need = (block.hard * (slowRate ? 5 : 1.5)) / (speed + eff * eff + 1);
+        if (rankLv >= 2) need /= 1.15;
         if (hammer && block.tough) need *= 0.38;
         hud.mine = Math.min(1, mineTime / Math.max(need, 0.01));
         // v4.14 — the block visibly crumbles: crack overlay grows with
@@ -10066,7 +10537,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     upscaler.aces = renderer.toneMapping === THREE.ACESFilmicToneMapping;
     upscaler.exposure = renderer.toneMappingExposure;
     upscaler.sharpness = settings.sharpness;
-    upscaler.path = touchMode && settings.quality === "performance" ? "fast" : "easu";
+    // v4.18 perf: on touch, the EASU chain is the most expensive full-screen
+    // pass in the game — Auto quality takes the fast path (Philippe's A54
+    // lag report); EASU stays for explicit High or desktop.
+    upscaler.path = touchMode && (settings.quality === "performance" || settings.upscale === "auto") ? "fast" : "easu";
     upscaler.render(scene, camera);
   }
   // Quality ladder (Philippe's law, 2026-10-25: Realistic is the normal
@@ -10336,6 +10810,17 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // Touch jump/mine are level-triggered by the DOM; don't clear them here.
     updateParticles(dt);
     updateFireFx();
+    updateTopples(dt);
+    updateFallers(dt);
+    // DualSense adaptive triggers (v4.18): R2 stiffens as the block cracks
+    // while you mine; L2 gets a weapon "wall" while a bow is in hand.
+    if (settings.adaptive) {
+      const mining = phase === "play" && mineTime > 0 && hud.mine > 0;
+      const right: TriggerFx = mining ? { mode: "feedback", start: 1, strength: Math.round(1 + hud.mine * 7) } : { mode: "off" };
+      const heldNow = hotbar[slot];
+      const left: TriggerFx = phase === "play" && (heldNow === ID.Bow || heldNow === ID.Crossbow) ? { mode: "weapon", start: 3, end: 8, strength: 7 } : { mode: "off" };
+      dsApply(right, left);
+    }
     renderCamera(dt);
     stream(phase === "title" ? 3 : 2);
     // Behind a pause/inventory panel the world barely moves: redraw at a quarter
@@ -10359,6 +10844,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   }
 
   applyQuality();
+  if (settings.adaptive) void dsTryReconnect();
   renderer.setAnimationLoop(frame);
   stream(2);
   spawnSheep();
@@ -10748,6 +11234,28 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         chain_sizes: QUESTS.length === 38,
       };
     },
+    getBoss: () => {
+      const b = mobs.find((m) => BOSSES.has(m.kind) && !m.dead);
+      if (!b) return null;
+      return { kind: b.kind, hp: Math.round(b.hp), maxHp: b.maxHp ?? b.hp, shield: !!b.shield, spawnT: +(b.spawnT ?? 0).toFixed(2), phaseN: b.phaseN ?? 0, breathZones: breathZones.length };
+    },
+    hitMob: (kind: string, dmg: number) => {
+      const m = mobs.find((x) => x.kind === kind && !x.dead);
+      if (!m) return false;
+      m.hp -= dmg;
+      if (m.hp <= 0) killMob(m);
+      return true;
+    },
+    getFx: () => ({ booms: boomFx.length, flames: flameFx.geo.instanceCount, smoke: smokeFx.geo.instanceCount }),
+    boom: (dx: number, dz: number) => {
+      explode(Math.floor(player.x + dx), Math.floor(player.y + 1), Math.floor(player.z + dz), 3);
+    },
+    breakAt: (x: number, y: number, z: number) => { breakBlock(x, y, z); return world.get(x, y, z); },
+    toppleCount: () => topples.length,
+    dropList: () => drops.map((d) => ({ id: d.id, n: d.n })),
+    phaseNow: () => phase,
+    pauseGame: () => api.pauseGame(),
+    toggleInv: () => api.toggleInventory(),
     getPeers: () => [...mp.peers.values()].map((p) => ({ name: p.name, x: p.x, y: p.y, z: p.z })),
     getEnch: (id: number) => ench.get(id) ?? null,
     setEnch: (id: number, key: string, lvl: number) => {
@@ -10968,6 +11476,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       flying = false;
       fireT = 0;
       poisonT = 0;
+      witherT = 0;
       slowT = 0;
       mount = null;
       invuln = 2;
@@ -10988,13 +11497,17 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           grid[i] = 0;
         }
         panel = "bag";
-        phase = "play";
+        // Opened from the pause menu → closing returns to pause, not the game
+        // (Philippe 2026-10-28: pause → Inventory "ouvre rien" — the open
+        // guard below used to reject every phase except "play").
+        phase = invReturn;
         audio.uiClose();
-        if (!touchMode) lockPointer();
+        if (phase === "play" && !touchMode) lockPointer();
         emit();
         return;
       }
-      if (phase !== "play") return;
+      if (phase !== "play" && phase !== "pause") return;
+      invReturn = phase === "pause" ? "pause" : "play";
       panel = "bag";
       const locked = document.pointerLockElement === canvas;
       if (locked) suppressUnlock = true;
@@ -11780,6 +12293,23 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       settings.haptics = on;
       persistSettings();
       emit();
+    },
+    setDead(side, v) {
+      const c = Math.max(0.02, Math.min(0.4, v));
+      if (side === "left") settings.deadL = c;
+      else settings.deadR = c;
+      persistSettings();
+      emit();
+    },
+    setAdaptive(on) {
+      settings.adaptive = on;
+      persistSettings();
+      emit();
+      if (on) void dsRequest().then(() => emit());
+      else void dsRelease();
+    },
+    dsState() {
+      return dsState(settings.adaptive);
     },
     setInvertY(on) {
       settings.invertY = on;

@@ -89,6 +89,9 @@ export type SettingsSave = {
   sfx?: number;
   haptics?: boolean;
   invertY?: boolean;
+  deadL?: number;
+  deadR?: number;
+  adaptive?: boolean;
   mods?: { hard: boolean; generous: boolean; peaceful: boolean; spells: boolean };
 };
 

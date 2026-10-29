@@ -2303,15 +2303,108 @@ Philippe's "lets go" on the RPG roadmap above. The flat board of 37 one-off erra
 - **QA:** `npx tsc --noEmit` 0 errors; standalone build OK. New hooks `getQuests` / `questAudit` (synthetic done-sets): all 5 audit checks pass — fresh world activates exactly the 4 openers, the finale stays locked until all 9 priors are done, a mid-chain step unlocks only in order, all 38 quests sit in a chain. Booted live (qa92): **exactly 4 active quests on a fresh world (logs / wheat / hunt / moss), 0 page errors**. Not screenshot-verified: the journal panel itself (reachability of the hub in the QA rig) — Philippe's A54 look closes it.
 - **Next move (claimed, Muse):** ship R1 with the next delivery train (v4.18) once Philippe has the v4.17 verdicts in; R2 boss encounters after that.
 
----
+## NEXT MOVE CLAIMED (Muse) — RPG R2: boss encounters
 
-## 2026-10-28 — Held items = vanilla Minecraft first-person chain, hand derived from the item (Claude) — code on main, NOT delivered
+Audit first (code read): the dragon is already a real fight (circle/swoop/climb, enrage <35 %, crystal heal + damage split, fireballs, boss bar, End pillars). The **wither is a fake boss**: 40 HP (a ravager's), plain arrows, an instant bite(2) at range, no spawn sequence, no shield, no boss bar, and no MOB_XP entry. R2 scope:
+- **Wither rebuilt**: 120 HP; summon = 3 s charging rise, fully invulnerable, then an explosion + callout; attacks become **wither skulls** (dark projectiles: hit = 4 dmg + "Wither" decay effect, a new player timer mirroring venom); at ≤50 % a **shield phase** — all ranged damage turns aside (melee only), skulls fire in pairs, phase-2 contact applies the decay; joins the boss bar as "The Wither"; MOB_XP 120.
+- **Dragon polish**: fireballs below 65 % HP leave **lingering breath zones** (purple ground clouds, tick damage, capped at 6 — perf law); spoken callouts at 50 % ("falters") and at the 35 % enrage ("rages").
+- **QA**: new hooks `getBoss` / `hitMob` — spawn a wither on the rig, watch it charge, break its shield threshold, kill it, all measured.
+- NOT in R2: boss respawn/rematch, new boss kinds, dragon perch phase. Next after R2: R3 dungeon.
 
-Philippe (10:07 PDT): « va chercher la position des objets dans Minecraft … ça fait 3 jours … les objets doivent être alignés avec les mains, pas tout croche ».
+## NEXT MOVE CLAIMED (Muse) — v4.18 FX: explosion smoke + flame pass (Philippe, in the v4.18 train)
 
-- **Root cause of "tout croche":** the item was oriented on its own (view-space basis, `mcTilt`) and then stuck to a minifig hand that kept its OWN fixed orientation → the handle crossed the C-clip at an angle.
-- **Vanilla values (researched):** `ItemInHandRenderer.applyItemArmTransform` translate(0.56, −0.52, −0.72); display `firstperson_righthand` — item/handheld & item/generated rotation [0, −90, 25], translation [1.13, 3.2, 1.13]/16, scale 0.68; block rotation [0, 45, 0], scale 0.40; applied T·R(XYZ)·S then the model from (−0.5, −0.5, −0.5) in 16-px sprite space. Attack swing = `applyItemArmAttackTransform` (translate −0.4·sin√p·π, 0.2·sin√p·2π, −0.2·sin p·π; rotY(45−20·sin p²π)·rotZ(−20·sin√pπ)·rotX(−80·sin√pπ)·rotY(−45)) — now used verbatim; equip drop −0.6.
-- **Implementation (`game.ts` `placeHeldMinecraft`):** each 3D LEGO model is mapped into sprite space (tools: handle end at the sprite's bottom-left, shaft on the diagonal; torches lean 30°; small items centred), then the vanilla chain places it. **The hand is computed from the item:** the C-clip goes on the handle grip point with its bore ALONG the handle and the arm leaving toward the lower right (`placeArm`); blocks / small items are held from below (clip under the bottom, bore along an edge, mouth up). Aligned by construction.
-- **StudCraft framing on top:** the whole chain is scaled ×0.4 about the eye (`MC_K`: identical on screen by perspective, but everything within ~0.35 of the eye → never pokes into walls; the viewmodel shares the world depth buffer). Items shrunk about the clip and the anchor nudged so the minifig hand stays on screen (vanilla hides the arm with an item): tools size 0.5 at (0.44, −0.34); blocks 0.5 at (0.32, 0.0); small items 0.3. QA hook `setMcHeld`. Empty hand keeps its previous on-screen pose (`armRest`).
-- **QA:** phone rig (915×412) photos of pick, sword, axe, bow, torch, stone, crate, apple — clip on the handle, tools on the diagonal toward the crosshair; blocks/apple held from below with the clip visible.
-- **NOT delivered** — Philippe's verdict (A54).
+Philippe (2026-10-28 20:09): « ajoute de la fumée et améliore les graphismes des flammes et des explosions TNT » — and chose to put it IN the v4.18 train before packaging. Audit: smoke already exists for fires (v4.15 instanced shaders); explosions have none (sparks + shake only). Scope: (1) `explode()` registers a transient boom emitter — additive fireball cluster (~0.45 s), a fat smoke column (scale ~3.1) + a 5-point dust ring at the crater rim, ageing out over ~7 s through the existing FX sync; benefits TNT, creepers and the wither wake-up at once. (2) Flame shader: faster scroll, a flicker term on alpha, a wider white-hot core and a brighter heat ramp. (3) Smoke shader: denser (alpha .17→.23), taller rise, larger growth. (4) Burning blocks throw occasional ember sparks (near-player only, particle-budget safe). All instanced/zero-asset — perf law respected.
+
+## 2026-10-28 — RPG R2: boss encounters (Muse) — code done, in the v4.18 train
+
+- **Wither rebuilt as a real boss** (`witherTick` + `launchSkull`): 120 HP; the summon is a 3 s charging rise, fully invulnerable (gated at both ranged and melee intake), ending in an explosion + « The Wither rages! ». Attacks are **wither skulls** — hit = bite 4 + the new **Wither decay** player effect (1 dmg/s for 8 s, floors at 1 HP, HUD label "Wither", cleared by the milk-style "Cleared" potion and on respawn). At ≤50 % HP the **shield phase** starts: every ranged hit is turned aside with a spark burst (melee only), skulls fire in pairs, it gains a charge attack (8.5 speed) and its contact bite applies decay. Boss bar shows « The Wither »; MOB_XP 120 added.
+- **Dragon polish**: fireballs below 65 % HP leave **breath zones** (max 6, r 2.4, 6 s, tick damage, purple puffs); spoken phase callouts at 50 % and at the 35 % enrage.
+- **QA**: tsc 0 errors; hooks `getBoss`/`hitMob`; the full fight (spawn 120/120, charge timer, shield flip, clean kill) is exercised by qa96 on the merged train build. Philippe's A54 fight closes it.
+
+## 2026-10-28 — v4.18 FX pass: explosion smoke, flame & ember pass (Muse) — in the train
+
+Per the claimed scope above: `boomFx` transient emitters on every `explode()` (fireball cluster, smoke column + dust ring, ~7 s life through the existing FX sync); flame fragment v2 (faster scroll, alpha flicker, wider white-hot band, brighter heat ramp); smoke v2 (denser, taller, larger); burning blocks throw ember sparks. Hooks `getFx`/`boom` measure it in qa96.
+
+## 2026-10-28 — Studcraft is LIVE for testing: studcraft.pages.dev (Muse)
+
+Philippe: the game goes online, easy to test, BEFORE any store/Steam launch — and no commercial launch until he is satisfied with the game. Cloudflare Pages project `studcraft` created; watcher cron `studcraft-auto-deploy` (15 min) polls `AFKmoney/studcraft` main, rebuilds dist-game (vite standalone) and redeploys on every push. First deploy = main@7d3ee244, verified HTTP 200. Scripts in `~/workspace/studcraft-deploy/`.
+
+## 2026-10-28 — v4.18 fixes batch, from Philippe's live tests (Muse) — in the train
+
+Seven reports from Philippe playing the online build, each diagnosed to the line and fixed:
+1. **"Casser un bloc doit pouvoir le ramasser"** — mined blocks silently materialized in the bag (invisible with a full hotbar). Yields are now **world drops** (dropItem) with the existing magnet pickup; collapsed blocks also drop (60 %) instead of vaporizing.
+2. **Pause → Inventory opened nothing** — `toggleInventory()` rejected every phase except "play". It now opens from pause too and returns to pause on close (`invReturn`).
+3. **Tree gravity (Teardown)** — cutting a log checks the connected log+leaves component above: if it is a real tree (≥6 leaves, no other support) it **topples as one rigid instanced body** away from the player; on impact the lowest band **shatters into LEGO pieces**, the rest lands as placed blocks or log drops. Log builds without canopy never fall.
+4. **Lag** — snapshot() diet (catalogue spread, recipe match and the 27-slot chest map are now change-gated instead of rebuilt ~8×/s) and touch devices on Auto quality take the upscaler's fast path (EASU reserved for High/desktop).
+5. **Placing IN water** — the targeting raycast passes **through fluids** (Minecraft rule): aiming into a lake targets the solid under it, blocks fill the water cell, never sit on top. The empty bucket keeps its own fluid-inclusive cast for scooping.
+6. **Block resistance reworked, Minecraft-exact** — break time = hardness × rate ÷ tool speed; rate 1.5 (÷30) normally, 5 (÷100) when a pick-required block is mined without the right class or with too low a tier (and that slow break drops nothing). Tool speeds = MC tiers (hand 1, wood 2, stone 4, iron 6, gem 8); block class comes from the block itself (axe/shovel/pick sets first, not from hardness). Hardness values recalibrated to MC (dirt 0.5, grass 0.6, stone 1.5 → drops cobble + needs any pick, log/planks 2, ores 3, iron block 5, void brick 50). Spot checks: stone by hand 7.5 s/no drop, wood pick 1.1 s; log by hand 3 s, wood axe 1.5 s.
+7. **Climbing out of water** — the step assist only ran while grounded; a swimmer's feet ride ~0.4 under the bank top, so shores were unclimbable. Step assist now applies while swimming too.
+- The batch is merged (3-way, zero conflicts) with Claude's Minecraft held-item chain (main@7d3ee244) + R1 + R2 + FX. tsc 0 errors; qa96 exercises drops/pickup, pause-inventory round-trip, a full tree topple, the wither fight and a boom's smoke on the merged build. Water placement, MC mining times and the swim-exit are code-verified; Philippe's A54/PC play closes them.
+
+## v4.18 — Controller feel batch (Muse, 2026-10-28 late, Philippe's orders)
+Three controller demands from Philippe in one batch ("zone morte des joystick par joystick", "le adaptative trigger de ps5", "pis les vibration"):
+
+1. **Per-stick dead zones** — `settings.deadL` / `settings.deadR` (defaults 0.16 / 0.14 = the old hardcoded values), sliders 2–40 % in Settings → Controls ("Move stick dead zone" / "Look stick dead zone"), persisted (save v3 fields), wired into `pollPad`'s two `stick()` calls. Menu-nav stick unchanged (deliberate 0.5).
+2. **Vibration coverage** — `padRumble` existed but fired in only 2 places (hurt, mining chip). Now also: block break (0.12/0.25/45 ms), melee hit landed (0.3/0.15/55), mob kill thump (0.3/0.2/70), explosion distance-scaled (≤16 blocks, 200 ms), hard landing (vy < −8, scaled, 90 ms), tree-topple impact within 22 blocks (0.5/0.3/160). All still gated by the existing Vibration toggle + `hud.padActive`, so keyboard/touch players feel nothing change.
+3. **DualSense adaptive triggers (WebHID)** — NEW `src/game/dualsense.ts`. The Gamepad API has no resistance channel, so this is Chrome/Edge-on-PC only, via `navigator.hid` (vendor 0x054C), USB report 0x02 (trigger blocks at data[10] R / data[21] L per the kernel hid-playstation struct) with a Bluetooth 0x31 + CRC32 fallback. Effects: R2 = Feedback mode, strength ramps 1→8 with mining crack progress (`hud.mine`); L2 = Weapon mode (start zone 3, end 8, strength 7) while a Bow/Crossbow is held. Settings → Controls row: enable opens the browser device picker (user gesture), granted devices auto-reconnect on later loads (`getDevices`), state chip shows "DualSense linked". Deduped + 50 ms rate-limited sends; every failure path is a silent no-op — the pad plays normally everywhere else. tsc 0 errors. **Closing verdict = Philippe's real DualSense on PC (only he can feel it); Steam/DSX must be closed or they override the reports.**
+
+NEXT (unchanged): qa96 verdict on the merged fixes build → push train (game.ts, ranks.ts, blocks.ts, GameView.tsx, save.ts, dualsense.ts, WORKLOG.md) → Pages auto-deploy → qa97 perf probe on the final build → v4.18 train (APK vc40 / PC 4.18.0).
+
+## v4.18 — Real gravity for blocks (Muse, 2026-10-28 late, Philippe's order)
+Philippe: « il manque la gravité des arbres et des blocs et la physique réaliste gravitationnelle — mais il faut que ce soit léger mais ultra réaliste ».
+
+- **Trees**: already in this train (tryTopple, previous batch) — it simply was not live on studcraft.pages.dev yet, which is why he could not see it.
+- **Blocks — the honest diagnosis**: a gravity system EXISTED but was fake: every 0.25 s, sand/gravel/soul within ±4 of the player teleported ONE cell down if the cell below was air. No motion, no acceleration, nothing over water. Replaced:
+  - The tick scan (now ±5, dy +8..−2) only SPAWNS: an unsupported `def().fall` block becomes a **faller entity** (`spawnFaller`/`updateFallers`): gravity 30/s², terminal −38, water/lava drag (g 9, terminal −5), sub-stepped integration (≤0.45 cell/step, no tunneling on frame hitches), lands → world block + dust burst + pad thud within 10 blocks.
+  - Rendering: ONE shared BoxGeometry per block id with atlas UVs remapped per face (`faceTile` kinds [side,side,top,bottom,side,side]), the chunk material (`opaqueLam`) — no new textures, no physics engine.
+  - Cap 64 fallers; a faller that exits the world bottom is discarded. Transient: quitting mid-fall loses that one block (noted, accepted).
+- QA: qa96 had DIED earlier on a harness bug (its `ev` helper dropped evaluate args — game innocent); fixed, and the battery now runs against the FINAL merged build (fixes + controller batch + gravity). New qa98: hover-sand vacates + lands; 3-sand column cascades when its dirt base is broken.
+
+## Direction — THE PLASTIC PILLAR approved (Philippe, 2026-10-28 22:05 PDT)
+Philippe approved Muse's differentiation analysis ("Minecraft = a world of cubes; Studcraft = a world of plastic — it snaps, it melts, it breaks like the real thing") and the three moves + sound, in order:
+- **P1 · Stud structural integrity** — builds hold because bricks interlock; overhangs past a support limit crack, sag and let go. The Teardown layer, done the LEGO way (the stud is the physics unit).
+- **P2 · Welding (soudure)** — a torch welds two bricks into a permanent, stronger joint; build by welding, demolish by cutting/melting. The inverse verb of the melt system.
+- **P3 · Furnace tempering (trempe)** — progression stops copying Minecraft's ore ladder: heat a brick and quench it (water = hard grade, other baths = other grades); the material itself levels up.
+- **P4 · Plastic sound identity** — every sound is plastic: clicks, snaps, clatter — 100 % DSP-synthesized, zero assets (existing doctrine), cheap enough to ride along any train.
+Sequencing: after the v4.18 train ships; interleaves with the RPG roadmap (R3 dungeon). Philippe also revived the name himself: **"Plastic Edition"** — adopted as the edition/tagline (title screen + future store naming). The 2026-10-26 rejection was of the PATCH LOGO art; the current logo stays untouched.
+
+## Direction — P5 MÉCANIQUE (Philippe, 2026-10-28 22:22 PDT)
+Philippe: « à la place de redstone, on pourrait implémenter les LEGO mécanique ». DECISION: Studs will NEVER copy redstone. The automation system is **mechanical, Technic-style** — motion you can SEE, transmitted by parts that snap together:
+- **Axle** — placed like a block, spins, carries rotation to aligned neighbours.
+- **Gear** — meshes with adjacent gears/axles; size ratios (small driving large = slower + stronger, inverse = faster). Rotation propagates as a bounded local graph with signed speeds (integer ratios only) — same budgeted-scan pattern as gravity/fire, state in a dedicated module like chipState/fireState. LIGHT by construction.
+- **Power sources** — hand crank (manual), water wheel (spins free in flowing water), windmill, spring motor (wind it up). No wires anywhere: if it isn't touching, it isn't powered — unless a **belt/chain** links two pulleys.
+- **Cam piston** — rotation → reciprocation; pushes blocks (doors, drawbridges, crushers, elevators).
+- **Lever/clutch** — engage/disengage a shaft.
+Enables: working doors, drawbridges, mills, conveyors, traps, crank elevators — all buildable, all visible. Pillar slot P5, sequenced with P1–P4 after the v4.18 train.
+
+## VISION CONSOLIDÉE — STUDS · Plastic Edition (2026-10-28 soir, session avec Philippe)
+Everything decided in this session, in one place. The game is renamed **STUDS** ("craft" = the clone suffix; the stud is our physics unit), subtitle **Plastic Edition** (revived by Philippe; the 2026-10-26 rejection was of the old patch LOGO only). Logo direction: the wordmark ON a real 2×4 brick in 3/4 view (red = hero, charcoal = dark variant), Fredoka, glossy molded studs; explosive key-art variant (multicolor studded letters + debris + grey dust) composited OVER the game world, never a black background.
+Pitch: **« Minecraft, c'est un monde de cubes. Studs, c'est un monde de plastique — ça snap, ça fond, ça casse, pis ça tourne. »** Market: adult builders (AFOL) — the real-LEGO game LEGO itself never made; no licensed-IP corridors.
+THE PLASTIC PILLAR (all approved by Philippe):
+- P1 Stud structural integrity — builds hold by interlock; overhangs crack/sag/fall.
+- P2 Welding — torch-weld permanent joints; build by welding, demolish by cutting/melting.
+- P3 Furnace tempering — material grades by heat + quench, replacing the Minecraft ore ladder.
+- P4 Plastic sound identity — clicks/snaps/clatter, 100 % DSP.
+- P5 Mechanics (Technic) — axles, gears, cranks, water wheels, cam pistons, belts. **Never redstone.**
+Already real in the v4.18 train: melt + FUSION, Teardown chipping/toppling, real falling-block gravity, RPG quest chains + phased bosses, full controller feel (per-stick dead zones, vibration coverage, DualSense adaptive triggers).
+Gate unchanged: nothing ships until QA is green and Philippe's A54/PC verdict closes it.
+
+## Direction — P0 STUD-GRID BUILDING (Philippe, 2026-10-28 22:39 PDT) — the foundation
+Philippe: « tu dois pouvoir placer les briques sur différents studs, genre un coin de 2 studs — comme des vrais LEGO ». REQUIREMENT: placed bricks must live on the **stud lattice** (half-block resolution), not the 1:1 voxel grid. A brick can straddle the seam between two blocks below, offset by one stud, in real LEGO sizes (footprints in stud units: 2×2 = one voxel block, 2×4, 1×2, plates...), enabling running-bond walls and corner overlaps — the single most "real LEGO" behaviour there is.
+Architecture (decided): the TERRAIN stays voxel; player-placed bricks become a dedicated **brick layer** — entities on integer stud coordinates with (id, size, rotation), cached geometries per (id,size) with real studs, AABB collision contributed to the physics query, raycast tests brick AABBs alongside the voxel DDA, bricks saved as a list (like world edits). P1 structural integrity is then COMPUTED on this lattice (a brick holds by the studs it actually covers; welded joints from P2 multiply stud strength).
+Honest scope: this is a major system, not a patch — it is P0, the foundation the whole Plastic pillar stands on. Sequencing: v4.18 train ships first; P0 is the headline chantier of the Plastic era, before P1.
+
+## Direction — P6 LA FONDERIE (Philippe, 2026-10-28 23:04 PDT) — the core loop
+Philippe's progression redesign: **crafting stays, but BASIC. The real progression is a plastic FOUNDRY.**
+- **Recycle loop**: breaking things yields PLASTIC — every block has a foundry yield (common bricks low, rare/colored/enchanted high); mobs are plastic toys and drop pellets too. Feed blocks into the Foundry → molten plastic (a material resource, counted in units).
+- **Molds (moules)**: the Foundry CASTS items from molds — injection molding, literally how real bricks are made. A mold = the recipe; plastic = the cost. Molds are UNLOCKED by completing quests (R1 chains) and killing monsters/bosses (R2 Wither/Dragon drop legendary molds; R3 dungeon hides more). Own the mold → cast the item whenever you can pay the plastic.
+- **Tempering (P3) folds into the Foundry**: casting can spend tempered plastic (heat + quench at cast time) for higher grades of the same mold.
+- **Crafting's role**: the first-minutes basics only (planks, sticks, torches, the Foundry itself). recipes.ts stays; the foundry gets its own registry (molds + yield table).
+Loop: smash the world → melt it down → cast better gear → kill stronger monsters → unlock rarer molds → dive deeper. The world is plastic; your gear is recycled world. Hooks already exist: R1 quest completion flags, R2 boss drops, furnace/foundry workstation pattern.
+
+## STUDS key art — APPROVED (Philippe, 2026-10-28 23:12 PDT)
+Philippe approved the explosive key art (his reference artwork, reproduced identically, black background removed → true transparency): chunky cracked 3D STUDS letters with studs, bursting brick wall, flying debris, grey pixel dust, blue PLASTIC EDITION plaque. Canonical menu asset: `logo-keyart-transparent.png` (2112×1152 RGBA, checkerboard keyed out by border flood-fill). Integration: title menu shows this logo floating over the live world (no black band) — rides the v4.18 train with the STUDS rename in-game.
+
+## v4.18 TRAIN PUSHED (Muse, 2026-10-29 ~03:07 EDT — on Philippe's live order)
+Full train on main: **R2 bosses** (Wither rebuilt: 120 HP, invulnerable charge + explosion, wither skulls/decay, shield phase ≤50% HP; dragon breath zones + phase callouts) · **FX pass** (explosion emitters, flame/smoke v2) · **Fixes batch** (mined blocks drop as pickable world items; pause → Inventory; tree topples as one rigid body; snapshot lag diet; placing blocks in water; MC mining model + hardness recalibration; swim-exit stepping) · **Controller batch** (per-stick dead zones with Settings sliders; rumble on break/hit/kill/explosion/landing/topple; DualSense adaptive triggers via WebHID — R2 mining resistance, L2 bow weapon mode; desktop Chrome/Edge) · **Real block gravity** (faller entities: 30/s², sub-stepped, fluid drag, landing dust — the old 1-cell teleport system is gone) · **STUDS rename in-game**: approved explosive key art (transparent, 1400px WebP, 126 KB) replaces the CSS wordmark in the title menu, floating over the live world; page titles now "Studs — Plastic Edition". Base: 7d3ee244 (Claude's MC held-item chain), 3-way merge, zero conflicts, tsc 0 errors. QA: qa95 (boss+FX) passed; Philippe ordered the push to test live on Pages himself — his verdict gates the APK/PC train.
+Next claimed: P0 stud-grid building (foundation of the Plastic pillar), sequenced with R3 dungeon.

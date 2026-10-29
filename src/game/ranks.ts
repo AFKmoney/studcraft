@@ -133,6 +133,7 @@ export const ORE_HEAR: Record<number, string> = {
 };
 
 export const MOB_XP: Record<string, number> = {
+  wither: 120,
   sheep: 2,
   cow: 3,
   pig: 2,

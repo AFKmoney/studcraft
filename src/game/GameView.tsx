@@ -179,17 +179,11 @@ function BootScreen() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function Logo({ small = false }: { small?: boolean }) {
+  // STUDS · Plastic Edition key art (approved by Philippe 2026-10-28):
+  // transparent PNG/WebP floating over the live world — no background band.
   return (
-    <div className={small ? "sc-logo sc-logo-sm" : "sc-logo"} aria-label="Studcraft">
-      <div className="sc-logo-studs" aria-hidden="true">
-        {["#e8402f", "#f5c518", "#2f7fe0", "#36a852"].map((c) => (
-          <i key={c} style={{ background: c }} />
-        ))}
-      </div>
-      <h1 className="sc-logo-word">
-        <span>STUD</span>
-        <span className="sc-logo-craft">CRAFT</span>
-      </h1>
+    <div className={small ? "sc-logo sc-logo-sm" : "sc-logo"} aria-label="Studs — Plastic Edition">
+      <img className="sc-logo-img" src="logo-keyart.webp" alt="Studs — Plastic Edition" draggable={false} />
     </div>
   );
 }
@@ -919,6 +913,22 @@ function SettingsPanel({ game, onBack }: { game: GameApi; onBack: () => void }) 
             </Row>
             <Row title="Invert look (controller)" detail="Right stick up looks down.">
               <Toggle label="Invert look" on={s.invertY} onChange={(v) => game.setInvertY(v)} />
+            </Row>
+            <Row title="Move stick dead zone" detail="Raise it if the left stick drifts on its own; lower it for a touchier stick.">
+              <Slider label="Left stick dead zone" value={s.deadL} min={0.02} max={0.4} step={0.01} onChange={(v) => game.setDead("left", v)} format={(v) => Math.round(v * 100) + "%"} />
+            </Row>
+            <Row title="Look stick dead zone" detail="Raise it if the camera creeps on its own; lower it for finer aim.">
+              <Slider label="Right stick dead zone" value={s.deadR} min={0.02} max={0.4} step={0.01} onChange={(v) => game.setDead("right", v)} format={(v) => Math.round(v * 100) + "%"} />
+            </Row>
+            <Row title="Adaptive triggers (DualSense)" detail={game.dsState() === "unavailable" ? "Needs Chrome or Edge on PC with a PlayStation DualSense — the browser picker opens when you turn it on. Not available on phones or in the app." : "R2 stiffens as the block cracks while you mine; L2 gets a bow wall. Turning it on opens the browser's controller picker."}>
+              {game.dsState() === "unavailable" ? (
+                <span className="sc-chip">PC + Chrome/Edge only</span>
+              ) : (
+                <>
+                  <Toggle label="Adaptive triggers" on={s.adaptive} onChange={(v) => game.setAdaptive(v)} />
+                  <span className={"sc-chip" + (game.dsState() === "connected" ? " rep good" : "")}>{game.dsState() === "connected" ? "DualSense linked" : "Not linked"}</span>
+                </>
+              )}
             </Row>
           </>
         )}
