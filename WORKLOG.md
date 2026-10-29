@@ -3490,3 +3490,17 @@ Le fichier `Catalogue_Complet_LEGO_Technic_et_Accessoires_Minifigurines.pdf` (35
 - **Prochain** : retest Philippe sur Pages. Si la chute n’est toujours pas visible, le prochain geste est d’élargir le scan de gravité (actuellement centré joueur ±5 / +8..−2) ou de forcer le détachement immédiat sans stress.
 
 
+
+## 2026-10-29 ~14:43 PDT — Grok (polish icônes Technic — DONE)
+
+- **Claim** : polish visuel des icônes Technic dans les menus.
+- **Fait** : dans `icons.tsx`, les pièces Technic ont maintenant un rendu SVG dédié au lieu du fallback brique générique :
+  - Engrenages = disque + dents
+  - Essieux / pins = tige avec embouts
+  - Liftarms / frames = poutre avec trous
+  - Moteurs / hub / remote = boîtier + arbre / ports
+  - Pompes / tuyaux / vérins = tube avec colliers
+- **QA** : tsc 0. Pas de save.ts.
+- **Prochain** : retest visuel dans l’inventaire, ou dernière passe de variantes PDF si nécessaire. Continuer.
+
+

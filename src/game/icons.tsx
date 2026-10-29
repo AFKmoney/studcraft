@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ID, def, type BlockDef } from "./blocks";
+import { ID, TECHNIC, def, type BlockDef } from "./blocks";
 import { CUBE_ICONS } from "./cubeIcons";
 
 // IDs that have bespoke multi-part 3D LEGO set-piece illustrations (workstations,
@@ -56,6 +56,8 @@ const BESPOKE_LEGO_SET_IDS = new Set<number>([
   ID.Hay,
   ID.Cactus,
 ]);
+
+const TECHNIC_IDS = new Set<number>(TECHNIC);
 
 function shadeHex(hex: string, amt: number): string {
   const clean = hex.startsWith("#") ? hex.slice(1) : "8e959c";
@@ -295,6 +297,9 @@ function glyph(block: BlockDef, fill: string, muted = false): ReactNode {
     return <LegoCrystalGem fill={fill} />;
   }
 
+  // Technic pieces: specialized SVG instead of generic brick
+  if (TECHNIC_IDS.has(id)) return <LegoTechnic id={id} fill={fill} />;
+
   // Fallback: 3D Isometric LEGO 2x2 Brick with 4 real cylindrical studs
   return (
     <IsoBrick
@@ -303,6 +308,86 @@ function glyph(block: BlockDef, fill: string, muted = false): ReactNode {
       rightFill={shadeHex(fill, -26)}
       studFill={shadeHex(fill, 14)}
     />
+  );
+}
+
+function LegoTechnic({ id, fill }: { id: number; fill: string }) {
+  const dark = shadeHex(fill, -40);
+  const light = shadeHex(fill, 30);
+  // Gears
+  if (id === ID.Gear8 || id === ID.Gear16 || id === ID.Gear24 || id === ID.Gear40 || id === ID.Bevel12 || id === ID.Bevel20 || id === ID.DBevel12 || id === ID.DBevel20 || id === ID.DBevel36 || id === ID.Slip) {
+    const teeth = id === ID.Gear8 || id === ID.Bevel12 ? 8 : id === ID.Gear16 ? 12 : id === ID.Gear24 || id === ID.DBevel36 ? 16 : 10;
+    const r = 8;
+    const teethPaths = [];
+    for (let i = 0; i < teeth; i++) {
+      const a = (i / teeth) * Math.PI * 2;
+      const x = 16 + Math.cos(a) * (r + 2);
+      const y = 16 + Math.sin(a) * (r + 2);
+      teethPaths.push(<rect key={i} x={x - 1.2} y={y - 1.2} width={2.4} height={2.4} fill={light} transform={`rotate(${(a * 180) / Math.PI} ${x} ${y})`} />);
+    }
+    return (
+      <g>
+        <circle cx="16" cy="16" r={r} fill={fill} />
+        <circle cx="16" cy="16" r={r * 0.55} fill={dark} />
+        <circle cx="16" cy="16" r={2.2} fill={light} />
+        {teethPaths}
+      </g>
+    );
+  }
+  // Axles and pins
+  if (id === ID.Axle || id === ID.Worm || id === ID.AxleStop3 || id === ID.AxleStop5 || id === ID.AxlePin || id === ID.Pin2L || id === ID.PinFree || id === ID.Pin3L || id === ID.Pin3LFree || id === ID.Towball) {
+    return (
+      <g>
+        <rect x="14" y="4" width="4" height="24" rx="1" fill={fill} />
+        <rect x="12" y="4" width="8" height="3" fill={dark} />
+        <rect x="12" y="25" width="8" height="3" fill={dark} />
+        {id === ID.Towball && <circle cx="16" cy="6" r="3.5" fill={light} />}
+      </g>
+    );
+  }
+  // Liftarms and frames
+  if (id === ID.Liftarm3 || id === ID.Liftarm5 || id === ID.Liftarm7 || id === ID.Liftarm9 || id === ID.Liftarm11 || id === ID.Liftarm13 || id === ID.Liftarm15 || id === ID.Thin3 || id === ID.Thin5 || id === ID.Thin7 || id === ID.BentL || id === ID.BentT || id === ID.Frame57 || id === ID.Frame711 || id === ID.Frame1115) {
+    const holes = id === ID.Liftarm3 || id === ID.Thin3 ? 3 : id === ID.Liftarm5 || id === ID.Thin5 ? 5 : 4;
+    const holeEls = [];
+    for (let i = 0; i < holes; i++) {
+      const y = 8 + i * 4;
+      holeEls.push(<circle key={i} cx="16" cy={y} r="1.6" fill={dark} />);
+    }
+    return (
+      <g>
+        <rect x="10" y="6" width="12" height="20" rx="1.5" fill={fill} />
+        {holeEls}
+      </g>
+    );
+  }
+  // Motors and hub
+  if (id === ID.MotorM || id === ID.MotorL || id === ID.MotorXL || id === ID.Servo || id === ID.TechHub || id === ID.Battery || id === ID.Remote) {
+    return (
+      <g>
+        <rect x="6" y="8" width="20" height="14" rx="2" fill={fill} />
+        <rect x="22" y="12" width="6" height="6" fill={dark} />
+        <circle cx="25" cy="15" r="1.8" fill={light} />
+        {id === ID.TechHub && <><rect x="9" y="11" width="3" height="3" fill={light} /><rect x="14" y="11" width="3" height="3" fill={light} /><rect x="19" y="11" width="3" height="3" fill={light} /></>}
+      </g>
+    );
+  }
+  // Pumps, pipes, actuators
+  if (id === ID.Pump || id === ID.SpringPump || id === ID.SmallPump || id === ID.Pipe || id === ID.PipeElbow || id === ID.Actuator || id === ID.ActMini || id === ID.ActXL || id === ID.Cylinder || id === ID.Valve || id === ID.Tank) {
+    return (
+      <g>
+        <rect x="12" y="4" width="8" height="24" rx="2" fill={fill} />
+        <rect x="10" y="6" width="12" height="4" fill={dark} />
+        <rect x="10" y="22" width="12" height="4" fill={dark} />
+        {id === ID.SpringPump && <><rect x="11" y="12" width="10" height="2" fill={light} /><rect x="11" y="16" width="10" height="2" fill={light} /></>}
+      </g>
+    );
+  }
+  // Default technic: small gear-like
+  return (
+    <g>
+      <circle cx="16" cy="16" r="7" fill={fill} />
+      <circle cx="16" cy="16" r="3" fill={dark} />
+    </g>
   );
 }
 
