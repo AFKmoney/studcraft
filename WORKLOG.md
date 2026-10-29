@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-29 (Grok — piège 364, un tour fait tomber le bloc du dessus).
+**Last update:** 2026-10-29 (Grok — hook stepBricks pour que Muse mesure la chute sans attendre les frames).
 
 ## 2026-10-26 — v4.12: Engine performance, mob judder & floating animal parts (Muse, ordered by Philippe after his A54 test of v4.11)
 
@@ -2821,3 +2821,17 @@ La chaîne matière de l'électronique suit la vraie logique, comme tout le rest
 - **Honnêteté — ce qui n'est PAS encore mesuré** : le détachement/chute lui-même n'a pas été observé dans le rig (le temps de jeu y coule ~700× plus lentement que le réel — famine dt mesurée pendant la saga qa99 : 0,75 s de stress ≈ 15 frames ≈ plusieurs minutes réelles par scan utile; la classification, elle, est calculée à la demande et ne dépend pas de l'horloge). L'**affaissement visuel (sag)** avant la chute n'est pas implémenté — c'est la prochaine tranche P1, avec la mesure du détachement sur Pages (temps réel). **La case P1 reste donc NON cochée** : V1 livrée et classifiée, pas fermée.
 - **Push ce run** : `src/game/game.ts` + ce WORKLOG sur head `d747fbac` (EXPECTED_HEAD vérifié au push). Aucun build APK/PC (hold du master plan inchangé); le watcher Pages déploie tout seul — le verdict de Philippe sur Pages reste le seul qui ferme.
 - **EN COURS / prochain geste** : tranche P1-2 = sag visuel des briques stressées (offset d'instance proportionnel au stress dans `rebuildBrickMesh`, rebuild seulement pour les ids touchés) + tenter la mesure du détachement complet dans le rig (poll long de `getIntegrity().falling`/`getBricks` après coupe, en acceptant la famine dt). Ensuite P2 · Soudure (dépend de P0, ma lane). qa98 relu au passage : `hoverSand ok:false` (vacated ✓, landed ✗) — déjà connu des runs précédents, à requalifier quand la chaîne qa96→qa97 sera relancée. Zones P5 de Grok intouchées; son prochain move (piège, bloc 364) reste le sien.
+
+## Grok → Muse — erreurs déjà payées, ne pas les refaire (2026-10-29)
+Le piège 364 est poussé (`8f97794`). Ce qui suit est pour ta prochaine boucle, pas un nouveau move à moi.
+
+- **`Target crashed` n'est pas un bogue de jeu.** 23 morts, zéro PAGEERROR. Ne pas rouvrir cette piste. Ne pas relancer un rig si le load est au-dessus de ~6.
+- **Le temps de jeu dans le rig coule ~700× trop lent.** `mineTime` et le stress P1 (0,75 s) n'arriveront jamais en pollant des frames. **Ne pas mesurer la chute comme ça.**
+- **Hook ajouté dans `__controlsTest` : `stepBricks(dt)`.** Il avance le stress et la chute en temps de jeu, plafonné à 2 s par appel, sans attendre une frame. Un `stepBricks(1)` lâche une brique non supportée et la fait tomber dans le même appel. Lis `falling` et `getBricks()` juste après. Le détachement reste non coché tant que TU ne l'as pas mesuré avec ça.
+- **Un cycle latch remet `mineTime` à 0.** Déjà prouvé en b11. Ne pas le remettre dans une batterie de minage.
+- **Un refus sur de la mousse est le comportement voulu** (`brickSpaceFree`). Ce n'est pas un échec de placement.
+- **`fetch_wl.py` a des SHA en dur périmés.** Ne pas s'en servir pour décider du head.
+- **Ne pas merger le WORKLOG depuis un vieil arbre.** Ça efface le journal de l'autre. Probe, puis 3-way.
+- **Sag (ta tranche P1-2) :** `rebuildBrickMesh` réécrit toutes les matrices. Un offset posé après coup disparaît au prochain rebuild. Applique le sag DANS `rebuildBrickMesh`, sinon la brique stressée se redresse toute seule.
+- Tes zones (briques, `save.ts`, IDs 400+) : je n'y ai touché que pour ajouter `stepBricks` à côté de `getIntegrity`. Le bloc `mechAcc` est inchangé.
+

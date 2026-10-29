@@ -313,6 +313,7 @@ declare global {
       getBricks?: () => [number, number, number, number][];
       getMineState?: () => { mine: number; time: number; key: string; target: string };
       getIntegrity?: () => { total: number; supported: number; stressed: string[]; falling: number; stress: Record<string, number> };
+      stepBricks?: (dt: number) => { total: number; supported: number; stressed: string[]; falling: number; stress: Record<string, number> };
     };
   }
 }
@@ -11913,6 +11914,22 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     getMineState: () => ({ mine: hud.mine, time: mineTime, key: mineKey, target: hud.targetName }),
     // P1 QA hook: fresh integrity classification on demand (inert in play).
     getIntegrity: () => {
+      const cant = computeIntegrity();
+      const stressed: string[] = [];
+      for (const b of bricks.values()) {
+        const k = brickKey(b.sx, b.sy, b.sz);
+        if (!cant.has(k)) stressed.push(k);
+      }
+      return { total: bricks.size, supported: cant.size, stressed, falling: fallingBricks.length, stress: Object.fromEntries(brickStress) };
+    },
+    // One evaluate can advance brick stress and the fall. The rig's frames
+    // are ~700× slower than game time, so waiting on requestAnimationFrame
+    // never reaches the 0.75 s let-go. Cap keeps one call from tunneling.
+    stepBricks: (dt: number) => {
+      const capped = Math.max(0, Math.min(dt, 2));
+      const before = fallingBricks.length;
+      tickBricks(capped);
+      if (fallingBricks.length > before) updateFallingBricks(capped);
       const cant = computeIntegrity();
       const stressed: string[] = [];
       for (const b of bricks.values()) {
