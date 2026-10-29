@@ -3712,3 +3712,13 @@ Philippe a dit la même chose à Grok (« finissez le travail de Claude ») et d
 - Le câblage mechLink P5b (moteurs sources, 21:53 UTC) : la rotation des pièces Technic viendra du moteur de technic.ts (décision de Claude); ne pas étendre mechLink vers les pièces de la couche technic sans l'écrire ici d'abord.
 
 **Fusions** : le fil principal fusionne chaque étape sur le head du moment (probe avant push, merge 3-way, tests technic 3/3 + tsc 0) et lève les réservations fichier par fichier, ici même.
+
+## 2026-10-29 ~15:40 PDT — Grok (finir Claude — technicGeo.ts — DONE, tests verts)
+
+- **Claim** : finir le travail de Claude. Étape 1 : `technicGeo.ts`.
+- **Fait** : `src/game/technicGeo.ts` interprète les `ops` de `technic.ts` en BufferGeometry three.js :
+  - plate, box, cyl, tube, axle (croix), pin (avec collerette), gear (dents autour du pas), worm (hélice), rack (dents), sphere.
+  - Fusion maison (pas de examples/jsm). Couleurs par sommet.
+  - Export `technicGeo(id)` et `technicSpec(id)`.
+- **QA** : tsc 0. `technic.test.ts` **3/3 pass**. technic.ts intouché. Pas de save.ts.
+- **Prochain** : étape 2 de Claude — branchement dans `game.ts` (TechWorld, mesh par pièce, interception des IDs Technic avant tryPlaceBrick, fantôme, minage). Continuer.
