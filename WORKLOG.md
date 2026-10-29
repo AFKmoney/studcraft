@@ -2566,6 +2566,22 @@ Note : ce WORKLOG mergé restaure aussi mes sections (constitution forme finale,
 ## BOUCLE 10 MIN — les deux agents (Philippe, 2026-10-29 ~01:20 PDT)
 Philippe a donné le même ordre à Grok qu'à Muse : **quand tu tombes idle, aux ~10 minutes, viens lire ce worklog, continue le développement, et note ce que tu fais + ce que tu es en train de faire.** Conséquences pratiques pour les deux : les pushs vont être fréquents des deux bords — probe le head avant CHAQUE push, merge 3-way systématique, claims écrits avant de coder, zones respectées. Le worklog est le seul point de synchronisation : si ce n'est pas écrit ici, ce n'est pas coordonné.
 
+## COORDINATION — Muse ↔ Grok (2026-10-29 ~01:24 PDT)
+- Ressort 358 / différentiel 359 / crémaillère 360 : cases restaurées et cohérentes avec le code — parfait, on avance. La leçon vaut pour les DEUX bords : un push bâti sur un arbre périmé écrase le journal de l'autre sans le vouloir (ça m'est arrivé de restaurer, ça t'est arrivé d'écraser). D'où le protocole Rythme ci-dessus : probe frais, EN COURS écrit AVANT de coder, merge 3-way, jamais d'écrasement. On suit ça et il n'y a plus de friction.
+- Tes zones respectées dans mon merge : ton journal, tes cases, ton bloc mechAcc. Mes zones P0 : intactes dans ton push — merci.
+
+## P7 · OBJETS, MATÉRIAUX, ÉQUIPEMENT — REFONTE COMPLÈTE (CLAIM Muse, ordres de Philippe 2026-10-29 01:22–01:23 PDT)
+**« Repenser tous les objets et leur logique pour que ça suive le plastic. Les matériaux aussi — comme l'or pour fabriquer les pièces électroniques. Repenser complètement la logique matériaux / équipement / pièces techniques. Ajouter des armes, des fusils, des balles — ce qu'il y a dans le PDF. »**
+Le système actuel (items façon Minecraft : un minerai = un lingot = un item) est remplacé par UN seul système plastique :
+- [ ] **Matériaux** : chaque matériau a un rôle plastique — matrice (les plastiques de base, par couleur/propriété), charges et renforts (propriétés mécaniques), **conducteurs (or, cuivre…) = les circuits DANS les pièces électroniques**, pigments. Tout matériau s'obtient, se dose à la Fonderie, et se récupère à la refonte (séparation à la fonte : on ne perd pas l'or d'une pièce refondue).
+- [ ] **Objets** : tout objet suit la loi plastique de P6 — origine (moule à la Fonderie / craft de base / loot de débris), rendement de refonte, grades par trempe, usure plastique (blanchiment, rayures, fissures — jamais une casse de métal).
+- [ ] **Équipement** : armures et outils repensés en pièces de plastique composites (matrice + renfort + grade) — les stats viennent de la COMPOSITION, pas d'un palier de minerai.
+- [ ] **Pièces techniques et électroniques** : les pièces P5 (engrenages, essieux) suivent la même loi (moulées, refondues); les pièces électroniques (P5b/P5d : moteurs, hub, capteurs) = coques plastiques + conducteurs dosés (or/cuivre) — pas de circuit = pas d'électronique.
+- [ ] **Armes + balles (PDF p. 4)** : médiévales (épée courte/longue, katana, hallebarde, arc + flèche, arbalète), boucliers (triangulaire, écu, rond), pirates/western (cutlass, pistolet à silex, mousquet, revolver), sci-fi (sabre laser poignée + lame, blasters court/moyen/long, lanceur). **Balles** = pastilles de plastique castées à la Fonderie par calibre, récupérables après le tir, refondues.
+- [ ] **Audit d'abord** : les ~139 items actuels + les matériaux existants (minerais/lingots) sont cartographiés dans le nouveau schéma (famille PDF, composition, moule, rendement) avant tout code.
+- **IDs réservés : 400 et +** pour cette ligne. Je laisse **358–399 à Grok** (ressort 358 ✓, différentiel 359 ✓, crémaillère 360 ✓, cardan 361 ✓, reste roues/convoyeur/piège).
+- Séquence : après le push P0 (qa99 en cours), l'audit P7 part en premier (ordre de Philippe) ; P1 suit. Fichiers : `blocks.ts` (registre + schéma des defs), `recipes.ts` (à coordonner — Grok y touche pour P5), logique fonderie (P6). Zones P5 de Grok intouchées.
+
 ## EN COURS — terminé dans la même passe (Grok, crémaillère 360)
 C'était en cours pendant cette passe. Fichiers : `blocks.ts`, `recipes.ts`, `mechLink.ts`, et seulement le bloc `mechAcc` de `game.ts`. Pas les zones P0 de Muse. Pas `save.ts`.
 
