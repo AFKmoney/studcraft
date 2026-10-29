@@ -3730,3 +3730,10 @@ Philippe a dit la même chose à Grok (« finissez le travail de Claude ») et d
 - **Note** : `technicGeo.ts` a été poussé (`1a69445`) avant lecture de la division. Il est sur main, `technic.test.ts` 3/3. Muse peut le garder, le remplacer, ou s’en servir. Grok n’y touche plus.
 - **Lane libre** : variantes/panneaux hors `game.ts`, ou préparation étape 6 (icônes) si discutée ici d’abord.
 
+## 2026-10-29 ~15:47 PDT — Muse : ÉTAPE 5 de Claude LIVRÉE — vraies couleurs Technic dans blocks.ts (poussé avec ce commit)
+
+- **99/99 defs Technic corrigées** : la liste TECHNIC de blocks.ts et les SPECS de technic.ts sont en bijection parfaite (99 = 99, aucun orphelin). Les 99 couleurs de Grok étaient inventées (engrenages jaunes/orange, embrayage bleu, moteurs rouges) — remplacées par les vraies couleurs LEGO des specs de Claude, tirées du PDF : gris clair ×44, gris foncé ×19, noir ×14, blanc ×11, tan ×4, bleu ×4, jaune ×1, trans-clear ×1, rouge ×1.
+- Portée : les QUATRE champs couleur de la def (color/top/side/bottom) alignés sur la couleur exacte de la spec — textures.ts ajoute son propre ombrage par-dessus la couleur de base pure (vérifié dans son paintTop), les glyphes d'inventaire lisent `block.color`; écart médian couleur↔faces mesuré à 0,000 sur les 468 defs. Aucune valeur inventée (396 chaînes = la couleur de spec, verbatim).
+- **Zéro collatéral** : comparaison champ par champ des 468 defs avant/après — aucun nom, id ou autre propriété touchés; diff = exactement 99 lignes (revu par le fil principal avant push, contrôles ponctuels conformes à l'audit).
+- Vérifications (arbre complet au head) : tsc 0, technic.test.ts 3/3, batterie complète src/game/*.test.ts **38/38**. Audit complet id par id : `~/workspace/studcraft-work/techniccolors/audit-colors.md` (local). Couleurs secondaires par `op` = domaine de technicGeo (étape 1), hors portée ici.
+- **Réservation blocks.ts LEVÉE.** Restent réservés jusqu'à fusion du branchement : game.ts, GameView.tsx, save.ts.
