@@ -2,7 +2,7 @@
 
 **Goal:** Make StudCraft a near 1:1 Minecraft experience, but every block/item is a Lego brick with real cylindrical studs. Sync point for Grok agents and Muse.
 
-**Last update:** 2026-10-29 (Grok — snap P4, un tic plus haut et plus court quand une brique s'assoit).
+**Last update:** 2026-10-29 (Grok — cliquetis de casse P4, deux tons graves quand une brique casse).
 
 ## 2026-10-26 — v4.12: Engine performance, mob judder & floating animal parts (Muse, ordered by Philippe after his A54 test of v4.11)
 
@@ -2469,7 +2469,7 @@ Pitch : Minecraft, c'est un monde de cubes. Studs, c'est un monde de plastique �
   - [x] Tourelle (371) : un tour fait passer le bloc du dessus à la case suivante, sens horaire : dessus, est, sud, ouest, nord, puis retour.
   - [x] Embrayage 24T (372) : sur l'arbre, couple 1, il entraîne. Mené par un 8T, couple 3, il patine et l'essieu derrière ne tourne pas.
   - [x] Pneumatique, le lot (373 pompe, 374 cylindre, 375 valve, 376 réservoir) : valve fermée, l'air reste dans le réservoir (plafond 4). Valve ouverte, un tour pousse le cylindre et dépense 1. Un tour à l'envers le ramène. L'air n'est pas sauvé.
-- [ ] **P4 · Son plastique** — pose et snap livrés, synthétisés, aucun fichier. Reste : le cliquetis de casse. Zéro asset.
+- [x] **P4 · Son plastique** — pose, snap et casse sont synthétisés. Aucun fichier audio.
 
 ### Lane RPG
 - [x] R1 : 4 chaînes de quêtes, 38 quêtes, journal par chaîne
@@ -2741,8 +2741,19 @@ EN COURS au début de la passe. Fichiers : `audio.ts`, une ligne dans `placeBric
 - Il joue quand une brique s'assoit. La pose d'un bloc voxel garde le clic de pose.
 - Aucun fichier audio. QA : 29/29. `tsc` 0 erreur.
 
+### Next move — TAKEN and DONE (cliquetis de casse)
+Ne pas le refaire. P8 et qa96 restent à Muse. Pas de `save.ts`.
+
+### 2026-10-29 — Grok (cliquetis de casse) — FAIT
+EN COURS au début de la passe. Fichiers : `audio.ts`, une ligne dans `breakBrick`, le test. La casse d'un bloc voxel garde son son.
+
+- Deux tons, 420 Hz puis 210 Hz. Les deux sont sous le snap (2480 Hz).
+- Ça joue quand une brique casse. Aucun fichier audio.
+- QA : le test du son passe, 3/3. `tsc` 0 erreur. P4 est cochée.
+
 ### Next move — UNCLAIMED
-**P4, le cliquetis de casse.** Un son synthétisé, plus grave que le snap, joué quand une brique casse. Pas un fichier. Pas de `save.ts`, pas les IDs 400+, pas P8, pas qa96. Avant les sites de débris.
+**Sites de débris.** Un site par chunk, tiré de la graine du monde. Un petit tas de pièces Technic, pas une table de butin. Pas de `save.ts`, pas les IDs 400+, pas P8, pas qa96.
+
 
 
 

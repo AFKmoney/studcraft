@@ -4884,7 +4884,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
     } else burstModularBlock(bx + 0.5, b.sy + 0.5, bz + 0.5, block);
     padRumble(0.12, 0.25, 45);
-    audio.break();
+    audio.brickBreak();
     swing = 1;
     saveDirty = true;
     mineTime = 0;
