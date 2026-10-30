@@ -279,6 +279,8 @@ declare global {
       setStation?: (kind: string, x: number, y: number, z: number, val: string) => boolean;
       getVillage?: () => string;
       setRep?: (n: number) => boolean;
+      getRank?: () => number;
+      setRank?: (n: number) => boolean;
       tradeAt?: (i: number) => boolean;
       restockNow?: () => boolean;
       getMobNames?: () => string[];
@@ -13035,6 +13037,17 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     setRep: (n: number) => {
       // Test hook: set the current hamlet's reputation directly.
       reputation[curTraderKey()] = n;
+      saveDirty = true;
+      emit();
+      return true;
+    },
+    getRank: () => rankLv,
+    setRank: (n: number) => {
+      // Test hook: set the builder rank directly (the setRep precedent) —
+      // lets QA exercise level-gated paths (boss moulds) in Survival
+      // without farming XP. Inert in play.
+      rankLv = Math.max(0, Math.min(30, Math.floor(n)));
+      xp = 0;
       saveDirty = true;
       emit();
       return true;
