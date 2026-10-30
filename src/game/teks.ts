@@ -62,10 +62,13 @@ export const COL = {
   WHT: 0xf4f4f4,
   ORG: 0xfe8a18,
   GRN: 0x4b9f4a,
+  EMR: 0x00a26a, // emerald — OUR friction code (section 23)
+  VIO: 0x7c3aed, // violet — OUR long-pin code (section 23)
+  LED: 0x38b6ff, // electric blue — gauges and power lights (section 23)
   TRC: 0xdfe8ec, // trans-clear-ish
   MET: 0x9ba19d, // flat silver
 };
-const { LBG, DBG, BLK, BLU, TAN, RED, YEL, WHT, ORG, GRN, TRC, MET } = COL;
+const { LBG, DBG, BLK, BLU, TAN, RED, YEL, WHT, ORG, GRN, TRC, MET, EMR, VIO, LED } = COL;
 
 // Real-geometry constants (modules)
 export const HOLE_R = 4.85 / 16; // Ø 4.85 mm
@@ -163,7 +166,7 @@ const put = (s: Spec) => S.set(s.id, s);
 
 // ---------- AXLES (cross 4.8 mm, 1L = 8 mm) ----------
 const axleL: [number, string, number, number][] = [
-  [ID.Axle2, "32062", 2, RED],
+  [ID.Axle2, "32062", 2, ORG],
   [ID.Axle, "4519", 3, LBG],
   [ID.Axle4, "3705", 4, BLK],
   [ID.Axle6, "3706", 6, BLK],
@@ -174,16 +177,16 @@ put(new B(ID.AxleStop3, "24316", DBG, 0).axle(-1.5, 1.5, DBG, 1).done());
 put(new B(ID.AxleStop5, "15462", DBG, 0).axle(-2.5, 2.5, DBG, 1).done());
 
 // ---------- PINS ----------
-put(new B(ID.Pin2L, "2780", BLK, 0).pin(-1, 1, [0]).done());
-put(new B(ID.PinFree, "3673", LBG, 0).pin(-1, 1, [0]).done());
-put(new B(ID.Pin3L, "6558", BLU, 0).pin(-1.5, 1.5, [-0.5]).done());
-put(new B(ID.Pin3LFree, "32556", TAN, 0).pin(-1.5, 1.5, [-0.5]).done());
-put(new B(ID.AxlePin, "43093", BLU, 0).pin(-1, 0, [0]).axle(0, 1, BLU).done());
+put(new B(ID.Pin2L, "2780", EMR, 0).pin(-1, 1, [0]).done());
+put(new B(ID.PinFree, "3673", WHT, 0).pin(-1, 1, [0]).done());
+put(new B(ID.Pin3L, "6558", VIO, 0).pin(-1.5, 1.5, [-0.5]).done());
+put(new B(ID.Pin3LFree, "32556", WHT, 0).pin(-1.5, 1.5, [-0.5]).done());
+put(new B(ID.AxlePin, "43093", VIO, 0).pin(-1, 0, [0]).axle(0, 1, VIO).done());
 put(new B(ID.Towball, "6628", BLK, 0).pin(-1, 0, [0]).pin(0, 1, [], BLK, true).done());
 
 // ---------- BUSHES / RINGS ----------
 put(new B(ID.Bush, "3713", LBG, 0).tube(0, [0, 0, 0], 0.36, 0.92, "A", LBG, 0.44).done());
-put(new B(ID.HalfBush, "32123", YEL, 0).tube(0, [-0.25, 0, 0], 0.38, 0.46, "A").done());
+put(new B(ID.HalfBush, "32123", LBG, 0).tube(0, [-0.25, 0, 0], 0.38, 0.46, "A").done());
 put(new B(ID.Ring, "18947", DBG, 0).tube(0, [0, 0, 0], 0.44, 0.94, "A").cyl(0, [0, 0, 0], 0.5, 0.22, DBG).done());
 
 // ---------- LIFTARMS (studless 1M, thin 0.5M) ----------
@@ -498,21 +501,23 @@ function eBox(id: number, part: string, body: number, a: V3, b: V3, top: number,
 const pinRow = (bb: B, xs: number[], y: number, z: number, len: number) => {
   for (const x of xs) bb.hole([x, y, z], 2, len, "P");
 };
-put(eBox(ID.MotorM, "45303", DBG, [-2, -1.5, -1.5], [2, 1.5, 1.5], LBG, { c: [2.5, 0, 0], ax: 0 }, (bb) => pinRow(bb, [-1, 1], -1, 0, 3)).done({ drive: "motor", rpm: 135 }));
-put(eBox(ID.MotorL, "88013", DBG, [-3, -1.5, -1.5], [3, 1.5, 1.5], LBG, { c: [3.5, 0, 0], ax: 0 }, (bb) => pinRow(bb, [-2, 0, 2], -1, 0, 3)).done({ drive: "motor", rpm: 175 }));
-put(eBox(ID.MotorXL, "88014", DBG, [-3, -2.5, -1.5], [3, 2.5, 1.5], LBG, { c: [3.5, 0, 0], ax: 0 }, (bb) => pinRow(bb, [-2, 0, 2], -2, 0, 3)).done({ drive: "motor", rpm: 145 }));
-put(eBox(ID.Servo, "88004", LBG, [-2.5, -1.5, -1.5], [2.5, 1.5, 1.5], DBG, { c: [0, 0, 2], ax: 2 }, (bb) => pinRow(bb, [-2, 2], -1, 0, 3)).done({ drive: "motor", rpm: 60 }));
-put(eBox(ID.TechHub, "88012", WHT, [-4, -2, -3], [4, 2, 3], DBG, undefined, (bb) => {
+put(eBox(ID.MotorM, "45303", BLK, [-2, -1.5, -1.5], [2, 1.5, 1.5], YEL, { c: [2.5, 0, 0], ax: 0 }, (bb) => pinRow(bb, [-1, 1], -1, 0, 3)).done({ drive: "motor", rpm: 135 }));
+put(eBox(ID.MotorL, "88013", BLK, [-3, -1.5, -1.5], [3, 1.5, 1.5], YEL, { c: [3.5, 0, 0], ax: 0 }, (bb) => pinRow(bb, [-2, 0, 2], -1, 0, 3)).done({ drive: "motor", rpm: 175 }));
+put(eBox(ID.MotorXL, "88014", BLK, [-3, -2.5, -1.5], [3, 2.5, 1.5], YEL, { c: [3.5, 0, 0], ax: 0 }, (bb) => pinRow(bb, [-2, 0, 2], -2, 0, 3)).done({ drive: "motor", rpm: 145 }));
+put(eBox(ID.Servo, "88004", BLK, [-2.5, -1.5, -1.5], [2.5, 1.5, 1.5], YEL, { c: [0, 0, 2], ax: 2 }, (bb) => pinRow(bb, [-2, 2], -1, 0, 3)).done({ drive: "motor", rpm: 60 }));
+put(eBox(ID.TechHub, "88012", BLK, [-4, -2, -3], [4, 2, 3], YEL, undefined, (bb) => {
   pinRow(bb, [-3, -1, 1, 3], 1, 0, 6);
-  bb.cyl(1, [0, 2.06, 0], 0.5, 0.12, GRN);
+  bb.cyl(1, [0, 2.06, 0], 0.5, 0.12, LED);
 }).done({ drive: "power" }));
-put(eBox(ID.Battery, "8881", DBG, [-2, -1.5, -4], [2, 1.5, 4], LBG, undefined, (bb) => {
-  bb.cyl(1, [0, 1.56, 2.5], 0.4, 0.12, GRN);
+put(eBox(ID.Battery, "8881", BLK, [-2, -1.5, -4], [2, 1.5, 4], YEL, undefined, (bb) => {
+  // A blue LED charge gauge instead of the old green button (section 23).
+  bb.box([-1.2, 1.56, 2.3], [1.2, 1.7, 2.7], LED, false);
+  bb.box([1.5, 1.56, 2.3], [1.9, 1.74, 2.7], DBG, false);
   pinRow(bb, [-1.5, 1.5], -1, 0, 8);
 }).done({ drive: "power" }));
-put(eBox(ID.Remote, "88010", LBG, [-3, -0.75, -2], [3, 0.75, 2], BLK, undefined, (bb) => {
-  for (const x of [-1.6, 1.6]) bb.box([x - 0.5, 0.75, -1.4], [x + 0.5, 1.1, 1.4], RED, false);
-  bb.cyl(1, [0, 0.9, 0], 0.45, 0.2, GRN);
+put(eBox(ID.Remote, "88010", BLK, [-3, -0.75, -2], [3, 0.75, 2], YEL, undefined, (bb) => {
+  for (const x of [-1.6, 1.6]) bb.box([x - 0.5, 0.75, -1.4], [x + 0.5, 1.1, 1.4], ORG, false);
+  bb.cyl(1, [0, 0.9, 0], 0.45, 0.2, LED);
 }).done());
 // Pull-back "spring" motor 6×2×1⅓ (axle out through the sides)
 put(eBox(ID.Spring, "75822", BLK, [-3, -0.8, -1], [3, 0.8, 1], DBG, undefined, (bb) => bb.hole([2, 0, 0], 2, 2, "A")).done());

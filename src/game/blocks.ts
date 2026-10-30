@@ -1400,9 +1400,9 @@ put(b(ID.Liftarm3, "Liftarm 1×3", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9", {
 put(b(ID.Liftarm5, "Liftarm 1×5", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9", { hard: 0.4 }));
 put(b(ID.Liftarm7, "Liftarm 1×7", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9", { hard: 0.4 }));
 put(b(ID.Bush, "Bush 1L", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9", { hard: 0.4 }));
-put(b(ID.HalfBush, "Half-bush 0.5L", "#f2cd37", "#f2cd37", "#f2cd37", "#f2cd37", { hard: 0.4 }));
-put(b(ID.Pin2L, "Pin 2L friction", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
-put(b(ID.PinFree, "Pin 2L free", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9", { hard: 0.4 }));
+put(b(ID.HalfBush, "Half-bush 0.5L", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9", { hard: 0.4 }));
+put(b(ID.Pin2L, "Pin 2L friction", "#00a26a", "#00a26a", "#00a26a", "#00a26a", { hard: 0.4 }));
+put(b(ID.PinFree, "Pin 2L free", "#f4f4f4", "#f4f4f4", "#f4f4f4", "#f4f4f4", { hard: 0.4 }));
 put(b(ID.Angle1, "Angle connector #1", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
 put(b(ID.Angle2, "Angle connector #2", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
 put(b(ID.Frame57, "Frame 5×7", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9", { hard: 0.4 }));
@@ -1449,13 +1449,13 @@ put(b(ID.FairLeft, "Fairing left", "#f4f4f4", "#f4f4f4", "#f4f4f4", "#f4f4f4", {
 put(b(ID.FairRight, "Fairing right", "#f4f4f4", "#f4f4f4", "#f4f4f4", "#f4f4f4", { hard: 0.4 }));
 put(b(ID.FairLarge, "Fairing large", "#f4f4f4", "#f4f4f4", "#f4f4f4", "#f4f4f4", { hard: 0.4 }));
 // Electric P5b
-put(b(ID.TechHub, "Teks Hub 4 ports", "#f4f4f4", "#f4f4f4", "#f4f4f4", "#f4f4f4", { hard: 0.4 }));
-put(b(ID.MotorM, "Motor M", "#6c6e68", "#6c6e68", "#6c6e68", "#6c6e68", { hard: 0.4 }));
-put(b(ID.MotorL, "Motor L", "#6c6e68", "#6c6e68", "#6c6e68", "#6c6e68", { hard: 0.4 }));
-put(b(ID.MotorXL, "Motor XL", "#6c6e68", "#6c6e68", "#6c6e68", "#6c6e68", { hard: 0.4 }));
-put(b(ID.Servo, "Servo", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9", { hard: 0.4 }));
-put(b(ID.Remote, "Remote control", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9", { hard: 0.4 }));
-put(b(ID.Battery, "Battery box", "#6c6e68", "#6c6e68", "#6c6e68", "#6c6e68", { hard: 0.4 }));
+put(b(ID.TechHub, "Teks Hub 4 ports", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
+put(b(ID.MotorM, "Motor M", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
+put(b(ID.MotorL, "Motor L", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
+put(b(ID.MotorXL, "Motor XL", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
+put(b(ID.Servo, "Servo", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
+put(b(ID.Remote, "Remote control", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
+put(b(ID.Battery, "Battery box", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
 // Remaining CAT-02
 put(b(ID.Liftarm9, "Liftarm 1×9", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9", { hard: 0.4 }));
 put(b(ID.Liftarm11, "Liftarm 1×11", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9", { hard: 0.4 }));
@@ -1463,16 +1463,16 @@ put(b(ID.Liftarm13, "Liftarm 1×13", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9",
 put(b(ID.Liftarm15, "Liftarm 1×15", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9", { hard: 0.4 }));
 put(b(ID.Frame711, "Frame 7×11", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9", { hard: 0.4 }));
 put(b(ID.Frame1115, "Frame 11×15", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9", { hard: 0.4 }));
-put(b(ID.AxlePin, "Axle pin", "#0055bf", "#0055bf", "#0055bf", "#0055bf", { hard: 0.4 }));
+put(b(ID.AxlePin, "Axle pin", "#7c3aed", "#7c3aed", "#7c3aed", "#7c3aed", { hard: 0.4 }));
 put(b(ID.Towball, "Pin with towball", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
 // Minor CAT-02 variants
 put(b(ID.Thin7, "Thin liftarm 1×7", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9", { hard: 0.4 }));
-put(b(ID.Pin3L, "Pin 3L friction", "#0055bf", "#0055bf", "#0055bf", "#0055bf", { hard: 0.4 }));
-put(b(ID.Pin3LFree, "Pin 3L free", "#e4cd9e", "#e4cd9e", "#e4cd9e", "#e4cd9e", { hard: 0.4 }));
+put(b(ID.Pin3L, "Pin 3L friction", "#7c3aed", "#7c3aed", "#7c3aed", "#7c3aed", { hard: 0.4 }));
+put(b(ID.Pin3LFree, "Pin 3L free", "#f4f4f4", "#f4f4f4", "#f4f4f4", "#f4f4f4", { hard: 0.4 }));
 put(b(ID.AxleStop3, "Axle with stop 3L", "#6c6e68", "#6c6e68", "#6c6e68", "#6c6e68", { hard: 0.4 }));
 put(b(ID.AxleStop5, "Axle with stop 5L", "#6c6e68", "#6c6e68", "#6c6e68", "#6c6e68", { hard: 0.4 }));
 // Axle lengths
-put(b(ID.Axle2, "Axle 2L", "#c91a09", "#c91a09", "#c91a09", "#c91a09", { hard: 0.4 }));
+put(b(ID.Axle2, "Axle 2L", "#fe8a18", "#fe8a18", "#fe8a18", "#fe8a18", { hard: 0.4 }));
 put(b(ID.Axle4, "Axle 4L", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
 put(b(ID.Axle6, "Axle 6L", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
 put(b(ID.Axle8, "Axle 8L", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
