@@ -53,7 +53,7 @@ export type Hud = {
   cursor: number;
   panel: "bag" | "bench" | "furnace" | "chest" | "enchant" | "anvil" | "brew" | "trade" | "beacon";
   craftOut: { id: number; n: number } | null;
-  furnace: { in: number; inN: number; fuel: number; fuelN: number; out: number; outN: number; cook: number };
+  furnace: { in: number; inN: number; fuel: number; fuelN: number; out: number; outN: number; cook: number; burn: number };
   chest: { id: number; n: number }[];
   compass: number;
   realm: string;
@@ -431,7 +431,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     cursor: 0,
     panel: "bag",
     craftOut: null,
-    furnace: { in: 0, inN: 0, fuel: 0, fuelN: 0, out: 0, outN: 0, cook: 0 },
+    furnace: { in: 0, inN: 0, fuel: 0, fuelN: 0, out: 0, outN: 0, cook: 0, burn: 0 },
     chest: [],
     compass: 0,
     realm: "Overworld",
@@ -3546,8 +3546,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     hud.craftOut = gridCacheOut;
     const furn = furnaces.get(focus.x + "," + focus.y + "," + focus.z);
     hud.furnace = furn
-      ? { in: furn.in, inN: furn.inN, fuel: furn.fuel, fuelN: furn.fuelN, out: furn.out, outN: furn.outN, cook: furn.cook / 5 }
-      : { in: 0, inN: 0, fuel: 0, fuelN: 0, out: 0, outN: 0, cook: 0 };
+      ? { in: furn.in, inN: furn.inN, fuel: furn.fuel, fuelN: furn.fuelN, out: furn.out, outN: furn.outN, cook: furn.cook / 5, burn: furn.burn }
+      : { in: 0, inN: 0, fuel: 0, fuelN: 0, out: 0, outN: 0, cook: 0, burn: 0 };
     // v4.18 perf diet: the 27-slot chest map is only read by the chest panel.
     if (panel === "chest") {
       const bin = chests.get(focus.x + "," + focus.y + "," + focus.z);
@@ -13024,7 +13024,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           gainXp(product === ID.Ingot || product === ID.Tin || product === ID.Copper || product === ID.Amber || product === ID.Chrome || product === ID.Sapphire || product === ID.Resin || product === ID.Prism ? 2 : 1);
           saveDirty = true;
         }
-      } else if (f.cook > 0) f.cook = Math.max(0, f.cook - dt * 2);
+      } else if (f.cook > 0 && !can) f.cook = Math.max(0, f.cook - dt * 2);
+      // Philippe 2026-10-30 (audit §21 A3): when the input is still in
+      // the kiln but the fuel ran out mid-cook, the cook HOLDS — it no
+      // longer slides back to zero. Most early fuels burn shorter than
+      // the 5 s cook (log 3 s, planks 1.5 s), so the old decay made the
+      // progress bar rise then melt away: « on voit pas la progression ».
+      // Decay now only happens when the cook is invalidated (input
+      // removed / output blocked), never for a dry kiln.
     }
   }
 

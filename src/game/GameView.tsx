@@ -1886,7 +1886,7 @@ function BinPage({ game }: { game: GameApi }) {
 function CraftPage({ game }: { game: GameApi }) {
   const hud = game.hud;
   const bench = hud.panel === "bench";
-  const [book, setBook] = useState<"all" | "build" | "tools" | "magic" | "gear" | "food" | "redstone">("all");
+  const [book, setBook] = useState<"all" | "build" | "tools" | "magic" | "gear" | "food" | "redstone" | "technic">("all");
   const [search, setSearch] = useState("");
   const [sel, setSel] = useState("");
   const [onlyCan, setOnlyCan] = useState(false);
@@ -1982,6 +1982,7 @@ function CraftPage({ game }: { game: GameApi }) {
               ["food", "Food"],
               ["magic", "Arcane"],
               ["redstone", "Redstone"],
+              ["technic", "Technic"],
             ] as const
           ).map(([cat, label]) => (
             <button key={cat} className={book === cat ? "sc-chip-btn on" : "sc-chip-btn"} onClick={() => setBook(cat)}>
@@ -2251,7 +2252,20 @@ function StationScreen({ game }: { game: GameApi }) {
                     <figcaption>Output</figcaption>
                   </figure>
                 </div>
-                <p className="sc-hint">Tap an item below: ores and food go to Input, fuel to Fuel. Tap a kiln slot to take its stack back.</p>
+                <p className="sc-kiln-state">
+                  {hud.furnace.burn > 0 ? (
+                    <>🔥 Burning — {Math.ceil(hud.furnace.burn)}s of fuel left · cooking {Math.round(hud.furnace.cook * 100)}%</>
+                  ) : hud.furnace.in ? (
+                    hud.furnace.cook > 0 ? (
+                      <>Out of fuel — the cook holds at {Math.round(hud.furnace.cook * 100)}%. Add fuel to finish it.</>
+                    ) : (
+                      <>Not lit — add fuel (coal burns 8s; one cook takes 5s).</>
+                    )
+                  ) : (
+                    <>Put plastic pellets or ore in Input, and fuel in Fuel.</>
+                  )}
+                </p>
+                <p className="sc-hint">Plastic pellets smelt into ingots here — and every pellet smelted also distils Fuel, dropped beside the kiln. Ingots cast bricks and Technic parts from the Crafting book. Tap an item below: ores and food go to Input, fuel to Fuel. Tap a kiln slot to take its stack back.</p>
                 <BinGrid game={game} onPick={(id) => game.furnaceQuick(id)} />
               </>
             )}

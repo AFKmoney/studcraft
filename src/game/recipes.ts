@@ -1,4 +1,5 @@
-import { ID } from "./blocks.ts";
+import { ID, def } from "./blocks.ts";
+import { SPECS, type Spec } from "./technic.ts";
 
 export type Recipe = {
   id: string;
@@ -13,7 +14,7 @@ export type Recipe = {
   h?: number;
   lvl?: number;
   skill?: string;
-  cat?: "build" | "tools" | "magic" | "gear" | "food" | "redstone";
+  cat?: "build" | "tools" | "magic" | "gear" | "food" | "redstone" | "technic";
 };
 
 const P = ID.Planks;
@@ -1590,6 +1591,41 @@ export const RECIPES: Recipe[] = [
     cat: "gear",
   }),
 ];
+
+// ── Technic casting (Muse, 2026-10-30 — audit §21 A3) ─────────────────
+// The 99 Technic parts had NO Survival source (debris sites and dungeon
+// chests only) — Philippe: « aucun bloc qui me permette de créer les lego
+// technic ». The mould IS the recipe, generated from the technic registry
+// so the list can never drift from the parts that exist (the BUG-4
+// lesson). Cost = the part's real volume (spec boxes + discs) at the
+// game's matter rate: 1 block³ of plastic = 2 pellets = 2 ingots.
+// Electric parts also take Copper — the conductor; plastic alone makes
+// no motor. Cast from the Crafting book (Technic tab) with ingots the
+// Kiln smelted from pellets.
+function specVolumeBlocks(s: Spec): number {
+  let v = 0;
+  for (const [a, b] of s.boxes) v += Math.abs(b[0] - a[0]) * Math.abs(b[1] - a[1]) * Math.abs(b[2] - a[2]);
+  for (const d of s.discs) v += Math.PI * d.r * d.r * d.len;
+  return v / 8; // spec units are modules; 1 block = 2 modules per side
+}
+for (const s of SPECS.values()) {
+  const ingots = Math.max(1, Math.min(24, Math.round(specVolumeBlocks(s) * 2)));
+  const need: [number, number][] = [[ID.PlasticIngot, ingots]];
+  let extra = "";
+  if (s.drive === "motor") {
+    need.push([ID.Copper, 2]);
+    extra = " + 2 copper (motor windings)";
+  }
+  if (s.drive === "power") {
+    need.push([ID.Copper, 4]);
+    extra = " + 4 copper (power bus)";
+  }
+  RECIPES.push(
+    r(`cast-tech-${s.id}`, `Cast ${def(s.id).name}`, `${ingots} plastic ingots${extra} — cast in the part's mould`, need, s.id, 1, {
+      cat: "technic",
+    }),
+  );
+}
 
 export const SMELT: Record<number, number> = {
   [ID.RawIron]: ID.Ingot,

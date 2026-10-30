@@ -3243,6 +3243,13 @@ kbd {
   margin-bottom: 8px;
 }
 
+.sc-kiln-state {
+  margin: 2px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffd36a;
+}
+
 .sc-kiln figure {
   margin: 0;
   display: flex;
