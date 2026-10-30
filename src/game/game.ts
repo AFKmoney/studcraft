@@ -21,7 +21,7 @@ import { mayYield, spillSlots } from "./yields";
 import { Upscaler, upscaleScale } from "./upscale";
 import { BTN, PadEdges, activePad, padBusy, padLabel, rumble, stick } from "./gamepad";
 import { dsApply, dsRelease, dsRequest, dsState, dsTryReconnect, type TriggerFx } from "./dualsense";
-import { parseSeed } from "./noise";
+import { parseSeed, hash3 } from "./noise";
 import { MobBatchRenderer } from "./mobBatch";
 import { batteryAt, remoteChAt, setRemoteChannel, springsJustSpent, stepMech, toggleValve, windSpring } from "./mechLink";
 
@@ -3935,11 +3935,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     if (world.edits.get(mark) === ID.Bedrock) return;
     const h = world.heightAt(x, z);
     if (h <= SEA || h >= HEIGHT - 3) return;
-    const cells = [
-      { x, y: h + 1, z, id: spot.ids[0] },
-      { x: x + 1, y: h + 1, z, id: spot.ids[1] },
-      { x, y: h + 2, z, id: spot.ids[2] },
-    ];
+    const cells = spot.ids.map((id, i) => {
+      const ox = Math.floor(hash3(cx, i, cz, world.seed + 8810) * 3) - 1;
+      const oz = Math.floor(hash3(cx, i, cz, world.seed + 8811) * 3) - 1;
+      return { x: x + ox, y: h + 1, z: z + oz, id };
+    });
     for (const c of cells) {
       const cur = world.get(c.x, c.y, c.z);
       if (cur !== ID.Air && cur !== ID.TallGrass && cur !== ID.Flower && cur !== ID.FlowerRed && cur !== ID.Reed && cur !== ID.Bloom) return;
