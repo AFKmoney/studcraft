@@ -3244,15 +3244,57 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // instanced group rotating about its cut base; on impact the lowest cells
   // shatter and the rest land as blocks or pickable drops.
   type Topple = {
-    mesh: THREE.InstancedMesh;
+    mesh: THREE.Mesh;
     cells: { dx: number; dy: number; dz: number; id: number }[];
     px: number; py: number; pz: number;
     axis: THREE.Vector3;
     angle: number; vel: number;
   };
   const topples: Topple[] = [];
-  const toppleGeo = new THREE.BoxGeometry(0.98, 0.98, 0.98);
-  const toppleMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  // The falling tree renders with the SAME stack as the standing world:
+  // fallerGeo carries the per-face atlas tiles, opaqueMat is the live world
+  // material (the sirenized MeshStandardMaterial in Realistic mode), and the
+  // merged geometry writes the white color attribute opaqueStd requires
+  // (vertexColors:true — the BUG-1 lesson). The old path (plain white Lambert
+  // + flat per-instance colours) lost every texture and all the SRN shading
+  // the moment the tree started to fall (Philippe, 2026-10-29).
+  function toppleGeoFor(cells: { dx: number; dy: number; dz: number; id: number }[]) {
+    const parts: THREE.BufferGeometry[] = [];
+    for (const c of cells) {
+      const part = fallerGeo(c.id).clone();
+      part.translate(c.dx, c.dy + 0.5, c.dz);
+      parts.push(part);
+    }
+    let vtx = 0;
+    let idx = 0;
+    for (const part of parts) {
+      vtx += part.getAttribute("position").count;
+      idx += part.getIndex()!.count;
+    }
+    const pos = new Float32Array(vtx * 3);
+    const nor = new Float32Array(vtx * 3);
+    const uvA = new Float32Array(vtx * 2);
+    const col = new Float32Array(vtx * 3).fill(1);
+    const index = new Uint32Array(idx);
+    let vo = 0;
+    let io = 0;
+    for (const part of parts) {
+      pos.set(part.getAttribute("position").array as Float32Array, vo * 3);
+      nor.set(part.getAttribute("normal").array as Float32Array, vo * 3);
+      uvA.set(part.getAttribute("uv").array as Float32Array, vo * 2);
+      const pi = part.getIndex()!;
+      for (let i = 0; i < pi.count; i++) index[io + i] = pi.getX(i) + vo;
+      vo += part.getAttribute("position").count;
+      io += pi.count;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    g.setAttribute("normal", new THREE.BufferAttribute(nor, 3));
+    g.setAttribute("uv", new THREE.BufferAttribute(uvA, 2));
+    g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    g.setIndex(new THREE.BufferAttribute(index, 1));
+    return g;
+  }
   let jumpTap = -10;
   let elapsed = 0;
   const tmp = new THREE.Color();
@@ -4425,15 +4467,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     let ax = x + 0.5 - player.x;
     let az = z + 0.5 - player.z;
     if (Math.abs(ax) > Math.abs(az)) { ax = Math.sign(ax) || 1; az = 0; } else { az = Math.sign(az) || 1; ax = 0; }
-    const mesh = new THREE.InstancedMesh(toppleGeo, toppleMat, cells.length);
-    const m4 = new THREE.Matrix4();
-    const col = new THREE.Color();
-    cells.forEach((c, i) => {
-      m4.makeTranslation(c.dx, c.dy + 0.5, c.dz);
-      mesh.setMatrixAt(i, m4);
-      mesh.setColorAt(i, col.set(def(c.id).side || def(c.id).color));
-    });
+    const mesh = new THREE.Mesh(toppleGeoFor(cells), opaqueMat);
     mesh.castShadow = true;
+    mesh.receiveShadow = true;
     mesh.position.set(x + 0.5, y, z + 0.5);
     scene.add(mesh);
     for (const c of cells) {
@@ -4513,7 +4549,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         }
       }
       scene.remove(t.mesh);
-      t.mesh.dispose();
+      t.mesh.geometry.dispose();
       topples.splice(i, 1);
       if (Math.hypot(player.x - t.px, player.z - t.pz) < 22) padRumble(0.5, 0.3, 160); // the trunk slams down
       audio.break();
