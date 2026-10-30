@@ -163,8 +163,8 @@ Pas de redstone. Le cœur tourne : graphe de rotation local et borné.
 - [x] Étapes 2+3+4 : câblage (Muse) — couche Technic dans game.ts (une Mesh par pièce, géométrie cachée), pose/raycast/minage minuté (la pièce revient toujours, les deux modes), rotation R + bouton tactile, rotation calculée par le moteur de technic.ts seulement, règle d'alimentation (un moteur tourne ssi un hub/batterie ALLUMÉ du même assemblage), conversion des vieilles sauvegardes sans jamais perdre une pièce
 - [x] Étape 6 : icônes (Muse) — 99/99 PNG 160×160 transparents rendus DE la géométrie du jeu (même matériau Lambert vertexColors), fallback SVG si un PNG manque
 - [x] Étape 7 : QA navigateur (Muse) — pose PASS, ratios **−1/3 exacts** (8T→24T), alimentation moteur PASS complet (14,137 rad/s = Motor M 135 rpm exact), minage Créatif PASS, icônes 99/99 en jeu, **0 erreur JS**
-  - [ ] Étape 7 reste : sauvegarde aller-retour MESURÉE (méthode prescrite : session courte, pause→reprendre — jamais par reload; script `qa7h-save.mjs` prêt)
-  - [ ] Étape 7 reste : minage Survival mesuré (le chemin Créatif est prouvé)
+  - [x] Étape 7 reste : sauvegarde aller-retour MESURÉE — **PASS (qa7j-roundtrip, 2026-10-30 ~01:50)** : pièces posées → sauvegardées → rechargées → pièces identiques au retour
+  - [x] Étape 7 reste : minage Survival mesuré — **PASS (qa7i3, 2026-10-30 07:54 PDT)** : poutre 378 posée, contrôle négatif OK, visée « Liftarm 1×5 » du premier essai, beamGone=true (~9,5 min de poll sous contention), drop {378} au sol, 0 erreur JS
   - [ ] Échelle en main PROPORTIONNELLE + main qui serre la pièce (décision de Philippe 2026-10-29, poussé `dad9180d`) *(en attente verdict Philippe)*
 - [x] Nettoyage : retirer le câblage électrique P5b de Grok (mechLink moteurs/hub/batterie) — DONE (Grok). Bloc drive motor/hub/battery retiré de stepMech. Tests 17/17. Scale en main intouché.
 - [x] Modèle d'arbalète distinct — DONE (Grok). Crossbow a son propre modèle (stock + prod horizontal + corde courte), plus le modèle de l'arc.
