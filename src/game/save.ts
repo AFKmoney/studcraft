@@ -72,7 +72,9 @@ export type SaveV1 = {
   chips?: [number, number, number, number][]; // v4.17 Teardown: [x, y, z, (id << 12) | removedMask]
   bricks?: [number, number, number, number][]; // P0 stud grid: [id, sx, sy, sz] — stud coords (sx = 2 × block x), y stays cell-aligned
   welds?: [number, number, number, number, number, number][]; // P2: welded brick pairs [sx1, sy1, sz1, sx2, sy2, sz2] (stud coords of both bricks)
-  technic?: [number, number, number, number, number, number][]; // Technic 1:1 layer: [id, o, qx, qy, qz, on] — o = orientation index (0..23), q = half-module lattice coords (world blocks = q / 4), on = 0/1
+  teks?: [number, number, number, number, number, number][]; // Teks 1:1 layer: [id, o, qx, qy, qz, on] — o = orientation index (0..23), q = half-module lattice coords (world blocks = q / 4), on = 0/1
+  /** @deprecated Pre-rename field name (before the 2026-10-30 Teks rename): old saves carry their parts layer here. Read-only fallback in game.ts; never written. */
+  technic?: [number, number, number, number, number, number][];
   // P5b (Muse, 2026-10-30): vehicle bindings/state, keyed by the part's
   // lattice position "qx,qy,qz" (stable across save/load, unlike uids):
   // motor channel bindings, hub channels, hub fuel + battery reserves.

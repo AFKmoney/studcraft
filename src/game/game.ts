@@ -1,7 +1,7 @@
 import * as THREE from "three";
-import { ATLAS_COLS, ATLAS_ROWS, BLOCKS, CREATIVE_BAR, ID, TECHNIC, def, faceTile, stairsVariant, type BlockDef } from "./blocks";
-import { TechWorld, ORIENTS, composeO, worldCells, bbox as techBbox, spec as techSpec, type Part as TechPart, type Plan as TechPlan, type Target as TechTarget } from "./technic";
-import { buildTechnicGeometry } from "./technicGeo";
+import { ATLAS_COLS, ATLAS_ROWS, BLOCKS, CREATIVE_BAR, ID, TEKS, def, faceTile, stairsVariant, type BlockDef } from "./blocks";
+import { TechWorld, ORIENTS, composeO, worldCells, bbox as techBbox, spec as techSpec, type Part as TechPart, type Plan as TechPlan, type Target as TechTarget } from "./teks";
+import { buildTeksGeometry } from "./teksGeo";
 import { fuelFromMelt, parkPoses, refuel as vehRefuel, stepVehicle as stepVeh, vehicleFromAssembly, type Vehicle, type VPart } from "./vehicle";
 import { FUEL, type Channel } from "./p5bProto";
 import { createAudio } from "./audio";
@@ -75,8 +75,12 @@ export type Hud = {
   dayCount: number;
   mine: number;
   targetName: string;
-  /** A drive Technic part (hub/motor/remote/battery) is under the crosshair: the touch UI shows its Channel button. */
+  /** A drive Teks part (hub/motor/remote/battery) is under the crosshair: the touch UI shows its Channel button. */
   techAim: boolean;
+  /** The crosshair is on a TechHub (vehicle control core): the touch UI shows the Enter button (§22.2, 2026-10-30). */
+  techAimHub: boolean;
+  /** A vehicle is being driven right now: the touch UI swaps its action cluster for driving controls and shows the Park button (§22.2). */
+  driving: boolean;
   /** Build mode (Tab / fly camera) is on: the touch UI shows fly + rotation controls. */
   buildMode: boolean;
   signEdit: { x: number; y: number; z: number; text: string } | null;
@@ -133,7 +137,7 @@ export type TouchState = {
   jump: boolean;
   mine: boolean;
   place: boolean;
-  /** Momentary pulse from the touch "tourner" button: cycles the Technic placement variant. Consumed (reset to false) by the game loop. */
+  /** Momentary pulse from the touch "tourner" button: cycles the Teks placement variant. Consumed (reset to false) by the game loop. */
   spin: boolean;
   /** Touch sneak (hold): parking a vehicle, channel binding, plain sneak — touch had NO sneak source before (P5b all-devices line, 2026-10-30). */
   sneak: boolean;
@@ -177,10 +181,12 @@ export type GameApi = {
   pauseGame: () => void;
   /** Build mode (Tab) for the touch Build button — the pad uses the L3+R3 chord in pollPad. */
   toggleBuildMode: () => void;
-  /** One 90° rotation step of the held Technic part (touch build-mode buttons). */
+  /** One 90° rotation step of the held Teks part (touch build-mode buttons). */
   rotatePart: (axis: number, dir: number) => void;
-  /** Replay the Technic use gesture on the aimed part (touch Channel button — la télécommande à l'écran). */
+  /** Replay the Teks use gesture on the aimed part (touch Channel button — la télécommande à l'écran). */
   techUse: () => void;
+  /** Enter the aimed hub's vehicle, or park + exit the driven one (touch Enter/Park button, §22.2 2026-10-30). */
+  enterExitVehicle: () => void;
   setQuality: (q: Quality) => void;
   quit: () => void;
   respawn: () => void;
@@ -337,8 +343,8 @@ declare global {
       placeBrickAt?: (id: number, sx: number, sy: number, sz: number) => boolean;
       getBricks?: () => [number, number, number, number][];
       placeTechAt?: (id: number, o: number, qx: number, qy: number, qz: number) => boolean;
-      getTechnic?: () => [number, number, number, number, number, number][];
-      stepTechnic?: (dt: number) => { parts: number; jammed: boolean; omegas: Record<string, number>; angles: Record<string, number> };
+      getTeks?: () => [number, number, number, number, number, number][];
+      stepTeks?: (dt: number) => { parts: number; jammed: boolean; omegas: Record<string, number>; angles: Record<string, number> };
       getVehicle?: () => { pos: { x: number; y: number; z: number }; vel: number; yaw: number; fuel: number; battery: number; load: number; parts: number } | null;
       getBuildMode?: () => { on: boolean; fly: boolean; techHeld: boolean; wantO: number | null };
       spinTech?: () => number;
@@ -453,6 +459,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     mine: 0,
     targetName: "",
     techAim: false,
+    techAimHub: false,
+    driving: false,
     buildMode: false,
     signEdit: null as { x: number; y: number; z: number; text: string } | null,
     seed: 0,
@@ -555,11 +563,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       return;
     }
     if (e.pressed(BTN.Y)) keys.add("KeyF"); // poll() swaps the off-hand on KeyF
-    // In build mode with a Technic part in hand, the bumpers and the
+    // In build mode with a Teks part in hand, the bumpers and the
     // D-pad ROTATE the part (Philippe's axes: bumpers/D-pad L/R yaw
     // and roll, D-pad U/D pitch) instead of their play jobs — the
     // same contextual-remap precedent as DOWN cycling spells.
-    const bmPart = freePlace && TECHNIC_SET.has(hotbar[slot]);
+    const bmPart = freePlace && TEKS_SET.has(hotbar[slot]);
     if (e.pressed(BTN.LB)) { if (bmPart) rotateHeldPart(1, 1); else api.setSlot(slot - 1); }
     if (e.pressed(BTN.RB)) { if (bmPart) rotateHeldPart(1, -1); else api.setSlot(slot + 1); }
     if (e.pressed(BTN.LEFT)) { if (bmPart) rotateHeldPart(2, 1); else api.setSlot(slot - 1); }
@@ -1173,7 +1181,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   float molW = max(fwidth(molS), 1e-4);
   vec3 molBase = mix(vMolB.rgb, vColor.rgb, smoothstep(-molW, molW, molS));
   float molM = clamp(vMolU.x / 0.9, 0.0, 1.0);
-  // the brick is still a LEGO brick while it softens: course seams (at 1/3
+  // the brick is still a STUDS brick while it softens: course seams (at 1/3
   // and 2/3 of its slumped height, so they droop with it) and staggered
   // vertical joints, crisp per pixel, fading out as it liquefies
   vec3 molWN = normalize((vec4(vNormal, 0.0) * viewMatrix).xyz);
@@ -1441,7 +1449,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // v4.14 — crumbling: a procedural crack overlay that grows over the
   // block being mined (zero texture assets: the cracks are drawn on a
   // canvas in 6 stages, and from stage 2 they follow the brick courses —
-  // LEGO bricks split along their seams). Chips fly while you mine and
+  // STUDS bricks split along their seams). Chips fly while you mine and
   // the block bursts into studded sub-bricks when it breaks.
   function makeCrackTexture(stage: number): THREE.Texture {
     const S = 256;
@@ -1538,9 +1546,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   function updateGhostGeo(id: number) {
     if (id === ghostLastId) return;
     ghostLastId = id;
-    // Clear old. Technic parts never use this block ghost: the Technic
-    // layer draws its own planned-pose ghost (see the Technic section),
-    // and the block ghost is force-hidden while a Technic part is held.
+    // Clear old. Teks parts never use this block ghost: the Teks
+    // layer draws its own planned-pose ghost (see the Teks section),
+    // and the block ghost is force-hidden while a Teks part is held.
     while (ghost.children.length) ghost.remove(ghost.children[0]);
     ghost.add(ghostBody);
   }
@@ -1558,7 +1566,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   const viewBrick = new THREE.Group();
   viewBrick.userData.keepShadow = false;
 
-  // Dynamic 3D LEGO Item & Multi-Part Block Builder (used by 1st-person hand, 3rd-person Minifig & world drops)
+  // Dynamic 3D STUDS Item & Multi-Part Block Builder (used by 1st-person hand, 3rd-person Figure & world drops)
   function shiftHex(hex: number, f: number): number {
     const r = Math.min(255, Math.max(0, Math.round(((hex >> 16) & 255) * f)));
     const g = Math.min(255, Math.max(0, Math.round(((hex >> 8) & 255) * f)));
@@ -1636,11 +1644,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     return m;
   }
 
-  function addSculptedLegoFlame(parent: THREE.Group, x: number, y: number, z: number, scale = 1, soul = false) {
+  function addSculptedStudsFlame(parent: THREE.Group, x: number, y: number, z: number, scale = 1, soul = false) {
     const fg = new THREE.Group();
     fg.position.set(x, y, z);
     fg.scale.setScalar(scale);
-    fg.userData.legoFlame = true;
+    fg.userData.studsFlame = true;
     fg.userData.baseY = y;
     fg.userData.baseScale = scale;
     const outerCol = soul ? 0x28d7ff : 0xff6200;
@@ -1652,7 +1660,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     innerMat.emissive = new THREE.Color(innerCol);
     innerMat.emissiveIntensity = 1.05;
 
-    // Base stem pin + S-curved molded LEGO flame tongues
+    // Base stem pin + S-curved molded STUDS flame tongues
     addCylPart(fg, 0.018, 0.022, 0.035, 0, 0.017, 0, outerMat, 8);
     const l1 = addCylPart(fg, 0.032, 0.020, 0.065, -0.006, 0.055, 0, outerMat, 10);
     l1.rotation.z = 0.22;
@@ -1666,7 +1674,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     return fg;
   }
 
-  function buildLegoItem3D(id: number): { group: THREE.Group; isTool: boolean; flames: THREE.Object3D[] } {
+  function buildStudsItem3D(id: number): { group: THREE.Group; isTool: boolean; flames: THREE.Object3D[] } {
     const group = new THREE.Group();
     const flames: THREE.Object3D[] = [];
     if (!id) return { group, isTool: false, flames };
@@ -1675,7 +1683,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const s = 0.25;
     const hs = s / 2;
 
-    // 1. WORKSTATIONS & BESPOKE MULTI-PART LEGO BLOCKS
+    // 1. WORKSTATIONS & BESPOKE MULTI-PART STUDS BLOCKS
     if (id === ID.Furnace) {
       const darkStone = skin(0x3e4248);
       const midStone = skin(0x6c7179);
@@ -1688,7 +1696,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
 
       // Stepped dark stone base plate + hearth lip
       addBoxPart(group, s * 1.04, s * 0.18, s * 1.04, 0, -hs + s * 0.09, 0, darkStone);
-      // Left, right & back masonry walls (stacked LEGO bricks)
+      // Left, right & back masonry walls (stacked STUDS bricks)
       addBoxPart(group, s * 0.24, s * 0.62, s * 0.98, -hs + s * 0.12, s * 0.02, 0, midStone);
       addBoxPart(group, s * 0.24, s * 0.62, s * 0.98, hs - s * 0.12, s * 0.02, 0, midStone);
       addBoxPart(group, s * 0.56, s * 0.62, s * 0.34, 0, s * 0.02, hs - s * 0.17, midStone);
@@ -1697,20 +1705,20 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       // Arched stone lintel above firebox + ventilation slits
       addBoxPart(group, s * 0.62, s * 0.18, s * 0.26, 0, s * 0.24, -hs + s * 0.13, lightStone);
       addBoxPart(group, s * 0.44, s * 0.05, s * 0.28, -s * 0.02, s * 0.24, -hs + s * 0.13, darkStone);
-      // Top cap plate + 4 LEGO studs + circular chimney exhaust ring
+      // Top cap plate + 4 STUDS studs + circular chimney exhaust ring
       addBoxPart(group, s * 1.02, s * 0.18, s * 1.02, 0, hs - s * 0.09, 0, lightStone);
       addStudGrid(group, s * 0.96, hs, s * 0.96, 2, 2, midStone, 0, 0, true);
       addCylPart(group, s * 0.22, s * 0.24, s * 0.06, 0, hs + s * 0.03, 0, darkStone, 12);
       addCylPart(group, s * 0.13, s * 0.13, s * 0.07, 0, hs + s * 0.035, 0, emberMat, 10);
 
-      // Glowing 1×1 LEGO coal studs inside hearth
+      // Glowing 1×1 STUDS coal studs inside hearth
       for (const ox of [-0.042, 0, 0.042]) {
         addCylPart(group, 0.018, 0.020, 0.022, ox, -hs + s * 0.22, -hs + s * 0.14, emberMat, 10);
       }
-      // Sculpted 3D LEGO Flames roaring inside the furnace mouth
-      flames.push(addSculptedLegoFlame(group, 0, -hs + s * 0.22, -hs + s * 0.13, 0.42));
-      flames.push(addSculptedLegoFlame(group, -0.032, -hs + s * 0.20, -hs + s * 0.15, 0.30));
-      flames.push(addSculptedLegoFlame(group, 0.032, -hs + s * 0.20, -hs + s * 0.15, 0.30));
+      // Sculpted 3D STUDS Flames roaring inside the furnace mouth
+      flames.push(addSculptedStudsFlame(group, 0, -hs + s * 0.22, -hs + s * 0.13, 0.42));
+      flames.push(addSculptedStudsFlame(group, -0.032, -hs + s * 0.20, -hs + s * 0.15, 0.30));
+      flames.push(addSculptedStudsFlame(group, 0.032, -hs + s * 0.20, -hs + s * 0.15, 0.30));
 
       // Iron grate bars across lower firebox opening
       for (const gx of [-0.045, -0.015, 0.015, 0.045]) {
@@ -1735,7 +1743,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       // Overhanging workbench top plate
       addBoxPart(group, s * 1.06, s * 0.22, s * 1.06, 0, hs - s * 0.10, 0, topWood);
-      // Recessed 3×3 LEGO Crafting Grid on top (9 dark cells + 9 miniature LEGO studs!)
+      // Recessed 3×3 STUDS Crafting Grid on top (9 dark cells + 9 miniature STUDS studs!)
       addBoxPart(group, s * 0.78, 0.008, s * 0.78, 0, hs + 0.004, 0, darkWood);
       for (let gx = -1; gx <= 1; gx++) {
         for (let gz = -1; gz <= 1; gz++) {
@@ -1745,13 +1753,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           addCylPart(group, 0.015, 0.016, 0.016, cx, hs + 0.020, cz, gridStud, 10);
         }
       }
-      // Front SNOT tool rack: grey LEGO clip + miniature 3D LEGO Hammer & Hand-Saw!
+      // Front SNOT tool rack: grey STUDS clip + miniature 3D STUDS Hammer & Hand-Saw!
       addBoxPart(group, s * 0.76, 0.020, 0.018, 0, s * 0.12, -hs - 0.008, darkWood);
-      // Mini LEGO Hammer on left
+      // Mini STUDS Hammer on left
       addBoxPart(group, 0.022, 0.020, 0.022, -s * 0.20, s * 0.12, -hs - 0.016, clipMat);
       addCylPart(group, 0.009, 0.009, s * 0.42, -s * 0.20, -s * 0.02, -hs - 0.018, darkWood, 8);
       addBoxPart(group, 0.052, 0.024, 0.026, -s * 0.20, s * 0.16, -hs - 0.020, ironMat);
-      // Mini LEGO Saw on right
+      // Mini STUDS Saw on right
       addBoxPart(group, 0.022, 0.020, 0.022, s * 0.18, s * 0.12, -hs - 0.016, clipMat);
       addBoxPart(group, 0.036, 0.028, 0.018, s * 0.18, s * 0.14, -hs - 0.020, topWood);
       addBoxPart(group, 0.028, s * 0.36, 0.008, s * 0.18, -s * 0.04, -hs - 0.020, ironMat);
@@ -1772,7 +1780,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       // Hinged upper lid + 4 top studs
       addBoxPart(group, s * 0.96, s * 0.34, s * 0.88, 0, hs - s * 0.19, 0, lidMat);
       addStudGrid(group, s * 0.86, hs - 0.005, s * 0.78, 2, 2, lidMat, 0, 0, true);
-      // Protruding 1×1 gold LEGO latch plate + central gold stud
+      // Protruding 1×1 gold STUDS latch plate + central gold stud
       addBoxPart(group, s * 0.22, s * 0.28, 0.026, 0, s * 0.08, -hs * 0.88 - 0.01, goldMat);
       const latchStud = addCylPart(group, 0.018, 0.018, 0.018, 0, s * 0.08, -hs * 0.88 - 0.026, goldMat, 10);
       latchStud.rotation.x = Math.PI / 2;
@@ -1805,7 +1813,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       addBoxPart(group, s * 0.98, s * 0.68, s * 0.98, 0, -hs + s * 0.34, 0, obsMat);
       addBoxPart(group, s * 1.02, s * 0.16, s * 1.02, 0, s * 0.10, 0, clothMat);
       addStudGrid(group, s * 0.90, s * 0.18, s * 0.90, 2, 2, cyanMat);
-      // Open LEGO spellbook angled on top
+      // Open STUDS spellbook angled on top
       const bookG = new THREE.Group();
       bookG.position.set(0, s * 0.29, 0);
       bookG.rotation.set(-0.32, 0.45, 0);
@@ -1827,13 +1835,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return { group, isTool: false, flames };
     }
 
-    // Technic (Claude's 1:1 layer): the held model IS the real geometry
-    // from technicGeo — the same function that renders the part in the
+    // Teks (Claude's 1:1 layer): the held model IS the real geometry
+    // from teksGeo — the same function that renders the part in the
     // world — sized proportionally for the hand (fixed size per module,
     // spec.hand tweaks the fit). The
-    // old hand-modelled Technic shapes that lived here are gone: parts
-    // place through the Technic layer now, never as blocks or bricks.
-    if (TECHNIC_SET.has(id)) {
+    // old hand-modelled Teks shapes that lived here are gone: parts
+    // place through the Teks layer now, never as blocks or bricks.
+    if (TEKS_SET.has(id)) {
       const geo = techGeoOf(id);
       geo.computeBoundingBox();
       const bb = geo.boundingBox!;
@@ -1850,8 +1858,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       // pin rendered the same length as a 15-module frame; measured in
       // the step-7 QA at 93.5 vs 45.4 px per module). spec.hand stays as
       // a per-part multiplier on top. placeHeldMinecraft applies a
-      // CONSTANT pipeline factor for Technic (no re-normalization) and
-      // closes the minifig hand on the part.
+      // CONSTANT pipeline factor for Teks (no re-normalization) and
+      // closes the figure hand on the part.
       const heldSize = Math.min(0.11 * maxDim, 0.85) * (techSpec(id)?.hand ?? 1);
       mesh.scale.setScalar(heldSize / maxDim);
       mesh.position.copy(centre).multiplyScalar(-mesh.scale.x);
@@ -1875,7 +1883,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       flames.push(rod);
       addBoxPart(group, s * 0.68, 0.022, 0.022, 0, s * 0.22, 0, rodMat);
       addBoxPart(group, 0.022, 0.022, s * 0.68, 0, s * 0.22, 0, rodMat);
-      // 3 LEGO Potion bottles around the base
+      // 3 STUDS Potion bottles around the base
       const dirs = [[-s * 0.28, 0], [s * 0.28, 0], [0, -s * 0.28]] as const;
       dirs.forEach(([px, pz], idx) => {
         const pMat = skin(potCols[idx]);
@@ -1895,16 +1903,16 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       coalMat.emissive = new THREE.Color(0xff2a00);
       coalMat.emissiveIntensity = 0.85;
 
-      // 4 crossed LEGO logs with studs
+      // 4 crossed STUDS logs with studs
       addBoxPart(group, s * 0.94, s * 0.18, s * 0.22, 0, -hs + s * 0.09, -s * 0.24, logMat);
       addBoxPart(group, s * 0.94, s * 0.18, s * 0.22, 0, -hs + s * 0.09, s * 0.24, logMat);
       addBoxPart(group, s * 0.22, s * 0.18, s * 0.94, -s * 0.24, -hs + s * 0.24, 0, barkMat);
       addBoxPart(group, s * 0.22, s * 0.18, s * 0.94, s * 0.24, -hs + s * 0.24, 0, barkMat);
-      // Glowing ember bed + 3 sculpted LEGO flames
+      // Glowing ember bed + 3 sculpted STUDS flames
       addBoxPart(group, s * 0.38, s * 0.10, s * 0.38, 0, -hs + s * 0.12, 0, coalMat);
-      flames.push(addSculptedLegoFlame(group, 0, -hs + s * 0.16, 0, 0.72));
-      flames.push(addSculptedLegoFlame(group, -0.036, -hs + s * 0.14, 0.025, 0.48));
-      flames.push(addSculptedLegoFlame(group, 0.036, -hs + s * 0.14, -0.025, 0.48));
+      flames.push(addSculptedStudsFlame(group, 0, -hs + s * 0.16, 0, 0.72));
+      flames.push(addSculptedStudsFlame(group, -0.036, -hs + s * 0.14, 0.025, 0.48));
+      flames.push(addSculptedStudsFlame(group, 0.036, -hs + s * 0.14, -0.025, 0.48));
       return { group, isTool: false, flames };
     }
 
@@ -1987,16 +1995,16 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const spineMat = skin(0xf4ebd2);
       const flowerMat = skin(0xf26498);
       const pollenMat = skin(0xffd838);
-      // 3 stacked ribbed green LEGO column courses
+      // 3 stacked ribbed green STUDS column courses
       addBoxPart(group, s * 0.64, s * 0.34, s * 0.64, 0, -hs + s * 0.17, 0, greenMat);
       addBoxPart(group, s * 0.64, s * 0.34, s * 0.64, 0, -hs + s * 0.53, 0, darkRibMat);
       addBoxPart(group, s * 0.64, s * 0.32, s * 0.64, 0, hs - s * 0.16, 0, greenMat);
-      // 4 vertical fluted LEGO rib plates
+      // 4 vertical fluted STUDS rib plates
       for (const off of [-s * 0.16, s * 0.16]) {
         addBoxPart(group, s * 0.74, s * 0.96, s * 0.10, 0, 0, off, lightRibMat);
         addBoxPart(group, s * 0.10, s * 0.96, s * 0.74, off, 0, 0, lightRibMat);
       }
-      // Left & Right L-shaped 3D LEGO Saguaro Side Arms with top studs
+      // Left & Right L-shaped 3D STUDS Saguaro Side Arms with top studs
       addBoxPart(group, s * 0.32, s * 0.20, s * 0.24, s * 0.42, -s * 0.04, 0, greenMat);
       addBoxPart(group, s * 0.24, s * 0.44, s * 0.24, s * 0.50, s * 0.22, 0, lightRibMat);
       addStudGrid(group, s * 0.22, s * 0.44, s * 0.22, 1, 1, lightRibMat, s * 0.50, 0, true);
@@ -2005,13 +2013,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       addBoxPart(group, s * 0.24, s * 0.42, s * 0.24, -s * 0.50, s * 0.08, 0, lightRibMat);
       addStudGrid(group, s * 0.22, s * 0.29, s * 0.22, 1, 1, lightRibMat, -s * 0.50, 0, true);
 
-      // Protruding cream LEGO spines
+      // Protruding cream STUDS spines
       for (const sy of [-s * 0.24, s * 0.18]) {
         for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
           addBoxPart(group, 0.022, 0.016, 0.022, sx * s * 0.36, sy, sz * s * 0.36, spineMat);
         }
       }
-      // 4 top LEGO studs + blooming LEGO desert flower stud on crown
+      // 4 top STUDS studs + blooming STUDS desert flower stud on crown
       addStudGrid(group, s * 0.60, hs, s * 0.60, 2, 2, lightRibMat, 0, 0, true);
       addCylPart(group, 0.036, 0.028, 0.024, 0, hs + 0.022, 0, flowerMat, 8);
       addCylPart(group, 0.018, 0.018, 0.016, 0, hs + 0.040, 0, pollenMat, 8);
@@ -2033,7 +2041,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         const b = addCylPart(group, 0.032, 0.032, 0.055, 0, s * 0.50, 0, bulbMat, 10);
         flames.push(b);
       } else {
-        flames.push(addSculptedLegoFlame(group, 0, s * 0.38, 0, 0.72));
+        flames.push(addSculptedStudsFlame(group, 0, s * 0.38, 0, 0.72));
       }
       return { group, isTool: true, flames };
     }
@@ -2054,15 +2062,15 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return { group, isTool: false, flames };
     }
 
-    // 3. MOLDED 3D LEGO MINIFIG TOOLS & WEAPONS
+    // 3. MOLDED 3D STUDS FIGURE TOOLS & WEAPONS
     if (d.tool === "pick") {
       const handleMat = skin(0x7c522b);
       const headMat = skin(baseHex);
       const darkHead = skin(shiftHex(baseHex, 0.75));
-      // Cylindrical LEGO grip + bottom pommel ring
+      // Cylindrical STUDS grip + bottom pommel ring
       addCylPart(group, 0.020, 0.022, 0.34, 0, 0, 0, handleMat, 10);
       addCylPart(group, 0.028, 0.028, 0.024, 0, -0.165, 0, handleMat, 10);
-      // Central head socket collar + top LEGO stud
+      // Central head socket collar + top STUDS stud
       addBoxPart(group, 0.062, 0.056, 0.048, 0, 0.13, 0, darkHead);
       addCylPart(group, 0.018, 0.020, 0.020, 0, 0.18, 0, headMat, 10);
       // Curved left & right pickaxe arms + chisel tips
@@ -2085,7 +2093,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       addCylPart(group, 0.028, 0.028, 0.024, 0, -0.165, 0, handleMat, 10);
       addBoxPart(group, 0.065, 0.062, 0.046, 0, 0.12, 0, headMat);
       addCylPart(group, 0.018, 0.020, 0.020, 0, 0.18, 0, headMat, 10);
-      // Stepped LEGO axe blade on -X side + rear poll block on +X
+      // Stepped STUDS axe blade on -X side + rear poll block on +X
       addBoxPart(group, 0.085, 0.11, 0.032, -0.062, 0.115, 0, headMat);
       addBoxPart(group, 0.034, 0.145, 0.018, -0.108, 0.11, 0, edgeMat);
       addBoxPart(group, 0.042, 0.046, 0.036, 0.046, 0.12, 0, headMat);
@@ -2174,7 +2182,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       // that was too short (0.30 for a 0.337 tip span) and offset from
       // the limb tips, so it floated detached. Now: each limb is THREE
       // segments walked along a real arc (the joints meet by
-      // construction, LEGO-faceted curve), the string spans tip to tip
+      // construction, STUDS-faceted curve), the string spans tip to tip
       // exactly, and the arrow sits on the grip.
       const woodMat = skin(0x7c522b);
       const stringMat = skin(0xe8e4dc);
@@ -2199,7 +2207,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       // String: one thin span, tip to tip exactly.
       addBoxPart(group, 0.006, tipY * 2, 0.006, tipX, 0, 0, stringMat);
-      // Nocked LEGO arrow, resting on the grip, pointing +x.
+      // Nocked STUDS arrow, resting on the grip, pointing +x.
       const arr = addCylPart(group, 0.007, 0.007, 0.30, 0.0, 0, 0, woodMat, 8);
       arr.rotation.z = Math.PI / 2;
       addBoxPart(group, 0.030, 0.024, 0.024, 0.165, 0, 0, tipMat);
@@ -2331,7 +2339,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return { group, isTool: false, flames };
     }
 
-    // 4b. ROD-LIKE ITEMS (stick, fishing rod, ember rod, bone, arrow): a LEGO
+    // 4b. ROD-LIKE ITEMS (stick, fishing rod, ember rod, bone, arrow): a STUDS
     // bar held through the hand like a tool — before v4.17 they fell through
     // to the full brick model and a stick was held as a plank block.
     if (id === ID.Stick || id === ID.Rod || id === ID.Blaze || id === ID.Bone || id === ID.Arrow) {
@@ -2605,7 +2613,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
 
     // 4c. EVERY OTHER NON-BLOCK ITEM (string, feather, paper, dust, shells…):
-    // a small 1×2 LEGO tile in the item's colour — small enough to sit in the
+    // a small 1×2 STUDS tile in the item's colour — small enough to sit in the
     // hand, never a full brick.
     if (!d.placeable) {
       const mat = skin(baseHex);
@@ -2614,8 +2622,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return { group, isTool: false, flames };
     }
 
-    // 5. ALL PLACEABLE WORLD BLOCKS: True 3-Course Modular LEGO Sub-Brick Assembly!
-    // Renders the top 2×2 LEGO plate (with 4 hollow studs) + 2 staggered courses of 1×2 LEGO bricks with real 3D seam gaps!
+    // 5. ALL PLACEABLE WORLD BLOCKS: True 3-Course Modular STUDS Sub-Brick Assembly!
+    // Renders the top 2×2 STUDS plate (with 4 hollow studs) + 2 staggered courses of 1×2 STUDS bricks with real 3D seam gaps!
     const isGrassLike = id === ID.Grass || id === ID.Snow || id === ID.Mycelium || id === ID.Podzol;
     const topHex =
       id === ID.Grass
@@ -2663,7 +2671,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     addBoxPart(group, s * 0.99, c2H, s * 0.485, 0, c2Y, -s * 0.255, matC);
     addBoxPart(group, s * 0.99, c2H, s * 0.485, 0, c2Y, s * 0.255, matA);
 
-    // Top course (y: hs - 0.265*s to hs): 2×2 LEGO plate + 4 bevelled hollow studs
+    // Top course (y: hs - 0.265*s to hs): 2×2 STUDS plate + 4 bevelled hollow studs
     const c3H = s * 0.265;
     const c3Y = hs - c3H / 2;
     addBoxPart(group, s * 1.0, c3H, s * 1.0, 0, c3Y, 0, matTop);
@@ -2707,7 +2715,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     return { group, isTool: false, flames };
   }
 
-  // Held 3D LEGO Item/Block gripped inside the first-person Minifig C-clamp hand
+  // Held 3D STUDS Item/Block gripped inside the first-person Figure C-clamp hand
   const heldBrickGroup = new THREE.Group();
   let heldFlames: THREE.Object3D[] = [];
   let heldIsTool = false;
@@ -2717,7 +2725,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   heldBrickGroup.rotation.set(0.18, -0.42, 0.08);
   viewBrick.add(heldBrickGroup);
 
-  // v4.13 first-person LEGO minifig arm: hollow C-clip hand on a wrist pin, a
+  // v4.13 first-person STUDS figure arm: hollow C-clip hand on a wrist pin, a
   // tapered sleeve with an elbow bend, and the upper arm running off-screen.
   // Built around the hand (origin) so the held-item placements stay valid.
   const fpsArmGroup = new THREE.Group();
@@ -2736,7 +2744,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     return m;
   };
   const fpsUpperArm: THREE.Object3D[] = []; // hidden while an item is held (see placeHeldMinecraft)
-  // Minifig anatomy: the wrist pin enters the back of the C, the mouth opens along
+  // Figure anatomy: the wrist pin enters the back of the C, the mouth opens along
   // the forearm (away from the elbow) and the bore runs across the arm — so a
   // tool handle passes straight through the hand.
   const fpsArmDir = new THREE.Vector3(0.25, -0.3, 0.92).normalize(); // hand → elbow (elbow is nearer the camera)
@@ -2809,14 +2817,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   const MC_K = 0.4;
   const X_AXIS = new THREE.Vector3(1, 0, 0), Y_AXIS = new THREE.Vector3(0, 1, 0), Z_AXIS = new THREE.Vector3(0, 0, 1);
   const MC_ANCHOR = new THREE.Vector3(0.56, -0.52, -0.72);
-  // StudCraft framing on top of the vanilla chain: our 3D LEGO items are much
-  // chunkier than flat sprites, and the minifig hand must stay ON screen
+  // StudCraft framing on top of the vanilla chain: our 3D STUDS items are much
+  // chunkier than flat sprites, and the figure hand must stay ON screen
   // holding them (vanilla hides the arm when an item is held). So the item is
   // shrunk about its grip point (angles untouched) and the arm anchor is
   // nudged up-left. Picked from phone-rig photos; QA hook setMcHeld.
   const mcTune = { size: 0.5, ax: 0.44, ay: -0.34, az: -0.72, bsize: 0.5, isize: 0.3, bx: 0.32, by: 0.0, bz: -0.72 };
   let heldKind = 0; // 0 tool, 1 block / small item
-  const ARM_SCALE = 0.56 / MC_K; // the minifig arm keeps its old on-screen size
+  const ARM_SCALE = 0.56 / MC_K; // the figure arm keeps its old on-screen size
   const mcDisplay = (rot: [number, number, number], tr16: [number, number, number], sc: number) =>
     new THREE.Matrix4()
       .makeTranslation(tr16[0] / 16, tr16[1] / 16, tr16[2] / 16)
@@ -2870,11 +2878,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const size = box.getSize(new THREE.Vector3());
     const d = def(id);
     let M: THREE.Matrix4;
-    if (TECHNIC_SET.has(id)) {
-      // Technic parts (Philippe, 2026-10-29): buildLegoItem3D already
+    if (TEKS_SET.has(id)) {
+      // Teks parts (Philippe, 2026-10-29): buildStudsItem3D already
       // applied the PROPORTIONAL per-module scale, so this pipeline
       // factor is a CONSTANT — never divide by maxDim here, that is what
-      // used to crush every part to the same held size. And the minifig
+      // used to crush every part to the same held size. And the figure
       // hand GRIPS the part: the clip closes on the part's body along
       // its long axis, like a tool handle — the part is held BY the
       // hand, never perched on top of it.
@@ -2937,7 +2945,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const grip = new THREE.Vector3(c.x, box.min.y + len * (d.tool === "sword" ? 0.1 : 0.16), c.z).applyMatrix4(M);
       const shaft = new THREE.Vector3(0, 1, 0).transformDirection(M);
       const mouth = ARM_OUT.clone().negate();
-      // clip bore sized to the handle: the minifig hand closes on it
+      // clip bore sized to the handle: the figure hand closes on it
       placeArm(grip, shaft, mouth, ARM_SCALE * 0.82);
     } else {
       // blocks: vanilla block display; small items: vanilla generated display
@@ -2983,9 +2991,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   viewBrick.position.set(0.20, -0.16, -0.27);
   camera.add(viewBrick);
 
-  const fig = makeMinifig();
+  const fig = makeFigure();
   // Minecraft proportions: the player character is exactly 1.8 blocks tall
-  // (the raw minifig measures 1.29 — Philippe, 2026-10-28).
+  // (the raw figure measures 1.29 — Philippe, 2026-10-28).
   {
     const fb = new THREE.Box3().setFromObject(fig.group);
     const fh = fb.max.y - fb.min.y;
@@ -3292,7 +3300,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         part.rotation.x = stride * (i % 2 === 0 ? 0.62 : -0.62) * v.amp + (arm ? idle : 0);
       }
     }
-    // Articulated LEGO Head Tracking & Dynamic Creature Parts
+    // Articulated STUDS Head Tracking & Dynamic Creature Parts
     const ud = m.mesh.userData;
     if (ud.collar) ud.collar.visible = !!m.tame;
     if (ud.head && camDistSq < 576) {
@@ -3391,14 +3399,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
   }
 
-  /** Death: the figure unclips into a physical LEGO Brick Ragdoll disassembly! */
+  /** Death: the figure unclips into a physical STUDS Brick Ragdoll disassembly! */
   function topple(m: Mob) {
     const v = m.vis;
     if (v) {
       dropBar(v);
       if (v.blob) v.blob.visible = false;
     }
-    // Extract actual ABS plastic colors from the mob's LEGO parts and launch tumbling 3D bricks & plates
+    // Extract actual ABS plastic colors from the mob's STUDS parts and launch tumbling 3D bricks & plates
     const colors: string[] = [];
     const mats: THREE.Material[] = [];
     m.mesh.traverse((o) => {
@@ -3434,7 +3442,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     for (let i = corpses.length - 1; i >= 0; i--) {
       const c = corpses[i];
       c.t += dt;
-      // Unclip and tumble individual LEGO limbs/bricks during death ragdoll
+      // Unclip and tumble individual STUDS limbs/bricks during death ragdoll
       for (const child of c.mesh.children) {
         if (child.userData.ragVy !== undefined) {
           child.userData.ragVy -= 11.5 * dt;
@@ -4219,13 +4227,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // v4.17: restore damaged (partially carved) blocks
     CH.clearChips();
     for (const [x, y, z, v] of data.chips ?? []) CH.chipMap.set(CH.ckey(x, y, z), v);
-    // P0: restore the stud-grid brick layer. Technic ids found in the
-    // brick layer are pre-layer saves: they migrate to the Technic
+    // P0: restore the stud-grid brick layer. Teks ids found in the
+    // brick layer are pre-layer saves: they migrate to the Teks
     // layer instead (conversion: convertLegacyTechBrick).
     clearBricks();
     clearTech();
     for (const [id, sx, sy, sz] of data.bricks ?? []) {
-      if (TECHNIC_SET.has(id)) convertLegacyTechBrick(id, sx, sy, sz);
+      if (TEKS_SET.has(id)) convertLegacyTechBrick(id, sx, sy, sz);
       else addBrick(id, sx, sy, sz);
     }
     // P2: restore welded joints — only pairs whose bricks both came back.
@@ -4235,9 +4243,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (bricks.has(ka) && bricks.has(kb)) welds.add(weldKey(ka, kb));
     }
     rebuildAllBrickMeshes();
-    // Technic layer restore: [id, o, qx, qy, qz, on].
-    for (const [id, o, qx, qy, qz, on] of data.technic ?? []) {
-      if (!TECHNIC_SET.has(id)) continue;
+    // Teks layer restore: [id, o, qx, qy, qz, on].
+    for (const [id, o, qx, qy, qz, on] of data.teks ?? data.technic ?? []) {
+      if (!TEKS_SET.has(id)) continue;
       const p = tech.add(id, o, [qx, qy, qz]);
       p.on = on !== 0;
     }
@@ -4351,8 +4359,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     const seen = new Set<number>();
     for (const c of cells) {
-      // Debris-site Technic finds join the Technic layer, not bricks.
-      if (TECHNIC_SET.has(c.id)) {
+      // Debris-site Teks finds join the Teks layer, not bricks.
+      if (TEKS_SET.has(c.id)) {
         convertLegacyTechBrick(c.id, c.x * 2, c.y, c.z * 2, true);
         continue;
       }
@@ -4798,12 +4806,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     if (id === ID.Mushroom || id === ID.MushroomRed) bumpQuest("break", "shroom");
     if (id === ID.Web) bumpQuest("break", "web");
     if (id === ID.EndCrystal) popCrystal(x, y, z);
-    // v4.14: solids burst into studded LEGO sub-bricks (plates + 1x2s);
+    // v4.14: solids burst into studded STUDS sub-bricks (plates + 1x2s);
     // plants and glass just shatter into chips.
     if (block.plant || !block.solid) burst(x + 0.5, y + 0.5, z + 0.5, block.color, 7);
     else if (block.glass) burst(x + 0.5, y + 0.5, z + 0.5, "#dff2ff", 12);
     else if (chippable(id)) {
-      // v4.17 Teardown LEGO: the block comes apart into the 1×1 LEGO bricks
+      // v4.17 Teardown STUDS: the block comes apart into the 1×1 STUDS bricks
       // it is made of — every piece still standing pops out, in place.
       const col = block.side || block.color;
       for (let p = 0; p < 12; p++) {
@@ -5151,17 +5159,17 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   const brickGrid = new Map<string, Set<string>>(); // voxel cell key -> brick keys
   const brickMeshes = new Map<number, THREE.InstancedMesh>();
   const brickGeos = new Map<number, THREE.BufferGeometry>();
-  const TECHNIC_SET = new Set<number>(TECHNIC);
+  const TEKS_SET = new Set<number>(TEKS);
 
   const aimPt = { x: 0, y: 0, z: 0 }; // frame aim point (face point of the current target)
 
-  // ---- Technic 1:1 layer (Claude's technic.ts, wired in by Muse) -----
+  // ---- Teks 1:1 layer (Claude's teks.ts, wired in by Muse) -----
   // Parts live in their own TechWorld on the half-module lattice (q
   // units; world blocks = q / 4). Rendering: ONE Mesh per part — parts
-  // are player-placed and few — with geometry from technicGeo (module
-  // units, technic.ts local frame), matrix = T(q/4) · ORIENTS[o] ·
+  // are player-placed and few — with geometry from teksGeo (module
+  // units, teks.ts local frame), matrix = T(q/4) · ORIENTS[o] ·
   // S(0.5), plus the mechanics group spin about the group axis line
-  // (from technic.ts step()). Meshes sync when tech.rev changes;
+  // (from teks.ts step()). Meshes sync when tech.rev changes;
   // transforms rewrite every frame (one compose per part, no allocs).
   // v1 limits: no player collision with parts, no net sync (same as
   // the P0 brick layer's v1).
@@ -5171,15 +5179,15 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   const techMeshes = new Map<number, THREE.Mesh>();
   const techGeos = new Map<number, THREE.BufferGeometry>();
   const techMatLam = new THREE.MeshLambertMaterial({ vertexColors: true });
-  // SRN world shading on the Technic layer (Philippe, 2026-10-29): the
-  // parts are LEGO plastic like everything else in the world — the flat
+  // SRN world shading on the Teks layer (Philippe, 2026-10-29): the
+  // parts are STUDS plastic like everything else in the world — the flat
   // Lambert they shipped with read as raw CG next to the SRN bricks
   // (his giant grey turntable screenshot). Same sirenizeWorld treatment
   // as the world set; seams gentler (a part is ONE moulded piece, not a
   // stack of block cells). Lambert stays as the non-realistic fallback,
   // mirroring opaqueMat's Std/Lam pair.
   const techMatStd = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0, envMapIntensity: 0.45 });
-  sirenizeWorld(techMatStd, 0.3, 1, "srn-world-technic-1");
+  sirenizeWorld(techMatStd, 0.3, 1, "srn-world-teks-1");
   let techMatSolid: THREE.Material = settings.realistic ? techMatStd : techMatLam;
   const techGhostMat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.45, depthWrite: false });
   const techGhostMesh = new THREE.Mesh(new THREE.BufferGeometry(), techGhostMat);
@@ -5189,8 +5197,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   scene.add(techGhostMesh);
   let techGhostId = 0;
   let techSpin = 0; // cycles plan() variants (R key / touch "tourner" button)
-  // Build mode (Tab) — Philippe, 2026-10-29, "tout pensé en LEGO
-  // Technic": a 30x30-STUD work plate (15x15 blocks = 60x60 half-module
+  // Build mode (Tab) — Philippe, 2026-10-29, "tout pensé en STUDS
+  // Teks": a 30x30-STUD work plate (15x15 blocks = 60x60 half-module
   // lattice cells) projected on the ground, and orientation keys that
   // dial the held part's orientation in 90° steps about the world axes.
   let techWantO: number | null = null; // dialled orientation; null = planner's choice
@@ -5229,7 +5237,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     say(freePlace ? "Build mode — fly camera in the 30×30 box · fly: arrows / stick · up/down: Space/C, A/B, ▲▼ buttons · rotate part: WASD/QE, D-pad/bumpers, buttons" : "Build mode off");
     emit();
   }
-  /** One 90° step of the held Technic part's wanted orientation about
+  /** One 90° step of the held Teks part's wanted orientation about
    * a world axis — shared by the WASD/QE keys, the gamepad build-mode
    * mapping and the touch rotation buttons. */
   function rotateHeldPart(axis: 0 | 1 | 2, dir: 1 | -1) {
@@ -5296,10 +5304,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   function techGeoOf(id: number): THREE.BufferGeometry {
     let g = techGeos.get(id);
     if (!g) {
-      // buildTechnicGeometry returns null only for an id without a spec;
-      // every TECHNIC_SET id has one, so the empty fallback is unreachable
+      // buildTeksGeometry returns null only for an id without a spec;
+      // every TEKS_SET id has one, so the empty fallback is unreachable
       // in play — it exists to keep the cache total.
-      g = buildTechnicGeometry(id) ?? EMPTY_TECH_GEO;
+      g = buildTeksGeometry(id) ?? EMPTY_TECH_GEO;
       techGeos.set(id, g);
     }
     return g;
@@ -5366,14 +5374,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     techRevSeen = -1;
     techGhostMesh.visible = false;
   }
-  /** Voxel/brick solidity for the planner, in BLOCK coords (technic.ts
+  /** Voxel/brick solidity for the planner, in BLOCK coords (teks.ts
    *  floors q/4 itself). Fluids and plants don't block a part. */
   function techSolidAt(x: number, y: number, z: number) {
     const id = world.get(x, y, z);
     if (id !== ID.Air && def(id).solid) return true;
     return brickCellBlocked(x, y, z);
   }
-  /** World AABB (blocks) of a posed part, from technic's own bbox. */
+  /** World AABB (blocks) of a posed part, from teks's own bbox. */
   function techPartAabb(id: number, o: number, q: readonly number[]) {
     const [lo, hi] = techBbox(id, o);
     return {
@@ -5392,7 +5400,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       a.c[2] + a.s[2] / 2 > player.z - HW
     );
   }
-  /** Power rule for technic.step(): a motor runs when it is switched on
+  /** Power rule for teks.step(): a motor runs when it is switched on
    *  and a switched-on hub / battery box belongs to the same assembly —
    *  any connector of the box within ~5 M of any connector of the motor
    *  (conns are in q units, so 10 q), or the part centres within ~6 M
@@ -5413,7 +5421,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     return false;
   }
 
-  function tickTechnic(dt: number) {
+  function tickTeks(dt: number) {
     // Spin input: R key (edge, consumed) + the touch "tourner" pulse.
     if (keys.has("KeyR")) {
       keys.delete("KeyR");
@@ -5457,7 +5465,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
 
   function tryPlaceTech(plan: TechPlan) {
     const held = hotbar[slot];
-    if (!TECHNIC_SET.has(held)) return;
+    if (!TEKS_SET.has(held)) return;
     if (!creative && (inv[held] ?? 0) <= 0) {
       say("Out of those parts");
       return;
@@ -5482,7 +5490,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const c = techPartAabb(id, p.o, p.q).c;
     tech.remove(uid);
     // A part is a physical object: mining always returns it, in both
-    // modes (no pellets — it comes back as itself, like real LEGO).
+    // modes (no pellets — it comes back as itself, like real STUDS).
     dropItem(id, 1, c[0], c[1] + 0.25, c[2]);
     burst(c[0], c[1], c[2], def(id).color, 7);
     audio.brickBreak();
@@ -5495,7 +5503,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   }
 
   /** The crank / hub / battery switch: flips the part's `on` flag, which
-   *  technic.step() (cranks) and techPowered() (motors) both read. */
+   *  teks.step() (cranks) and techPowered() (motors) both read. */
   function toggleTechPart(p: TechPart) {
     p.on = p.on === false ? true : false;
     say(def(p.id).name + (p.on ? " — on" : " — off"));
@@ -5503,7 +5511,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     saveDirty = true;
   }
 
-  // The "use" gesture on a placed Technic part (P5b): a HUB whose
+  // The "use" gesture on a placed Teks part (P5b): a HUB whose
   // assembly is a complete vehicle is DRIVEN (else toggled); a placed
   // REMOTE cycles its hub's channel; sneak+use on a MOTOR cycles the
   // channel that motor is bound to; any other drive part toggles on/off.
@@ -5536,11 +5544,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   }
 
   // ================= P5b VEHICLES (Muse wiring, 2026-10-30) =========
-  // A Technic assembly becomes ONE kinematic body (vehicle.ts): the
+  // A Teks assembly becomes ONE kinematic body (vehicle.ts): the
   // player builds it on the lattice, "use"s its hub to drive it, and
   // sneaks to park it back onto the lattice, part for part. Bindings
   // and energy reserves are keyed by lattice position ("qx,qy,qz") so
-  // they survive save/load (uids do not — the technic save format
+  // they survive save/load (uids do not — the teks save format
   // carries no uid). See WORKLOG 2026-10-30 (P5b claim) for the full
   // record: controls, energy model, parking rule.
   const CHANNELS: Channel[] = ["A", "B", "C", "D"];
@@ -5557,7 +5565,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     meshes: { vp: VPart; mesh: THREE.Mesh; base: THREE.Matrix4 }[];
   };
   let vehEnt: VehEnt | null = null;
-  /** uid of the Technic part under the crosshair this frame (-1 = none):
+  /** uid of the Teks part under the crosshair this frame (-1 = none):
    * the touch Channel button replays the use gesture on it. */
   let aimTechUid = -1;
 
@@ -5658,6 +5666,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     });
     scene.add(group);
     vehEnt = { v: vehicle, group, baseQuat: new THREE.Quaternion().setFromRotationMatrix(baseM), meshes };
+    hud.driving = true;
     placeVehGroup();
     say("Driving — W/S throttle, A/D steer, Shift park · Fuel " + vehicle.fuel.toFixed(1) + "/" + FUEL.tankCapacity + " · Battery " + Math.round(vehicle.battery * 100) + "%");
     audio.place();
@@ -5690,6 +5699,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     scene.remove(ent.group);
     vehEnt = null;
+    hud.driving = false;
     syncTechMeshes();
     player.x = ent.v.pos.x + 1.6;
     player.z = ent.v.pos.z;
@@ -5709,13 +5719,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     for (const vp of ent.v.parts) dropItem(vp.id, 1, ent.v.pos.x, ent.v.pos.y + 0.5, ent.v.pos.z);
     scene.remove(ent.group);
     vehEnt = null;
+    hud.driving = false;
     player.x = ent.v.pos.x;
     player.z = ent.v.pos.z;
     player.y = ent.v.pos.y + 1;
     player.vy = 0;
   }
 
-  // Save conversion (Technic étape 4): a Technic part stored as a P0
+  // Save conversion (Teks étape 4): a Teks part stored as a P0
   // brick sat in ONE block cell (stud coords sx, sy, sz). Re-seat it
   // with the planner, flat on the floor of its old cell; if no pose
   // fits, try the raw lattice origin; if even that collides, drop it
@@ -6157,7 +6168,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   const fallingBricks: FallingBrick[] = [];
   const brickStress = new Map<string, number>();
   const brickSagged = new Set<string>(); // brick keys currently rendered with sag > 0
-  const BRICK_STRESS_MAX = 0.12; // was 0.75 — Philippe: LEGO gravity was not visible
+  const BRICK_STRESS_MAX = 0.12; // was 0.75 — Philippe: STUDS gravity was not visible
   const BRICK_SAG_MAX = 0.15;
   // P6-2 Trempe (Muse): tempered colour bricks (410-418) are the grade
   // above plain cast bricks — they hold stress twice as long before
@@ -6201,7 +6212,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   }
 
   // Weight above a brick (count of bricks stacked on it, direct or via chain).
-  // Real LEGO: 1 stud holds almost nothing, 2 studs hold a little, 3–4 hold a lot.
+  // Real STUDS: 1 stud holds almost nothing, 2 studs hold a little, 3–4 hold a lot.
   function weightAbove(b: Brick, all: Brick[], seen = new Set<string>()): number {
     const k = brickKey(b.sx, b.sy, b.sz);
     if (seen.has(k)) return 0;
@@ -6227,7 +6238,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const cant = new Map<string, number>();
     const all = [...bricks.values()];
     // Recalibrated 2026-10-29 (Philippe): ONE covered stud anchors the
-    // brick itself — real LEGO clutch holds on a single corner stud, and
+    // brick itself — real STUDS clutch holds on a single corner stud, and
     // the old >= 2 seed made every 1-stud landing over a voxel block
     // fall within a scan (voxels can't grant support by propagation).
     // Strength still scales with coverage via maxWeightForStuds below.
@@ -6362,7 +6373,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const allBricks = [...bricks.values()];
     for (const b of allBricks) {
       const k = brickKey(b.sx, b.sy, b.sz);
-      // Weight overload: too much on 1–2 studs → treat as unsupported (real LEGO)
+      // Weight overload: too much on 1–2 studs → treat as unsupported (real STUDS)
       const studs = studsCoveredBelow(b);
       if (studs > 0 && studs <= 2) {
         const w = weightAbove(b, allBricks);
@@ -6461,7 +6472,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // half-offset target): food + generic placement only, v1.
   function tryPlaceBrick(bh: BrickHit) {
     const held = hotbar[slot];
-    if (TECHNIC_SET.has(held)) return; // Technic parts place through the Technic layer only
+    if (TEKS_SET.has(held)) return; // Teks parts place through the Teks layer only
     // P2: the welding torch never places — it welds the aimed brick.
     if (held === ID.Welder) {
       weldAction(bh);
@@ -7053,7 +7064,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // The keepable ex-redstone items, re-logic'd onto the energy model
   // (Philippe: « rediriger vers notre modèle d'énergie »). No wires, no
   // signal levels: a switch block directly sets the `on` state of
-  // Technic parts in its 6 neighbouring cells. The parts still draw
+  // Teks parts in its 6 neighbouring cells. The parts still draw
   // their power from hub batteries and fuel — a switch is a CONTROL,
   // never a power source. Autonomous switches (solar, watcher) register
   // themselves in switchCells at placement; levers, plates and targets
@@ -7303,7 +7314,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const sneaking = isSneaking();
     const held = hotbar[slot];
     const heldDef = def(held);
-    if (TECHNIC_SET.has(held)) return; // Technic parts place through the Technic layer only
+    if (TEKS_SET.has(held)) return; // Teks parts place through the Teks layer only
     if (held === ID.Bow || held === ID.Crossbow) return shootHeld();
     if (held === ID.Trident) return throwTrident();
     if (held === ID.Firework) return launchFirework();
@@ -7521,7 +7532,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
 
   function dropItem(id: number, n: number, x: number, y: number, z: number) {
     if (!id || n <= 0) return;
-    const { group: mesh } = buildLegoItem3D(id);
+    const { group: mesh } = buildStudsItem3D(id);
     mesh.scale.setScalar(0.92);
     mesh.position.set(x, y, z);
     if (plasticOn) {
@@ -7621,7 +7632,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       saveDirty = true;
     }
   };
-  type RemoteFig = { body: LegoBody; tx: number; ty: number; tz: number };
+  type RemoteFig = { body: StudsBody; tx: number; ty: number; tz: number };
   const remotes = new Map<string, RemoteFig>();
   let posAcc = 0;
   let mpName = "";
@@ -7659,7 +7670,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (p.y < -100) continue; // no transform received yet
       let r = remotes.get(id);
       if (!r) {
-        const body = buildLego("villager", 1);
+        const body = buildStuds("villager", 1);
         body.group.add(nameSprite(p.name));
         scene.add(body.group);
         body.group.position.set(p.x, p.y, p.z);
@@ -7933,7 +7944,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const y = hit.y + hit.ny;
     const z = hit.z + hit.nz + 0.5;
     if (!creative) spend(hotbar[slot], 1);
-    const body = buildLego(kind, 1);
+    const body = buildStuds(kind, 1);
     const mob: Mob = {
       kind,
       x,
@@ -8722,8 +8733,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     emit();
   }
 
-  // 3D Molded LEGO Sub-Brick (1×2 brick with 2 studs) & Plate (2×2 plate with 4 studs) Ragdoll/Debris System:
-  // Replaces generic unlit cubes with real 3D studded LEGO sub-pieces that spin, bounce off terrain, and clatter!
+  // 3D Molded STUDS Sub-Brick (1×2 brick with 2 studs) & Plate (2×2 plate with 4 studs) Ragdoll/Debris System:
+  // Replaces generic unlit cubes with real 3D studded STUDS sub-pieces that spin, bounce off terrain, and clatter!
   type DebrisPiece = {
     x: number;
     y: number;
@@ -8742,7 +8753,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     scale: number;
     color: string;
     isPlate: boolean;
-    piece?: boolean; // v4.17: a 1×1 LEGO brick knocked out of a block (Teardown)
+    piece?: boolean; // v4.17: a 1×1 STUDS brick knocked out of a block (Teardown)
   };
   const particles: DebrisPiece[] = [];
 
@@ -8807,7 +8818,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   plateMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(240 * 3), 3);
   scene.add(plateMesh);
   const pdummy = new THREE.Object3D();
-  // v4.17 Teardown LEGO: the pieces knocked out of blocks are real 1×1 LEGO
+  // v4.17 Teardown STUDS: the pieces knocked out of blocks are real 1×1 STUDS
   // bricks (one stud), at the exact size they had inside the block — a
   // block is 2 × 2 of them, 3 courses high.
   const PIECE_MAX = 320;
@@ -8860,7 +8871,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   function burstModularBlock(x: number, y: number, z: number, block: ReturnType<typeof def>) {
     const topCol = block.top || block.color;
     const sideCol = block.side || block.color;
-    // 1. Eject the top 2×2 LEGO plate (e.g. green grass plate on Grass blocks)
+    // 1. Eject the top 2×2 STUDS plate (e.g. green grass plate on Grass blocks)
     for (let i = 0; i < 2; i++) {
       const life = 0.7 + Math.random() * 0.3;
       particles.push({
@@ -8909,7 +8920,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     if (particles.length > 420) particles.splice(0, particles.length - 420);
   }
 
-  // Mob Brick Ragdoll Disassembly: scatters larger constituent 1×2 LEGO bricks & 2×2 plates on death/explosion
+  // Mob Brick Ragdoll Disassembly: scatters larger constituent 1×2 STUDS bricks & 2×2 plates on death/explosion
   function spawnMobRagdoll(x: number, y: number, z: number, colors: string[], count: number) {
     for (let i = 0; i < count; i++) {
       const life = 1.05 + Math.random() * 0.55;
@@ -9009,7 +9020,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       p.rx += p.vrx * dt;
       p.ry += p.vry * dt;
       p.rz += p.vrz * dt;
-      // Physical terrain bounce for unclipped LEGO bricks & plates.
+      // Physical terrain bounce for unclipped STUDS bricks & plates.
       // A melt puddle's visual surface is ~0.28 high, not a full block:
       // rest debris ON the liquid, never floating at full-block height.
       const gBase = groundY(p.x, p.z);
@@ -9570,7 +9581,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       if (count("slime", 28) === 0) spawnKind("slime", lm.x + 5, lm.z - 3, 0.85);
     } else if (lm.kind === "castle") {
-      greet("Royal LEGO Fortress — Illager knights & crossbowmen hold the battlements!");
+      greet("Royal STUDS Fortress — Illager knights & crossbowmen hold the battlements!");
       if (count("pillager", 34) < 2) {
         spawnKind("pillager", lm.x - 4, lm.z + 11);
         spawnKind("pillager", lm.x + 4, lm.z + 11);
@@ -9703,7 +9714,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
 
   function spawnKind(kind: Mob["kind"], x: number, z: number, scale = 1) {
     const y = kind === "ghast" || kind === "dragon" || kind === "phantom" || kind === "wither" || kind === "blaze" ? groundY(x, z) + (kind === "dragon" ? 6 : kind === "wither" ? 5 : 4) : groundY(x, z);
-    const body = buildLego(kind, scale);
+    const body = buildStuds(kind, scale);
     const mob: Mob = {
       kind,
       x,
@@ -10105,8 +10116,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     saveDirty = true;
   }
 
-  // ================= v4.17 Teardown LEGO =================
-  // A block can be eaten PIECE BY PIECE (12 × 1×1 LEGO bricks, see
+  // ================= v4.17 Teardown STUDS =================
+  // A block can be eaten PIECE BY PIECE (12 × 1×1 STUDS bricks, see
   // chipState). Explosions carve by distance, mining knocks pieces off the
   // face being hit, and whatever is left hanging collapses. Bounded and
   // event-driven only: nothing runs per frame except the debris pool.
@@ -10144,7 +10155,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   }
   // Structural collapse: after a blast, every solid cell in a bounded box
   // that is no longer connected (face to face) to the box's walls/floor —
-  // i.e. to the rest of the world — falls as LEGO rubble. A flood fill over
+  // i.e. to the rest of the world — falls as STUDS rubble. A flood fill over
   // at most (2R+1)^3 cells, once per explosion.
   function collapseAround(cx: number, cy: number, cz: number, R: number, debrisBudget: { n: number }) {
     const S = 2 * R + 1;
@@ -10204,7 +10215,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const r = rad;
     const ex = x + 0.5, ey = y + 0.5, ez = z + 0.5;
     const budget = { n: 90 };
-    // Teardown carving: each LEGO piece goes if it is inside the (ragged)
+    // Teardown carving: each STUDS piece goes if it is inside the (ragged)
     // blast radius — blocks on the rim lose only the pieces facing the blast.
     for (let dy = -r - 1; dy <= r + 1; dy++) {
       for (let dz = -r - 1; dz <= r + 1; dz++) {
@@ -10250,7 +10261,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     boomFx.push({ x: x + 0.5, y: y + 0.6, z: z + 0.5, r, age: 0 });
     if (boomFx.length > 4) boomFx.splice(0, boomFx.length - 4);
-    burst(x, y, z, "#f07820", 30); // fireball sparks; the rubble is the real LEGO pieces above
+    burst(x, y, z, "#f07820", 30); // fireball sparks; the rubble is the real STUDS pieces above
     if (d < 16) padRumble(Math.max(0.15, 0.9 - d / 16), 0.4, 200); // felt through the pad, fades with distance
     shake = 0.55;
     audio.explode();
@@ -10802,7 +10813,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           m.convT = (m.convT ?? 0) + dt;
           if (m.convT > 5) {
             m.kind = "drowned";
-            const body = buildLego("drowned", 1);
+            const body = buildStuds("drowned", 1);
             scene.remove(m.mesh);
             m.mesh = body.group;
             m.legs = body.legs;
@@ -11317,7 +11328,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         return [x, y, z, v] as [number, number, number, number];
       }),
       bricks: [...bricks.values()].map((b) => [b.id, b.sx, b.sy, b.sz] as [number, number, number, number]),
-      technic: [...tech.parts.values()].map((p) => [p.id, p.o, p.q[0], p.q[1], p.q[2], p.on === false ? 0 : 1] as [number, number, number, number, number, number]),
+      teks: [...tech.parts.values()].map((p) => [p.id, p.o, p.q[0], p.q[1], p.q[2], p.on === false ? 0 : 1] as [number, number, number, number, number, number]),
       vehBind: [...motorChannelByQ.entries()],
       vehHubCh: [...hubChannelByQ.entries()],
       vehFuel: [...vehFuelByQ.entries()],
@@ -11393,9 +11404,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       keys.delete("KeyF");
       emit();
     }
-    // Build mode with a Technic part in hand: WASD rotate the part
+    // Build mode with a Teks part in hand: WASD rotate the part
     // (keydown handler), the arrow keys keep walking.
-    const buildRot = freePlace && TECHNIC_SET.has(hotbar[slot]);
+    const buildRot = freePlace && TEKS_SET.has(hotbar[slot]);
     // Build-mode fly camera: the CHARACTER receives no movement input
     // at all — he stays parked; the camera integration (frame loop)
     // reads the keys itself.
@@ -11576,9 +11587,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // (voxel hit, brick hit) owns the crosshair this frame.
     const bHit = bricks.size > 0 ? raycastBricks(rox, roy, roz, rdx, rdy, rdz, reach + (tp ? thirdAim.back : 0)) : null;
     const useBrick = !!bHit && (!hit || bHit.t < hit.dist);
-    // Technic layer: its own DDA raycast on the half-module lattice (t
+    // Teks layer: its own DDA raycast on the half-module lattice (t
     // comes back in q units — /4 = blocks). The nearest of voxel /
-    // brick / Technic owns the crosshair this frame.
+    // brick / Teks owns the crosshair this frame.
     const tHit = tech.parts.size > 0 ? tech.raycast([rox * 4, roy * 4, roz * 4], [rdx, rdy, rdz], (reach + (tp ? thirdAim.back : 0)) * 4) : null;
     const tDist = tHit ? tHit.t / 4 : Infinity;
     const useTech = !!tHit && tDist <= (hit ? hit.dist : Infinity) && tDist <= (bHit ? bHit.t : Infinity);
@@ -11619,14 +11630,15 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     hud.targetName = "";
     aimTechUid = -1;
     hud.techAim = false;
+    hud.techAimHub = false;
     hud.mine = 0;
     highlight.visible = false;
     ghost.visible = false;
-    // Technic placement preview: while a Technic part is held, the
-    // planner (technic.ts plan()) owns the ghost — against the nearest
+    // Teks placement preview: while a Teks part is held, the
+    // planner (teks.ts plan()) owns the ghost — against the nearest
     // target, whichever layer it belongs to. The plan is executed
     // after the aim chain below; the block ghost is force-hidden
-    // whenever a Technic part is held.
+    // whenever a Teks part is held.
     hideTechGhost();
     // Build plate anchor: the last top face aimed at pins the bench;
     // the plate then stays put while you work on it. Once the box is
@@ -11649,7 +11661,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     let techPlanNow: TechPlan | null = null;
     techPlanLive = null;
     const heldTechId = hotbar[slot];
-    if (TECHNIC_SET.has(heldTechId) && blockFirst) {
+    if (TEKS_SET.has(heldTechId) && blockFirst) {
       const look: [number, number, number] = [rdx, rdy, rdz];
       let tgt: TechTarget | null = null;
       let tKey = "";
@@ -11855,7 +11867,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         if (mob.hp <= 0) killMob(mob);
       }
     } else if (useTech && tHit) {
-      // Technic: the crosshair is on a placed part.
+      // Teks: the crosshair is on a placed part.
       const tpart = tech.parts.get(tHit.uid)!;
       const block = def(tpart.id);
       const tspec = techSpec(tpart.id);
@@ -11882,7 +11894,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         mineKey = "";
         hideCrack();
       }
-      // Place button on a part: with a Technic part in hand, the
+      // Place button on a part: with a Teks part in hand, the
       // planner pre-pass above owns placement; with anything else in
       // hand (P5b gestures in **bold**): a HUB whose assembly is a
       // complete vehicle is DRIVEN; a placed REMOTE cycles its hub's
@@ -11890,7 +11902,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       // is bound to; any other drive part toggles on/off as before.
       aimTechUid = tHit.uid;
       hud.techAim = !!tspec?.drive;
-      if (!TECHNIC_SET.has(hotbar[slot]) && sample.first && sample.place && !prevPlace) {
+      hud.techAimHub = tpart?.id === ID.TechHub;
+      if (!TEKS_SET.has(hotbar[slot]) && sample.first && sample.place && !prevPlace) {
         techUseAction(tpart, sample.sneak);
       }
     } else if (useBrick && bHit) {
@@ -12038,8 +12051,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         if (dmgStage > chipStage) {
           if (chipStage >= 0) {
             if (chippable(hit.id)) {
-              // v4.17 Teardown LEGO: each damage stage knocks the two
-              // outermost LEGO pieces off the face being hit — the block
+              // v4.17 Teardown STUDS: each damage stage knocks the two
+              // outermost STUDS pieces off the face being hit — the block
               // visibly comes apart brick by brick as you mine it.
               const rm = CH.removedAt(hit.x, hit.y, hit.z, hit.id);
               const depth = (p: number) => {
@@ -12132,10 +12145,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         else if (def(heldId).food) eat();
       }
     }
-    // Technic: execute the planned placement (pre-pass above) on the
+    // Teks: execute the planned placement (pre-pass above) on the
     // same place-button cadence as blocks/bricks; the block ghost never
-    // shows while a Technic part is held.
-    if (TECHNIC_SET.has(hotbar[slot])) ghost.visible = false;
+    // shows while a Teks part is held.
+    if (TEKS_SET.has(hotbar[slot])) ghost.visible = false;
     if (techPlanNow) {
       const placeDown = sample.place;
       if ((sample.first && placeDown && !prevPlace) || (placeDown && placeCool <= 0 && prevPlace)) {
@@ -12205,7 +12218,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
     }
 
-    // P5b: driving a converted Technic vehicle — the player rides the
+    // P5b: driving a converted Teks vehicle — the player rides the
     // body (the mount pattern); sneak parks it back onto the lattice.
     if (vehEnt) {
       const v = vehEnt.v;
@@ -12593,7 +12606,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       // Bare hand (Philippe, 2026-10-29, photo in a tunnel): the FULL
       // Minecraft attack pivot rotates the whole viewmodel up to -56
       // degrees and drags the anchor toward the centre — with a chunky
-      // LEGO forearm that puts the sleeve's open end dead centre, and
+      // STUDS forearm that puts the sleeve's open end dead centre, and
       // mining retriggers the swing on every hit, so tunnelling meant
       // digging blind behind your own arm. The held-item path avoided
       // this with a wrist motion; the bare hand gets the same respect:
@@ -12608,11 +12621,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       // whole arm swept the forearm and its open end across the screen)
       viewBrick.quaternion.identity();
       const g = fpsArmGroup.position;
-      // Technic parts chop at half amplitude (Philippe, 2026-10-29): the
+      // Teks parts chop at half amplitude (Philippe, 2026-10-29): the
       // full wrist arc on a wide flat part sweeps it across the centre of
       // the screen on every mining hit — same centre-screen family as
       // the bare-hand bug, one layer up.
-      _qaTmp.copy(_identityQ).slerp(qa, TECHNIC_SET.has(lastHeldId) ? 0.5 : 1);
+      _qaTmp.copy(_identityQ).slerp(qa, TEKS_SET.has(lastHeldId) ? 0.5 : 1);
       heldBrickGroup.quaternion.copy(_qaTmp).multiply(heldBase.quat);
       heldBrickGroup.position.copy(heldBase.pos).sub(g).applyQuaternion(_qaTmp).add(g);
       const aq = fpsArmGroup.quaternion;
@@ -12653,14 +12666,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       // box; the character stays parked where he stood (poll() feeds him
       // no input) and no arm/held item floats in the editor view. Mouse
       // look is unchanged (player yaw/pitch); arrows fly along the look,
-      // WASD fly too when no Technic part is held (with a part, WASD
+      // WASD fly too when no Teks part is held (with a part, WASD
       // rotate it — his 2026-10-29 mapping), Space/C = up/down,
       // Shift = fast. The pose is clamped inside the 30x30x30 box.
       const sp = ((keys.has("ShiftLeft") || keys.has("ShiftRight") || padIn.sprint) ? 21 : 9) * dt;
       const cp = Math.cos(player.pitch);
       const fx = -Math.sin(player.yaw) * cp, fy = Math.sin(player.pitch), fz = -Math.cos(player.yaw) * cp;
       const rx = Math.cos(player.yaw), rz = -Math.sin(player.yaw);
-      const partHeld = TECHNIC_SET.has(hotbar[slot]);
+      const partHeld = TEKS_SET.has(hotbar[slot]);
       let mx = 0, my = 0, mz = 0;
       if (keys.has("ArrowUp") || (keys.has("KeyW") && !partHeld)) { mx += fx; my += fy; mz += fz; }
       if (keys.has("ArrowDown") || (keys.has("KeyS") && !partHeld)) { mx -= fx; my -= fy; mz -= fz; }
@@ -12710,7 +12723,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     } else if (settings.third) {
       // v4.17 aim fix: over-the-shoulder camera ALIGNED with the look direction
       // (it used to lookAt the player's back, so the crosshair sat on the
-      // minifig while the targeted block was elsewhere). The target ray is
+      // figure while the targeted block was elsewhere). The target ray is
       // cast from this camera (see thirdAim), so crosshair = target, exactly.
       const cp = Math.cos(player.pitch);
       const fx = -Math.sin(player.yaw) * cp, fy = Math.sin(player.pitch), fz = -Math.cos(player.yaw) * cp;
@@ -12775,13 +12788,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       heldFlames = [];
       if (!held) restArm();
       if (held) {
-        const built1 = buildLegoItem3D(held);
+        const built1 = buildStudsItem3D(held);
         heldIsTool = built1.isTool;
         heldFlames = built1.flames;
         heldBrickGroup.add(built1.group);
         placeHeldMinecraft(held, built1.group, heldIsTool);
 
-        const built3 = buildLegoItem3D(held);
+        const built3 = buildStudsItem3D(held);
         if (built3.isTool) {
           built3.group.scale.setScalar(1.35);
           built3.group.rotation.set(Math.PI / 2, Math.PI / 2, 0);
@@ -12800,7 +12813,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     heldBrickGroup.visible = !!held;
     figHeldGroup.visible = !!held;
-    // Animate internal 3D LEGO flames on held Furnace, Campfire, Torch, Lantern, Brew Stand, or Beacon
+    // Animate internal 3D STUDS flames on held Furnace, Campfire, Torch, Lantern, Brew Stand, or Beacon
     for (let fi = 0; fi < heldFlames.length; fi++) {
       const fl = heldFlames[fi];
       const baseS = (fl.userData.baseScale as number) || 1;
@@ -13153,7 +13166,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     updateTopples(dt);
     updateFallers(dt);
     tickBricks(dt);
-    tickTechnic(dt);
+    tickTeks(dt);
     // DualSense adaptive triggers (v4.18): R2 stiffens as the block cracks
     // while you mine; L2 gets a weapon "wall" while a bow is in hand.
     if (settings.adaptive) {
@@ -13227,12 +13240,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         return;
       }
       if (!fresh || phase === "dead") return;
-      // Build mode (Tab): WASD / Q E rotate the held Technic part in
+      // Build mode (Tab): WASD / Q E rotate the held Teks part in
       // 90° steps about the WORLD axes (Philippe, 2026-10-29) — A/D
       // yaw, W/S pitch, Q/E roll, Shift+Q/E pitch (the other axis).
       // Outside build mode Q/E keep their jobs (spell cycle, inventory)
       // and WASD walk (see poll()'s buildRot gate).
-      if (freePlace && phase === "play" && TECHNIC_SET.has(hotbar[slot])) {
+      if (freePlace && phase === "play" && TEKS_SET.has(hotbar[slot])) {
         const rk =
           e.code === "KeyA" ? ([1, 1] as const)
           : e.code === "KeyD" ? ([1, -1] as const)
@@ -13459,20 +13472,20 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return true;
     },
     getBricks: () => [...bricks.values()].map((b) => [b.id, b.sx, b.sy, b.sz] as [number, number, number, number]),
-    // Technic QA hooks: place a part on the lattice (planner-free: the
+    // Teks QA hooks: place a part on the lattice (planner-free: the
     // pose must pass tech.test), list the layer in save format, and
     // step the mechanics deterministically (the stepBricks precedent —
     // rig frames run far slower than game time).
     placeTechAt: (id: number, o: number, qx: number, qy: number, qz: number) => {
-      if (!TECHNIC_SET.has(id)) return false;
+      if (!TEKS_SET.has(id)) return false;
       if (tech.test(id, o, [qx, qy, qz], techSolidAt) < 0) return false;
       tech.add(id, o, [qx, qy, qz]);
       saveDirty = true;
       return true;
     },
-    getTechnic: () => [...tech.parts.values()].map((p) => [p.id, p.o, p.q[0], p.q[1], p.q[2], p.on === false ? 0 : 1] as [number, number, number, number, number, number]),
-    stepTechnic: (dt: number) => {
-      tickTechnic(dt);
+    getTeks: () => [...tech.parts.values()].map((p) => [p.id, p.o, p.q[0], p.q[1], p.q[2], p.on === false ? 0 : 1] as [number, number, number, number, number, number]),
+    stepTeks: (dt: number) => {
+      tickTeks(dt);
       const omegas: Record<string, number> = {};
       for (const [g, w] of tech.gOmega) omegas[g] = w;
       const angles: Record<string, number> = {};
@@ -13484,7 +13497,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // All-devices QA witness (inert in play): build-mode state for the
     // touch/pad rig — toggled via the DOM Build button, rotated via
     // the DOM rotation buttons.
-    getBuildMode: () => ({ on: freePlace, fly: fly.on, techHeld: TECHNIC_SET.has(hotbar[slot]), wantO: techWantO }),
+    getBuildMode: () => ({ on: freePlace, fly: fly.on, techHeld: TEKS_SET.has(hotbar[slot]), wantO: techWantO }),
     spinTech: () => ++techSpin,
     // P0 QA witness (qa99b11): mining progress on the current target —
     // key "B:…" = brick branch, voxel key = classic branch, "" = no mining.
@@ -13726,11 +13739,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const out: Record<string, { h: number; minY: number; w: number; d: number }> = {};
       const box = new THREE.Box3();
       for (const k of kinds) {
-        const b = buildLego(k, 1);
+        const b = buildStuds(k, 1);
         box.setFromObject(b.group);
         out[k] = { h: +(box.max.y - box.min.y).toFixed(2), minY: +box.min.y.toFixed(2), w: +(box.max.x - box.min.x).toFixed(2), d: +(box.max.z - box.min.z).toFixed(2) };
       }
-      const fig = makeMinifig();
+      const fig = makeFigure();
       box.setFromObject(fig.group);
       out.__player = { h: +(box.max.y - box.min.y).toFixed(2), minY: +box.min.y.toFixed(2), w: +(box.max.x - box.min.x).toFixed(2), d: +(box.max.z - box.min.z).toFixed(2) };
       return out;
@@ -13998,6 +14011,16 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (phase !== "play" || aimTechUid < 0) return;
       const p = tech.parts.get(aimTechUid);
       if (p) techUseAction(p, isSneaking());
+    },
+    enterExitVehicle() {
+      if (phase !== "play") return;
+      if (vehEnt) {
+        if (!leaveVehicle()) say("Can't park here — no room to set it down");
+        return;
+      }
+      if (aimTechUid < 0) return;
+      const p = tech.parts.get(aimTechUid);
+      if (p && p.id === ID.TechHub) techUseAction(p, false);
     },
     resume() {
       if (phase !== "pause") return;
@@ -15000,9 +15023,9 @@ const srnLightU = {
   uDayF: { value: 1.0 },
 };
 
-// Band-Limited Physical SIREN (Sinusoidal Representation Network) for Mobs & Minifigs:
+// Band-Limited Physical SIREN (Sinusoidal Representation Network) for Mobs & Figures:
 // Uses a coupled 2-layer sinusoidal representation with analytic Gaussian Nyquist
-// band-limiting so minifigs and creatures exhibit smooth injection-molded ABS satin
+// band-limiting so figures and creatures exhibit smooth injection-molded ABS satin
 // sheen, subtle part-line seams, and light-coupled subsurface scattering without
 // high-frequency aliasing or unlit night-time glow.
 const sirenAmt = { value: 1 };
@@ -15111,7 +15134,7 @@ roughnessFactor = clamp(roughnessFactor * 0.78 + (sirenHash(floor(vSirenPos * 16
 }
 
 // Band-Limited Coupled 2-Layer Physical SIREN + Modular Sub-Brick Partitioning
-// for Hyper-Realistic Macro LEGO ABS Plastic Bricks (v4.5):
+// for Hyper-Realistic Macro STUDS ABS Plastic Bricks (v4.5):
 //   1. Sub-Brick Running-Bond Partitioning (Zero extra polygons):
 //      Every 1×1×1 block is mathematically partitioned into 3 horizontal courses
 //      (y = 0.36, y = 0.72) and staggered running-bond vertical joints (1×2 bricks,
@@ -15243,7 +15266,7 @@ float srnHashW(vec3 c) { return fract(sin(dot(c, vec3(12.9898, 78.233, 37.719)))
     vec3 srnTintShift = vec3(1.0 + (gSrnSubH - 0.5) * 0.052, 1.0 + (gSrnSubH - 0.5) * 0.044, 1.0 + (srnSubH2 - 0.5) * 0.048);
     diffuseColor.rgb *= mix(vec3(1.0), srnTintShift + gSrnF * 0.014, uSrnAmt * clamp(uSrnSeam, 0.0, 1.0));
 
-    // Per-sub-piece mechanical assembly micro-tilt (0.35° - 0.75° play between clipped LEGO pieces)
+    // Per-sub-piece mechanical assembly micro-tilt (0.35° - 0.75° play between clipped STUDS pieces)
     vec3 srnTiltW = vec3(gSrnSubH - 0.5, srnSubH2 - 0.5, (gSrnH - 0.5)) * (0.046 * uSrnSeam * uSrnAmt * srnBand1);
 
     // Outer 1×1×1 voxel perimeter seam & chamfer
@@ -15393,7 +15416,7 @@ function skin(
   return new THREE.MeshLambertMaterial({ color, ...extra });
 }
 
-function makeMinifig() {
+function makeFigure() {
   const fig = makeFig(0xe23b2f, 0x1f5fbf, 0x241c16, "smile");
   return { group: fig.group, legL: fig.legs[0], legR: fig.legs[1], armL: fig.legs[3], armR: fig.legs[2] };
 }
@@ -15420,7 +15443,7 @@ function geoCyl(r: number, h: number, n = 12, rb = r) {
   return g;
 }
 
-// Authentic tapered LEGO Minifig trapezoidal torso (narrower at neck collar, wider at waist)
+// Authentic tapered STUDS Figure trapezoidal torso (narrower at neck collar, wider at waist)
 function geoTrap(topW: number, botW: number, h: number, d: number) {
   const k = "trap:" + topW + ":" + botW + ":" + h + ":" + d;
   let g = figGeo.get(k);
@@ -15440,7 +15463,7 @@ function geoTrap(topW: number, botW: number, h: number, d: number) {
   return g;
 }
 
-// Authentic 45° LEGO slope brick for creature feet & brick-built snouts
+// Authentic 45° STUDS slope brick for creature feet & brick-built snouts
 function geoSlope(w: number, h: number, d: number) {
   const k = "slope:" + w + ":" + h + ":" + d;
   let g = figGeo.get(k);
@@ -15460,9 +15483,9 @@ function geoSlope(w: number, h: number, d: number) {
   return g;
 }
 
-// Open 270° C-Clamp LEGO Minifig Hand
-// v4.13: a real minifig hand — a hollow C-clip (annular sector, ~90° mouth) with
-// rounded LEGO edges, extruded along Y like the old cylinder slice so every
+// Open 270° C-Clamp STUDS Figure Hand
+// v4.13: a real figure hand — a hollow C-clip (annular sector, ~90° mouth) with
+// rounded STUDS edges, extruded along Y like the old cylinder slice so every
 // existing caller keeps its orientation (mouth faces +Z, axis along Y).
 function geoClaw(r = 0.058, h = 0.068) {
   const k = "claw2:" + r + ":" + h;
@@ -15503,13 +15526,13 @@ function put(parent: THREE.Object3D, geo: THREE.BufferGeometry, mat: THREE.Mater
   return mesh;
 }
 
-// Pierced / hollow safety stud on top of LEGO Minifig heads
+// Pierced / hollow safety stud on top of STUDS Figure heads
 function hollowStud(parent: THREE.Object3D, mat: THREE.Material, darkMat: THREE.Material, x: number, y: number, z: number, r = 0.086, h = 0.062) {
   put(parent, geoCyl(r * 0.94, h, 12, r), mat, x, y + h / 2, z, 0, true);
   put(parent, geoCyl(r * 0.56, h * 0.35, 10), darkMat, x, y + h - h * 0.14, z, 0, true);
 }
 
-// Translucent refractive Trans-Neon / Trans-Red / Trans-Purple 1×1 LEGO tile material for mob eyes
+// Translucent refractive Trans-Neon / Trans-Red / Trans-Purple 1×1 STUDS tile material for mob eyes
 function transTile(color: number, glowHex: number) {
   const mat = skin(color, { transparent: true, opacity: 0.88 });
   mat.emissive = new THREE.Color(glowHex);
@@ -15568,7 +15591,7 @@ function legBox(parent: THREE.Object3D, mat: THREE.Material, w: number, h: numbe
   mesh.castShadow = plasticOn;
   mesh.receiveShadow = plasticOn;
   pivot.add(mesh);
-  // Sloped 1×2 LEGO foot brick at the bottom with a front toe stud
+  // Sloped 1×2 STUDS foot brick at the bottom with a front toe stud
   const footH = Math.max(0.06, h * 0.28);
   const footD = d * 1.28;
   const foot = new THREE.Mesh(geoSlope(w * 1.04, footH, footD), mat);
@@ -15581,9 +15604,9 @@ function legBox(parent: THREE.Object3D, mat: THREE.Material, w: number, h: numbe
 }
 
 type FigFace = "smile" | "mad" | "skull" | "snout" | "nose";
-type LegoBody = { group: THREE.Group; legs: THREE.Object3D[]; bodyMat: THREE.MeshStandardMaterial | THREE.MeshLambertMaterial };
+type StudsBody = { group: THREE.Group; legs: THREE.Object3D[]; bodyMat: THREE.MeshStandardMaterial | THREE.MeshLambertMaterial };
 
-function makeFig(shirt: number, pants: number, hairCol: number, face: FigFace, headCol = 0xf3d37a): LegoBody {
+function makeFig(shirt: number, pants: number, hairCol: number, face: FigFace, headCol = 0xf3d37a): StudsBody {
   const g = new THREE.Group();
   const shirtM = skin(shirt);
   const pantsM = skin(pants);
@@ -15602,8 +15625,8 @@ function makeFig(shirt: number, pants: number, hairCol: number, face: FigFace, h
   const hipAxle = put(g, geoCyl(0.042, 0.38, 10), pantsM, 0, 0.42, 0, 0, true);
   hipAxle.rotation.z = Math.PI / 2;
 
-  // 2. Articulated Hinged LEGO Minifig Legs (hip barrel nests directly into pelvis underside)
-  const makeMinifigLeg = (lx: number) => {
+  // 2. Articulated Hinged STUDS Figure Legs (hip barrel nests directly into pelvis underside)
+  const makeFigureLeg = (lx: number) => {
     const pivot = new THREE.Group();
     pivot.position.set(lx, 0.42, 0);
     // Rounded upper hip barrel
@@ -15619,10 +15642,10 @@ function makeFig(shirt: number, pants: number, hairCol: number, face: FigFace, h
     g.add(pivot);
     return pivot;
   };
-  const legL = makeMinifigLeg(-0.115);
-  const legR = makeMinifigLeg(0.115);
+  const legL = makeFigureLeg(-0.115);
+  const legR = makeFigureLeg(0.115);
 
-  // 3. Tapered Trapezoidal LEGO Torso (y: 0.52 .. 0.94 rests flush on hip plate 0.5225)
+  // 3. Tapered Trapezoidal STUDS Torso (y: 0.52 .. 0.94 rests flush on hip plate 0.5225)
   const torso = put(g, geoTrap(0.35, 0.43, 0.42, 0.23), shirtM, 0, 0.73, 0);
   torso.userData.skin = "body";
   put(g, geoBox(0.16, 0.05, 0.018), white, 0, 0.89, -0.116, 0, true); // Collar undershirt V
@@ -15632,7 +15655,7 @@ function makeFig(shirt: number, pants: number, hairCol: number, face: FigFace, h
   put(g, geoCyl(0.105, 0.018, 12), black, 0, 0.945, 0, 0, true); // Crisp neck collar shadow ring
 
   // 4. Curved Cylindrical Arms with Shoulder Sockets tucked flush into Torso (Zero Gap)
-  const makeMinifigArm = (side: -1 | 1) => {
+  const makeFigureArm = (side: -1 | 1) => {
     const pivot = new THREE.Group();
     pivot.position.set(side * 0.195, 0.88, 0);
     pivot.rotation.z = -side * 0.11; // Slight outward flare matching tapered torso
@@ -15644,7 +15667,7 @@ function makeFig(shirt: number, pants: number, hairCol: number, face: FigFace, h
     put(pivot, geoCyl(0.048, 0.16, 10, 0.052), shirtM, side * 0.042, -0.25, -0.015, 0.18);
     // Wrist pin
     put(pivot, geoCyl(0.034, 0.055, 8), headM, side * 0.042, -0.34, -0.035, 0.22, true);
-    // Open 270° C-Clamp LEGO Hand oriented to grip forward
+    // Open 270° C-Clamp STUDS Hand oriented to grip forward
     const clawGrp = new THREE.Group();
     clawGrp.position.set(side * 0.042, -0.39, -0.055);
     clawGrp.rotation.x = Math.PI / 2 + 0.22;
@@ -15654,10 +15677,10 @@ function makeFig(shirt: number, pants: number, hairCol: number, face: FigFace, h
     g.add(pivot);
     return pivot;
   };
-  const armR = makeMinifigArm(1);
-  const armL = makeMinifigArm(-1);
+  const armR = makeFigureArm(1);
+  const armL = makeFigureArm(-1);
 
-  // 5. Articulated Cylindrical LEGO Head Group (y: 0.955 sits flush on neck collar ring 0.945 with Zero Gap)
+  // 5. Articulated Cylindrical STUDS Head Group (y: 0.955 sits flush on neck collar ring 0.945 with Zero Gap)
   const head = new THREE.Group();
   head.position.set(0, 0.955, 0);
   g.add(head);
@@ -15696,7 +15719,7 @@ function makeFig(shirt: number, pants: number, hairCol: number, face: FigFace, h
     put(head, geoBox(0.08, 0.026, 0.02), black, 0, 0.045, -0.152, 0, true);
     put(head, geoCyl(0.05, 0.14, 10), skin(0xc47a2a), 0, 0.08, -0.19, Math.PI / 2, true);
   } else {
-    // Classic LEGO Minifig Eyes + White Specular Catchlights + Smile/Brow
+    // Classic STUDS Figure Eyes + White Specular Catchlights + Smile/Brow
     put(head, geoBox(0.046, 0.048, 0.02), black, -0.056, 0.155, -0.152, 0, true);
     put(head, geoBox(0.046, 0.048, 0.02), black, 0.056, 0.155, -0.152, 0, true);
     put(head, geoBox(0.016, 0.016, 0.022), white, -0.062, 0.165, -0.154, 0, true);
@@ -15719,7 +15742,7 @@ function tagWool(group: THREE.Group, mat: THREE.Material) {
   });
 }
 
-function beast(kind: string): LegoBody {
+function beast(kind: string): StudsBody {
   const g = new THREE.Group();
   const dark = skin(0x2a241c);
   const black = skin(0x1a120c);
@@ -15730,11 +15753,11 @@ function beast(kind: string): LegoBody {
     const faceSkin = skin(0xd8b8a0);
     const body = block(g, wool, 0.78, 0.30, 0.50, 0, 0.54, 0, 0, 0);
     body.userData.skin = "body";
-    // Modular top & side LEGO wool plates with studs + fluffy tail
+    // Modular top & side STUDS wool plates with studs + fluffy tail
     block(g, woolPlate, 0.76, 0.11, 0.48, 0, 0.745, 0, 3, 2);
     put(g, geoBox(0.68, 0.22, 0.56), woolPlate, 0, 0.55, 0);
     put(g, geoSlope(0.18, 0.16, 0.14), wool, 0, 0.56, 0.30, Math.PI, true);
-    // Articulated LEGO Sheep Head with wool crown, horizontal pupils & floppy ears
+    // Articulated STUDS Sheep Head with wool crown, horizontal pupils & floppy ears
     const head = new THREE.Group();
     head.position.set(0, 0.64, -0.32);
     g.add(head);
@@ -15764,7 +15787,7 @@ function beast(kind: string): LegoBody {
     put(g, geoBox(0.26, 0.12, 0.48), spot, -0.16, 0.806, 0, 0, true);
     put(g, geoBox(0.24, 0.22, 0.50), spot, 0.18, 0.62, 0, 0, true);
     put(g, geoBox(0.24, 0.09, 0.22), udder, 0.12, 0.38, 0, 0, true);
-    // Articulated LEGO Cow Head with horns, ears & tan muzzle
+    // Articulated STUDS Cow Head with horns, ears & tan muzzle
     const head = new THREE.Group();
     head.position.set(0, 0.74, -0.31);
     g.add(head);
@@ -15798,7 +15821,7 @@ function beast(kind: string): LegoBody {
     const body = block(g, pink, 0.7, 0.26, 0.42, 0, 0.44, 0, 0, 0);
     body.userData.skin = "body";
     block(g, pinkPlate, 0.68, 0.10, 0.40, 0, 0.62, 0, 3, 2);
-    // Articulated LEGO Pig Head with 3D cylindrical snout, nostrils & floppy ears
+    // Articulated STUDS Pig Head with 3D cylindrical snout, nostrils & floppy ears
     const head = new THREE.Group();
     head.position.set(0, 0.54, -0.28);
     g.add(head);
@@ -15849,7 +15872,7 @@ function beast(kind: string): LegoBody {
     const blaze = skin(0xf4f1ea);
     const body = block(g, hide, 1.05, 0.38, 0.38, 0, 0.78, 0, 4, 2);
     body.userData.skin = "body";
-    // Molded LEGO saddle & stirrups
+    // Molded STUDS saddle & stirrups
     put(g, geoBox(0.36, 0.09, 0.42), saddle, 0, 0.99, 0, 0, true);
     // Articulated neck + head group
     const head = new THREE.Group();
@@ -15879,7 +15902,7 @@ function beast(kind: string): LegoBody {
     const body = block(g, coat, 0.68, 0.26, 0.32, 0, 0.40, 0, 3, 1);
     body.userData.skin = "body";
     put(g, geoBox(0.28, 0.14, 0.12), white, 0, 0.36, -0.20, 0, true); // Fluffy white chest bib
-    // Articulated LEGO Fox Head
+    // Articulated STUDS Fox Head
     const head = new THREE.Group();
     head.position.set(0, 0.48, -0.33);
     g.add(head);
@@ -15942,14 +15965,14 @@ function beast(kind: string): LegoBody {
     const body = block(g, coat, 0.72, 0.28, 0.32, 0, 0.48, 0, 3, 1);
     body.userData.skin = "body";
     block(g, ruff, 0.32, 0.34, 0.28, 0, 0.52, -0.22, 1, 1);
-    // Red LEGO Tamed Collar with Golden Tag (shown automatically when m.tame is true)
+    // Red STUDS Tamed Collar with Golden Tag (shown automatically when m.tame is true)
     const collar = new THREE.Group();
     put(collar, geoBox(0.30, 0.32, 0.07), skin(0xe23b2f), 0, 0.52, -0.34, 0, true);
     put(collar, geoBox(0.06, 0.06, 0.04), skin(0xf5c518), 0, 0.35, -0.36, 0, true);
     collar.visible = false;
     g.add(collar);
     g.userData.collar = collar;
-    // Articulated LEGO Wolf Head
+    // Articulated STUDS Wolf Head
     const head = new THREE.Group();
     head.position.set(0, 0.58, -0.38);
     g.add(head);
@@ -15982,7 +16005,7 @@ function beast(kind: string): LegoBody {
     g.add(head);
     g.userData.head = head;
     block(head, dark, 0.28, 0.20, 0.22, 0, 0, -0.06, 1, 1);
-    // Chelicerae fangs + 8 glowing Trans-Red LEGO tile eyes
+    // Chelicerae fangs + 8 glowing Trans-Red STUDS tile eyes
     put(head, geoSlope(0.06, 0.09, 0.08), carapace, -0.055, -0.06, -0.19, 0, true);
     put(head, geoSlope(0.06, 0.09, 0.08), carapace, 0.055, -0.06, -0.19, 0, true);
     const redEye = transTile(0xff2a22, 0x990a06);
@@ -16002,7 +16025,7 @@ function beast(kind: string): LegoBody {
     return { group: g, legs, bodyMat: dark };
   }
   if (kind === "creeper") {
-    // Brick-Built LEGO Creeper: continuous zero-gap stacked ABS courses, articulated turntable head, sloped feet & Trans-Neon Green 1×1 tile eyes!
+    // Brick-Built STUDS Creeper: continuous zero-gap stacked ABS courses, articulated turntable head, sloped feet & Trans-Neon Green 1×1 tile eyes!
     const green = skin(0x3aaa4c);
     green.emissive = new THREE.Color(0x000000);
     const greenCourse = skin(0x329842);
@@ -16012,7 +16035,7 @@ function beast(kind: string): LegoBody {
     body.userData.skin = "body";
     block(g, greenCourse, 0.44, 0.22, 0.26, 0, 0.58, 0, 0, 0); // Course 2 (y: 0.47 .. 0.69)
     block(g, green, 0.44, 0.20, 0.26, 0, 0.79, 0, 2, 1); // Course 3 (y: 0.69 .. 0.89)
-    // Turntable neck joint + Articulated 2×2 LEGO Head block with 4 top studs (y: 0.89 .. 0.925)
+    // Turntable neck joint + Articulated 2×2 STUDS Head block with 4 top studs (y: 0.89 .. 0.925)
     put(g, geoCyl(0.14, 0.035, 12), skin(0x1f5c28), 0, 0.9075, 0, 0, true);
     const head = new THREE.Group();
     head.position.set(0, 0.905, 0);
@@ -16041,7 +16064,7 @@ function beast(kind: string): LegoBody {
     put(g, geoBox(0.20, 0.16, 0.04), black, 0.24, 0.86, -0.58, 0, true);
     put(g, geoBox(0.13, 0.09, 0.048), redEye, -0.24, 0.86, -0.585, 0, true);
     put(g, geoBox(0.13, 0.09, 0.048), redEye, 0.24, 0.86, -0.585, 0, true);
-    // Translucent cyan LEGO tear tracks under eyes + wailing mouth
+    // Translucent cyan STUDS tear tracks under eyes + wailing mouth
     put(g, geoBox(0.06, 0.22, 0.042), tearM, -0.24, 0.66, -0.582, 0, true);
     put(g, geoBox(0.06, 0.22, 0.042), tearM, 0.24, 0.66, -0.582, 0, true);
     put(g, geoBox(0.28, 0.18, 0.04), black, 0, 0.48, -0.58, 0, true);
@@ -16116,7 +16139,7 @@ function beast(kind: string): LegoBody {
     return { group: g, legs: [], bodyMat: glow };
   }
   if (kind === "slime") {
-    // Translucent Trans-Neon Green LEGO Slime with visible inner solid core brick!
+    // Translucent Trans-Neon Green STUDS Slime with visible inner solid core brick!
     const gel = skin(0x5dce6a, { transparent: true, opacity: 0.68 });
     const innerCore = skin(0x2a8838);
     put(g, geoBox(0.46, 0.38, 0.46), innerCore, 0, 0.42, 0);
@@ -16135,7 +16158,7 @@ function beast(kind: string): LegoBody {
     const body = block(g, iron, 0.72, 0.72, 0.42, 0, 1.1, 0, 3, 2);
     body.userData.skin = "body";
     block(g, darkIron, 0.5, 0.16, 0.32, 0, 0.66, 0, 2, 1);
-    // Overgrown LEGO moss & vine plates + red poppy on shoulder
+    // Overgrown STUDS moss & vine plates + red poppy on shoulder
     put(g, geoBox(0.18, 0.46, 0.44), vineM, -0.22, 1.14, 0, 0, true);
     put(g, geoBox(0.08, 0.08, 0.08), skin(0xe23b2f), -0.26, 1.50, -0.10, 0, true);
     const head = new THREE.Group();
@@ -16177,7 +16200,7 @@ function beast(kind: string): LegoBody {
     return { group: g, legs: [], bodyMat: iron };
   }
   if (kind === "enderman") {
-    // Tall brick-built Enderman: hinged Technic limbs, C-clamp hands, articulated 2×2 studded head, and glowing Trans-Purple 1×1 tile eyes!
+    // Tall brick-built Enderman: hinged Teks limbs, C-clamp hands, articulated 2×2 studded head, and glowing Trans-Purple 1×1 tile eyes!
     const blackM = skin(0x16121c);
     const legL = hinge(g, blackM, 0.085, 0.95, -0.11, 0.98, 0);
     const legR = hinge(g, blackM, 0.085, 0.95, 0.11, 0.98, 0);
@@ -16243,7 +16266,7 @@ function beast(kind: string): LegoBody {
     const body = block(g, coat, 0.56, 0.24, 0.28, 0, 0.34, 0, 3, 1);
     body.userData.skin = "body";
     put(g, geoBox(0.2, 0.14, 0.04), white, 0, 0.32, -0.15, 0, true);
-    // Red LEGO Tamed Cat Collar with Gold Bell
+    // Red STUDS Tamed Cat Collar with Gold Bell
     const collar = new THREE.Group();
     put(collar, geoBox(0.25, 0.23, 0.06), skin(0xe23b2f), 0, 0.41, -0.24, 0, true);
     put(collar, geoCyl(0.032, 0.04, 8), skin(0xf5c518), 0, 0.28, -0.26, 0, true);
@@ -16313,7 +16336,7 @@ function beast(kind: string): LegoBody {
     const body = block(g, coat, 0.72, 0.38, 0.44, 0, 0.55, 0, 3, 2);
     body.userData.skin = "body";
     put(g, geoBox(0.08, 0.14, 0.06), coat, 0, 0.68, 0.20, -0.3, true);
-    // Articulated LEGO Goat Head (pitches down when aiming/charging!)
+    // Articulated STUDS Goat Head (pitches down when aiming/charging!)
     const head = new THREE.Group();
     head.position.set(0, 0.66, -0.31);
     g.add(head);
@@ -16514,7 +16537,7 @@ function beast(kind: string): LegoBody {
   return { group: g, legs: [], bodyMat: fallback };
 }
 
-// Attach 3D LEGO Role Hats, Aprons, Packs, Spectacles & Held Tools to Hamlet NPC Villagers ("PNJ")
+// Attach 3D STUDS Role Hats, Aprons, Packs, Spectacles & Held Tools to Hamlet NPC Villagers ("PNJ")
 function decorateVillagerRole(group: THREE.Group, role?: TraderRole) {
   if (!role || group.userData.roleDecorated) return;
   group.userData.roleDecorated = true;
@@ -16532,14 +16555,14 @@ function decorateVillagerRole(group: THREE.Group, role?: TraderRole) {
     put(group, geoBox(0.28, 0.26, 0.245), skin(0x2f7d38), 0, 0.68, 0, 0, true);
     put(group, geoBox(0.06, 0.24, 0.06), skin(0xf0c43a), 0.28, 0.50, -0.14, 0.45, true);
   } else if (role === "smith") {
-    // Blacksmith Iron Forging Helmet + Visor + Leather Apron + Held 3D LEGO Hammer
+    // Blacksmith Iron Forging Helmet + Visor + Leather Apron + Held 3D STUDS Hammer
     put(head, geoCyl(0.175, 0.14, 12), skin(0x3a3e46), 0, 1.28 + hy, 0, 0, true);
     put(head, geoBox(0.26, 0.06, 0.06), ironM, 0, 1.25 + hy, -0.15, 0, true);
     put(group, geoBox(0.32, 0.32, 0.245), skin(0x3b2618), 0, 0.67, 0, 0, true);
     put(group, geoCyl(0.018, 0.26, 8), woodM, 0.28, 0.50, -0.15, 0.4, true);
     put(group, geoBox(0.08, 0.055, 0.13), ironM, 0.28, 0.58, -0.22, 0, true);
   } else if (role === "mason") {
-    // Red LEGO Construction Hard-Hat + Stone Belt + Held Bricklayer Chisel
+    // Red STUDS Construction Hard-Hat + Stone Belt + Held Bricklayer Chisel
     put(head, geoCyl(0.18, 0.11, 12), skin(0xe23b2f), 0, 1.29 + hy, 0, 0, true);
     put(head, geoBox(0.22, 0.03, 0.12), skin(0xe23b2f), 0, 1.25 + hy, -0.14, 0, true);
     put(group, geoBox(0.42, 0.07, 0.25), skin(0x5c3818), 0, 0.55, 0, 0, true);
@@ -16553,7 +16576,7 @@ function decorateVillagerRole(group: THREE.Group, role?: TraderRole) {
     put(group, geoCyl(0.02, 0.85, 8), woodM, 0.29, 0.56, -0.12, 0.12, true);
     put(group, geoBox(0.08, 0.06, 0.04), goldM, 0.29, 0.98, -0.16, 0, true);
   } else if (role === "clerk") {
-    // Scholarly Gold Spectacles + Blue Tunic Medallion + Held Red LEGO Tome
+    // Scholarly Gold Spectacles + Blue Tunic Medallion + Held Red STUDS Tome
     put(head, geoBox(0.068, 0.056, 0.024), goldM, -0.058, 1.16 + hy, -0.158, 0, true);
     put(head, geoBox(0.068, 0.056, 0.024), goldM, 0.058, 1.16 + hy, -0.158, 0, true);
     put(head, geoBox(0.04, 0.018, 0.026), goldM, 0, 1.16 + hy, -0.16, 0, true);
@@ -16571,7 +16594,7 @@ function decorateVillagerRole(group: THREE.Group, role?: TraderRole) {
     const orb = transTile(0x64f5e8, 0x24b8a8);
     put(group, geoBox(0.09, 0.09, 0.09), orb, 0.29, 1.01, -0.19, 0, true);
   } else if (role === "ranger") {
-    // Forest Hood with Red Feather Plume + Back Quiver + Held 3D LEGO Bow
+    // Forest Hood with Red Feather Plume + Back Quiver + Held 3D STUDS Bow
     put(head, geoBox(0.34, 0.12, 0.28), skin(0x1d5526), 0, 1.28 + hy, 0, 0, true);
     put(head, geoBox(0.03, 0.14, 0.06), skin(0xe23b2f), 0.14, 1.38 + hy, -0.04, -0.25, true);
     put(group, geoCyl(0.055, 0.28, 8), skin(0x6b3e22), 0.08, 0.76, 0.15, 0.15, true);
@@ -16581,7 +16604,7 @@ function decorateVillagerRole(group: THREE.Group, role?: TraderRole) {
   }
 }
 
-export function buildLego(kind: string, scale: number): LegoBody {
+export function buildStuds(kind: string, scale: number): StudsBody {
   const figKind =
     kind === "villager"
       ? makeFig(0x8d5a34, 0x6b3e22, 0x4a3424, "nose")
@@ -16623,7 +16646,7 @@ export function buildLego(kind: string, scale: number): LegoBody {
     put(g, geoBox(0.16, 0.10, 0.24), skin(0x425238), -0.16, 0.89, 0, 0, true);
     put(g, geoBox(0.32, 0.08, 0.245), skin(0x3a2818), 0, 0.56, 0, 0, true);
   } else if (kind === "skelly" || kind === "stray") {
-    // Skeleton / Frost Stray: 3D LEGO Bow gripped in right hand + back arrow quiver (+ Ice Crown on Stray)
+    // Skeleton / Frost Stray: 3D STUDS Bow gripped in right hand + back arrow quiver (+ Ice Crown on Stray)
     const bowCol = kind === "stray" ? skin(0x7ae2ff) : woodM;
     put(g, geoBox(0.032, 0.34, 0.14), bowCol, 0.28, 0.52, -0.18, 0.25, true);
     put(g, geoCyl(0.008, 0.34, 6), skin(0xf4f1ea), 0.28, 0.52, -0.11, 0.25, true);
@@ -16649,7 +16672,7 @@ export function buildLego(kind: string, scale: number): LegoBody {
     put(g, geoCyl(0.02, 0.44, 8), goldM, 0.28, 0.54, -0.16, 0.35, true);
     put(g, geoBox(0.08, 0.08, 0.08), transTile(0xffd84a, 0xd88800), 0.28, 0.74, -0.24, 0, true);
   } else if (kind === "drowned") {
-    // Drowned: Glowing Cyan Eyes + Seaweed Shoulder Wraps + Held 3-Pronged 3D LEGO Trident!
+    // Drowned: Glowing Cyan Eyes + Seaweed Shoulder Wraps + Held 3-Pronged 3D STUDS Trident!
     const seaEye = transTile(0x4ef2f7, 0x128898);
     put(head, geoBox(0.05, 0.048, 0.024), seaEye, -0.056, 1.155 + hy, -0.155, 0, true);
     put(head, geoBox(0.05, 0.048, 0.024), seaEye, 0.056, 1.155 + hy, -0.155, 0, true);
@@ -16660,7 +16683,7 @@ export function buildLego(kind: string, scale: number): LegoBody {
       put(g, geoCyl(0.008, 0.11, 6), skin(0xe8ffff), 0.28 + px, 0.83, -0.28, 0.35, true);
     }
   } else if (kind === "piglin") {
-    // Piglin: Golden Horned Helmet + Flopped Ears + Ivory Tusks + Gold Belt + Held Golden LEGO Sword!
+    // Piglin: Golden Horned Helmet + Flopped Ears + Ivory Tusks + Gold Belt + Held Golden STUDS Sword!
     put(head, geoCyl(0.175, 0.12, 12), goldM, 0, 1.28 + hy, 0, 0, true);
     put(head, geoBox(0.04, 0.10, 0.04), skin(0xf7f4ee), -0.18, 1.32 + hy, -0.02, 0, true);
     put(head, geoBox(0.04, 0.10, 0.04), skin(0xf7f4ee), 0.18, 1.32 + hy, -0.02, 0, true);
@@ -16682,14 +16705,14 @@ export function buildLego(kind: string, scale: number): LegoBody {
     const potM = transTile(0xba6eff, 0x732ab5);
     put(g, geoCyl(0.06, 0.12, 8), potM, 0.28, 0.48, -0.16, 0, true);
   } else if (kind === "pillager") {
-    // Pillager: Dark Iron Shoulder Pauldrons + Silver Belt Buckle + Held 3D LEGO Crossbow
+    // Pillager: Dark Iron Shoulder Pauldrons + Silver Belt Buckle + Held 3D STUDS Crossbow
     put(g, geoBox(0.48, 0.09, 0.26), darkIron, 0, 0.89, 0, 0, true);
     put(g, geoBox(0.42, 0.065, 0.245), skin(0x231a12), 0, 0.56, 0, 0, true);
     put(g, geoBox(0.07, 0.07, 0.03), ironM, 0, 0.56, -0.13, 0, true);
     put(g, geoBox(0.05, 0.06, 0.28), woodM, 0.28, 0.50, -0.18, 0, true);
     put(g, geoBox(0.26, 0.035, 0.04), darkIron, 0.28, 0.52, -0.30, 0, true);
   } else if (kind === "vindicator") {
-    // Vindicator: Silver-Trimmed Vest + Held 3D LEGO Iron Battle-Axe
+    // Vindicator: Silver-Trimmed Vest + Held 3D STUDS Iron Battle-Axe
     put(g, geoBox(0.10, 0.36, 0.245), ironM, 0, 0.72, 0, 0, true);
     put(g, geoCyl(0.02, 0.42, 8), woodM, 0.28, 0.55, -0.16, 0.38, true);
     put(g, geoBox(0.13, 0.14, 0.035), ironM, 0.28, 0.72, -0.25, 0, true);
@@ -16754,7 +16777,7 @@ const MC_FLOATING = new Set(["ghast", "phantom", "bat", "bee", "vex", "blaze", "
 // the body. Head, tail and leg pivots are moved but never rotated, so the gait
 // (legs swing on X) and head-look (Y) keep working unchanged.
 const BROADSIDE = new Set(["sheep", "cow", "pig", "horse", "fox", "wolf", "cat", "goat"]);
-function alignQuadruped(built: LegoBody, kind: string) {
+function alignQuadruped(built: StudsBody, kind: string) {
   if (!BROADSIDE.has(kind)) return;
   const g = built.group;
   let body: THREE.Mesh | null = null;

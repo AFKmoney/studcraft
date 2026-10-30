@@ -1,12 +1,12 @@
 import { useState, type ReactNode } from "react";
-import { ID, TECHNIC, def, type BlockDef } from "./blocks";
+import { ID, TEKS, def, type BlockDef } from "./blocks";
 import { CUBE_ICONS } from "./cubeIcons";
-import { technicIcon } from "./technicIcons";
+import { teksIcon } from "./teksIcons";
 
-// IDs that have bespoke multi-part 3D LEGO set-piece illustrations (workstations,
+// IDs that have bespoke multi-part 3D STUDS set-piece illustrations (workstations,
 // mechanisms, lighting, storage, special blocks) so they never fall back to an old
 // plain single-color cube PNG.
-const BESPOKE_LEGO_SET_IDS = new Set<number>([
+const BESPOKE_STUDS_SET_IDS = new Set<number>([
   ID.Bench,
   ID.Furnace,
   ID.Chest,
@@ -58,7 +58,7 @@ const BESPOKE_LEGO_SET_IDS = new Set<number>([
   ID.Cactus,
 ]);
 
-const TECHNIC_IDS = new Set<number>(TECHNIC);
+const TEKS_IDS = new Set<number>(TEKS);
 
 function shadeHex(hex: string, amt: number): string {
   const clean = hex.startsWith("#") ? hex.slice(1) : "8e959c";
@@ -70,7 +70,7 @@ function shadeHex(hex: string, amt: number): string {
   return `rgb(${r | 0},${g | 0},${b | 0})`;
 }
 
-// Reusable 3D cylindrical LEGO stud in isometric projection
+// Reusable 3D cylindrical STUDS stud in isometric projection
 function IsoStud({ cx, cy, fill, r = 2.6, h = 1.8 }: { cx: number; cy: number; fill: string; r?: number; h?: number }) {
   const dark = shadeHex(fill, -36);
   const top = shadeHex(fill, 22);
@@ -86,7 +86,7 @@ function IsoStud({ cx, cy, fill, r = 2.6, h = 1.8 }: { cx: number; cy: number; f
   );
 }
 
-// Reusable 3D Isometric LEGO 2x2 Brick Base with 4 top studs & modular sub-brick seams
+// Reusable 3D Isometric STUDS 2x2 Brick Base with 4 top studs & modular sub-brick seams
 function IsoBrick({
   topFill,
   leftFill,
@@ -111,7 +111,7 @@ function IsoBrick({
       <polygon points="4,11 16,17 16,29 4,23" fill={leftFill} />
       {/* Right face */}
       <polygon points="16,17 28,11 28,23 16,29" fill={rightFill} />
-      {/* Modular 3-course LEGO horizontal & running-bond seams */}
+      {/* Modular 3-course STUDS horizontal & running-bond seams */}
       {seams && (
         <g stroke="rgba(0,0,0,0.28)" strokeWidth="0.7" fill="none">
           <line x1="4" y1="14.5" x2="16" y2="20.5" />
@@ -125,7 +125,7 @@ function IsoBrick({
       {/* Specular bevel highlights */}
       <polyline points="4,11 16,17 28,11" fill="none" stroke="rgba(255,255,255,0.32)" strokeWidth="0.75" />
       <line x1="16" y1="17" x2="16" y2="29" stroke="rgba(0,0,0,0.22)" strokeWidth="0.75" />
-      {/* 4 cylindrical LEGO studs on top */}
+      {/* 4 cylindrical STUDS studs on top */}
       {studs && (
         <g>
           <IsoStud cx={16} cy={8.2} fill={sCol} r={2.3} h={1.6} />
@@ -141,14 +141,14 @@ function IsoBrick({
 export function ItemIcon({ id, muted = false }: { id: number; muted?: boolean }) {
   if (id <= 0) return null;
   const block = def(id);
-  // Technic parts: the icon is the PNG rendered from the part's real
-  // geometry (technicIcons.ts), not the generic LegoTechnic glyph. Muted
+  // Teks parts: the icon is the PNG rendered from the part's real
+  // geometry (teksIcons.ts), not the generic StudsTeks glyph. Muted
   // rendering keeps the grey SVG, like every other icon family.
-  if (!muted && TECHNIC_IDS.has(id)) {
-    return <TechnicItemIcon id={id} fill={block.color} />;
+  if (!muted && TEKS_IDS.has(id)) {
+    return <TeksItemIcon id={id} fill={block.color} />;
   }
   const img = CUBE_ICONS[id];
-  if (img && !muted && !BESPOKE_LEGO_SET_IDS.has(id)) {
+  if (img && !muted && !BESPOKE_STUDS_SET_IDS.has(id)) {
     return (
       <img
         className="item-icon"
@@ -171,67 +171,67 @@ export function ItemIcon({ id, muted = false }: { id: number; muted?: boolean })
 
 function glyph(block: BlockDef, fill: string, muted = false): ReactNode {
   const id = block.id;
-  // 1. Bespoke LEGO Workstations & Functional Blocks
-  if (id === ID.Furnace || block.work === "furnace") return <LegoFurnace muted={muted} />;
-  if (id === ID.Bench || block.work === "bench") return <LegoWorkbench muted={muted} />;
+  // 1. Bespoke STUDS Workstations & Functional Blocks
+  if (id === ID.Furnace || block.work === "furnace") return <StudsFurnace muted={muted} />;
+  if (id === ID.Bench || block.work === "bench") return <StudsWorkbench muted={muted} />;
   if (id === ID.Chest || id === ID.ShulkerBox || (block.work === "chest" && id !== ID.Barrel)) {
-    return <LegoChest fill={fill} isShulker={id === ID.ShulkerBox} muted={muted} />;
+    return <StudsChest fill={fill} isShulker={id === ID.ShulkerBox} muted={muted} />;
   }
-  if (id === ID.Barrel) return <LegoBarrel muted={muted} />;
+  if (id === ID.Barrel) return <StudsBarrel muted={muted} />;
   if (id === ID.Anvil || id === ID.Grindstone || block.work === "anvil") {
-    return <LegoAnvil isGrind={id === ID.Grindstone} muted={muted} />;
+    return <StudsAnvil isGrind={id === ID.Grindstone} muted={muted} />;
   }
-  if (id === ID.Enchanter || block.work === "enchant") return <LegoEnchanter muted={muted} />;
-  if (id === ID.Brew || block.work === "brew") return <LegoBrewStand muted={muted} />;
-  if (id === ID.Campfire) return <LegoCampfire muted={muted} />;
-  if (id === ID.Bed || block.work === "bed") return <LegoBed fill={fill} />;
-  if (id === ID.TNT) return <LegoTNT />;
-  if (id === ID.Bookshelf) return <LegoBookshelf />;
-  if (id === ID.Jukebox || id === ID.Note) return <LegoJukebox isJuke={id === ID.Jukebox} />;
-  if (id === ID.Dispenser || id === ID.Observer || id === ID.ObserverOn) return <LegoDispenser isObserver={id !== ID.Dispenser} />;
-  if (id === ID.Hopper) return <LegoHopper />;
-  if (id === ID.Beacon || id === ID.Conduit) return <LegoBeacon isConduit={id === ID.Conduit} />;
-  if (id === ID.Spawner) return <LegoSpawner />;
-  if (id === ID.EndFrame || id === ID.EndFrameEye) return <LegoEndFrame hasEye={id === ID.EndFrameEye} />;
-  if (id === ID.EndCrystal) return <LegoEndCrystal />;
-  if (id === ID.DragonEgg) return <LegoDragonEgg />;
-  if (id === ID.Pumpkin || id === ID.Melon || id === ID.Hay || id === ID.Target) return <LegoSpecialBlock id={id} fill={fill} />;
-  if (id === ID.Piston) return <LegoPiston />;
-  if (id === ID.Daylight || id === ID.DaylightInv) return <LegoDaylight inv={id === ID.DaylightInv} />;
+  if (id === ID.Enchanter || block.work === "enchant") return <StudsEnchanter muted={muted} />;
+  if (id === ID.Brew || block.work === "brew") return <StudsBrewStand muted={muted} />;
+  if (id === ID.Campfire) return <StudsCampfire muted={muted} />;
+  if (id === ID.Bed || block.work === "bed") return <StudsBed fill={fill} />;
+  if (id === ID.TNT) return <StudsTNT />;
+  if (id === ID.Bookshelf) return <StudsBookshelf />;
+  if (id === ID.Jukebox || id === ID.Note) return <StudsJukebox isJuke={id === ID.Jukebox} />;
+  if (id === ID.Dispenser || id === ID.Observer || id === ID.ObserverOn) return <StudsDispenser isObserver={id !== ID.Dispenser} />;
+  if (id === ID.Hopper) return <StudsHopper />;
+  if (id === ID.Beacon || id === ID.Conduit) return <StudsBeacon isConduit={id === ID.Conduit} />;
+  if (id === ID.Spawner) return <StudsSpawner />;
+  if (id === ID.EndFrame || id === ID.EndFrameEye) return <StudsEndFrame hasEye={id === ID.EndFrameEye} />;
+  if (id === ID.EndCrystal) return <StudsEndCrystal />;
+  if (id === ID.DragonEgg) return <StudsDragonEgg />;
+  if (id === ID.Pumpkin || id === ID.Melon || id === ID.Hay || id === ID.Target) return <StudsSpecialBlock id={id} fill={fill} />;
+  if (id === ID.Piston) return <StudsPiston />;
+  if (id === ID.Daylight || id === ID.DaylightInv) return <StudsDaylight inv={id === ID.DaylightInv} />;
 
-  // 2. LEGO Tools & Weapons (with cylindrical Minifig handles, Technic collars & studded blades)
-  if (block.tool === "pick") return <LegoPick fill={fill} />;
-  if (block.tool === "axe") return <LegoAxe fill={fill} />;
-  if (block.tool === "shovel") return <LegoShovel fill={fill} />;
-  if (id === ID.Trident || id === ID.TidalBlade) return <LegoTrident fill={fill} />;
-  if (block.tool === "sword") return <LegoSword fill={fill} />;
-  if (block.tool === "hoe") return <LegoHoe fill={fill} />;
-  if (id === ID.Crossbow) return <LegoCrossbow />;
-  if (block.tool === "bow" || id === ID.AntlerBow) return <LegoBow fill={fill} />;
-  if (id === ID.Shield) return <LegoShield fill={fill} />;
-  if (id === ID.Rod) return <LegoFishingRod />;
-  if (id === ID.Shears) return <LegoShears />;
-  if (id === ID.Flint) return <LegoFlintSteel />;
+  // 2. STUDS Tools & Weapons (with cylindrical Figure handles, Teks collars & studded blades)
+  if (block.tool === "pick") return <StudsPick fill={fill} />;
+  if (block.tool === "axe") return <StudsAxe fill={fill} />;
+  if (block.tool === "shovel") return <StudsShovel fill={fill} />;
+  if (id === ID.Trident || id === ID.TidalBlade) return <StudsTrident fill={fill} />;
+  if (block.tool === "sword") return <StudsSword fill={fill} />;
+  if (block.tool === "hoe") return <StudsHoe fill={fill} />;
+  if (id === ID.Crossbow) return <StudsCrossbow />;
+  if (block.tool === "bow" || id === ID.AntlerBow) return <StudsBow fill={fill} />;
+  if (id === ID.Shield) return <StudsShield fill={fill} />;
+  if (id === ID.Rod) return <StudsFishingRod />;
+  if (id === ID.Shears) return <StudsShears />;
+  if (id === ID.Flint) return <StudsFlintSteel />;
 
-  // 3. LEGO Minifig Armor & Wearables
-  if (block.armorSlot === 1) return <LegoHelmet fill={fill} />;
-  if (block.armorSlot === 2) return <LegoChestplate fill={fill} />;
-  if (block.armorSlot === 3) return <LegoLeggings fill={fill} />;
-  if (block.armorSlot === 4) return <LegoBoots fill={fill} />;
-  if (id === ID.Elytra) return <LegoElytra fill={fill} />;
+  // 3. STUDS Figure Armor & Wearables
+  if (block.armorSlot === 1) return <StudsHelmet fill={fill} />;
+  if (block.armorSlot === 2) return <StudsChestplate fill={fill} />;
+  if (block.armorSlot === 3) return <StudsLeggings fill={fill} />;
+  if (block.armorSlot === 4) return <StudsBoots fill={fill} />;
+  if (id === ID.Elytra) return <StudsElytra fill={fill} />;
 
-  // 4. LEGO Torches, Lanterns, Doors, Fences, Rails & Redstone
-  if (id === ID.Lantern) return <LegoLantern />;
-  if (block.torch) return <LegoTorch isRed={id === ID.RedTorch || id === ID.RedTorchOn} />;
-  if (block.door || block.gate) return <LegoDoor fill={fill} isGate={block.gate} />;
-  if (id === ID.Fence) return <LegoFence fill={fill} />;
-  if (block.ladder) return <LegoLadder fill={fill} />;
-  if (block.rail) return <LegoRail />;
-  if (block.lever) return <LegoLever />;
-  if (block.plate || id === ID.Repeater || id === ID.Comparator) return <LegoRedstonePlate id={id} fill={fill} />;
-  if (block.dust) return <LegoRedstoneDust fill={fill} />;
+  // 4. STUDS Torches, Lanterns, Doors, Fences, Rails & Redstone
+  if (id === ID.Lantern) return <StudsLantern />;
+  if (block.torch) return <StudsTorch isRed={id === ID.RedTorch || id === ID.RedTorchOn} />;
+  if (block.door || block.gate) return <StudsDoor fill={fill} isGate={block.gate} />;
+  if (id === ID.Fence) return <StudsFence fill={fill} />;
+  if (block.ladder) return <StudsLadder fill={fill} />;
+  if (block.rail) return <StudsRail />;
+  if (block.lever) return <StudsLever />;
+  if (block.plate || id === ID.Repeater || id === ID.Comparator) return <StudsRedstonePlate id={id} fill={fill} />;
+  if (block.dust) return <StudsRedstoneDust fill={fill} />;
 
-  // 5. LEGO Potions, Bottles & Buckets
+  // 5. STUDS Potions, Bottles & Buckets
   if (
     id === ID.Bottle ||
     id === ID.BaseBrew ||
@@ -241,40 +241,40 @@ function glyph(block: BlockDef, fill: string, muted = false): ReactNode {
     block.name.includes("brew") ||
     block.name.includes("splash")
   ) {
-    return <LegoPotion fill={fill} splash={block.name.includes("splash")} empty={id === ID.Bottle} />;
+    return <StudsPotion fill={fill} splash={block.name.includes("splash")} empty={id === ID.Bottle} />;
   }
   if (id === ID.Bucket || id === ID.WaterBucket || id === ID.LavaBucket || id === ID.Milk) {
-    return <LegoBucket id={id} fill={fill} />;
+    return <StudsBucket id={id} fill={fill} />;
   }
 
-  // 6. LEGO Food & Crops
+  // 6. STUDS Food & Crops
   if (block.food > 0 || id === ID.Wheat || id === ID.Seeds || id === ID.Pie) {
-    return <LegoFood block={block} fill={fill} />;
+    return <StudsFood block={block} fill={fill} />;
   }
-  if (id === ID.Cactus) return <LegoCactus />;
+  if (id === ID.Cactus) return <StudsCactus />;
   if (block.plant || block.crop || block.sapling || block.cane) {
-    return <LegoPlant block={block} fill={fill} />;
+    return <StudsPlant block={block} fill={fill} />;
   }
 
-  // 7. LEGO Vehicles, Books, Gadgets, Ingots, Gems & Misc Items
-  if (id === ID.Boat) return <LegoBoat fill={fill} />;
-  if (id === ID.Cart) return <LegoMinecart />;
-  if (id === ID.Saddle) return <LegoSaddle />;
-  if (id === ID.Arrow) return <LegoArrow />;
-  if (id === ID.Firework) return <LegoFirework />;
-  if (id === ID.Stick || id === ID.Blaze || id === ID.Bone) return <LegoRodPiece id={id} fill={fill} />;
-  if (id === ID.Compass || id === ID.Clock) return <LegoDialTile isClock={id === ID.Clock} fill={fill} />;
-  if (id === ID.Map || id === ID.Paper || id === ID.NameTag) return <LegoPrintedTile id={id} fill={fill} />;
-  if (id === ID.Book || id === ID.EnchBook || id === ID.Tome) return <LegoBook fill={fill} enchanted={id !== ID.Book} />;
-  if (id === ID.Banner || id === ID.Sign || id === ID.Frame || id === ID.Painting) return <LegoSignBanner id={id} fill={fill} />;
-  if (id === ID.Horn) return <LegoHorn fill={fill} />;
-  if (id === ID.Lead || id === ID.String) return <LegoCord fill={fill} />;
-  if (id === ID.Feather) return <LegoFeather />;
-  if (id === ID.Totem) return <LegoTotem />;
-  if (id === ID.NetherStar) return <LegoNetherStar />;
-  if (id === ID.WitherSkull) return <LegoSkull />;
-  if (id === ID.EnderPearl || id === ID.Eye || id === ID.Slime || id === ID.VoidCore) return <LegoOrb id={id} fill={fill} />;
-  if (id >= ID.DiscA && id <= ID.DiscE) return <LegoDisc fill={fill} />;
+  // 7. STUDS Vehicles, Books, Gadgets, Ingots, Gems & Misc Items
+  if (id === ID.Boat) return <StudsBoat fill={fill} />;
+  if (id === ID.Cart) return <StudsMinecart />;
+  if (id === ID.Saddle) return <StudsSaddle />;
+  if (id === ID.Arrow) return <StudsArrow />;
+  if (id === ID.Firework) return <StudsFirework />;
+  if (id === ID.Stick || id === ID.Blaze || id === ID.Bone) return <StudsRodPiece id={id} fill={fill} />;
+  if (id === ID.Compass || id === ID.Clock) return <StudsDialTile isClock={id === ID.Clock} fill={fill} />;
+  if (id === ID.Map || id === ID.Paper || id === ID.NameTag) return <StudsPrintedTile id={id} fill={fill} />;
+  if (id === ID.Book || id === ID.EnchBook || id === ID.Tome) return <StudsBook fill={fill} enchanted={id !== ID.Book} />;
+  if (id === ID.Banner || id === ID.Sign || id === ID.Frame || id === ID.Painting) return <StudsSignBanner id={id} fill={fill} />;
+  if (id === ID.Horn) return <StudsHorn fill={fill} />;
+  if (id === ID.Lead || id === ID.String) return <StudsCord fill={fill} />;
+  if (id === ID.Feather) return <StudsFeather />;
+  if (id === ID.Totem) return <StudsTotem />;
+  if (id === ID.NetherStar) return <StudsNetherStar />;
+  if (id === ID.WitherSkull) return <StudsSkull />;
+  if (id === ID.EnderPearl || id === ID.Eye || id === ID.Slime || id === ID.VoidCore) return <StudsOrb id={id} fill={fill} />;
+  if (id >= ID.DiscA && id <= ID.DiscE) return <StudsDisc fill={fill} />;
   if (
     id === ID.Ingot ||
     id === ID.RawIron ||
@@ -287,7 +287,7 @@ function glyph(block: BlockDef, fill: string, muted = false): ReactNode {
     id === ID.PharaohGold ||
     id === ID.IllagerBadge
   ) {
-    return <LegoIngotTile fill={fill} />;
+    return <StudsIngotTile fill={fill} />;
   }
   if (
     id === ID.Diamond ||
@@ -301,13 +301,13 @@ function glyph(block: BlockDef, fill: string, muted = false): ReactNode {
     id === ID.GuardianSpike ||
     block.need >= 2
   ) {
-    return <LegoCrystalGem fill={fill} />;
+    return <StudsCrystalGem fill={fill} />;
   }
 
-  // Technic pieces: specialized SVG instead of generic brick
-  if (TECHNIC_IDS.has(id)) return <LegoTechnic id={id} fill={fill} />;
+  // Teks pieces: specialized SVG instead of generic brick
+  if (TEKS_IDS.has(id)) return <StudsTeks id={id} fill={fill} />;
 
-  // Fallback: 3D Isometric LEGO 2x2 Brick with 4 real cylindrical studs
+  // Fallback: 3D Isometric STUDS 2x2 Brick with 4 real cylindrical studs
   return (
     <IsoBrick
       topFill={shadeHex(fill, 18)}
@@ -318,18 +318,18 @@ function glyph(block: BlockDef, fill: string, muted = false): ReactNode {
   );
 }
 
-// A Technic part's inventory icon: the geometry-rendered PNG when it
+// A Teks part's inventory icon: the geometry-rendered PNG when it
 // loads; if the file is missing (part added after the last icon
 // regeneration) or fails to load, fall back to the generic SVG glyph —
 // the same graceful degradation the cube icons use, except the fallback
 // here is the old render instead of an empty slot.
-function TechnicItemIcon({ id, fill }: { id: number; fill: string }) {
+function TeksItemIcon({ id, fill }: { id: number; fill: string }) {
   const [failed, setFailed] = useState(false);
-  const src = technicIcon(id);
+  const src = teksIcon(id);
   if (!src || failed) {
     return (
       <svg className="item-icon" viewBox="0 0 32 32" aria-hidden="true">
-        <LegoTechnic id={id} fill={fill} />
+        <StudsTeks id={id} fill={fill} />
       </svg>
     );
   }
@@ -344,7 +344,7 @@ function TechnicItemIcon({ id, fill }: { id: number; fill: string }) {
   );
 }
 
-function LegoTechnic({ id, fill }: { id: number; fill: string }) {
+function StudsTeks({ id, fill }: { id: number; fill: string }) {
   const dark = shadeHex(fill, -40);
   const light = shadeHex(fill, 30);
   // Gears
@@ -415,7 +415,7 @@ function LegoTechnic({ id, fill }: { id: number; fill: string }) {
       </g>
     );
   }
-  // Default technic: small gear-like
+  // Default teks: small gear-like
   return (
     <g>
       <circle cx="16" cy="16" r="7" fill={fill} />
@@ -424,9 +424,9 @@ function LegoTechnic({ id, fill }: { id: number; fill: string }) {
   );
 }
 
-// ─── BESPOKE 3D ISOMETRIC LEGO WORKSTATIONS ──────────────────────────────
+// ─── BESPOKE 3D ISOMETRIC STUDS WORKSTATIONS ──────────────────────────────
 
-function LegoFurnace({ muted }: { muted?: boolean }) {
+function StudsFurnace({ muted }: { muted?: boolean }) {
   const top = muted ? "#78726a" : "#8c847c";
   const left = muted ? "#625c56" : "#6e665e";
   const right = muted ? "#4c4642" : "#544d47";
@@ -436,13 +436,13 @@ function LegoFurnace({ muted }: { muted?: boolean }) {
       {/* Chimney vent on top center */}
       <ellipse cx="16" cy="11" rx="3.2" ry="1.6" fill="#221e1b" />
       <ellipse cx="16" cy="11" rx="1.6" ry="0.8" fill="#ff6a18" />
-      {/* Arched LEGO kiln hearth on right-front face */}
+      {/* Arched STUDS kiln hearth on right-front face */}
       <polygon points="18,19.5 26,15.5 26,23.5 18,27.5" fill="#18120e" stroke="#38312c" strokeWidth="0.8" />
-      {/* Glowing LEGO Coal 1x1 studs */}
+      {/* Glowing STUDS Coal 1x1 studs */}
       <circle cx="20" cy="25" r="1.2" fill="#ff4810" />
       <circle cx="22.2" cy="24" r="1.2" fill="#ff7818" />
       <circle cx="24.2" cy="23" r="1.2" fill="#ff4810" />
-      {/* Molded Trans-Orange & Trans-Yellow LEGO Flame piece inside furnace */}
+      {/* Molded Trans-Orange & Trans-Yellow STUDS Flame piece inside furnace */}
       <path
         d="M19.2 25.2 C19 21.5 20.5 19.5 21.2 18.2 C21.8 19.8 22.5 17.2 23.2 16.5 C23.8 18.5 25 19.2 24.8 22.5 Z"
         fill="#ff6210"
@@ -457,18 +457,18 @@ function LegoFurnace({ muted }: { muted?: boolean }) {
   );
 }
 
-function LegoWorkbench({ muted }: { muted?: boolean }) {
+function StudsWorkbench({ muted }: { muted?: boolean }) {
   const top = muted ? "#9a8262" : "#e8b960";
   const left = muted ? "#7a6448" : "#c89242";
   const right = muted ? "#624e36" : "#a4722c";
   return (
     <g>
       <IsoBrick topFill={top} leftFill={left} rightFill={right} studs={false} />
-      {/* Dark brown LEGO corner timber pillars */}
+      {/* Dark brown STUDS corner timber pillars */}
       <polygon points="4,11 6.5,12.2 6.5,24.2 4,23" fill="#5c341a" />
       <polygon points="13.5,15.8 16,17 16,29 13.5,27.8" fill="#5c341a" />
       <polygon points="25.5,12.2 28,11 28,23 25.5,24.2" fill="#462612" />
-      {/* 3x3 LEGO Crafting Grid with 9 miniature studs on top */}
+      {/* 3x3 STUDS Crafting Grid with 9 miniature studs on top */}
       <polygon points="16,6.3 25.4,11 16,15.7 6.6,11" fill="#6b3e22" />
       {[
         [16, 8.0],
@@ -483,17 +483,17 @@ function LegoWorkbench({ muted }: { muted?: boolean }) {
       ].map(([cx, cy], i) => (
         <IsoStud key={i} cx={cx} cy={cy} fill={i % 2 === 0 ? "#d99e4c" : "#b87e34"} r={1.35} h={0.95} />
       ))}
-      {/* Hanging miniature LEGO Hammer on left face */}
+      {/* Hanging miniature STUDS Hammer on left face */}
       <rect x="8.2" y="16.5" width="4.2" height="1.8" rx="0.4" transform="skewY(26)" fill="#d9dde2" />
       <rect x="9.8" y="17.5" width="1.1" height="5.5" transform="skewY(26)" fill="#5c341a" />
-      {/* Hanging miniature LEGO Saw on right face */}
+      {/* Hanging miniature STUDS Saw on right face */}
       <polygon points="20,18 24,16 23,22 20,23.5" fill="#d9dde2" />
       <polygon points="20,17 23.2,15.4 23.2,17.2 20,18.8" fill="#d43228" />
     </g>
   );
 }
 
-function LegoChest({ fill, isShulker, muted }: { fill: string; isShulker?: boolean; muted?: boolean }) {
+function StudsChest({ fill, isShulker, muted }: { fill: string; isShulker?: boolean; muted?: boolean }) {
   const base = muted ? "#7a6854" : isShulker ? "#8a6aa8" : "#c89044";
   const top = shadeHex(base, 20);
   const left = base;
@@ -508,14 +508,14 @@ function LegoChest({ fill, isShulker, muted }: { fill: string; isShulker?: boole
       <line x1="5" y1="11.5" x2="5" y2="23.2" stroke={trim} strokeWidth="1.4" />
       <line x1="16" y1="17" x2="16" y2="29" stroke={trim} strokeWidth="1.6" />
       <line x1="27" y1="11.5" x2="27" y2="23.2" stroke={trim} strokeWidth="1.4" />
-      {/* Metallic Gold 1x1 LEGO Latch Plate with stud on right-front */}
+      {/* Metallic Gold 1x1 STUDS Latch Plate with stud on right-front */}
       <polygon points="20.5,17.2 23.8,15.6 23.8,19.8 20.5,21.4" fill="#ffd84a" stroke="#9e6e10" strokeWidth="0.6" />
       <circle cx="22.1" cy="18.6" r="0.9" fill="#b88418" />
     </g>
   );
 }
 
-function LegoBarrel({ muted }: { muted?: boolean }) {
+function StudsBarrel({ muted }: { muted?: boolean }) {
   const base = muted ? "#6e5c4a" : "#8d5a34";
   return (
     <g>
@@ -528,19 +528,19 @@ function LegoBarrel({ muted }: { muted?: boolean }) {
   );
 }
 
-function LegoAnvil({ isGrind, muted }: { isGrind?: boolean; muted?: boolean }) {
+function StudsAnvil({ isGrind, muted }: { isGrind?: boolean; muted?: boolean }) {
   const c1 = muted ? "#7a7e82" : isGrind ? "#a7aeb4" : "#8e959c";
   const c2 = shadeHex(c1, -26);
   const c3 = shadeHex(c1, 24);
   return (
     <g>
-      {/* Stepped LEGO Anvil baseplate */}
+      {/* Stepped STUDS Anvil baseplate */}
       <polygon points="6,23 16,28 26,23 16,18" fill={c1} />
       <polygon points="6,23 16,28 16,30 6,25" fill={c2} />
       <polygon points="16,28 26,23 26,25 16,30" fill={shadeHex(c1, -42)} />
       {/* Narrow neck column */}
       <polygon points="11,15 21,15 21,23 11,23" fill={c2} />
-      {/* Heavy overhanging horned LEGO anvil top with studs */}
+      {/* Heavy overhanging horned STUDS anvil top with studs */}
       <polygon points="16,6 28,12 16,18 4,12" fill={c3} />
       <polygon points="4,12 16,18 16,22 4,16" fill={c1} />
       <polygon points="16,18 28,12 28,16 16,22" fill={c2} />
@@ -550,7 +550,7 @@ function LegoAnvil({ isGrind, muted }: { isGrind?: boolean; muted?: boolean }) {
   );
 }
 
-function LegoEnchanter({ muted }: { muted?: boolean }) {
+function StudsEnchanter({ muted }: { muted?: boolean }) {
   return (
     <g>
       <IsoBrick
@@ -567,27 +567,27 @@ function LegoEnchanter({ muted }: { muted?: boolean }) {
       <IsoStud cx={7.2} cy={11} fill="#5ef2f2" r={1.8} h={1.4} />
       <IsoStud cx={24.8} cy={11} fill="#5ef2f2" r={1.8} h={1.4} />
       <IsoStud cx={16} cy={15.2} fill="#5ef2f2" r={1.8} h={1.4} />
-      {/* Open hinged LEGO Spellbook on top */}
+      {/* Open hinged STUDS Spellbook on top */}
       <polygon points="11,9.5 16,11.5 16,7.5 11,5.5" fill="#f4f1ea" stroke="#8d3e18" strokeWidth="0.8" />
       <polygon points="16,11.5 21,9.5 21,5.5 16,7.5" fill="#e7e2d8" stroke="#8d3e18" strokeWidth="0.8" />
     </g>
   );
 }
 
-function LegoBrewStand({ muted }: { muted?: boolean }) {
+function StudsBrewStand({ muted }: { muted?: boolean }) {
   return (
     <g>
-      {/* Cobblestone 2x2 LEGO base plate */}
+      {/* Cobblestone 2x2 STUDS base plate */}
       <polygon points="16,18 28,24 16,30 4,24" fill="#9aa1a8" />
       <polygon points="4,24 16,30 16,31.5 4,25.5" fill="#7e868e" />
       <polygon points="16,30 28,24 28,25.5 16,31.5" fill="#5c646c" />
       <IsoStud cx={10.5} cy={24} fill="#9aa1a8" r={2} h={1.3} />
       <IsoStud cx={21.5} cy={24} fill="#9aa1a8" r={2} h={1.3} />
-      {/* Golden Blaze-rod central Technic column & brewing arms */}
+      {/* Golden Blaze-rod central Teks column & brewing arms */}
       <rect x="14.6" y="6" width="2.8" height="18" rx="1" fill={muted ? "#9a8858" : "#ffb820"} stroke="#b87410" strokeWidth="0.6" />
       <line x1="9" y1="12" x2="23" y2="12" stroke="#ffb820" strokeWidth="2" strokeLinecap="round" />
       <IsoStud cx={16} cy={6} fill="#ffe14a" r={2} h={1.4} />
-      {/* 3 Translucent LEGO Potion flasks */}
+      {/* 3 Translucent STUDS Potion flasks */}
       <polygon points="7,15 11,15 12,22 6,22" fill="#e23b2f" stroke="#ffffff" strokeOpacity="0.55" strokeWidth="0.6" />
       <IsoStud cx={9} cy={14.8} fill="#d9dde2" r={1.3} h={1} />
       <polygon points="21,15 25,15 26,22 20,22" fill="#3ec8c8" stroke="#ffffff" strokeOpacity="0.55" strokeWidth="0.6" />
@@ -597,15 +597,15 @@ function LegoBrewStand({ muted }: { muted?: boolean }) {
   );
 }
 
-function LegoCampfire({ muted }: { muted?: boolean }) {
+function StudsCampfire({ muted }: { muted?: boolean }) {
   return (
     <g>
-      {/* Crossed Reddish-Brown LEGO Logs with studs */}
+      {/* Crossed Reddish-Brown STUDS Logs with studs */}
       <polygon points="4,22 25,14 28,17 7,25" fill="#6b3e22" stroke="#3a2010" strokeWidth="0.6" />
       <polygon points="7,14 28,22 25,25 4,17" fill="#8d5a34" stroke="#3a2010" strokeWidth="0.6" />
       <IsoStud cx={9} cy={21} fill="#8d5a34" r={1.8} h={1.2} />
       <IsoStud cx={23} cy={21} fill="#8d5a34" r={1.8} h={1.2} />
-      {/* Molded Trans-Orange & Trans-Yellow LEGO Flame Plume */}
+      {/* Molded Trans-Orange & Trans-Yellow STUDS Flame Plume */}
       <path
         d="M11 21 C10 15 13 11 14 7 C15.5 11 17 5 18 4 C19.5 9 22 14 21 21 Z"
         fill={muted ? "#b87840" : "#ff6210"}
@@ -618,18 +618,18 @@ function LegoCampfire({ muted }: { muted?: boolean }) {
   );
 }
 
-function LegoBed({ fill }: { fill: string }) {
+function StudsBed({ fill }: { fill: string }) {
   return (
     <g>
-      {/* Wooden LEGO frame & feet */}
+      {/* Wooden STUDS frame & feet */}
       <polygon points="3,18 16,24 29,18 16,12" fill="#c4924a" />
       <polygon points="3,18 16,24 16,28 3,22" fill="#8d5a34" />
       <polygon points="16,24 29,18 29,22 16,28" fill="#6b3e22" />
-      {/* Red LEGO mattress with studs */}
+      {/* Red STUDS mattress with studs */}
       <polygon points="3,14 16,20 29,14 16,8" fill={shadeHex(fill, 16)} />
       <polygon points="3,14 16,20 16,24 3,18" fill={fill} />
       <polygon points="16,20 29,14 29,18 16,24" fill={shadeHex(fill, -24)} />
-      {/* White LEGO Pillow brick at head */}
+      {/* White STUDS Pillow brick at head */}
       <polygon points="16,7.5 26,12.2 21,14.6 11,9.9" fill="#ffffff" />
       <IsoStud cx={13} cy={14.5} fill={fill} r={2} h={1.3} />
       <IsoStud cx={18} cy={16.5} fill={fill} r={2} h={1.3} />
@@ -637,7 +637,7 @@ function LegoBed({ fill }: { fill: string }) {
   );
 }
 
-function LegoTNT() {
+function StudsTNT() {
   return (
     <g>
       <IsoBrick topFill="#f25a46" leftFill="#e23b2f" rightFill="#b02620" studFill="#2a2a2a" />
@@ -651,11 +651,11 @@ function LegoTNT() {
   );
 }
 
-function LegoBookshelf() {
+function StudsBookshelf() {
   return (
     <g>
       <IsoBrick topFill="#f0c36e" leftFill="#d7a44e" rightFill="#a67c3a" studFill="#f0c36e" seams={false} />
-      {/* 2 rows of colorful LEGO book spines on right face */}
+      {/* 2 rows of colorful STUDS book spines on right face */}
       <polygon points="17,18 27,13 27,17 17,22" fill="#2a180c" />
       <polygon points="17,23 27,18 27,22 17,27" fill="#2a180c" />
       <line x1="18.5" y1="17.5" x2="18.5" y2="21.2" stroke="#e23b2f" strokeWidth="2" />
@@ -669,7 +669,7 @@ function LegoBookshelf() {
   );
 }
 
-function LegoJukebox({ isJuke }: { isJuke: boolean }) {
+function StudsJukebox({ isJuke }: { isJuke: boolean }) {
   return (
     <g>
       <IsoBrick topFill="#c4924a" leftFill="#8a6428" rightFill="#5c4020" studFill="#c4924a" />
@@ -679,7 +679,7 @@ function LegoJukebox({ isJuke }: { isJuke: boolean }) {
   );
 }
 
-function LegoDispenser({ isObserver }: { isObserver: boolean }) {
+function StudsDispenser({ isObserver }: { isObserver: boolean }) {
   return (
     <g>
       <IsoBrick topFill="#c5ccd3" leftFill="#8e959c" rightFill="#6e645c" studFill="#c5ccd3" />
@@ -688,7 +688,7 @@ function LegoDispenser({ isObserver }: { isObserver: boolean }) {
   );
 }
 
-function LegoHopper() {
+function StudsHopper() {
   return (
     <g>
       <polygon points="16,5 28,11 16,17 4,11" fill="#aeb6be" />
@@ -701,12 +701,12 @@ function LegoHopper() {
   );
 }
 
-function LegoBeacon({ isConduit }: { isConduit: boolean }) {
+function StudsBeacon({ isConduit }: { isConduit: boolean }) {
   return (
     <g>
       {/* Obsidian baseplate */}
       <polygon points="4,22 16,28 28,22 16,16" fill="#2a1848" />
-      {/* Trans-Cyan LEGO Glass Shell */}
+      {/* Trans-Cyan STUDS Glass Shell */}
       <IsoBrick topFill="rgba(180,248,255,0.68)" leftFill="rgba(94,216,230,0.58)" rightFill="rgba(46,176,196,0.58)" studFill="#9ae8e0" seams={false} />
       {/* Glowing Star Core */}
       <polygon points="16,11 19,16 16,21 13,16" fill="#ffffff" stroke={isConduit ? "#ffd84a" : "#3ec8c8"} strokeWidth="1.2" />
@@ -714,7 +714,7 @@ function LegoBeacon({ isConduit }: { isConduit: boolean }) {
   );
 }
 
-function LegoSpawner() {
+function StudsSpawner() {
   return (
     <g>
       <IsoBrick topFill="#3a3a44" leftFill="#2a2a32" rightFill="#1a1a22" studFill="#3aaa4c" />
@@ -723,7 +723,7 @@ function LegoSpawner() {
   );
 }
 
-function LegoEndFrame({ hasEye }: { hasEye: boolean }) {
+function StudsEndFrame({ hasEye }: { hasEye: boolean }) {
   return (
     <g>
       <IsoBrick topFill="#ddd4a4" leftFill="#2a8a78" rightFill="#1e6456" studFill="#2a8a78" />
@@ -732,7 +732,7 @@ function LegoEndFrame({ hasEye }: { hasEye: boolean }) {
   );
 }
 
-function LegoEndCrystal() {
+function StudsEndCrystal() {
   return (
     <g>
       <polygon points="6,24 16,29 26,24 16,19" fill="#2a1848" />
@@ -742,7 +742,7 @@ function LegoEndCrystal() {
   );
 }
 
-function LegoDragonEgg() {
+function StudsDragonEgg() {
   return (
     <g>
       <path d="M16 4 C23 9 25 18 23 26 C20 29 12 29 9 26 C7 18 9 9 16 4 Z" fill="#1a1030" stroke="#7a4ad4" strokeWidth="1" />
@@ -753,7 +753,7 @@ function LegoDragonEgg() {
   );
 }
 
-function LegoSpecialBlock({ id, fill }: { id: number; fill: string }) {
+function StudsSpecialBlock({ id, fill }: { id: number; fill: string }) {
   return (
     <g>
       <IsoBrick topFill={shadeHex(fill, 18)} leftFill={fill} rightFill={shadeHex(fill, -24)} />
@@ -763,7 +763,7 @@ function LegoSpecialBlock({ id, fill }: { id: number; fill: string }) {
   );
 }
 
-function LegoPiston() {
+function StudsPiston() {
   return (
     <g>
       <IsoBrick topFill="#e0b15a" leftFill="#8e959c" rightFill="#6e767e" studFill="#e0b15a" />
@@ -772,7 +772,7 @@ function LegoPiston() {
   );
 }
 
-function LegoDaylight({ inv }: { inv: boolean }) {
+function StudsDaylight({ inv }: { inv: boolean }) {
   const c = inv ? "#3d7ad4" : "#f0c43a";
   return (
     <g>
@@ -787,20 +787,20 @@ function LegoDaylight({ inv }: { inv: boolean }) {
   );
 }
 
-// ─── BESPOKE 3D MOLDED LEGO TOOLS & WEAPONS ──────────────────────────────
+// ─── BESPOKE 3D MOLDED STUDS TOOLS & WEAPONS ──────────────────────────────
 
-function LegoPick({ fill }: { fill: string }) {
+function StudsPick({ fill }: { fill: string }) {
   const dark = shadeHex(fill, -28);
   return (
     <g>
-      {/* Cylindrical LEGO bar handle + bottom pommel ring */}
+      {/* Cylindrical STUDS bar handle + bottom pommel ring */}
       <rect x="14.2" y="11" width="3.6" height="17" rx="1.4" fill="#a67238" stroke="#5c3a18" strokeWidth="0.6" />
       <rect x="13.4" y="26" width="5.2" height="2.4" rx="0.8" fill="#6b3e22" />
-      {/* Technic grey connector collar */}
+      {/* Teks grey connector collar */}
       <rect x="13" y="9" width="6" height="3.8" rx="0.8" fill="#5c646c" />
-      {/* Stepped LEGO Pickaxe Head Plates */}
+      {/* Stepped STUDS Pickaxe Head Plates */}
       <path d="M4 12 L10 7 L22 7 L28 12 L25 15 L20 11 L12 11 L7 15 Z" fill={fill} stroke={dark} strokeWidth="0.7" />
-      {/* LEGO Studs on pickaxe head */}
+      {/* STUDS Studs on pickaxe head */}
       <IsoStud cx={11.5} cy={7.5} fill={fill} r={1.8} h={1.2} />
       <IsoStud cx={16} cy={6.8} fill={fill} r={1.9} h={1.3} />
       <IsoStud cx={20.5} cy={7.5} fill={fill} r={1.8} h={1.2} />
@@ -808,13 +808,13 @@ function LegoPick({ fill }: { fill: string }) {
   );
 }
 
-function LegoAxe({ fill }: { fill: string }) {
+function StudsAxe({ fill }: { fill: string }) {
   const dark = shadeHex(fill, -28);
   return (
     <g>
       <rect x="14.5" y="7" width="3.5" height="21" rx="1.4" fill="#a67238" stroke="#5c3a18" strokeWidth="0.6" />
       <rect x="13.6" y="26" width="5.2" height="2.4" rx="0.8" fill="#6b3e22" />
-      {/* Bearded LEGO Wedge Axe Blade + Back Poll */}
+      {/* Bearded STUDS Wedge Axe Blade + Back Poll */}
       <path d="M18 8 L26 6 L27 16 L19 19 L18 14 Z" fill={fill} stroke={dark} strokeWidth="0.7" />
       <rect x="11" y="9" width="4" height="4.5" rx="0.8" fill={dark} />
       <IsoStud cx={16.2} cy={6.8} fill={fill} r={2} h={1.3} />
@@ -823,30 +823,30 @@ function LegoAxe({ fill }: { fill: string }) {
   );
 }
 
-function LegoShovel({ fill }: { fill: string }) {
+function StudsShovel({ fill }: { fill: string }) {
   const dark = shadeHex(fill, -28);
   return (
     <g>
       <rect x="14.3" y="13" width="3.4" height="15" rx="1.4" fill="#a67238" stroke="#5c3a18" strokeWidth="0.6" />
       <rect x="12.8" y="26" width="6.4" height="2.6" rx="1" fill="#6b3e22" />
-      {/* Molded LEGO Spade Scoop with central stud */}
+      {/* Molded STUDS Spade Scoop with central stud */}
       <path d="M10 6 C10 3 22 3 22 6 L21 15 L16 17 L11 15 Z" fill={fill} stroke={dark} strokeWidth="0.7" />
       <IsoStud cx={16} cy={9.5} fill={fill} r={2.2} h={1.4} />
     </g>
   );
 }
 
-function LegoSword({ fill }: { fill: string }) {
+function StudsSword({ fill }: { fill: string }) {
   const dark = shadeHex(fill, -30);
   const hi = shadeHex(fill, 28);
   return (
     <g>
-      {/* LEGO Grip + Round Pommel Stud */}
+      {/* STUDS Grip + Round Pommel Stud */}
       <rect x="14.3" y="21" width="3.4" height="6.5" rx="1.2" fill="#8d5a34" />
       <IsoStud cx={16} cy={28.5} fill="#ffd84a" r={2.4} h={1.4} />
-      {/* Studded LEGO Crossguard */}
+      {/* Studded STUDS Crossguard */}
       <rect x="9" y="18.5" width="14" height="3.2" rx="1" fill="#ffd84a" stroke="#9e6e10" strokeWidth="0.6" />
-      {/* Chamfered LEGO Blade with central fuller ridge & studs */}
+      {/* Chamfered STUDS Blade with central fuller ridge & studs */}
       <polygon points="16,3 20.5,8 20.5,18.5 11.5,18.5 11.5,8" fill={fill} stroke={dark} strokeWidth="0.7" />
       <polygon points="16,3 16,18.5 11.5,18.5 11.5,8" fill={hi} opacity="0.45" />
       <IsoStud cx={16} cy={11} fill={fill} r={1.7} h={1.1} />
@@ -855,7 +855,7 @@ function LegoSword({ fill }: { fill: string }) {
   );
 }
 
-function LegoTrident({ fill }: { fill: string }) {
+function StudsTrident({ fill }: { fill: string }) {
   return (
     <g>
       <rect x="14.5" y="11" width="3" height="18" rx="1.2" fill="#2a9a86" />
@@ -868,7 +868,7 @@ function LegoTrident({ fill }: { fill: string }) {
   );
 }
 
-function LegoHoe({ fill }: { fill: string }) {
+function StudsHoe({ fill }: { fill: string }) {
   return (
     <g>
       <rect x="16.5" y="10" width="3.4" height="18" rx="1.4" fill="#a67238" />
@@ -879,19 +879,19 @@ function LegoHoe({ fill }: { fill: string }) {
   );
 }
 
-function LegoBow({ fill }: { fill: string }) {
+function StudsBow({ fill }: { fill: string }) {
   return (
     <g>
       <path d="M11 4 C22 8 22 24 11 28" fill="none" stroke={fill} strokeWidth="3.2" strokeLinecap="round" />
       <line x1="11" y1="4" x2="11" y2="28" stroke="#f4f1ea" strokeWidth="1.3" />
-      {/* Nocked LEGO Arrow */}
+      {/* Nocked STUDS Arrow */}
       <line x1="7" y1="16" x2="25" y2="16" stroke="#c4924a" strokeWidth="2" />
       <polygon points="27,16 22,13 22,19" fill="#d9dde2" />
     </g>
   );
 }
 
-function LegoCrossbow() {
+function StudsCrossbow() {
   return (
     <g>
       <rect x="14.2" y="7" width="3.6" height="20" rx="1.2" fill="#8a6428" />
@@ -902,7 +902,7 @@ function LegoCrossbow() {
   );
 }
 
-function LegoShield({ fill }: { fill: string }) {
+function StudsShield({ fill }: { fill: string }) {
   return (
     <g>
       <path d="M7 5 H25 V18 L16 28 L7 18 Z" fill={fill} stroke="#8e959c" strokeWidth="2.2" />
@@ -913,7 +913,7 @@ function LegoShield({ fill }: { fill: string }) {
   );
 }
 
-function LegoFishingRod() {
+function StudsFishingRod() {
   return (
     <g>
       <line x1="7" y1="26" x2="23" y2="5" stroke="#8d5a34" strokeWidth="2.6" strokeLinecap="round" />
@@ -924,7 +924,7 @@ function LegoFishingRod() {
   );
 }
 
-function LegoShears() {
+function StudsShears() {
   return (
     <g>
       <polygon points="8,7 19,18 16,20 6,10" fill="#d9dde2" />
@@ -936,7 +936,7 @@ function LegoShears() {
   );
 }
 
-function LegoFlintSteel() {
+function StudsFlintSteel() {
   return (
     <g>
       <path d="M8 10 H18 V15 H12 V22 H18 V26 H8 Z" fill="#8e959c" />
@@ -946,9 +946,9 @@ function LegoFlintSteel() {
   );
 }
 
-// ─── LEGO MINIFIG ARMOR & WEARABLES ──────────────────────────────────────
+// ─── STUDS FIGURE ARMOR & WEARABLES ──────────────────────────────────────
 
-function LegoHelmet({ fill }: { fill: string }) {
+function StudsHelmet({ fill }: { fill: string }) {
   return (
     <g>
       <IsoStud cx={16} cy={6.5} fill={fill} r={3} h={1.8} />
@@ -957,7 +957,7 @@ function LegoHelmet({ fill }: { fill: string }) {
   );
 }
 
-function LegoChestplate({ fill }: { fill: string }) {
+function StudsChestplate({ fill }: { fill: string }) {
   return (
     <g>
       <polygon points="6,8 26,8 24,26 8,26" fill={fill} stroke={shadeHex(fill, -30)} strokeWidth="1" />
@@ -968,7 +968,7 @@ function LegoChestplate({ fill }: { fill: string }) {
   );
 }
 
-function LegoLeggings({ fill }: { fill: string }) {
+function StudsLeggings({ fill }: { fill: string }) {
   return (
     <g>
       <rect x="8" y="6" width="16" height="6" rx="1" fill={shadeHex(fill, -20)} />
@@ -980,7 +980,7 @@ function LegoLeggings({ fill }: { fill: string }) {
   );
 }
 
-function LegoBoots({ fill }: { fill: string }) {
+function StudsBoots({ fill }: { fill: string }) {
   return (
     <g>
       <path d="M6 12 H14 V25 H4 V20 H6 Z" fill={fill} stroke={shadeHex(fill, -28)} strokeWidth="0.8" />
@@ -991,7 +991,7 @@ function LegoBoots({ fill }: { fill: string }) {
   );
 }
 
-function LegoElytra({ fill }: { fill: string }) {
+function StudsElytra({ fill }: { fill: string }) {
   return (
     <g>
       <path d="M16 6 L6 10 L8 27 L15 21 Z" fill={fill} stroke={shadeHex(fill, -28)} strokeWidth="0.8" />
@@ -1001,9 +1001,9 @@ function LegoElytra({ fill }: { fill: string }) {
   );
 }
 
-// ─── LEGO TORCHES, LANTERNS, DOORS, REDSTONE ─────────────────────────────
+// ─── STUDS TORCHES, LANTERNS, DOORS, REDSTONE ─────────────────────────────
 
-function LegoTorch({ isRed }: { isRed: boolean }) {
+function StudsTorch({ isRed }: { isRed: boolean }) {
   const c1 = isRed ? "#e23b2f" : "#ff7820";
   const c2 = isRed ? "#ff9a8a" : "#ffe14a";
   return (
@@ -1016,7 +1016,7 @@ function LegoTorch({ isRed }: { isRed: boolean }) {
   );
 }
 
-function LegoLantern() {
+function StudsLantern() {
   return (
     <g>
       <circle cx="16" cy="5.5" r="2" fill="none" stroke="#5c646c" strokeWidth="1.6" />
@@ -1028,7 +1028,7 @@ function LegoLantern() {
   );
 }
 
-function LegoDoor({ fill, isGate }: { fill: string; isGate: boolean }) {
+function StudsDoor({ fill, isGate }: { fill: string; isGate: boolean }) {
   if (isGate) {
     return (
       <g>
@@ -1051,7 +1051,7 @@ function LegoDoor({ fill, isGate }: { fill: string; isGate: boolean }) {
   );
 }
 
-function LegoFence({ fill }: { fill: string }) {
+function StudsFence({ fill }: { fill: string }) {
   return (
     <g>
       <rect x="7" y="8" width="4.5" height="19" rx="1" fill={fill} />
@@ -1064,7 +1064,7 @@ function LegoFence({ fill }: { fill: string }) {
   );
 }
 
-function LegoLadder({ fill }: { fill: string }) {
+function StudsLadder({ fill }: { fill: string }) {
   return (
     <g stroke={fill} strokeWidth="2.6" strokeLinecap="round">
       <line x1="9" y1="4" x2="9" y2="28" />
@@ -1077,7 +1077,7 @@ function LegoLadder({ fill }: { fill: string }) {
   );
 }
 
-function LegoRail() {
+function StudsRail() {
   return (
     <g>
       <rect x="6" y="8" width="20" height="3" fill="#8d5a34" />
@@ -1089,7 +1089,7 @@ function LegoRail() {
   );
 }
 
-function LegoLever() {
+function StudsLever() {
   return (
     <g>
       <polygon points="6,22 16,27 26,22 16,17" fill="#8e959c" />
@@ -1099,7 +1099,7 @@ function LegoLever() {
   );
 }
 
-function LegoRedstonePlate({ id, fill }: { id: number; fill: string }) {
+function StudsRedstonePlate({ id, fill }: { id: number; fill: string }) {
   return (
     <g>
       <polygon points="16,11 28,17 16,23 4,17" fill="#9aa1a8" />
@@ -1111,7 +1111,7 @@ function LegoRedstonePlate({ id, fill }: { id: number; fill: string }) {
   );
 }
 
-function LegoRedstoneDust({ fill }: { fill: string }) {
+function StudsRedstoneDust({ fill }: { fill: string }) {
   return (
     <g>
       <IsoStud cx={16} cy={11} fill={fill} r={3} h={1.8} />
@@ -1122,19 +1122,19 @@ function LegoRedstoneDust({ fill }: { fill: string }) {
   );
 }
 
-// ─── LEGO POTIONS, BUCKETS, FOOD & ITEMS ─────────────────────────────────
+// ─── STUDS POTIONS, BUCKETS, FOOD & ITEMS ─────────────────────────────────
 
-function LegoPotion({ fill, splash, empty }: { fill: string; splash?: boolean; empty?: boolean }) {
+function StudsPotion({ fill, splash, empty }: { fill: string; splash?: boolean; empty?: boolean }) {
   return (
     <g>
-      {/* Translucent LEGO Erlenmeyer Flask Body */}
+      {/* Translucent STUDS Erlenmeyer Flask Body */}
       <path
         d={splash ? "M13 8 H19 L25 18 C26 24 22 28 16 28 C10 28 6 24 7 18 Z" : "M13 9 H19 V13 L24 21 C25 25 22 28 16 28 C10 28 7 25 8 21 L13 13 Z"}
         fill={empty ? "rgba(213,243,246,0.45)" : fill}
         stroke="#e7fbff"
         strokeWidth="1.3"
       />
-      {/* Top LEGO 1x1 Cork Stud Stopper */}
+      {/* Top STUDS 1x1 Cork Stud Stopper */}
       <IsoStud cx={16} cy={7.5} fill="#c4924a" r={2.6} h={1.8} />
       {/* Glossy plastic reflection strip */}
       <path d="M11 19 Q10 23 13 25" fill="none" stroke="rgba(255,255,255,0.65)" strokeWidth="1.4" strokeLinecap="round" />
@@ -1142,7 +1142,7 @@ function LegoPotion({ fill, splash, empty }: { fill: string; splash?: boolean; e
   );
 }
 
-function LegoBucket({ id, fill }: { id: number; fill: string }) {
+function StudsBucket({ id, fill }: { id: number; fill: string }) {
   const liq = id === ID.WaterBucket ? "#3b96e4" : id === ID.LavaBucket ? "#ff7820" : id === ID.Milk ? "#ffffff" : "#3a3e42";
   return (
     <g>
@@ -1154,7 +1154,7 @@ function LegoBucket({ id, fill }: { id: number; fill: string }) {
   );
 }
 
-function LegoFood({ block, fill }: { block: BlockDef; fill: string }) {
+function StudsFood({ block, fill }: { block: BlockDef; fill: string }) {
   const id = block.id;
   if (id === ID.Apple || id === ID.Gapple || id === ID.Beetroot) {
     return (
@@ -1220,36 +1220,36 @@ function LegoFood({ block, fill }: { block: BlockDef; fill: string }) {
   );
 }
 
-function LegoCactus() {
+function StudsCactus() {
   return (
     <g>
-      {/* Left L-shaped LEGO Saguaro Arm + Top Stud */}
+      {/* Left L-shaped STUDS Saguaro Arm + Top Stud */}
       <rect x="4" y="15" width="6" height="4" rx="0.8" fill="#2f8e3c" stroke="#164e1f" strokeWidth="0.7" />
       <rect x="4" y="9" width="4.5" height="9" rx="0.8" fill="#3aaa4c" stroke="#164e1f" strokeWidth="0.7" />
       <IsoStud cx={6.2} cy={9} fill="#46b856" r={1.8} h={1.2} />
-      {/* Right L-shaped LEGO Saguaro Arm + Top Stud */}
+      {/* Right L-shaped STUDS Saguaro Arm + Top Stud */}
       <rect x="22" y="13" width="6" height="4" rx="0.8" fill="#236e2e" stroke="#164e1f" strokeWidth="0.7" />
       <rect x="23.5" y="7" width="4.5" height="9" rx="0.8" fill="#2f8e3c" stroke="#164e1f" strokeWidth="0.7" />
       <IsoStud cx={25.8} cy={7} fill="#3aaa4c" r={1.8} h={1.2} />
-      {/* Central 3-Course Isometric Fluted LEGO Cactus Column */}
+      {/* Central 3-Course Isometric Fluted STUDS Cactus Column */}
       <polygon points="16,5 23,8.5 16,12 9,8.5" fill="#46b856" />
       <polygon points="9,8.5 16,12 16,29 9,25.5" fill="#349a44" />
       <polygon points="16,12 23,8.5 23,25.5 16,29" fill="#236e2e" />
-      {/* Vertical Fluted Rib Grooves & Horizontal LEGO Brick Seams */}
+      {/* Vertical Fluted Rib Grooves & Horizontal STUDS Brick Seams */}
       <line x1="11.5" y1="10" x2="11.5" y2="26.5" stroke="#164e1f" strokeWidth="1" />
       <line x1="14" y1="11" x2="14" y2="28" stroke="#5ad266" strokeWidth="0.9" />
       <line x1="18.5" y1="11" x2="18.5" y2="28" stroke="#164e1f" strokeWidth="1" />
       <line x1="21" y1="10" x2="21" y2="26.5" stroke="#3aaa4c" strokeWidth="0.8" />
       <polyline points="9,14 16,17.5 23,14" fill="none" stroke="rgba(0,0,0,0.32)" strokeWidth="0.7" />
       <polyline points="9,20 16,23.5 23,20" fill="none" stroke="rgba(0,0,0,0.32)" strokeWidth="0.7" />
-      {/* Protruding Cream-White LEGO Spine Needles */}
+      {/* Protruding Cream-White STUDS Spine Needles */}
       <rect x="7.5" y="12" width="2" height="1.3" fill="#f7f2e2" />
       <rect x="7.5" y="21" width="2" height="1.3" fill="#f7f2e2" />
       <rect x="22.5" y="17" width="2" height="1.3" fill="#f7f2e2" />
       <rect x="22.5" y="22" width="2" height="1.3" fill="#f7f2e2" />
       <rect x="14.2" y="15" width="1.8" height="1.3" fill="#f7f2e2" />
       <rect x="14.2" y="22" width="1.8" height="1.3" fill="#f7f2e2" />
-      {/* Top LEGO Studs & Blooming Pink/Yellow Desert Cactus Flower */}
+      {/* Top STUDS Studs & Blooming Pink/Yellow Desert Cactus Flower */}
       <IsoStud cx={13} cy={8.5} fill="#46b856" r={1.8} h={1.2} />
       <IsoStud cx={19} cy={8.5} fill="#46b856" r={1.8} h={1.2} />
       <IsoStud cx={16} cy={6.8} fill="#f26498" r={2.5} h={1.6} />
@@ -1258,7 +1258,7 @@ function LegoCactus() {
   );
 }
 
-function LegoPlant({ block, fill }: { block: BlockDef; fill: string }) {
+function StudsPlant({ block, fill }: { block: BlockDef; fill: string }) {
   return (
     <g>
       <rect x="14.6" y="13" width="2.8" height="14" rx="1" fill="#2f7d3a" />
@@ -1268,7 +1268,7 @@ function LegoPlant({ block, fill }: { block: BlockDef; fill: string }) {
   );
 }
 
-function LegoBoat({ fill }: { fill: string }) {
+function StudsBoat({ fill }: { fill: string }) {
   return (
     <g>
       <polygon points="4,16 16,11 28,16 24,25 8,25" fill={fill} stroke={shadeHex(fill, -28)} strokeWidth="0.9" />
@@ -1279,7 +1279,7 @@ function LegoBoat({ fill }: { fill: string }) {
   );
 }
 
-function LegoMinecart() {
+function StudsMinecart() {
   return (
     <g>
       <polygon points="5,11 27,11 24,23 8,23" fill="#9aa1a8" stroke="#4a5056" strokeWidth="1" />
@@ -1291,7 +1291,7 @@ function LegoMinecart() {
   );
 }
 
-function LegoSaddle() {
+function StudsSaddle() {
   return (
     <g>
       <path d="M6 12 Q16 18 26 12 L24 23 H8 Z" fill="#8d5a34" stroke="#4e2c18" strokeWidth="1" />
@@ -1300,7 +1300,7 @@ function LegoSaddle() {
   );
 }
 
-function LegoArrow() {
+function StudsArrow() {
   return (
     <g>
       <line x1="6" y1="26" x2="24" y2="8" stroke="#c4924a" strokeWidth="2.4" />
@@ -1310,7 +1310,7 @@ function LegoArrow() {
   );
 }
 
-function LegoFirework() {
+function StudsFirework() {
   return (
     <g>
       <rect x="15" y="14" width="2" height="14" fill="#c4924a" />
@@ -1321,7 +1321,7 @@ function LegoFirework() {
   );
 }
 
-function LegoRodPiece({ id, fill }: { id: number; fill: string }) {
+function StudsRodPiece({ id, fill }: { id: number; fill: string }) {
   return (
     <g>
       <rect x="13.8" y="5" width="4.4" height="22" rx="1.8" transform="rotate(24 16 16)" fill={fill} stroke={shadeHex(fill, -26)} strokeWidth="0.7" />
@@ -1335,7 +1335,7 @@ function LegoRodPiece({ id, fill }: { id: number; fill: string }) {
   );
 }
 
-function LegoDialTile({ isClock, fill }: { isClock: boolean; fill: string }) {
+function StudsDialTile({ isClock, fill }: { isClock: boolean; fill: string }) {
   return (
     <g>
       <circle cx="16" cy="17" r="10" fill="#2a241c" stroke={isClock ? "#f0c43a" : "#adb5bd"} strokeWidth="2.4" />
@@ -1346,7 +1346,7 @@ function LegoDialTile({ isClock, fill }: { isClock: boolean; fill: string }) {
   );
 }
 
-function LegoPrintedTile({ fill }: { id: number; fill: string }) {
+function StudsPrintedTile({ fill }: { id: number; fill: string }) {
   return (
     <g>
       <polygon points="16,7 27,12.5 16,18 5,12.5" fill={fill} stroke="#8d5a34" strokeWidth="0.8" />
@@ -1357,7 +1357,7 @@ function LegoPrintedTile({ fill }: { id: number; fill: string }) {
   );
 }
 
-function LegoBook({ fill, enchanted }: { fill: string; enchanted: boolean }) {
+function StudsBook({ fill, enchanted }: { fill: string; enchanted: boolean }) {
   return (
     <g>
       <rect x="7" y="5" width="18" height="22" rx="2" fill={fill} stroke={enchanted ? "#ffd84a" : shadeHex(fill, -30)} strokeWidth="1.4" />
@@ -1369,7 +1369,7 @@ function LegoBook({ fill, enchanted }: { fill: string; enchanted: boolean }) {
   );
 }
 
-function LegoSignBanner({ fill }: { id: number; fill: string }) {
+function StudsSignBanner({ fill }: { id: number; fill: string }) {
   return (
     <g>
       <rect x="14.5" y="14" width="3" height="14" fill="#8d5a34" />
@@ -1380,7 +1380,7 @@ function LegoSignBanner({ fill }: { id: number; fill: string }) {
   );
 }
 
-function LegoHorn({ fill }: { fill: string }) {
+function StudsHorn({ fill }: { fill: string }) {
   return (
     <g>
       <path d="M7 22 C9 12 16 8 25 6 C26 14 21 22 12 25 Z" fill={fill} stroke="#8d5a34" strokeWidth="1" />
@@ -1389,7 +1389,7 @@ function LegoHorn({ fill }: { fill: string }) {
   );
 }
 
-function LegoCord({ fill }: { fill: string }) {
+function StudsCord({ fill }: { fill: string }) {
   return (
     <g>
       <circle cx="16" cy="17" r="7" fill="none" stroke={fill} strokeWidth="2.8" />
@@ -1398,7 +1398,7 @@ function LegoCord({ fill }: { fill: string }) {
   );
 }
 
-function LegoFeather() {
+function StudsFeather() {
   return (
     <g>
       <path d="M9 26 C11 16 17 8 24 5 C24 14 19 21 11 26 Z" fill="#ffffff" stroke="#c5ccd3" strokeWidth="0.9" />
@@ -1407,7 +1407,7 @@ function LegoFeather() {
   );
 }
 
-function LegoTotem() {
+function StudsTotem() {
   return (
     <g>
       <IsoStud cx={16} cy={6} fill="#ffd84a" r={3} h={1.8} />
@@ -1420,7 +1420,7 @@ function LegoTotem() {
   );
 }
 
-function LegoNetherStar() {
+function StudsNetherStar() {
   return (
     <g>
       <polygon points="16,3 19.5,12.5 29,16 19.5,19.5 16,29 12.5,19.5 3,16 12.5,12.5" fill="#f4e8ff" stroke="#7ee0e0" strokeWidth="1.2" />
@@ -1429,7 +1429,7 @@ function LegoNetherStar() {
   );
 }
 
-function LegoSkull() {
+function StudsSkull() {
   return (
     <g>
       <IsoStud cx={16} cy={6.5} fill="#2a2a2a" r={3} h={1.8} />
@@ -1441,7 +1441,7 @@ function LegoSkull() {
   );
 }
 
-function LegoOrb({ id, fill }: { id: number; fill: string }) {
+function StudsOrb({ id, fill }: { id: number; fill: string }) {
   return (
     <g>
       <circle cx="16" cy="17" r="8.5" fill={fill} stroke="rgba(255,255,255,0.45)" strokeWidth="1" />
@@ -1451,7 +1451,7 @@ function LegoOrb({ id, fill }: { id: number; fill: string }) {
   );
 }
 
-function LegoDisc({ fill }: { fill: string }) {
+function StudsDisc({ fill }: { fill: string }) {
   return (
     <g>
       <ellipse cx="16" cy="17" rx="11" ry="7" fill="#1e1e24" stroke="#3a3a44" strokeWidth="1" />
@@ -1461,12 +1461,12 @@ function LegoDisc({ fill }: { fill: string }) {
   );
 }
 
-function LegoIngotTile({ fill }: { fill: string }) {
+function StudsIngotTile({ fill }: { fill: string }) {
   const top = shadeHex(fill, 24);
   const side = shadeHex(fill, -26);
   return (
     <g>
-      {/* Sloped 1x2 LEGO Metallic Bullion Tile with 2 studs */}
+      {/* Sloped 1x2 STUDS Metallic Bullion Tile with 2 studs */}
       <polygon points="8,13 22,9 26,15 10,20" fill={top} />
       <polygon points="6,18 8,13 10,20 8,24" fill={fill} />
       <polygon points="8,24 10,20 26,15 25,20" fill={side} />
@@ -1476,12 +1476,12 @@ function LegoIngotTile({ fill }: { fill: string }) {
   );
 }
 
-function LegoCrystalGem({ fill }: { fill: string }) {
+function StudsCrystalGem({ fill }: { fill: string }) {
   const hi = shadeHex(fill, 38);
   const dark = shadeHex(fill, -28);
   return (
     <g>
-      {/* Faceted Trans-Clear / Trans-Neon LEGO Gem with top stud */}
+      {/* Faceted Trans-Clear / Trans-Neon STUDS Gem with top stud */}
       <polygon points="16,5 25,13 21,26 11,26 7,13" fill={fill} stroke={hi} strokeWidth="0.9" />
       <polygon points="16,5 16,26 11,26 7,13" fill={hi} opacity="0.38" />
       <polygon points="16,5 25,13 21,26 16,26" fill={dark} opacity="0.28" />

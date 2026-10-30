@@ -49,7 +49,7 @@ const ids: MechBlockIds = {
   gateOpen: 18,
 };
 
-describe("placed technic", () => {
+describe("placed teks", () => {
   beforeEach(() => {
     clearMech();
     clearSprings();

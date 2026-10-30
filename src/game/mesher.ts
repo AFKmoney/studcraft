@@ -83,7 +83,7 @@ function hashBlock(x: number, y: number, z: number) {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
 }
 
-// Classic 2×2 LEGO brick on a 1×1×1 voxel cell (40×40 LDU top):
+// Classic 2×2 STUDS brick on a 1×1×1 voxel cell (40×40 LDU top):
 // 4 cylindrical studs in a 2×2 grid at (0.26, 0.26), (0.74, 0.26), (0.26, 0.74), (0.74, 0.74).
 export const STUD_R = 0.148;
 export const STUD_H = 0.11;
@@ -299,7 +299,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
   const scratchShade = [1, 1, 1, 1];
   const scratchTint = [1, 1, 1];
 
-  function isPartialLego(id: number, block: ReturnType<typeof def>) {
+  function isPartialStuds(id: number, block: ReturnType<typeof def>) {
     return (
       block.slab ||
       block.stairs ||
@@ -324,7 +324,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
     if (!id) return 0;
     const block = def(id);
     // Slabs/stairs/signs/work-props never fully hide a neighbour's face or cast full AO.
-    return block.solid && !block.glass && !block.fluid && !isPartialLego(id, block) ? 1 : 0;
+    return block.solid && !block.glass && !block.fluid && !isPartialStuds(id, block) ? 1 : 0;
   }
 
   function shadeAt(x: number, y: number, z: number, nx: number, ny: number, nz: number, vx: number, vy: number, vz: number) {
@@ -356,7 +356,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
   const occ = (nid: number) => {
     if (nid === ID.Melted) return false;
     const n = def(nid);
-    return n.solid && !n.glass && !isPartialLego(nid, n);
+    return n.solid && !n.glass && !isPartialStuds(nid, n);
   };
   // A neighbour that is melting, damaged (pieces knocked out) or a puddle no
   // longer fills its cube — it must not cull this block's face, or the gap
@@ -397,7 +397,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
   const isMolten = (x: number, y: number, z: number, id: number) => {
     if (!meltActive || !id || id === ID.Melted) return false;
     const d = def(id);
-    if (!d.solid || d.fluid || d.glass || isPartialLego(id, d)) return false;
+    if (!d.solid || d.fluid || d.glass || isPartialStuds(id, d)) return false;
     return meltAt(x, y, z) > 0;
   };
   const openCell = (id: number) => id !== ID.Melted && !occ(id) && !def(id).fluid;
@@ -506,7 +506,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
       // a cold brick only matters where molten plastic touches it (the
       // wetting fillet): touching a molten brick or a puddle on a face
       const d = def(id);
-      if (d.solid && !d.fluid && !isPartialLego(id, d)) {
+      if (d.solid && !d.fluid && !isPartialStuds(id, d)) {
         let touch = false;
         for (let f = 0; f < 6 && !touch; f++) {
           const n = FACES[f].n, nx = x + n[0], ny = y + n[1], nz = z + n[2];
@@ -574,7 +574,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
     return d;
   }
   /** Height of a point inside brick p's slumped body, 0 (foot) .. 1 (top):
-   *  the brick's LEGO courses are drawn at 1/3 and 2/3 of it in the shader,
+   *  the brick's STUDS courses are drawn at 1/3 and 2/3 of it in the shader,
    *  so the seams stretch and droop with the sag instead of staying put. */
   const matFrac = (p: Prim, px: number, py: number, pz: number) => {
     if (p.k !== 1) return 0;
@@ -827,8 +827,8 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
     flush();
   }
 
-  // ---- v4.17 Teardown LEGO: a damaged block is meshed piece by piece —
-  // only the 1×1 LEGO bricks still standing (2 × 2 × 3 grid), each face
+  // ---- v4.17 Teardown STUDS: a damaged block is meshed piece by piece —
+  // only the 1×1 STUDS bricks still standing (2 × 2 × 3 grid), each face
   // culled against its neighbour piece (inside this block or in the
   // neighbouring block, damaged or not), a stud on every exposed top, and
   // the block's own tiles mapped across the pieces so the brick reads
@@ -963,13 +963,13 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
             else if (self.dir === 2) addBoxT(opaque, x, y + 0.5, z + 0.5, x + 1, y + 1, z + 1, tile, top, tile);
             else addBoxT(opaque, x, y + 0.5, z, x + 0.5, y + 1, z + 1, tile, top, tile);
           } else if (id === ID.Anvil || id === ID.Grindstone) {
-            // Multi-part 3D LEGO Anvil: stepped base plate + narrow waist pillar + heavy horned anvil top with studs
+            // Multi-part 3D STUDS Anvil: stepped base plate + narrow waist pillar + heavy horned anvil top with studs
             addBoxT(opaque, x + 0.14, y, z + 0.18, x + 0.86, y + 0.22, z + 0.82, tile, top, bot);
             addBoxT(opaque, x + 0.28, y + 0.22, z + 0.30, x + 0.72, y + 0.54, z + 0.70, tile, top, bot);
             addBoxT(opaque, x + 0.08, y + 0.54, z + 0.18, x + 0.92, y + 0.96, z + 0.82, tile, top, bot);
             if (fancy) addStud(opaque, x, y - 0.04, z, top);
           } else if (id === ID.Brew) {
-            // 3D LEGO Brewing Stand: cobblestone 2x2 base plate + central blaze rod + 3 LEGO potion bottles
+            // 3D STUDS Brewing Stand: cobblestone 2x2 base plate + central blaze rod + 3 STUDS potion bottles
             addBoxT(opaque, x + 0.08, y, z + 0.08, x + 0.92, y + 0.20, z + 0.92, tile, top, bot);
             addBox(opaque, x + 0.44, y + 0.20, z + 0.44, x + 0.56, y + 0.92, z + 0.56, faceTile(ID.Gold, 0));
             addBox(opaque, x + 0.16, y + 0.20, z + 0.20, x + 0.36, y + 0.54, z + 0.40, faceTile(ID.Red, 0));
@@ -977,7 +977,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
             addBox(opaque, x + 0.40, y + 0.20, z + 0.64, x + 0.60, y + 0.54, z + 0.84, faceTile(ID.Orange, 0));
             if (fancy) addStud(opaque, x, y - 0.80, z, top);
           } else if (id === ID.Campfire) {
-            // 3D LEGO Campfire: 4 crossed reddish-brown LEGO logs + glowing ember base + stepped LEGO flame plumes
+            // 3D STUDS Campfire: 4 crossed reddish-brown STUDS logs + glowing ember base + stepped STUDS flame plumes
             const logTile = faceTile(ID.Log, 1);
             const flameTile = faceTile(ID.Lava, 0);
             addBox(opaque, x + 0.10, y, z + 0.18, x + 0.90, y + 0.18, z + 0.36, logTile);
@@ -988,7 +988,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
             addBox(opaque, x + 0.38, y + 0.48, z + 0.38, x + 0.62, y + 0.78, z + 0.62, flameTile);
             addBox(opaque, x + 0.43, y + 0.78, z + 0.43, x + 0.57, y + 0.96, z + 0.57, top);
           } else if (id === ID.Bed) {
-            // 3D LEGO Bed: 4 wooden corner feet + oak frame + red LEGO mattress + white LEGO pillow brick + studs
+            // 3D STUDS Bed: 4 wooden corner feet + oak frame + red STUDS mattress + white STUDS pillow brick + studs
             const woodTile = faceTile(ID.Planks, 1);
             const pilTile = faceTile(ID.White, 0);
             addBox(opaque, x + 0.04, y, z + 0.04, x + 0.20, y + 0.18, z + 0.20, woodTile);
@@ -1011,7 +1011,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
             addBoxT(opaque, x + 0.18, y + 0.3, z + 0.18, x + 0.82, y + 0.55, z + 0.82, tile, top, bot);
             addBoxT(opaque, x + 0.34, y, z + 0.34, x + 0.66, y + 0.3, z + 0.66, tile, top, bot);
           } else if (id === ID.Fence) {
-            // 3D LEGO Fence: central post + connecting rails to adjacent solid/fence blocks
+            // 3D STUDS Fence: central post + connecting rails to adjacent solid/fence blocks
             addBoxT(opaque, x + 0.34, y, z + 0.34, x + 0.66, y + 1.0, z + 0.66, tile, top, bot);
             const conn = (nx: number, nz: number) => {
               const nid = world.get(x + nx, y, z + nz);
@@ -1041,14 +1041,14 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
             addBox(opaque, x + 0.07, y + 0.07, z + 0.44, x + 0.93, y + 0.93, z + 0.56, tile);
           } else if (self.torch) {
             if (id === ID.Lantern) {
-              // 3D LEGO Lantern: iron base plate + glowing yellow lamp body + top hood + hanging loop
+              // 3D STUDS Lantern: iron base plate + glowing yellow lamp body + top hood + hanging loop
               const ironT = faceTile(ID.Anvil, 1);
               addBox(opaque, x + 0.30, y, z + 0.30, x + 0.70, y + 0.12, z + 0.70, ironT);
               addBox(opaque, x + 0.33, y + 0.12, z + 0.33, x + 0.67, y + 0.56, z + 0.67, top);
               addBox(opaque, x + 0.28, y + 0.56, z + 0.28, x + 0.72, y + 0.68, z + 0.72, ironT);
               addBox(opaque, x + 0.42, y + 0.68, z + 0.42, x + 0.58, y + 0.82, z + 0.58, ironT);
             } else {
-              // 3D LEGO Torch: brown handle bar + collar + glowing stepped LEGO flame plume
+              // 3D STUDS Torch: brown handle bar + collar + glowing stepped STUDS flame plume
               addBox(opaque, x + 0.43, y, z + 0.43, x + 0.57, y + 0.50, z + 0.57, tile);
               addBox(opaque, x + 0.39, y + 0.46, z + 0.39, x + 0.61, y + 0.56, z + 0.61, bot);
               addBox(opaque, x + 0.36, y + 0.56, z + 0.36, x + 0.64, y + 0.76, z + 0.64, top);
@@ -1074,7 +1074,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
             addBox(opaque, x + 0.43, y + 0.95, z + 0.43, x + 0.57, y + 1.1, z + 0.57, stemT);
             addBox(opaque, x + 0.47, y + 1.08, z + 0.43, x + 0.67, y + 1.17, z + 0.57, stemT);
           } else if (self.ladder) {
-            // v4.16: the classic LEGO ladder as a real 3D piece — two side
+            // v4.16: the classic STUDS ladder as a real 3D piece — two side
             // rails and ROUND rungs (Philippe's law: a ladder is a sculpted
             // piece, never a flat decal). It leans on its first solid
             // neighbour; free-standing keeps the historic south face.
@@ -1115,10 +1115,10 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
             addBox(opaque, x + 0.05, y, z + 0.3, x + 0.95, y + 0.08, z + 0.4, tile);
             addBox(opaque, x + 0.05, y, z + 0.6, x + 0.95, y + 0.08, z + 0.7, tile);
           } else if (self.cactus) {
-            // 3D LEGO Saguaro Cactus:
-            // 1. Central fluted LEGO column (full height y..y+1 so stacked segments interlock seamlessly)
+            // 3D STUDS Saguaro Cactus:
+            // 1. Central fluted STUDS column (full height y..y+1 so stacked segments interlock seamlessly)
             addBoxT(opaque, x + 0.18, y, z + 0.18, x + 0.82, y + 1.0, z + 0.82, tile, top, bot);
-            // 2. Four vertical 3D fluted LEGO rib plates on cardinal sides (+X, -X, +Z, -Z)
+            // 2. Four vertical 3D fluted STUDS rib plates on cardinal sides (+X, -X, +Z, -Z)
             addBoxT(opaque, x + 0.82, y + 0.02, z + 0.28, x + 0.88, y + 0.98, z + 0.44, tile, top, bot);
             addBoxT(opaque, x + 0.82, y + 0.02, z + 0.56, x + 0.88, y + 0.98, z + 0.72, tile, top, bot);
             addBoxT(opaque, x + 0.12, y + 0.02, z + 0.28, x + 0.18, y + 0.98, z + 0.44, tile, top, bot);
@@ -1127,7 +1127,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
             addBoxT(opaque, x + 0.56, y + 0.02, z + 0.82, x + 0.72, y + 0.98, z + 0.88, tile, top, bot);
             addBoxT(opaque, x + 0.28, y + 0.02, z + 0.12, x + 0.44, y + 0.98, z + 0.18, tile, top, bot);
             addBoxT(opaque, x + 0.56, y + 0.02, z + 0.12, x + 0.72, y + 0.98, z + 0.18, tile, top, bot);
-            // 3. Protruding 3D cream-white LEGO spines jutting out from the corners in silhouette
+            // 3. Protruding 3D cream-white STUDS spines jutting out from the corners in silhouette
             const spineT = faceTile(ID.Sand, 0);
             for (const sy of [0.24, 0.70]) {
               addBox(opaque, x + 0.09, y + sy, z + 0.14, x + 0.18, y + sy + 0.06, z + 0.20, spineT);
@@ -1135,14 +1135,14 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
               addBox(opaque, x + 0.09, y + sy, z + 0.80, x + 0.18, y + sy + 0.06, z + 0.86, spineT);
               addBox(opaque, x + 0.82, y + sy, z + 0.80, x + 0.91, y + sy + 0.06, z + 0.86, spineT);
             }
-            // 4. L-shaped 3D LEGO Saguaro Side Arms on upper/middle segments when adjacent space is clear
+            // 4. L-shaped 3D STUDS Saguaro Side Arms on upper/middle segments when adjacent space is clear
             const hasBelow = world.get(x, y - 1, z) === ID.Cactus;
             const hasAbove = world.get(x, y + 1, z) === ID.Cactus;
             const ch = hashBlock(x, y, z);
             if (hasBelow) {
-              // Left/Right (+X / -X) LEGO Saguaro arms
+              // Left/Right (+X / -X) STUDS Saguaro arms
               if (ch < 0.68 && world.get(x + 1, y, z) === ID.Air) {
-                // Horizontal connector brick + vertical upward LEGO arm + top stud
+                // Horizontal connector brick + vertical upward STUDS arm + top stud
                 addBoxT(opaque, x + 0.82, y + 0.24, z + 0.36, x + 1.18, y + 0.46, z + 0.64, tile, top, bot);
                 addBoxT(opaque, x + 0.96, y + 0.46, z + 0.36, x + 1.22, y + 0.92, z + 0.64, tile, top, bot);
                 addBox(opaque, x + 1.01, y + 0.92, z + 0.41, x + 1.17, y + 1.01, z + 0.59, top);
@@ -1159,7 +1159,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
                 addBox(opaque, x + 0.41, y + 0.90, z + 1.01, x + 0.59, y + 0.99, z + 1.17, top);
               }
             }
-            // 5. Top 2x2 cylindrical LEGO studs & Desert Cactus Flower Crown on the top segment
+            // 5. Top 2x2 cylindrical STUDS studs & Desert Cactus Flower Crown on the top segment
             if (!hasAbove) {
               if (fancy) addStud(opaque, x, y, z, top);
               if (hasBelow && ch < 0.62) {
@@ -1208,7 +1208,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
         scratchTint[1] = 1;
         scratchTint[2] = 0.986 + ((h0 * 43.7) % 1) * 0.028;
 
-        // v4.17 Teardown LEGO: a damaged full block is meshed piece by piece.
+        // v4.17 Teardown STUDS: a damaged full block is meshed piece by piece.
         if (chipMap.size && self.solid && !self.fluid && !self.glass) {
           const rm = removedAt(x, y, z, id);
           if (rm && rm !== FULL) {
@@ -1239,7 +1239,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
             if (n.solid && !n.glass) continue;
           } else if (self.glass) {
             if (nid === id) continue;
-          } else if (n.solid && !n.glass && !isPartialLego(nid, n) && !deformsAt(x + nx, y + ny, z + nz, nid)) {
+          } else if (n.solid && !n.glass && !isPartialStuds(nid, n) && !deformsAt(x + nx, y + ny, z + nz, nid)) {
             continue;
           }
 

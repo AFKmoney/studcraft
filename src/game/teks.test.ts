@@ -1,13 +1,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { ID, TECHNIC } from "./blocks.ts";
-import { ORIENTS, SPECS, TechWorld, axOf, localCells, rot } from "./technic.ts";
+import { ID, TEKS } from "./blocks.ts";
+import { ORIENTS, SPECS, TechWorld, axOf, localCells, rot } from "./teks.ts";
 
 const find = (f: (o: number) => boolean) => ORIENTS.findIndex((_, o) => f(o));
 
-describe("technic", () => {
-  it("has a real 1:1 spec for every Technic part", () => {
-    for (const id of TECHNIC) {
+describe("teks", () => {
+  it("has a real 1:1 spec for every Teks part", () => {
+    for (const id of TEKS) {
       const s = SPECS.get(id);
       assert.ok(s, "spec " + id);
       assert.ok(s.ops.length > 0 && localCells(id).length > 0, "geometry " + id);
@@ -16,7 +16,7 @@ describe("technic", () => {
     assert.equal(ORIENTS.length, 24);
     assert.deepEqual(rot(0, [1, 2, 3]), [1, 2, 3]);
   });
-  it("pins, beams and axles assemble like real LEGO", () => {
+  it("pins, beams and axles assemble like real STUDS", () => {
     const w = new TechWorld();
     const b = w.plan(ID.Liftarm5, { kind: "face", point: [10, 0, 10], n: [1, 1], face: 0 }, [1, 0, 0], 0)!;
     assert.deepEqual(axOf(b.o, 2)[0], 1); // holes vertical when laid flat

@@ -2,7 +2,7 @@
 //
 // Grok's p5bProto.ts proved the numbers in isolation; this module is
 // what the plan (§P5b) actually asks for:
-//   · a player's Technic ASSEMBLY converts into ONE kinematic body
+//   · a player's Teks ASSEMBLY converts into ONE kinematic body
 //     (build == run: same parts, same geometry, same relative layout);
 //   · the hub owns channels A–D, motors are BOUND to channels, and a
 //     motor only answers when its channel is the one being commanded
@@ -12,7 +12,7 @@
 //   · the driven axle runs through mechState.diffOutput, the ONE
 //     differential implementation (mechLink uses it too);
 //   · energy answers "made of what" (plan, CARBURANT item): every
-//     Technic drive motor in the 1:1 catalogue is ELECTRIC, so motors
+//     Teks drive motor in the 1:1 catalogue is ELECTRIC, so motors
 //     drink the hub BATTERY, drained in proportion to TORQUE LOAD
 //     (not speed). FUEL — plastic melted at the Foundry, 0.25 per
 //     pellet (p5bProto FUEL numbers) — feeds the hub GENERATOR, which
@@ -26,14 +26,14 @@
 // sampling and the terrain; it passes heightAt in.
 //
 // Tuning constants (documented choices, not hidden):
-//   DRIVE_REDUCTION 8 — the classic Technic 8:1 final drive between a
+//   DRIVE_REDUCTION 8 — the classic Teks 8:1 final drive between a
 //     Power Functions motor and the wheel; without it a 405 rpm motor
 //     on a Ø5-module wheel would do 53 blocks/s.
 //   MASS_DENSITY — part mass = bbox volume (modules³) × density, with
 //     a floor; the hub really is the heavy part, like the real one.
 
 import { ID } from "./blocks.ts";
-import { ORIENTS, bbox, centroid, composeO, rot, spec, type Mat, type Part, type V3 } from "./technic.ts";
+import { ORIENTS, bbox, centroid, composeO, rot, spec, type Mat, type Part, type V3 } from "./teks.ts";
 import { diffOutput, frac } from "./mechState.ts";
 import { FUEL, MOTOR_SPEC, suspRay, type Channel, type MotorSize } from "./p5bProto.ts";
 
@@ -194,7 +194,7 @@ export function wheelRadius(p: Part): number {
 export type Conversion = { vehicle: Vehicle; missing: string[] };
 
 /**
- * Convert one connected Technic assembly (lattice parts, world frame)
+ * Convert one connected Teks assembly (lattice parts, world frame)
  * into a Vehicle. `bindings` maps motor uid → channel (default A);
  * `hubChannel` is the channel the hub listens on (default A).
  * The vehicle frame: x = right (wheel axle direction), y = up,

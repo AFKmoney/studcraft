@@ -1129,7 +1129,7 @@ export class World {
     }
 
     if (lm.kind === "castle") {
-      // Grand Medieval LEGO Castle: 4 corner watchtowers, crenellated battlements, gatehouse, courtyard & royal throne room
+      // Grand Medieval STUDS Castle: 4 corner watchtowers, crenellated battlements, gatehouse, courtyard & royal throne room
       if (Math.abs(dx) > 13 || Math.abs(dz) > 13 || dy < -2 || dy > 13) return -1;
       if (dy < 0) return ID.Cobble;
       const inCornerTower = Math.abs(dx) >= 9 && Math.abs(dx) <= 13 && Math.abs(dz) >= 9 && Math.abs(dz) <= 13;
@@ -1161,7 +1161,7 @@ export class World {
       if (onCurtain && dy <= 6) {
         // Front Gatehouse Archway (dz >= 10, |dx| <= 2)
         if (dz >= 10 && Math.abs(dx) <= 1 && dy >= 1 && dy <= 3) return ID.Air;
-        if (dz >= 10 && Math.abs(dx) <= 1 && dy === 4) return ID.Fence; // LEGO Portcullis
+        if (dz >= 10 && Math.abs(dx) <= 1 && dy === 4) return ID.Fence; // STUDS Portcullis
         if (dy === 0 || dy === 5) return ID.Cobble;
         if (dy === 6) {
           const outerEdge = Math.abs(dx) === 11 || Math.abs(dz) === 11;

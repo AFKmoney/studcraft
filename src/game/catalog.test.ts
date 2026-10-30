@@ -1,12 +1,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { BLOCKS, CATALOG, CATALOG_EXCLUDED, ID, TECHNIC } from "./blocks.ts";
+import { BLOCKS, CATALOG, CATALOG_EXCLUDED, ID, TEKS } from "./blocks.ts";
 
 describe("inventory", () => {
-  it("lists every technic part in its own bin", () => {
-    assert.equal(TECHNIC.length, 99);
+  it("lists every teks part in its own bin", () => {
+    assert.equal(TEKS.length, 99);
     const listed: number[] = CATALOG;
-    for (const id of TECHNIC) assert.equal(listed.includes(id), true);
+    for (const id of TEKS) assert.equal(listed.includes(id), true);
     assert.equal(listed.includes(ID.CrankOn), false);
     assert.equal(listed.includes(ID.ClutchOpen), false);
     assert.equal(listed.includes(ID.RingLo), false);

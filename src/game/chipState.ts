@@ -1,4 +1,4 @@
-// v4.17 — Teardown LEGO: every full block is built from 12 LEGO pieces
+// v4.17 — Teardown STUDS: every full block is built from 12 STUDS pieces
 // (a 2 × 2 grid of 1×1 bricks, 3 courses high — the studs of a block sit
 // exactly on the 4 piece centres). Explosions, mining and collapses knock
 // pieces out one by one; the block keeps the pieces that are left.

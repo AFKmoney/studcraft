@@ -1,5 +1,5 @@
 import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode, Fragment } from "react";
-import { CATALOG, COLORS, ID, TECHNIC, def } from "./blocks";
+import { CATALOG, COLORS, ID, TEKS, def } from "./blocks";
 import type { EnterKind, GameApi, Phase, Quality, Upscale } from "./game";
 import { RECIPES, type Recipe } from "./recipes";
 import { CODEX, PERKS } from "./ranks";
@@ -1193,7 +1193,7 @@ function ClockWidget({ hud }: { hud: GameApi["hud"] }) {
             </defs>
             {/* Celestial Sky Disc */}
             <circle cx="32" cy="32" r="30" fill="url(#scSkyGrad)" />
-            {/* Day: 3D LEGO Sun with golden studs */}
+            {/* Day: 3D STUDS Sun with golden studs */}
             <g transform="translate(32, 11)">
               <circle cx="0" cy="0" r="7.5" fill="#ffd13b" stroke="#e89812" strokeWidth="1.2" />
               <circle cx="-2" cy="-2" r="2.8" fill="#fff9d6" opacity="0.65" />
@@ -1202,7 +1202,7 @@ function ClockWidget({ hud }: { hud: GameApi["hud"] }) {
               <circle cx="-9" cy="0" r="1.6" fill="#f5aa18" />
               <circle cx="9" cy="0" r="1.6" fill="#f5aa18" />
             </g>
-            {/* Night: Crescent LEGO Moon with micro-craters */}
+            {/* Night: Crescent STUDS Moon with micro-craters */}
             <g transform="translate(32, 53)">
               <circle cx="0" cy="0" r="7" fill="#dce6f4" stroke="#889bb8" strokeWidth="1" />
               <circle cx="3" cy="-1.5" r="5.8" fill="#141c2e" />
@@ -1214,7 +1214,7 @@ function ClockWidget({ hud }: { hud: GameApi["hud"] }) {
             </g>
           </svg>
         </div>
-        {/* LEGO Stud Accents on Gold Bezel */}
+        {/* STUDS Stud Accents on Gold Bezel */}
         <div className="sc-clock-stud stud-t" />
         <div className="sc-clock-stud stud-r" />
         <div className="sc-clock-stud stud-b" />
@@ -1467,7 +1467,7 @@ function TouchControls({ game }: { game: GameApi }) {
   };
   const hud = game.hud;
   const heldId = hud.hotbar[hud.slot]?.id ?? -1;
-  const techHeld = TECHNIC_IDS.has(heldId);
+  const techHeld = TEKS_IDS.has(heldId);
   return (
     <div className="sc-touch" data-silent>
       <div
@@ -1550,6 +1550,20 @@ function TouchControls({ game }: { game: GameApi }) {
           CH
         </button>
       )}
+      {(hud.driving || hud.techAimHub) && (
+        <button
+          className={"sc-touch-enter" + (hud.driving ? " on" : "")}
+          aria-label={hud.driving ? "Park and exit the vehicle" : "Enter the vehicle"}
+          onClick={() => {
+            game.touch.moveX = 0;
+            game.touch.moveY = 0;
+            buzz(10);
+            game.enterExitVehicle();
+          }}
+        >
+          {hud.driving ? "Park" : "Drive"}
+        </button>
+      )}
       {hud.buildMode && (
         <>
           <div className="sc-touch-fly">
@@ -1588,6 +1602,22 @@ function TouchControls({ game }: { game: GameApi }) {
           )}
         </>
       )}
+      {hud.driving ? (
+        <div className="sc-touch-actions">
+          <HoldButton className="gas" label="Throttle" onHold={(v) => (game.touch.moveY = v ? 1 : 0)} buzz={buzz}>
+            ▲
+          </HoldButton>
+          <HoldButton className="brake" label="Brake or reverse" onHold={(v) => (game.touch.moveY = v ? -1 : 0)} buzz={buzz}>
+            ▼
+          </HoldButton>
+          <HoldButton className="steerl" label="Steer left" onHold={(v) => (game.touch.moveX = v ? -1 : 0)} buzz={buzz}>
+            ◀
+          </HoldButton>
+          <HoldButton className="steerr" label="Steer right" onHold={(v) => (game.touch.moveX = v ? 1 : 0)} buzz={buzz}>
+            ▶
+          </HoldButton>
+        </div>
+      ) : (
       <div className="sc-touch-actions">
         <HoldButton className="mine" label="Mine or attack" onHold={(v) => (game.touch.mine = v)} buzz={buzz}>
           <PickIcon size={30} />
@@ -1612,6 +1642,7 @@ function TouchControls({ game }: { game: GameApi }) {
           <GearIcon size={26} />
         </HoldButton>
       </div>
+      )}
     </div>
   );
 }
@@ -1735,12 +1766,12 @@ function InvHotbar({ game }: { game: GameApi }) {
   );
 }
 
-type BinCategory = "all" | "bricks" | "technic" | "tools" | "food" | "materials";
+type BinCategory = "all" | "bricks" | "teks" | "tools" | "food" | "materials";
 
-const TECHNIC_IDS = new Set<number>(TECHNIC);
+const TEKS_IDS = new Set<number>(TEKS);
 
 function itemBinCategory(id: number): BinCategory {
-  if (TECHNIC_IDS.has(id)) return "technic";
+  if (TEKS_IDS.has(id)) return "teks";
   const d = def(id);
   if (d.tool || d.armor > 0 || d.armorSlot || d.maxUse > 0 || id === ID.Shield || id === ID.Elytra || id === ID.Bow || id === ID.Crossbow || id === ID.Trident || id === ID.Arrow || id === ID.Totem) {
     return "tools";
@@ -1845,17 +1876,17 @@ function BinPage({ game }: { game: GameApi }) {
           </div>
         </div>
         <p className="sc-hint">Tap armor to unequip · press F in-game to swap off-hand.</p>
-        <p className="sc-label">LEGO Color Press</p>
+        <p className="sc-label">STUDS Color Press</p>
         <div className="sc-colors">
           {COLORS.map((id) => (
             <button key={id} style={{ background: def(id).color }} title={`Mold ${def(id).name}`} aria-label={"Press " + def(id).name} onClick={(e) => (e.shiftKey ? game.shiftStack(id) : game.press(id))} />
           ))}
         </div>
-        <p className="sc-hint">Molds 1 spare brick into any classic LEGO color.</p>
+        <p className="sc-hint">Molds 1 spare brick into any classic STUDS color.</p>
       </div>
       <div className="sc-bin-main">
         <div className="sc-search">
-          <input type="search" placeholder="Search bricks, technic, tools, food…" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Search items" />
+          <input type="search" placeholder="Search bricks, teks, tools, food…" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Search items" />
           <span className="sc-held">
             Held: <strong>{hud.cursor ? def(hud.cursor).name : "None"}</strong>
           </span>
@@ -1870,7 +1901,7 @@ function BinPage({ game }: { game: GameApi }) {
             [
               ["all", "All"],
               ["bricks", "Bricks"],
-              ["technic", "Technic"],
+              ["teks", "Teks"],
               ["tools", "Tools & Gear"],
               ["food", "Food & Brews"],
               ["materials", "Materials"],
@@ -1891,7 +1922,7 @@ function BinPage({ game }: { game: GameApi }) {
 function CraftPage({ game }: { game: GameApi }) {
   const hud = game.hud;
   const bench = hud.panel === "bench";
-  const [book, setBook] = useState<"all" | "build" | "tools" | "magic" | "gear" | "food" | "technic">("all");
+  const [book, setBook] = useState<"all" | "build" | "tools" | "magic" | "gear" | "food" | "teks">("all");
   const [search, setSearch] = useState("");
   const [sel, setSel] = useState("");
   const [onlyCan, setOnlyCan] = useState(false);
@@ -1963,7 +1994,7 @@ function CraftPage({ game }: { game: GameApi }) {
         <div className="sc-search sc-craft-search">
           <input
             type="search"
-            placeholder="Search LEGO recipes (pickaxe, torch, technic, armor, food…)"
+            placeholder="Search recipes (pickaxe, torch, teks parts, armor, food…)"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             aria-label="Search recipes"
@@ -1986,7 +2017,7 @@ function CraftPage({ game }: { game: GameApi }) {
               ["gear", "Armor & Gear"],
               ["food", "Food"],
               ["magic", "Arcane"],
-              ["technic", "Technic"],
+              ["teks", "Teks"],
             ] as const
           ).map(([cat, label]) => (
             <button key={cat} className={book === cat ? "sc-chip-btn on" : "sc-chip-btn"} onClick={() => setBook(cat)}>
@@ -2143,7 +2174,7 @@ function CraftPage({ game }: { game: GameApi }) {
             <div>
               <strong>{bench ? "3×3 Master Workbench Grid" : "2×2 Pocket Assembly Grid"}</strong>
               <small>
-                {bench ? "All 9 LEGO stud slots unlocked." : "2×2 pocket grid active — use a Workbench for 3×3 patterns."} Hold a brick in Bag or click "Place on Grid".
+                {bench ? "All 9 crafting slots unlocked." : "2×2 pocket grid active — use a Workbench for 3×3 patterns."} Hold a brick in Bag or click "Place on Grid".
               </small>
             </div>
             {hud.grid.some((x) => x > 0) && (
@@ -2269,7 +2300,7 @@ function StationScreen({ game }: { game: GameApi }) {
                     <>Put plastic pellets or ore in Input, and fuel in Fuel.</>
                   )}
                 </p>
-                <p className="sc-hint">Plastic pellets smelt into ingots here — and every pellet smelted also distils Fuel, dropped beside the kiln. Ingots cast bricks and Technic parts from the Crafting book. Tap an item below: ores and food go to Input, fuel to Fuel. Tap a kiln slot to take its stack back.</p>
+                <p className="sc-hint">Plastic pellets smelt into ingots here — and every pellet smelted also distils Fuel, dropped beside the kiln. Ingots cast bricks and Teks parts from the Crafting book. Tap an item below: ores and food go to Input, fuel to Fuel. Tap a kiln slot to take its stack back.</p>
                 <BinGrid game={game} onPick={(id) => game.furnaceQuick(id)} />
               </>
             )}
@@ -2339,7 +2370,7 @@ function StationScreen({ game }: { game: GameApi }) {
                 )}
                 {hud.heldEnch && <p className="sc-status">Held: ✦ {hud.heldEnch}</p>}
                 <p className="sc-muted">
-                  Surround the Enchanting Table with up to 15 LEGO Bookshelves (within 2 blocks) to unlock higher rune levels. Reveal a tier to see three runes, then choose the one you want — you pay only when you pick. Blades & Boss Weapons take Sharpness, Smite, Bane, Fire Aspect, Knockback, Looting. Tridents & Crossbows take Power/Sharpness & Unbreaking. Picks take Efficiency, Fortune or Silk Touch. Armor takes Protection & Thorns; Boots learn Feather Fall, Depth Strider or Frost Walker. Hold a plain Book to bind an Enchanted Book (books bind instantly, no choice).
+                  Surround the Enchanting Table with up to 15 STUDS Bookshelves (within 2 blocks) to unlock higher rune levels. Reveal a tier to see three runes, then choose the one you want — you pay only when you pick. Blades & Boss Weapons take Sharpness, Smite, Bane, Fire Aspect, Knockback, Looting. Tridents & Crossbows take Power/Sharpness & Unbreaking. Picks take Efficiency, Fortune or Silk Touch. Armor takes Protection & Thorns; Boots learn Feather Fall, Depth Strider or Frost Walker. Hold a plain Book to bind an Enchanted Book (books bind instantly, no choice).
                 </p>
               </div>
             )}

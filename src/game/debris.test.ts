@@ -3,8 +3,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { DEBRIS_PARTS, debrisAt, debrisStuds } from "./debris.ts";
 
-describe("technic debris", () => {
-  it("picks one seeded pile of technic parts per chunk", () => {
+describe("teks debris", () => {
+  it("picks one seeded pile of teks parts per chunk", () => {
     const a = debrisAt(7, 3, 4);
     const b = debrisAt(7, 3, 4);
     assert.deepEqual(a, b);

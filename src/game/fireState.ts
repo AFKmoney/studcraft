@@ -41,8 +41,8 @@ export function allEmitters(): string[] {
 export const heatMap = new Map<string, { h: number; m: number; stage: number; sx?: number; sy?: number; sz?: number }>();
 
 /**
- * v4.17 melt = Teardown LEGO: a heated block melts PIECE BY PIECE (its 12
- * LEGO pieces, see chipState), starting with the pieces that face the heat.
+ * v4.17 melt = Teardown STUDS: a heated block melts PIECE BY PIECE (its 12
+ * STUDS pieces, see chipState), starting with the pieces that face the heat.
  * One remesh per piece: stage = floor(m · MELT_STAGES).
  * (sx, sy, sz) = accumulated direction from the block toward its heat
  * sources (written by the fire tick) — where the flames lick from.

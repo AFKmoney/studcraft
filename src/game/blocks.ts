@@ -462,7 +462,7 @@ export const ID = {
   Axle6: 468,
   Axle8: 469,
   // Muse lane (P2 welding): IDs 400+ are reserved for the brick-layer
-  // pillars so they can never collide with Grok's Technic catalogue.
+  // pillars so they can never collide with Grok's Teks catalogue.
   Welder: 400,
   // P6 La Fonderie (Muse): plastic pellets — the foundry feedstock that
   // broken plastic blocks and mobs yield (see plasticYield in game.ts).
@@ -1449,7 +1449,7 @@ put(b(ID.FairLeft, "Fairing left", "#f4f4f4", "#f4f4f4", "#f4f4f4", "#f4f4f4", {
 put(b(ID.FairRight, "Fairing right", "#f4f4f4", "#f4f4f4", "#f4f4f4", "#f4f4f4", { hard: 0.4 }));
 put(b(ID.FairLarge, "Fairing large", "#f4f4f4", "#f4f4f4", "#f4f4f4", "#f4f4f4", { hard: 0.4 }));
 // Electric P5b
-put(b(ID.TechHub, "Technic Hub 4 ports", "#f4f4f4", "#f4f4f4", "#f4f4f4", "#f4f4f4", { hard: 0.4 }));
+put(b(ID.TechHub, "Teks Hub 4 ports", "#f4f4f4", "#f4f4f4", "#f4f4f4", "#f4f4f4", { hard: 0.4 }));
 put(b(ID.MotorM, "Motor M", "#6c6e68", "#6c6e68", "#6c6e68", "#6c6e68", { hard: 0.4 }));
 put(b(ID.MotorL, "Motor L", "#6c6e68", "#6c6e68", "#6c6e68", "#6c6e68", { hard: 0.4 }));
 put(b(ID.MotorXL, "Motor XL", "#6c6e68", "#6c6e68", "#6c6e68", "#6c6e68", { hard: 0.4 }));
@@ -1519,7 +1519,7 @@ export function faceTile(id: number, face: 0 | 1 | 2 | 3): number {
 // STATE variants (lit/open/rotated/growth forms of a catalogued base item),
 // not items. catalog.test.ts pins the invariant both ways: a new def that is
 // neither catalogued nor explicitly excluded fails the suite, so a part can
-// never again be defined-but-invisible (the Technic 345-376 bug).
+// never again be defined-but-invisible (the Teks 345-376 bug).
 export const CATALOG_EXCLUDED: Record<number, string> = {
   [ID.Air]: "no item form",
   [ID.Bedrock]: "baseplate core — world foundation, not an item",
@@ -1588,7 +1588,7 @@ export const RETIRED_REDSTONE: number[] = [
 ];
 // B7 (same day, Philippe's redirect): Lever, Plate, Daylight (Solar
 // switch), Observer (Watcher) and Target came BACK — re-logic'd onto the
-// energy model in game.ts (they switch neighbouring Technic parts; the
+// energy model in game.ts (they switch neighbouring Teks parts; the
 // power still comes from hub batteries and fuel). Dust, torches,
 // repeaters, comparators, the pusher and the launcher stay retired:
 // wire plumbing and duplicates of the old model.
@@ -1601,8 +1601,8 @@ for (const id of RETIRED_REDSTONE) {
 }
 if (BLOCKS[ID.Lamp]) BLOCKS[ID.Lamp].light = 6;
 
-/** Parts the player can take from the Technic bin. Click-states stay out. */
-export const TECHNIC = [
+/** Parts the player can take from the Teks bin. Click-states stay out. */
+export const TEKS = [
   ID.CrossBlock,
   ID.Axle,
   ID.Gear8,

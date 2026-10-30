@@ -66,7 +66,7 @@ const RESOLVE = /* glsl */ `
     }
     if (uAces) {
       // Subtle Macro Tilt-Shift Depth-of-Field (Bokeh) at extreme horizon/foreground bands
-      // Simulates a 50mm f/2.8 macro lens photographing physical LEGO bricks while keeping center crosshair 100% sharp
+      // Simulates a 50mm f/2.8 macro lens photographing physical STUDS bricks while keeping center crosshair 100% sharp
       float tiltBand = smoothstep(0.28, 0.49, abs(vUv.y - 0.50));
       if (tiltBand > 0.005) {
         vec2 r = tx * (1.35 * tiltBand);

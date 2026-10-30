@@ -1,5 +1,5 @@
-// LEGO Technic — 1:1 parts, real assembly, real mechanics (pure, no three.js).
-// Units: 1 module (M) = 8 mm = 1 stud pitch (Catalogue LEGO Technic PDF).
+// STUDS Teks — 1:1 parts, real assembly, real mechanics (pure, no three.js).
+// Units: 1 module (M) = 8 mm = 1 stud pitch (Catalogue STUDS Teks PDF).
 // World: 1 block = 2 studs, so 1 M = 0.5 block. Parts live on a lattice in
 // half-modules (q): world = q / 4 blocks. Hole/axle lines sit on odd q.
 // Local frame of every part: X = length, holes of flat parts along Z,
@@ -13,7 +13,7 @@ export type MaleT = "p" | "a"; // pin shaft / axle shaft
 export type Hole = { c: V3; ax: Ax; len: number; t: HoleT };
 export type Male = { c: V3; ax: Ax; len: number; t: MaleT };
 export type Seg = [[number, number], [number, number]];
-// Draw ops — interpreted by technicGeo.ts (three.js), pure data here.
+// Draw ops — interpreted by teksGeo.ts (three.js), pure data here.
 export type Op =
   | { k: "plate"; segs: Seg[]; holes: [number, number, HoleT | "N"][]; z0: number; z1: number; col: number; w: number }
   | { k: "axle"; x0: number; x1: number; col: number; stop?: number }
@@ -36,7 +36,7 @@ export type Op =
 export type GearInfo = { n: number; kind: "spur" | "bevel" | "worm"; c: V3; ax: Ax };
 export type Spec = {
   id: number;
-  part: string; // real LEGO design ID
+  part: string; // real STUDS design ID
   col: number; // main real colour
   prim: Ax; // primary axis (hole axis for flat parts, shaft axis for rods)
   holes: Hole[];
@@ -50,7 +50,7 @@ export type Spec = {
   hand?: number; // optional display scale in hand
 };
 
-// Real LEGO colours (BrickLink/LDraw values)
+// Real STUDS colours (BrickLink/LDraw values)
 export const COL = {
   LBG: 0xa0a5a9, // light bluish gray
   DBG: 0x6c6e68, // dark bluish gray
@@ -394,7 +394,7 @@ put(new B(ID.Wheel, "2983", BLU, 2).tube(2, [0, 0, 0], 0.5, 1, "A", LBG).op({ k:
 put(new B(ID.Mill, "2952", WHT, 2).tube(2, [0, 0, 0], 0.5, 1, "A", LBG).op({ k: "blade", n: 3, r0: 0.5, r1: 4.5, w0: 0.9, w1: 0.45, t: 0.12, col: WHT, pitch: 0.35, z: 0 }).done());
 // 3873 — tread link (conveyor)
 put(new B(ID.Belt, "3873", BLK, 2).box([-0.75, -1, -0.5], [0.75, 1, -0.25]).box([-0.25, -1, -0.25], [0.25, 1, 0], BLK, false).hole([0, 0, -0.25], 2, 0.5, "P", false).done());
-// 32001 — Technic plate 2×6 with 5 holes (Trap)
+// 32001 — Teks plate 2×6 with 5 holes (Trap)
 put(
   new B(ID.Trap, "32001", DBG, 2)
     .box([-3, -1, -0.5], [3, 1, -0.1])
@@ -865,7 +865,7 @@ export class TechWorld {
       return tryFace(wantO);
     }
     if (!cands.length) {
-      // flat on the face (block face, or the face of a Technic part)
+      // flat on the face (block face, or the face of a Teks part)
       const ranked = faceOrients(s, tg.n, look);
       for (let i = 0; i < ranked.length; i++) {
         const got = tryFace(ranked[(i + spin) % ranked.length]);

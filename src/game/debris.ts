@@ -1,7 +1,7 @@
 import { ID } from "./blocks.ts";
 import { hash2, hash3 } from "./noise.ts";
 
-/** Technic debris parts. Randomized per site. Broken-looking finds. */
+/** Teks debris parts. Randomized per site. Broken-looking finds. */
 export const DEBRIS_PARTS = [
   ID.Axle, ID.Axle2, ID.Axle4, ID.Axle6, ID.Axle8,
   ID.Gear8, ID.Gear16, ID.Gear24, ID.Gear40,

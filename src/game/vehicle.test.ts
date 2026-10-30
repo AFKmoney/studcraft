@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { ID } from "./blocks.ts";
-import { bbox, centroid, composeO, rot, type Part } from "./technic.ts";
+import { bbox, centroid, composeO, rot, type Part } from "./teks.ts";
 import {
   fuelFromMelt,
   parkPoses,
@@ -13,7 +13,7 @@ import {
 
 // P5b wiring tests (Muse, 2026-10-30). Effect-observed: every claim
 // is a before/after value, and the conversion expectations are
-// re-derived here from technic.ts primitives (bbox / centroid / rot),
+// re-derived here from teks.ts primitives (bbox / centroid / rot),
 // not from vehicle.ts's own helpers.
 
 const part = (uid: number, id: number, q: [number, number, number], on = true): Part => ({ uid, id, o: 0, q, on });
@@ -51,7 +51,7 @@ describe("p5b vehicle conversion (build == run)", () => {
     assert.equal(v.motors[0].size, "M");
     assert.equal(v.hubOn, true);
     assert.equal(v.hasBatteryBox, true);
-    // Expected mass + origin re-derived from technic primitives.
+    // Expected mass + origin re-derived from teks primitives.
     let m = 0;
     const c = [0, 0, 0];
     for (const p of parts) {

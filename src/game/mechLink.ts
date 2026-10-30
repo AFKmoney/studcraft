@@ -300,7 +300,7 @@ export function stepMech(
     const spec = specFor(id, ids);
     if (!spec) continue;
     let drive = spec.drive;
-    // P5b motor/hub/battery drive removed — Technic 1:1 layer owns motors now.
+    // P5b motor/hub/battery drive removed — Teks 1:1 layer owns motors now.
     if (id === ids.wheel && wet(get, c, ids.water)) drive = true;
     if (id === ids.mill && get(c.x, c.y + 1, c.z) === 0 && c.y >= 40) drive = true;
     if (id === ids.spring) {

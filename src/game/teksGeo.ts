@@ -1,5 +1,5 @@
-// LEGO Technic — 3D geometry for the parts of technic.ts (step 1 of the
-// Technic relay). Pure interpretation of each spec's draw `ops` into ONE
+// STUDS Teks — 3D geometry for the parts of teks.ts (step 1 of the
+// Teks relay). Pure interpretation of each spec's draw `ops` into ONE
 // merged THREE.BufferGeometry per part: home-made merge (no
 // three/examples/jsm anywhere — the standalone build excludes it), vertex
 // colours on every vertex, flat + analytic normals (no textures, no uv
@@ -7,7 +7,7 @@
 // that read uv keep working).
 //
 // Frame & units: geometry is built in MODULES (1 M = 8 mm) in the part's
-// own local frame from technic.ts (X = length, holes of flat parts along
+// own local frame from teks.ts (X = length, holes of flat parts along
 // Z, shafts along X). Step 2 places one Mesh per part with
 // mesh.scale.setScalar(MODULE_TO_BLOCK) and the TechWorld orientations —
 // the same frame TechWorld.worldCells/rot() already use.
@@ -27,10 +27,10 @@
 //   (r 0.42 M, 0.2 M wide). `ball`: plain stem + a sphere r 0.40 M at the
 //   far end (towball). Friction ridges of real pins are not modelled.
 // - tube `flange`: a ring of that radius at the -axis end of the tube,
-//   protruding 0.1 M (LEGO bush 3713 style).
+//   protruding 0.1 M (STUDS bush 3713 style).
 // - gear: module-1 teeth, tip radius = pitchR + 0.13 M, root radius =
 //   pitchR - 0.16 M (tips of meshed gears clear the other's root circle).
-//   Tooth phase is NOT synced to neighbours (same as real LEGO in hand).
+//   Tooth phase is NOT synced to neighbours (same as real STUDS in hand).
 //   taper "one"/"two": the toothed outline scales to 0.78 at the tapered
 //   face(s). If the op carries no `holes`, the centre bore is taken from
 //   the spec hole whose axis line passes through the gear centre (this is
@@ -60,7 +60,7 @@
 //   never get a pastille — it would cap the bore mouth. Everything else
 //   follows the ops literally: an op that is not emitted is not drawn.
 import * as THREE from "three";
-import { AXLE_R, AXLE_W, HOLE_R, SPECS, pitchR, type Ax, type Op, type Spec, type V3 } from "./technic.ts";
+import { AXLE_R, AXLE_W, HOLE_R, SPECS, pitchR, type Ax, type Op, type Spec, type V3 } from "./teks.ts";
 
 /** 1 module in world blocks — the scale step 2 applies to part meshes. */
 export const MODULE_TO_BLOCK = 0.5;
@@ -286,7 +286,7 @@ function prism(bk: Bucket, bs: Basis, o: P3, outer: P2[], holes: P2[][], t0: num
 // axis. `closed` wraps the last station back to the first (lathe loops);
 // open profiles may start/end on the axis (r = 0 poles -> fans).
 // Normals are analytic: for profile tangent (dr, dt) the outward normal
-// in (radial, axial) is (dt, -dr) for the profile windings technic.ts
+// in (radial, axial) is (dt, -dr) for the profile windings teks.ts
 // emits; strip winding (A, B, C), (A, C, D) matches it (checked against
 // the bottom / outer / inner walls of a ring profile).
 // ---------------------------------------------------------------------
@@ -1054,7 +1054,7 @@ function orphanHoleDots(bk: Bucket, spec: Spec) {
 // public API (step 2: one Mesh per placed part, scale MODULE_TO_BLOCK)
 // ---------------------------------------------------------------------
 const geoCache = new Map<number, THREE.BufferGeometry>();
-export function buildTechnicGeometry(id: number): THREE.BufferGeometry | null {
+export function buildTeksGeometry(id: number): THREE.BufferGeometry | null {
   const hit = geoCache.get(id);
   if (hit) return hit;
   const s = SPECS.get(id);

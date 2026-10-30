@@ -1,5 +1,5 @@
 import { ID, def } from "./blocks.ts";
-import { SPECS, type Spec } from "./technic.ts";
+import { SPECS, type Spec } from "./teks.ts";
 
 export type Recipe = {
   id: string;
@@ -14,7 +14,7 @@ export type Recipe = {
   h?: number;
   lvl?: number;
   skill?: string;
-  cat?: "build" | "tools" | "magic" | "gear" | "food" | "technic";
+  cat?: "build" | "tools" | "magic" | "gear" | "food" | "teks";
 };
 
 const P = ID.Planks;
@@ -220,7 +220,7 @@ export const RECIPES: Recipe[] = [
   r("lamp", "Lamp", "1 window + 1 amber — shines on its own, no switch", [[ID.Glass, 1], [ID.Amber, 1]], ID.Lamp, 1, { shape: [ID.Glass, ID.Amber], w: 1, h: 2, cat: "build" }),
   r("hard", "Kiln brick", "4 cobble + 1 coal", [[C, 4], [ID.Coal, 1]], ID.Hard, 1, { cat: "build" }),
   // B7 (2026-10-30): the switches are back, on the energy model — they
-  // control neighbouring Technic parts; power comes from hubs and fuel.
+  // control neighbouring Teks parts; power comes from hubs and fuel.
   r("lever", "Lever", "1 stick + 1 cobble — a switch: flips the machines beside it on or off", [[S, 1], [C, 1]], ID.Lever, 1, { shape: [S, C], w: 1, h: 2, cat: "build" }),
   r("plate", "Pressure plate", "2 plastic ingots — the machines beside it run while you stand on it", [[ID.PlasticIngot, 2]], ID.Plate, 1, { shape: [ID.PlasticIngot, ID.PlasticIngot], w: 2, h: 1, cat: "build" }),
   r("solar-switch", "Solar switch", "3 windows + 3 crystals + 3 plank slabs — switches neighbouring machines on by day; use it to flip to night mode", [[ID.Glass, 3], [ID.Crystal, 3], [ID.SlabPlanks, 3]], ID.Daylight, 1, {
@@ -1203,7 +1203,7 @@ export const RECIPES: Recipe[] = [
     cat: "build",
   }),
 
-  r("hub", "Technic Hub 4 ports", "1 battery + 2 gears", [[ID.Battery, 1], [ID.Gear16, 2]], ID.TechHub, 1, {
+  r("hub", "Teks Hub 4 ports", "1 battery + 2 gears", [[ID.Battery, 1], [ID.Gear16, 2]], ID.TechHub, 1, {
     shape: [ID.Gear16, ID.Battery, ID.Gear16],
     w: 3,
     h: 1,
@@ -1575,15 +1575,15 @@ export const RECIPES: Recipe[] = [
   }),
 ];
 
-// ── Technic casting (Muse, 2026-10-30 — audit §21 A3) ─────────────────
-// The 99 Technic parts had NO Survival source (debris sites and dungeon
-// chests only) — Philippe: « aucun bloc qui me permette de créer les lego
-// technic ». The mould IS the recipe, generated from the technic registry
+// ── Teks casting (Muse, 2026-10-30 — audit §21 A3) ─────────────────
+// The 99 Teks parts had NO Survival source (debris sites and dungeon
+// chests only) — Philippe: « aucun bloc qui me permette de créer les studs
+// teks ». The mould IS the recipe, generated from the teks registry
 // so the list can never drift from the parts that exist (the BUG-4
 // lesson). Cost = the part's real volume (spec boxes + discs) at the
 // game's matter rate: 1 block³ of plastic = 2 pellets = 2 ingots.
 // Electric parts also take Copper — the conductor; plastic alone makes
-// no motor. Cast from the Crafting book (Technic tab) with ingots the
+// no motor. Cast from the Crafting book (Teks tab) with ingots the
 // Kiln smelted from pellets.
 function specVolumeBlocks(s: Spec): number {
   let v = 0;
@@ -1605,7 +1605,7 @@ for (const s of SPECS.values()) {
   }
   RECIPES.push(
     r(`cast-tech-${s.id}`, `Cast ${def(s.id).name}`, `${ingots} plastic ingots${extra} — cast in the part's mould`, need, s.id, 1, {
-      cat: "technic",
+      cat: "teks",
     }),
   );
 }

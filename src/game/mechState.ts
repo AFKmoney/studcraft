@@ -1,4 +1,4 @@
-// P5 — Technic kinematics. Pure graph, no game.ts / save.ts / brick layer.
+// P5 — Teks kinematics. Pure graph, no game.ts / save.ts / brick layer.
 //
 // Catalog (module 1): centre distance in studs is (N1 + N2) / 16.
 // 16T+16T and 8T+24T both sit 2 studs apart (one block). A worm is

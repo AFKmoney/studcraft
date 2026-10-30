@@ -1383,7 +1383,7 @@ kbd {
   gap: 6px;
 }
 
-/* Authentic Minecraft / LEGO Gold Studded Clock Widget (v4.11) */
+/* Authentic Minecraft / STUDS Gold Studded Clock Widget (v4.11) */
 .sc-clock-card {
   display: flex;
   align-items: center;
@@ -2201,6 +2201,65 @@ kbd {
   transform: scale(0.92);
   background: rgba(245, 197, 24, 0.35);
   border-color: rgba(245, 197, 24, 0.7);
+}
+
+/* §22.2 vehicle controls (2026-10-30): Enter/Park button above the
+   channel button, and the driving cluster that replaces mine/place
+   while a vehicle is driven. */
+.sc-touch-enter {
+  position: absolute;
+  right: calc(24px + var(--safe-r));
+  bottom: calc(368px + var(--safe-b));
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border: 2px solid rgba(140, 255, 170, 0.45);
+  border-radius: 50%;
+  background: rgba(16, 70, 34, 0.55);
+  color: var(--sc-text);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.sc-touch-enter.on {
+  background: rgba(120, 70, 10, 0.6);
+  border-color: rgba(255, 200, 120, 0.55);
+}
+
+.sc-hold.gas {
+  right: 0;
+  bottom: 60px;
+  width: 84px;
+  height: 84px;
+  background: rgba(46, 160, 67, 0.38);
+  border-color: rgba(150, 255, 170, 0.4);
+  font-size: 26px;
+}
+
+.sc-hold.brake {
+  right: 100px;
+  bottom: 18px;
+  width: 70px;
+  height: 70px;
+  background: rgba(200, 60, 40, 0.32);
+  font-size: 22px;
+}
+
+.sc-hold.steerl {
+  right: 108px;
+  bottom: 104px;
+  width: 60px;
+  height: 60px;
+  font-size: 20px;
+}
+
+.sc-hold.steerr {
+  right: 8px;
+  bottom: 152px;
+  width: 60px;
+  height: 60px;
+  font-size: 20px;
 }
 
 .sc-hold.mine {

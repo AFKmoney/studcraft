@@ -17,7 +17,7 @@ const STUD_UV = [
 ] as const;
 
 function paintTop(ctx: CanvasRenderingContext2D, ox: number, oy: number, base: string, rings = false) {
-  // 2×2 LEGO brick top field: pure injection-molded ABS base color + smooth radial
+  // 2×2 STUDS brick top field: pure injection-molded ABS base color + smooth radial
   // contact ambient occlusion collars around the 4 stud bases (radius ~0.148).
   // No artificial white arcs are painted so real 3D PBR lighting and shadows drive all highlights.
   const S = TILE;
@@ -49,7 +49,7 @@ function paintTop(ctx: CanvasRenderingContext2D, ox: number, oy: number, base: s
 }
 
 function paintSide(ctx: CanvasRenderingContext2D, ox: number, oy: number, base: string, cap?: string) {
-  // Modular sub-brick LEGO assembly: each 1×1×1 block side is composed of 3 stacked
+  // Modular sub-brick STUDS assembly: each 1×1×1 block side is composed of 3 stacked
   // horizontal courses (top 2×2 plate y∈[0, 0.28], middle 1×2 running-bond course y∈[0.28, 0.64],
   // bottom 2×1 course y∈[0.64, 1.0]) with subtle factory ABS tint tolerance and deep cavity seams.
   const S = TILE;
@@ -100,7 +100,7 @@ function paintSide(ctx: CanvasRenderingContext2D, ox: number, oy: number, base: 
 }
 
 function paintBottom(ctx: CanvasRenderingContext2D, ox: number, oy: number, base: string) {
-  // Underside of a 2×2 LEGO brick: recessed cavity + center anti-stud tube + 4 stud sockets.
+  // Underside of a 2×2 STUDS brick: recessed cavity + center anti-stud tube + 4 stud sockets.
   const S = TILE;
   ctx.fillStyle = shade(base, -10);
   ctx.fillRect(ox, oy, S, S);
@@ -182,7 +182,7 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
         ctx.fillRect(ox, oy + S * pos - 2, S * 0.08, 4);
         ctx.fillRect(ox + S * 0.92, oy + S * pos - 2, S * 0.08, 4);
       }
-      // Corner cream LEGO spine tips
+      // Corner cream STUDS spine tips
       ctx.fillStyle = "#f4ebd0";
       for (const [sx, sy] of [
         [0.09, 0.09],
@@ -200,16 +200,16 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
       paintBottom(ctx, ox, oy, block.bottom);
       return;
     }
-    // Side face: 3-course modular LEGO green brick + deep fluted vertical cactus ribs + SNOT cream spine studs
+    // Side face: 3-course modular STUDS green brick + deep fluted vertical cactus ribs + SNOT cream spine studs
     paintSide(ctx, ox, oy, "#287e34", "#369e44");
-    // Vertical dark-green recessed flutes & bright-green raised LEGO cactus ribs
+    // Vertical dark-green recessed flutes & bright-green raised STUDS cactus ribs
     for (const rx of [0.14, 0.38, 0.62, 0.86]) {
       ctx.fillStyle = "rgba(12, 46, 18, 0.55)";
       ctx.fillRect(ox + S * rx - 4, oy + 2, 4, S - 4);
       ctx.fillStyle = "rgba(98, 218, 110, 0.38)";
       ctx.fillRect(ox + S * rx, oy + 2, 4, S - 4);
     }
-    // Protruding cream/tan LEGO spine needles at each of the 3 brick courses
+    // Protruding cream/tan STUDS spine needles at each of the 3 brick courses
     for (const cy of [0.15, 0.46, 0.82]) {
       for (const cx of [0.16, 0.50, 0.84]) {
         const px = ox + S * cx;
@@ -233,7 +233,7 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
   if (block.id === ID.Furnace) {
     if (face === 0) {
       paintTop(ctx, ox, oy, block.top, false);
-      // Central circular LEGO chimney exhaust grille on top plate
+      // Central circular STUDS chimney exhaust grille on top plate
       ctx.fillStyle = "#26211e";
       ctx.beginPath();
       ctx.arc(ox + S / 2, oy + S / 2, S * 0.16, 0, Math.PI * 2);
@@ -249,14 +249,14 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
       return;
     }
     paintSide(ctx, ox, oy, block.side, "#7e746b");
-    // Upper stone lintel 1x2 LEGO bricks & vent grille slots
+    // Upper stone lintel 1x2 STUDS bricks & vent grille slots
     ctx.fillStyle = "#453e39";
     ctx.fillRect(ox + S * 0.16, oy + S * 0.08, S * 0.68, S * 0.14);
     ctx.fillStyle = "#221d1a";
     for (let i = 0; i < 4; i++) {
       ctx.fillRect(ox + S * (0.21 + i * 0.16), oy + S * 0.11, S * 0.09, S * 0.08);
     }
-    // Arched LEGO kiln hearth opening
+    // Arched STUDS kiln hearth opening
     ctx.fillStyle = "#342e2a";
     ctx.fillRect(ox + S * 0.16, oy + S * 0.30, S * 0.68, S * 0.60);
     ctx.fillStyle = "#16110e";
@@ -264,7 +264,7 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
     ctx.beginPath();
     ctx.arc(ox + S * 0.5, oy + S * 0.42, S * 0.28, Math.PI, 0);
     ctx.fill();
-    // Glowing red-orange 1x1 LEGO coal studs at the bottom of the hearth
+    // Glowing red-orange 1x1 STUDS coal studs at the bottom of the hearth
     for (let i = 0; i < 3; i++) {
       const cx = ox + S * (0.31 + i * 0.19);
       ctx.fillStyle = i === 1 ? "#ff4e14" : "#b82810";
@@ -274,7 +274,7 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
       ctx.arc(cx, oy + S * 0.74, S * 0.045, 0, Math.PI * 2);
       ctx.fill();
     }
-    // Molded Trans-Orange & Trans-Yellow LEGO Flame plumes inside the furnace
+    // Molded Trans-Orange & Trans-Yellow STUDS Flame plumes inside the furnace
     ctx.fillStyle = "#ff5a10";
     ctx.beginPath();
     ctx.moveTo(ox + S * 0.27, oy + S * 0.76);
@@ -300,7 +300,7 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
   if (block.id === ID.Bench) {
     if (face === 0) {
       paintTop(ctx, ox, oy, block.top, false);
-      // 3x3 LEGO Crafting Grid plate recessed on top of the Workbench
+      // 3x3 STUDS Crafting Grid plate recessed on top of the Workbench
       const pad = S * 0.13;
       const span = S - pad * 2;
       ctx.fillStyle = "#6b3e22";
@@ -312,7 +312,7 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
           const cy = oy + pad + r * (cell + 3);
           ctx.fillStyle = (r + c) % 2 === 0 ? "#c4883c" : "#b07630";
           ctx.fillRect(cx, cy, cell, cell);
-          // Miniature LEGO stud socket inside each crafting cell
+          // Miniature STUDS stud socket inside each crafting cell
           ctx.strokeStyle = "rgba(50, 26, 10, 0.55)";
           ctx.lineWidth = 1.6;
           ctx.beginPath();
@@ -324,7 +324,7 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
     }
     if (face === 1) {
       paintSide(ctx, ox, oy, block.side, "#8d5228");
-      // Reddish-brown LEGO corner timber pillars
+      // Reddish-brown STUDS corner timber pillars
       ctx.fillStyle = "#5c341a";
       ctx.fillRect(ox, oy, S * 0.13, S);
       ctx.fillRect(ox + S * 0.87, oy, S * 0.13, S);
@@ -332,12 +332,12 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
       ctx.fillStyle = "#8e959c";
       ctx.fillRect(ox + S * 0.24, oy + S * 0.30, S * 0.14, S * 0.07);
       ctx.fillRect(ox + S * 0.60, oy + S * 0.30, S * 0.14, S * 0.07);
-      // Hanging LEGO Hammer (left)
+      // Hanging STUDS Hammer (left)
       ctx.fillStyle = "#6b3e22";
       ctx.fillRect(ox + S * 0.29, oy + S * 0.36, S * 0.05, S * 0.42);
       ctx.fillStyle = "#d0d6dc";
       ctx.fillRect(ox + S * 0.20, oy + S * 0.34, S * 0.22, S * 0.11);
-      // Hanging LEGO Hand-Saw (right)
+      // Hanging STUDS Hand-Saw (right)
       ctx.fillStyle = "#c43228";
       ctx.fillRect(ox + S * 0.61, oy + S * 0.33, S * 0.13, S * 0.10);
       ctx.fillStyle = "#d9dde2";
@@ -370,7 +370,7 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
       ctx.fillStyle = isShulk ? "#4a3264" : "#5c3a1a";
       ctx.fillRect(ox, oy, S * 0.11, S);
       ctx.fillRect(ox + S * 0.89, oy, S * 0.11, S);
-      // Metallic Gold 1x1 LEGO Latch Plate with central stud
+      // Metallic Gold 1x1 STUDS Latch Plate with central stud
       ctx.fillStyle = "#b88418";
       ctx.fillRect(ox + S * 0.40, oy + lidY - S * 0.10, S * 0.20, S * 0.24);
       ctx.fillStyle = "#ffd84a";
@@ -417,7 +417,7 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
         const bh = S * (sh - 0.04);
         ctx.fillStyle = colors[(i + (sy > 0.5 ? 2 : 0)) % colors.length];
         ctx.fillRect(bx, oy + S * (sy + 0.03), bw, bh);
-        // White LEGO book spine title tile
+        // White STUDS book spine title tile
         ctx.fillStyle = "rgba(255,255,255,0.78)";
         ctx.fillRect(bx + 2, oy + S * (sy + 0.09), bw - 4, 4);
       }
@@ -443,7 +443,7 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
       // Crisp white central label band
       ctx.fillStyle = "#f4f1ea";
       ctx.fillRect(ox, oy + S * 0.34, S, S * 0.32);
-      // Bold black LEGO "TNT" lettering
+      // Bold black STUDS "TNT" lettering
       ctx.fillStyle = "#1c1816";
       // T
       ctx.fillRect(ox + S * 0.14, oy + S * 0.40, S * 0.18, S * 0.05);
@@ -461,7 +461,7 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
   if (block.id === ID.Enchanter) {
     if (face === 0) {
       paintTop(ctx, ox, oy, "#24163c", false);
-      // Red LEGO diamond velvet cloth on top
+      // Red STUDS diamond velvet cloth on top
       ctx.fillStyle = "#c42828";
       ctx.beginPath();
       ctx.moveTo(ox + S * 0.5, oy + S * 0.08);
@@ -499,7 +499,7 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
   }
   if (block.id === ID.Brew && face === 1) {
     paintSide(ctx, ox, oy, block.side);
-    // Blaze rod column & 2 glowing LEGO potion flasks
+    // Blaze rod column & 2 glowing STUDS potion flasks
     ctx.fillStyle = "#ffb820";
     ctx.fillRect(ox + S * 0.45, oy + S * 0.12, S * 0.10, S * 0.62);
     ctx.fillStyle = "#e23b2f";
@@ -541,7 +541,7 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
   }
   if (block.id === ID.Pumpkin && face === 1) {
     paintSide(ctx, ox, oy, block.side);
-    // Carved LEGO Jack-o'-Lantern style ribs & face
+    // Carved STUDS Jack-o'-Lantern style ribs & face
     ctx.fillStyle = "rgba(110, 42, 6, 0.38)";
     for (const rx of [0.22, 0.5, 0.78]) ctx.fillRect(ox + S * rx - 1, oy, 3, S);
     return;
@@ -660,7 +660,7 @@ function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number
     ctx.fill();
     return;
   }
-  // v4.16 wood identity: wood must READ as wood inside the LEGO-brick
+  // v4.16 wood identity: wood must READ as wood inside the STUDS-brick
   // language — bark streaks on the log, plank seams + grain on planks
   // (and their slab/stairs, which share the tiles' colors).
   if (block.id === ID.Log && face === 1) {
@@ -873,7 +873,7 @@ export function buildAtlas(): BrickAtlases {
   }
 
   // Clean brick perimeter contact seam: darken each solid tile's outer 3px border
-  // smoothly (multiply only, no white inner ring) so adjacent LEGO bricks have a
+  // smoothly (multiply only, no white inner ring) so adjacent STUDS bricks have a
   // crisp physical gap without artificial white outlines on dark blocks.
   {
     const skip = new Set<number>();
@@ -1017,7 +1017,7 @@ export function buildAtlas(): BrickAtlases {
               rough += (1 - seamD / 0.032) * 0.16;
             }
           }
-          // Nearest of the 4 studs in the 2×2 LEGO grid (±0.24, ±0.24 in -0.5..0.5 space)
+          // Nearest of the 4 studs in the 2×2 STUDS grid (±0.24, ±0.24 in -0.5..0.5 space)
           const qx = dx < 0 ? -0.24 : 0.24;
           const qy = dy < 0 ? -0.24 : 0.24;
           const sdx = dx - qx;

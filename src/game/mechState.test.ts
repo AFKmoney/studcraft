@@ -15,7 +15,7 @@ function part(p: MechPart) {
   putMech(p);
 }
 
-describe("technic mesh", () => {
+describe("teks mesh", () => {
   beforeEach(() => clearMech());
 
   it("uses the catalog centre distance", () => {

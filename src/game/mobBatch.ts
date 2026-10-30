@@ -102,8 +102,8 @@ function buildCreeperLegGeo(): THREE.BufferGeometry {
   return mergeBufferGeometries(parts);
 }
 
-// Compound Minifig Geometries (Skeleton / Zombie / Villager parts)
-function buildMinifigTorsoGeo(): THREE.BufferGeometry {
+// Compound Figure Geometries (Skeleton / Zombie / Villager parts)
+function buildFigureTorsoGeo(): THREE.BufferGeometry {
   const gTrap = new THREE.BoxGeometry(0.43, 0.42, 0.23);
   const pos = gTrap.attributes.position as THREE.BufferAttribute;
   for (let i = 0; i < pos.count; i++) {
@@ -130,7 +130,7 @@ function buildMinifigTorsoGeo(): THREE.BufferGeometry {
   return mergeBufferGeometries(parts);
 }
 
-function buildMinifigHeadGeo(): THREE.BufferGeometry {
+function buildFigureHeadGeo(): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [
     // Bottom chin bevel
     new THREE.CylinderGeometry(0.154, 0.122, 0.035, 16).translate(0, -0.005, 0),
@@ -144,7 +144,7 @@ function buildMinifigHeadGeo(): THREE.BufferGeometry {
   return mergeBufferGeometries(parts);
 }
 
-function buildMinifigLegGeo(): THREE.BufferGeometry {
+function buildFigureLegGeo(): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [
     // Rounded upper hip barrel
     new THREE.CylinderGeometry(0.088, 0.088, 0.155, 12).rotateZ(Math.PI / 2).translate(0, 0, 0),
@@ -156,7 +156,7 @@ function buildMinifigLegGeo(): THREE.BufferGeometry {
   return mergeBufferGeometries(parts);
 }
 
-function buildMinifigArmGeo(side: -1 | 1): THREE.BufferGeometry {
+function buildFigureArmGeo(side: -1 | 1): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [
     // Shoulder ball (tucks flush into upper torso)
     new THREE.CylinderGeometry(0.056, 0.056, 0.09, 10).rotateZ(Math.PI / 2).translate(0, -0.02, 0),
@@ -259,21 +259,21 @@ export class MobBatchRenderer {
     this.creeperLegMesh = this.makeInstMesh(buildCreeperLegGeo(), creeperMat, maxInstances * 4);
 
     // Skeleton Meshes
-    this.skellyTorsoMesh = this.makeInstMesh(buildMinifigTorsoGeo(), skellyMat, maxInstances);
-    this.skellyHeadMesh = this.makeInstMesh(buildMinifigHeadGeo(), skellyMat, maxInstances);
-    this.skellyLegLMesh = this.makeInstMesh(buildMinifigLegGeo(), skellyMat, maxInstances);
-    this.skellyLegRMesh = this.makeInstMesh(buildMinifigLegGeo(), skellyMat, maxInstances);
-    this.skellyArmLMesh = this.makeInstMesh(buildMinifigArmGeo(-1), skellyMat, maxInstances);
-    this.skellyArmRMesh = this.makeInstMesh(buildMinifigArmGeo(1), skellyMat, maxInstances);
+    this.skellyTorsoMesh = this.makeInstMesh(buildFigureTorsoGeo(), skellyMat, maxInstances);
+    this.skellyHeadMesh = this.makeInstMesh(buildFigureHeadGeo(), skellyMat, maxInstances);
+    this.skellyLegLMesh = this.makeInstMesh(buildFigureLegGeo(), skellyMat, maxInstances);
+    this.skellyLegRMesh = this.makeInstMesh(buildFigureLegGeo(), skellyMat, maxInstances);
+    this.skellyArmLMesh = this.makeInstMesh(buildFigureArmGeo(-1), skellyMat, maxInstances);
+    this.skellyArmRMesh = this.makeInstMesh(buildFigureArmGeo(1), skellyMat, maxInstances);
     this.skellyBowMesh = this.makeInstMesh(buildBowGeo(), bowMat, maxInstances);
 
     // Walker / Zombie Meshes
-    this.walkerTorsoMesh = this.makeInstMesh(buildMinifigTorsoGeo(), walkerShirtMat, maxInstances);
-    this.walkerHeadMesh = this.makeInstMesh(buildMinifigHeadGeo(), walkerSkinMat, maxInstances);
-    this.walkerLegLMesh = this.makeInstMesh(buildMinifigLegGeo(), walkerPantsMat, maxInstances);
-    this.walkerLegRMesh = this.makeInstMesh(buildMinifigLegGeo(), walkerPantsMat, maxInstances);
-    this.walkerArmLMesh = this.makeInstMesh(buildMinifigArmGeo(-1), walkerShirtMat, maxInstances);
-    this.walkerArmRMesh = this.makeInstMesh(buildMinifigArmGeo(1), walkerShirtMat, maxInstances);
+    this.walkerTorsoMesh = this.makeInstMesh(buildFigureTorsoGeo(), walkerShirtMat, maxInstances);
+    this.walkerHeadMesh = this.makeInstMesh(buildFigureHeadGeo(), walkerSkinMat, maxInstances);
+    this.walkerLegLMesh = this.makeInstMesh(buildFigureLegGeo(), walkerPantsMat, maxInstances);
+    this.walkerLegRMesh = this.makeInstMesh(buildFigureLegGeo(), walkerPantsMat, maxInstances);
+    this.walkerArmLMesh = this.makeInstMesh(buildFigureArmGeo(-1), walkerShirtMat, maxInstances);
+    this.walkerArmRMesh = this.makeInstMesh(buildFigureArmGeo(1), walkerShirtMat, maxInstances);
   }
 
   private makeInstMesh(geo: THREE.BufferGeometry, mat: THREE.Material, count: number): THREE.InstancedMesh {
