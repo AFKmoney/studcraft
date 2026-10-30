@@ -2635,6 +2635,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     fpsArmGroup.scale.multiplyScalar(Math.max(0.75, sz)); // the hand shrinks less: it must still read as a hand
   }
   const vm = { equip: 1, land: 0, swayX: 0, swayY: 0, lastYaw: 0, lastPitch: 0, wasGrounded: true, fallV: 0, sprint: 0, place: 0 };
+  const _identityQ = new THREE.Quaternion();
 
   // Positioned at z = -0.27 with scale 0.56 so all 3D parts stay > camera.near (0.08) and < player HW (0.34)
   // while using full hardware Z-buffer depth testing for crisp 3D self-occlusion!
@@ -12045,7 +12046,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const fA = Math.sin(sw * sw * Math.PI), gA = Math.sin(sq * Math.PI);
     const D2R = Math.PI / 180;
     const holding = heldBrickGroup.visible && lastHeldId > 0;
-    const swT = holding ? 0.35 : 1; // holding: the hand stays put, the item does the chop
+    const swT = holding ? 0.35 : 0.5; // holding: the hand stays put, the item does the chop; bare hand: half travel (see the !holding branch below)
     const ax = (holding ? (heldKind ? mcTune.bx : mcTune.ax) : MC_ANCHOR.x) - 0.4 * gA * swT + (walkX + vm.swayX * 0.5 + vm.sprint * 0.03) * 2.2 * k;
     const ay = (holding ? (heldKind ? mcTune.by : mcTune.ay) : MC_ANCHOR.y) + 0.2 * Math.sin(sq * Math.PI * 2) * swT + (walkY + breathe + landY - vm.swayY * 0.4 - vm.sprint * 0.05) * 2.2 * k - eq * 0.6;
     const az = (holding ? (heldKind ? mcTune.bz : mcTune.az) : MC_ANCHOR.z) - 0.2 * Math.sin(sw * Math.PI);
@@ -12059,7 +12060,17 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // small look-lag / sprint / bob tilt on top (no effect at rest)
     qa.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler((-vm.sprint * 0.2 - vm.swayY * 0.4) * k, vm.swayX * 0.6 * k, (walkX * 0.8 + vm.sprint * 0.1) * k, "XYZ")));
     if (!holding) {
-      viewBrick.quaternion.copy(qa);
+      // Bare hand (Philippe, 2026-10-29, photo in a tunnel): the FULL
+      // Minecraft attack pivot rotates the whole viewmodel up to -56
+      // degrees and drags the anchor toward the centre — with a chunky
+      // LEGO forearm that puts the sleeve's open end dead centre, and
+      // mining retriggers the swing on every hit, so tunnelling meant
+      // digging blind behind your own arm. The held-item path avoided
+      // this with a wrist motion; the bare hand gets the same respect:
+      // the swing is damped to 45% of the rotation (and half the
+      // translation, via swT above) — the strike still reads, the fist
+      // stays in the lower-right quadrant where an arm belongs.
+      viewBrick.quaternion.copy(_identityQ).slerp(qa, 0.45);
       fpsClaw.quaternion.copy(clawRest);
     } else {
       // holding: the swing is a WRIST motion — the hand (clip) and the item
