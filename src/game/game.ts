@@ -585,6 +585,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   const skills = new Set<string>();
   let mana = 8;
   let spellIx = 0;
+  let freePlace = false; // Tab: free placement (ignore grid snap)
   let critterAcc = 0;
   let folkAcc = 0;
   const found = new Set<number>();
@@ -4484,6 +4485,21 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           for (let k = 0; k < 3 && debris > 0; k++, debris--) spawnPiece(p.x + 0.5, p.y + 0.5, p.z + 0.5, col, (Math.random() - 0.5) * 2.4, 1 + Math.random() * 2, (Math.random() - 0.5) * 2.4);
           if (!creative && p.c.id === ID.Log && Math.random() < 0.35) dropItem(ID.Log, 1, p.x + 0.5, p.y + 0.6, p.z + 0.5);
           if (p.c.id === ID.Leaves && Math.random() < 0.05) dropItem(ID.Apple, 1, p.x + 0.5, p.y + 0.6, p.z + 0.5);
+          continue;
+        }
+        // Fallen trunk: place logs in a horizontal line at ground level
+        // so the tree lies on its side instead of standing upright.
+        if (p.c.id === ID.Log) {
+          const gy = Math.floor(groundY(p.x, p.z));
+          const targetFree = world.get(p.x, gy, p.z) === ID.Air;
+          const belowId = world.get(p.x, gy - 1, p.z);
+          if (targetFree && belowId && def(belowId).solid) {
+            world.set(p.x, gy, p.z, p.c.id);
+            netSendEdit(p.x, gy, p.z, p.c.id);
+            markDirtyAt(p.x, p.z);
+          } else if (!creative) {
+            dropItem(ID.Log, 1, p.x + 0.5, gy + 0.6, p.z + 0.5);
+          }
           continue;
         }
         const targetFree = world.get(p.x, p.y, p.z) === ID.Air;
@@ -11421,7 +11437,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         const py = hit.y + hit.ny;
         const pz = hit.z + hit.nz;
         // P0: when the aim snaps to the stud lattice, the ghost shows the BRICK.
-        const cand = brickEligible(held, def(held)) ? brickSnap(px, py, pz, hit.nx, hit.ny, hit.nz) : null;
+        const cand = !freePlace && brickEligible(held, def(held)) ? brickSnap(px, py, pz, hit.nx, hit.ny, hit.nz) : null;
         if (cand) {
           const ok = brickSpaceFree(cand.sx, cand.sy, cand.sz) && !brickHitsPlayer(cand.sx / 2, cand.sy, cand.sz / 2) && (creative || (inv[held] ?? 0) > 0);
           updateGhostGeo(held);
@@ -12458,6 +12474,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           spellIx = (spellIx + 1) % list.length;
           say(list[spellIx].name);
         }
+        emit();
+      }
+      if (e.code === "Tab" && phase === "play") {
+        e.preventDefault();
+        freePlace = !freePlace;
+        say(freePlace ? "Free place" : "Snap place");
         emit();
       }
       if (e.code === "KeyE" && (phase === "play" || phase === "inventory") && !hud.ask && !hud.signEdit) {

@@ -1730,8 +1730,8 @@ kbd {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 40px;
-  height: 40px;
+  width: 28px;
+  height: 28px;
   transform: translate(-50%, -50%);
 }
 
