@@ -353,6 +353,7 @@ Philippe a testé sur Pages et rapporté 7 chantiers. Audit au code fait le mêm
 
 ### A2 · Redstone — un moteur Minecraft complet encore vivant (viole la loi P5 « jamais de redstone », 2026-10-28)
 - [ ] `tickRedstone` (game.ts, ~800 lignes) : dust/repeater/comparator/hopper/daylight (298)/night sensor (299)/target + ignition TNT; catégorie « Redstone » au livre de Crafting (2 recettes), filtre GameView, icônes dédiées. Nos machines sont moteurs + batteries + fuel — le système d'alimentation redstone doit PARTIR. Les capteurs utiles (lumière) reviendront re-logic en P5d (électrique), pas avant. Migration save : les blocs redstone d'un monde chargé sont convertis (composants → air; capteurs/blocs pleins → pellets selon le rendement, la matière ne disparaît pas). Chantier propre, claim séparé au moment de couper.
+- [x] **B5 FAIT** (retrait du moteur, migration save = drop pellets à la casse, `tickHoppers` conservé hors redstone). **B7 FAIT (2026-10-30, précision de Philippe ~16h03 : « certains items redstone se gardent en changeant leur logique »)** : Lever, Pressure plate, Daylight → **Solar switch**, DaylightInv → **Night switch**, Observer → **Watcher**, Target sont revenus, re-logic sur le modèle d'énergie — couche `applySwitch` : aucun fil, aucun niveau de signal, l'interrupteur pose l'état `on` des pièces Technic dans ses 6 cellules voisines, l'énergie vient toujours des hubs/fuel. Registre `switchCells` persisté (save.ts `switches`), tick 0,4 s. Restent retirés : Dust, RedTorch, Repeater, Comparator, Piston (l'Actuator est le poussoir), Dispenser. Fermeture = verdict Pages de Philippe.
 
 ### A3 · Machines / fuel — la boucle EXISTE au code, mais invisible et INCOMPLÈTE
 - Constat code : Kiln craftable (8 cobble), SMELT pellets→ingots 1:1, fuel distillé 0,25/pellet payé en items Fuel à côté du kiln (`fuelAcc`), 14 recettes de moulage au livre (cat. Build), ingot trempé — tout est là. Philippe n'a rien trouvé : le problème est réel et il est triple.
@@ -371,7 +372,7 @@ Philippe a testé sur Pages et rapporté 7 chantiers. Audit au code fait le mêm
 - [ ] Items sans rôle dans le système plastique/mécanique/électrique : LISTE soumise à Philippe AVANT tout retrait (règle suppression : jamais sur une instruction ambiguë).
 
 ### Ordre d'exécution (claim Muse, 2026-10-30)
-B1 studs (A1) → B2 eau (A5) → B3 bouton Build selon verdict qa-touch (A4) → B4 kiln visible + recettes Technic générées (A3) → B5 retrait redstone (A2) → B6 modèles en main + liste items (A6). Fermeture de chaque ligne = mesuré + retest Pages de Philippe.
+B1 studs (A1) → B2 eau (A5) → B3 bouton Build selon verdict qa-touch (A4) → B4 kiln visible + recettes Technic générées (A3) → B5 retrait redstone (A2) → B6 bulle de nom (ajout de Philippe 16h01) → B7 interrupteurs re-logic (précision de Philippe 16h03) → B8 modèles en main + liste items (A6). Fermeture de chaque ligne = mesuré + retest Pages de Philippe.
 
 ---
 
