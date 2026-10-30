@@ -169,7 +169,7 @@ Pas de redstone. Le cœur tourne : graphe de rotation local et borné.
 - [ ] **BUG-2 · Le Bow**
   - [x] Le nom est « Bow » (le renommage « Arc / Bow » de Grok a été reverté — jamais un alias en nom d'affichage)
   - [x] Modèle en main reconstruit (photo de Philippe : l'ancien était 2 boîtes droites + une corde flottante = un bloc beige) : branches en 3 segments sur un vrai arc, corde pointe-à-pointe (`5d7a41b5`)
-  - [ ] Mesure rig : prendre le Bow en Créatif et TIRER une flèche (script `qa-bow.mjs` prêt, en file derrière la contention des bancs)
+  - [x] Mesure rig FAITE (boucle 2026-10-29 ~20:20, sur le build du head `5e2a2482` qui contient le modèle reconstruit) — en **Survival** (plus strict que le Créatif écrit ici) : nom exact « Bow » ✓, craft recette `bow` (Stick 3→0, String 3→0, Bow pris = durabilité 80/80) ✓, contrôle négatif sans flèche (aucun tir) ✓, tir ×2 (projectiles 0→1→2, flèches 5→4→3) ✓, 0 erreur de page. Détail au WORKLOG 20:20 boucle.
   - [ ] Retest Pages de Philippe (silhouette + tir)
   - [ ] Dette liée : le Crossbow porte encore le modèle de l'arc — modèle d'arbalète distinct à faire
 - [ ] **BUG-3 · Gravité (briques et sable)**
@@ -209,7 +209,7 @@ Pas de redstone. Le cœur tourne : graphe de rotation local et borné.
 - [ ] qa-reg (en cours) : récolte terre/bûche, gravité sable, topple petite coupe + cas « un seul support » (le cas du frère)
 - [ ] qa96 restes : s3b (sonde settle du topple), s4 (Wither — le harnais est mort, pas le jeu), s5 (FX — aucun verdict n'existe, les deux logs sont vides)
 - [ ] qa97 : performance (chiffres relatifs au rig seulement — le verdict perf est l'A54 de Philippe)
-- [ ] qa-bow : voir BUG-2 (§13)
+- [x] qa-bow : MESURÉ PASS (voir BUG-2 §13) — reste seulement le retest Pages de Philippe
 - [ ] Re-mesurer qa100/qa101/qa102 sous le recalibrage studs (§3) : les classifications « unsupported » à 1 stud changent par design
 
 ## 16. Lag (de worklog2, item 3 — ouvert)
