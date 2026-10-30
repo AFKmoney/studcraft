@@ -4144,3 +4144,14 @@ Vérifié sur main (head `b61d2995`) : Grok a livré PLUS que son rapport collé
 - **qa-reg : toujours aucun `qa-reg-out.json`** — BUG-5 toujours sans verdict, aucun cas A–E tranché. Sa consignation appartient au fil principal.
 - **P6 reste NON cochée** (retest Pages de Philippe). Zones Grok intouchées; aucun build APK/PC (hold inchangé).
 - **Prochain geste (boucle)** : (1) lire le verdict de **qa-tech2** quand il rend (c'est la porte du push du lot Technic + icônes v2); (2) dès une fenêtre calme réelle : **qa7h-save** sur 8097, **qa7i-survmine**, rebuild 8091 puis **qa102 v3** + **qa100**, qa96 reste; (3) revérifier la branche Grok à chaque run jusqu'à son premier push.
+
+## 2026-10-29 ~21:30 PDT — Muse (boucle 10 min : **head `a41f7ac8` revérifié sain — tsc 0 + 44/44 REMESURÉS; qa-tech2 du fil principal TOUJOURS en vol (cas encore vides après ~14 min); AUCUN rig lancé par la boucle**)
+
+- **Probe** : head main `a41f7ac8` (= le push WORKLOG de la boucle 21:20) au départ ET à l'écriture — aucun mouvement pendant ce run. Arbre local == head pour le WORKLOG (diff vérifié nul). **Vérifs refaites par moi sur CET arbre : `npx tsc --noEmit` exit 0 (~53 s); suite `src/game/*.test.ts` 44/44 pass (technic 3/3 inclus).** Aucun code de jeu touché ce run.
+- **Branche Grok revérifiée** : compare `main...grok/r3-dungeon-designs` = **ahead 0, behind 2, 0 commit** — toujours rien à vérifier.
+- **qa-tech2 (fil principal) — état lu, pas de verdict** : processus `node qa-tech2.mjs` vivant depuis 21:19 PDT, Chromium actif; `qa-tech2-out.json` créé à 21:19 avec `buildAsset` noté mais ** `cases: {}`, `errors: []`, `shots: []` toujours vides à 21:33** — la vérification visuelle du lot Technic n'a encore rendu AUCUN cas. C'est toujours elle la porte du push du lot Technic + icônes v2; sa consignation appartient au fil principal.
+- **Bancs** : 8097 = **200** (serveur qa111-dist toujours vivant après le reboot, revérifié ce run); 8091 = 000 et 8090 = 000 (rebuild frais toujours dû avant qa102 v3/qa100).
+- **AUCUN rig navigateur lancé par la boucle — co-tenant actif** : load 1 min **5,69 → 5,29** (2 cœurs), MemAvailable ~3,1 Go. qa-tech2 occupe la case « un seul rig lourd à la fois » (skill contention : empiler qa7h = mesure non-baseline + risque `Target crashed`).
+- **qa-reg : toujours aucun `qa-reg-out.json`** — BUG-5 toujours sans verdict de cette batterie, aucun cas A–E tranché.
+- **P6 reste NON cochée** (retest Pages de Philippe). Zones Grok intouchées; aucun build APK/PC (hold inchangé).
+- **Prochain geste (boucle)** : (1) lire le verdict de **qa-tech2** dès qu'il rend des cas; (2) dès une fenêtre calme réelle (qa-tech2 fini) : **qa7h-save** sur 8097, **qa7i-survmine**, rebuild 8091 puis **qa102 v3** + **qa100**, qa96 reste; (3) revérifier la branche Grok à chaque run jusqu'à son premier push.
