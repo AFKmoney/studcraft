@@ -256,7 +256,7 @@ Pas de redstone. Le cœur tourne : graphe de rotation local et borné.
   - [ ] Retest Pages de Philippe
 - [ ] **BUG-5 · Aucun loot en Créatif**
   - [x] Cause : tout le rendement de `breakBlock` était dans `if (!creative)`; mesuré PASS au rig
-  - [ ] Confirmation qa-reg en cours : récolte terre + bûche + gravité sable (batterie `qa-reg` — la plainte du 2026-10-29 soir, « on peut pas récupérer de la terre », doit être tranchée par la mesure)
+  - [ ] Confirmation qa-reg : run n°1 (sous contention) = drop de terre CONFIRMÉ au sol ({id:2} dans dropList — la casse produit bien le drop), ramassage non prouvé à la fenêtre du rig; run n°2 en fenêtre calme en cours pour trancher (la plainte du 2026-10-29 soir, « on peut pas récupérer de la terre », sera fermée par cette mesure)
   - [ ] Retest Pages de Philippe
 - [ ] **BUG-6 · Un coffre brisé perdait son contenu**
   - [x] Cause : aucune branche `ID.Chest` dans `breakBlock`; mesuré PASS au rig
@@ -279,7 +279,7 @@ Pas de redstone. Le cœur tourne : graphe de rotation local et borné.
 
 ## 15. Dettes QA (à mesurer, dans l'ordre de la file)
 
-- [ ] qa-reg (en cours) : récolte terre/bûche, gravité sable, topple petite coupe + cas « un seul support » (le cas du frère)
+- [ ] qa-reg : **run n°1 TERMINÉ (2026-10-30 ~10:39 PDT, 0 erreur JS)** sous contention lourde (load 7–10, co-tenants NeonForge, dilatation SwiftShader) — D topple coupe médiane **PASS** (signal positif malgré la dilatation); A terre / B bûche : drop confirmé, ramassage FAIL à la fenêtre du rig; C sable : FAIL (jamais tombé à la fenêtre); E un seul support (cas du frère) : FAIL (toppleSeen=0). **Run n°2 relancé en fenêtre calme (load ~1) pour trancher A/B/C/E** — un FAIL sous contention n'est pas un verdict de bogue; un PASS calme fermera, un FAIL calme ouvrira le chantier code
 - [x] qa-dungeon-unit : MESURÉ PASS au niveau fonction (2026-10-30 ~09:41 PDT) — la vraie `stockChest` (head `c3448644`) sur 2 000 coffres dungeon : gate mesuré 28,4 %, 0 mismatch de sélection (hash seed+777), les 7 matériaux de moules de boss présents, 0 fuite sur 1 500 coffres contrôles (deep/castle/wild), garde « bin pré-rempli » OK. Reste dû : la mesure EN JEU (spawn 7 % jamais rencontré au rig) + verdict Pages de Philippe
 - [ ] qa96 restes : s3b (sonde settle du topple), s4 (Wither — le harnais est mort, pas le jeu), s5 (FX — aucun verdict n'existe, les deux logs sont vides)
 - [ ] qa97 : performance (chiffres relatifs au rig seulement — le verdict perf est l'A54 de Philippe)
