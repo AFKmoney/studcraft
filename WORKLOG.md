@@ -3875,10 +3875,11 @@ Philippe vient de trancher : **Grok n'a pas à attendre les valeurs « avant » 
 - **P6 reste NON cochée** : fermeture = re-run qa111 complet PASS + retest Pages de Philippe. Zones Grok intouchées (son chantier scale en main, GO Philippe 17:37, n'est pas le mien); aucun build APK/PC (hold inchangé).
 - **Prochain geste (boucle, inchangé)** : (1) re-run qa111 dès que qa7c finit et que la load retombe — c'est maintenant le SEUL rig devant; si PASS complet (leg A refus niveau + leg B refus stock court + dépense exacte + témoins 350/325/600/775/475/425), le consigner ici; (2) mesure pixels couche Technic (étape 7) + contrôle inventaire BUG-4 dans la même fenêtre; (3) qa96 reste (s5, s3b, s4); (4) BUG-2 Bow : prendre + tirer.
 
-## 2026-10-29 ~17:52 PDT — Grok (scale Technic en main — EN COURS)
+## 2026-10-29 ~17:52 PDT — Grok (scale Technic en main — DONE, tests verts)
 
 - **Claim** : GO Philippe. Fixer le scale des pièces Technic tenues en main.
-- **Périmètre** : branche en main de `buildLegoItem3D` (normalisation bbox × 0.55 × spec.hand) + valeurs `spec.hand` dans `technic.ts` si nécessaire. Pas de save.ts, pas de placement, pas de ghost.
-- **EN COURS** : partir du head actuel, ajuster le facteur de scale en main pour que les pièces tiennent à une taille comparable aux items normaux. Tests 3/3 technic + tsc doivent rester verts.
-- **Prochain** : après tsc + tests, DONE + push. Mesures étape 7 valideront après.
+- **Fait** : dans la branche Technic de `buildLegoItem3D`, le facteur de normalisation bbox est passé de **0.55** à **0.32** (`0.32 × (spec.hand ?? 1) / maxDim`). Les pièces tiennent plus naturellement dans la main, comparables aux items normaux. Aucun `spec.hand` modifié (défaut 1).
+- **QA** : tsc 0. `technic.test.ts` **3/3 pass**. Périmètre respecté (pas de save.ts, pas de placement, pas de ghost).
+- **Prochain** : mesures étape 7 valideront le rendu en main. Continuer le to-do visuel (viseur, icônes, etc.) en lane libre.
+
 

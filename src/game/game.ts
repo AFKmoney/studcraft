@@ -1813,7 +1813,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       bb.getCenter(centre);
       const mesh = new THREE.Mesh(geo, techMatSolid);
       const maxDim = Math.max(size.x, size.y, size.z) || 1;
-      mesh.scale.setScalar((0.55 * (techSpec(id)?.hand ?? 1)) / maxDim);
+      mesh.scale.setScalar((0.32 * (techSpec(id)?.hand ?? 1)) / maxDim);
       mesh.position.copy(centre).multiplyScalar(-mesh.scale.x);
       group.add(mesh);
       return { group, isTool: false, flames };
