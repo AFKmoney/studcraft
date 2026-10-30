@@ -3,7 +3,7 @@ import { hash2 } from "./noise";
 
 export const SITE_STEP = 96;
 
-export type SiteKind = "ruin" | "camp" | "wreck" | "mine" | "shrine" | "cairn" | "outpost" | "patch" | "tomb" | "reef";
+export type SiteKind = "ruin" | "camp" | "wreck" | "mine" | "shrine" | "cairn" | "outpost" | "patch" | "tomb" | "reef" | "dungeon";
 
 export type Site = { x: number; z: number; y: number; kind: SiteKind };
 
@@ -23,12 +23,38 @@ export function siteLabel(kind: SiteKind): string {
   if (kind === "outpost") return "Outpost";
   if (kind === "tomb") return "Tomb";
   if (kind === "reef") return "Reef";
+  if (kind === "dungeon") return "Dungeon";
   return "Patch";
 }
 
 export function siteBricks(kind: SiteKind, seed: number, x: number, z: number): SiteBrick[] {
   const out: SiteBrick[] = [];
   const h = (dx: number, dz: number, salt: number) => hash2(x + dx, z + dz, seed + salt);
+  if (kind === "dungeon") {
+    // Underground chamber like mine, deeper, with treasure chest for rare molds (P6 loop)
+    for (let dz = 0; dz < 7; dz++) {
+      for (let dx = 0; dx < 7; dx++) {
+        for (let dy = -12; dy <= -6; dy++) {
+          const shell = dx === 0 || dz === 0 || dx === 6 || dz === 6 || dy === -12 || dy === -6;
+          put(out, dx, dy, dz, shell ? ID.Cobble : ID.Air);
+        }
+      }
+    }
+    // Entrance ladder from surface
+    for (let dy = -11; dy <= 2; dy++) put(out, 3, dy, 3, ID.Ladder);
+    // Treasure room
+    put(out, 3, -10, 1, ID.Chest);
+    put(out, 1, -10, 3, ID.Chest);
+    put(out, 5, -10, 3, ID.Chest);
+    put(out, 3, -9, 1, ID.Torch);
+    put(out, 1, -9, 3, ID.Torch);
+    put(out, 5, -9, 5, ID.Torch);
+    // Some high-tier / signature loot placeholders (molds wired via loot tables later)
+    put(out, 3, -11, 5, ID.Gold);
+    put(out, 1, -11, 1, ID.PrismOre);
+    put(out, 5, -11, 1, ID.DiamondOre);
+    return out;
+  }
   if (kind === "ruin") {
     for (let dz = 0; dz < 5; dz++) {
       for (let dx = 0; dx < 5; dx++) {
