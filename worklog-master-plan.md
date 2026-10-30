@@ -99,6 +99,7 @@ Pas de redstone. Le cœur tourne : graphe de rotation local et borné.
   - [ ] Échelle en main PROPORTIONNELLE + main qui serre la pièce (décision de Philippe 2026-10-29, poussé `dad9180d`) *(en attente verdict Philippe)*
 - [x] Nettoyage : retirer le câblage électrique P5b de Grok (mechLink moteurs/hub/batterie) — DONE (Grok). Bloc drive motor/hub/battery retiré de stepMech. Tests 17/17. Scale en main intouché.
 - [x] Modèle d'arbalète distinct — DONE (Grok). Crossbow a son propre modèle (stock + prod horizontal + corde courte), plus le modèle de l'arc.
+- [x] Lag mesher — DONE (Grok). STUD_N 8→6 (−25 % triangles studs). Time-box 6 ms déjà en place. QA loop reste le principal suspect.
 - [ ] Manivelles des sites de débris : elles spawnent `on=1` et tournent toutes seules — bug ou feature? Décision Philippe
 
 ### P5b · Électrique + conduite (LE gros morceau restant)
