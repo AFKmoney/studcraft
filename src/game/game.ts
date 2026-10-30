@@ -2116,7 +2116,30 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return { group, isTool: true, flames };
     }
 
-    if (id === ID.Bow || id === ID.Crossbow) {
+    if (id === ID.Crossbow) {
+      // Distinct crossbow: stock + horizontal prod + short string.
+      const woodMat = skin(0x7c522b);
+      const stringMat = skin(0xe8e4dc);
+      const metalMat = skin(0xb0b6be);
+      const fletchMat = skin(0xd82e22);
+      // Stock
+      addBoxPart(group, 0.18, 0.032, 0.028, -0.04, 0, 0, woodMat);
+      addBoxPart(group, 0.06, 0.028, 0.032, -0.12, -0.01, 0, woodMat);
+      // Prod (horizontal bow)
+      addBoxPart(group, 0.22, 0.018, 0.016, 0.04, 0.02, 0, woodMat);
+      addBoxPart(group, 0.018, 0.018, 0.018, 0.15, 0.02, 0, metalMat);
+      addBoxPart(group, 0.018, 0.018, 0.018, -0.07, 0.02, 0, metalMat);
+      // String
+      addBoxPart(group, 0.22, 0.006, 0.006, 0.04, 0.01, 0, stringMat);
+      // Bolt
+      const bolt = addCylPart(group, 0.006, 0.006, 0.16, 0.02, 0, 0, woodMat, 8);
+      bolt.rotation.z = Math.PI / 2;
+      addBoxPart(group, 0.016, 0.016, 0.016, 0.11, 0, 0, metalMat);
+      addBoxPart(group, 0.008, 0.020, 0.016, -0.06, 0, 0, fletchMat);
+      return { group, isTool: true, flames };
+    }
+
+    if (id === ID.Bow) {
       // Rebuilt 2026-10-29 (Philippe's photo: the old bow read as a
       // beige lump). The old model was TWO short straight boxes angled
       // at 0.42 rad — a stubby chevron, no arc — plus a string cylinder
