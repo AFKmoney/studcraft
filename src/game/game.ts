@@ -1801,7 +1801,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
 
     // Technic (Claude's 1:1 layer): the held model IS the real geometry
     // from technicGeo — the same function that renders the part in the
-    // world — normalized to hand size (spec.hand tweaks the fit). The
+    // world — sized proportionally for the hand (fixed size per module,
+    // spec.hand tweaks the fit). The
     // old hand-modelled Technic shapes that lived here are gone: parts
     // place through the Technic layer now, never as blocks or bricks.
     if (TECHNIC_SET.has(id)) {
@@ -1814,7 +1815,17 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       bb.getCenter(centre);
       const mesh = new THREE.Mesh(geo, techMatSolid);
       const maxDim = Math.max(size.x, size.y, size.z) || 1;
-      mesh.scale.setScalar((0.32 * (techSpec(id)?.hand ?? 1)) / maxDim);
+      // PROPORTIONAL hand size (Philippe, 2026-10-29): a fixed size per
+      // module — 0.11 per module of the part's largest dimension, capped
+      // at 0.85 so the biggest frames stay holdable. The old formula
+      // normalized EVERY part to the same 0.32 max dimension (a 2-module
+      // pin rendered the same length as a 15-module frame; measured in
+      // the step-7 QA at 93.5 vs 45.4 px per module). spec.hand stays as
+      // a per-part multiplier on top. placeHeldMinecraft applies a
+      // CONSTANT pipeline factor for Technic (no re-normalization) and
+      // closes the minifig hand on the part.
+      const heldSize = Math.min(0.11 * maxDim, 0.85) * (techSpec(id)?.hand ?? 1);
+      mesh.scale.setScalar(heldSize / maxDim);
       mesh.position.copy(centre).multiplyScalar(-mesh.scale.x);
       group.add(mesh);
       return { group, isTool: false, flames };
@@ -2533,7 +2544,26 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const size = box.getSize(new THREE.Vector3());
     const d = def(id);
     let M: THREE.Matrix4;
-    if (isTool) {
+    if (TECHNIC_SET.has(id)) {
+      // Technic parts (Philippe, 2026-10-29): buildLegoItem3D already
+      // applied the PROPORTIONAL per-module scale, so this pipeline
+      // factor is a CONSTANT — never divide by maxDim here, that is what
+      // used to crush every part to the same held size. And the minifig
+      // hand GRIPS the part: the clip closes on the part's body along
+      // its long axis, like a tool handle — the part is held BY the
+      // hand, never perched on top of it.
+      const f = (11 / 16) / 0.32;
+      M = MC_HANDHELD.clone()
+        .multiply(new THREE.Matrix4().makeTranslation(0.5, 0.5, 0.5))
+        .multiply(new THREE.Matrix4().makeRotationY(Math.PI / 2))
+        .multiply(new THREE.Matrix4().makeScale(f, f, f))
+        .multiply(new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z));
+      const longAxis = size.x >= size.y && size.x >= size.z ? new THREE.Vector3(1, 0, 0) : size.y >= size.z ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1);
+      const grip = new THREE.Vector3(c.x, box.min.y + size.y * 0.35, c.z).applyMatrix4(M);
+      const shaft = longAxis.transformDirection(M);
+      const mouthT = ARM_OUT.clone().negate();
+      placeArm(grip, shaft, mouthT, ARM_SCALE * 0.82);
+    } else if (isTool) {
       const len = Math.max(1e-3, size.y);
       const upright = id === ID.Torch || id === ID.RedTorch || id === ID.RedTorchOn;
       // model -> sprite space: handle end at the sprite's bottom-left, shaft on the diagonal (torches stand upright)
@@ -4546,12 +4576,25 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         placed.push({ c, x: wx, y: wy, z: wz, h: _topV.y });
         if (_topV.y < minH) minH = _topV.y;
       }
+      // Philippe (2026-10-29): the leaves fall WITH the tree and PLACE —
+      // nothing vanishes. Settle lowest-first, and a cell placed during
+      // THIS settle counts as support for the cells above it (before,
+      // canopy cells checked support before the fallen trunk existed
+      // under them, failed, and were silently dropped — in Creative
+      // even the logs vanished). Any cell that still cannot place drops
+      // as its own item, in BOTH modes: matter circulates, it never
+      // disappears.
+      placed.sort((a, b) => a.h - b.h);
+      const settledCells = new Set<string>();
       let debris = 42;
       for (const p of placed) {
         const col = def(p.c.id).side || def(p.c.id).color;
         if (p.h <= minH + 0.85) {
+          // Impact band: shatters visually, but the material is
+          // recovered as items — logs AND leaves, both modes (before:
+          // leaves vanished outright, logs dropped 35% in Survival only).
           for (let k = 0; k < 3 && debris > 0; k++, debris--) spawnPiece(p.x + 0.5, p.y + 0.5, p.z + 0.5, col, (Math.random() - 0.5) * 2.4, 1 + Math.random() * 2, (Math.random() - 0.5) * 2.4);
-          if (!creative && p.c.id === ID.Log && Math.random() < 0.35) dropItem(ID.Log, 1, p.x + 0.5, p.y + 0.6, p.z + 0.5);
+          dropItem(p.c.id, 1, p.x + 0.5, p.y + 0.6, p.z + 0.5);
           if (p.c.id === ID.Leaves && Math.random() < 0.05) dropItem(ID.Apple, 1, p.x + 0.5, p.y + 0.6, p.z + 0.5);
           continue;
         }
@@ -4565,19 +4608,22 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
             world.set(p.x, gy, p.z, p.c.id);
             netSendEdit(p.x, gy, p.z, p.c.id);
             markDirtyAt(p.x, p.z);
-          } else if (!creative) {
+            settledCells.add(p.x + "," + gy + "," + p.z);
+          } else {
             dropItem(ID.Log, 1, p.x + 0.5, gy + 0.6, p.z + 0.5);
           }
           continue;
         }
         const targetFree = world.get(p.x, p.y, p.z) === ID.Air;
         const belowId = world.get(p.x, p.y - 1, p.z);
-        if (targetFree && belowId && def(belowId).solid) {
+        const supported = (belowId !== ID.Air && !!def(belowId)?.solid) || settledCells.has(p.x + "," + (p.y - 1) + "," + p.z);
+        if (targetFree && supported) {
           world.set(p.x, p.y, p.z, p.c.id);
           netSendEdit(p.x, p.y, p.z, p.c.id);
           markDirtyAt(p.x, p.z);
-        } else if (!creative && p.c.id === ID.Log) {
-          dropItem(ID.Log, 1, p.x + 0.5, p.y + 0.6, p.z + 0.5);
+          settledCells.add(p.x + "," + p.y + "," + p.z);
+        } else {
+          dropItem(p.c.id, 1, p.x + 0.5, p.y + 0.6, p.z + 0.5);
         }
       }
       scene.remove(t.mesh);
