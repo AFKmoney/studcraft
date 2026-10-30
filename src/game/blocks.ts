@@ -1053,8 +1053,8 @@ item(ID.DiscB, "Disc — Moonloop", "#7a8ac0");
 item(ID.DiscC, "Disc — Emberdeep", "#e85a4a");
 item(ID.DiscD, "Disc — Warloop", "#5a5a5a");
 item(ID.DiscE, "Disc — Rainloop", "#4a9ac0");
-put(b(ID.Daylight, "Daylight sensor", "#f0c43a", "#fff2b2", "#8d5a34", "#6b3e22", { hard: 0.4, slab: true }));
-put(b(ID.DaylightInv, "Night sensor", "#3d7ad4", "#8ec8f5", "#4a3c30", "#2a2218", { hard: 0.4, slab: true, placeable: false, drop: ID.Daylight }));
+put(b(ID.Daylight, "Solar switch", "#f0c43a", "#fff2b2", "#8d5a34", "#6b3e22", { hard: 0.4, slab: true }));
+put(b(ID.DaylightInv, "Night switch", "#3d7ad4", "#8ec8f5", "#4a3c30", "#2a2218", { hard: 0.4, slab: true, placeable: false, drop: ID.Daylight }));
 put(b(ID.Target, "Target block", "#f4f1ea", "#e23b2f", "#f4f1ea", "#e6c14a", { hard: 0.5 }));
 put(b(ID.Grindstone, "Grindstone", "#8e959c", "#a7aeb4", "#6d4426", "#4a2e1a", { hard: 1.5, tough: true, work: "anvil" }));
 item(ID.Copper, "Copper", "#e07a3d");
@@ -1192,13 +1192,13 @@ put(
   }),
 );
 put(
-  b(ID.Observer, "Observer", "#6e767e", "#c5ccd3", "#4a4038", "#2a2218", {
+  b(ID.Observer, "Watcher", "#6e767e", "#c5ccd3", "#4a4038", "#2a2218", {
     hard: 0.4,
     solid: true,
   }),
 );
 put(
-  b(ID.ObserverOn, "Observer pulse", "#f5c518", "#ffe14a", "#4a4038", "#2a2218", {
+  b(ID.ObserverOn, "Watcher pulse", "#f5c518", "#ffe14a", "#4a4038", "#2a2218", {
     hard: 0.4,
     solid: true,
     drop: ID.Observer,
@@ -1561,11 +1561,6 @@ export const CATALOG_EXCLUDED: Record<number, string> = {
   [ID.RedTorch]: "redstone — retired 2026-10-30 (audit §21 A2)",
   [ID.Repeater]: "redstone — retired 2026-10-30 (audit §21 A2)",
   [ID.Comparator]: "redstone — retired 2026-10-30 (audit §21 A2)",
-  [ID.Observer]: "redstone — retired 2026-10-30 (audit §21 A2)",
-  [ID.Lever]: "redstone — retired 2026-10-30 (audit §21 A2)",
-  [ID.Plate]: "redstone — retired 2026-10-30 (audit §21 A2)",
-  [ID.Daylight]: "redstone — retired 2026-10-30 (audit §21 A2)",
-  [ID.Target]: "redstone — retired 2026-10-30 (audit §21 A2)",
   [ID.Piston]: "redstone pusher — retired 2026-10-30 (the mech Actuator is the pusher now)",
   [ID.Dispenser]: "redstone launcher — retired 2026-10-30 (audit §21 A2)",
   [ID.Fire]: "world fire, not an item",
@@ -1589,9 +1584,14 @@ export const CATALOG: number[] = BLOCKS.filter(
 // simply a lamp now — place it and it shines, no switch (see below).
 export const RETIRED_REDSTONE: number[] = [
   ID.Dust, ID.DustOn, ID.RedTorch, ID.RedTorchOn, ID.Repeater, ID.RepeaterOn,
-  ID.Comparator, ID.ComparatorOn, ID.Observer, ID.ObserverOn, ID.Lever, ID.LeverOn,
-  ID.Plate, ID.PlateOn, ID.Daylight, ID.DaylightInv, ID.Target, ID.Piston, ID.Dispenser,
+  ID.Comparator, ID.ComparatorOn, ID.Piston, ID.Dispenser,
 ];
+// B7 (same day, Philippe's redirect): Lever, Plate, Daylight (Solar
+// switch), Observer (Watcher) and Target came BACK — re-logic'd onto the
+// energy model in game.ts (they switch neighbouring Technic parts; the
+// power still comes from hub batteries and fuel). Dust, torches,
+// repeaters, comparators, the pusher and the launcher stay retired:
+// wire plumbing and duplicates of the old model.
 for (const id of RETIRED_REDSTONE) {
   const d = BLOCKS[id];
   if (d) {

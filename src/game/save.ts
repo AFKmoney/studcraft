@@ -38,6 +38,7 @@ export type SaveV1 = {
     burn: number;
   }[];
   comps?: { x: number; y: number; z: number; dir: number; delay: number }[];
+  switches?: { x: number; y: number; z: number }[];
   beacons?: { x: number; y: number; z: number; buff: string }[];
   jukeboxes?: { x: number; y: number; z: number; disc: number }[];
   shulkerQueue?: { ids: number[]; ns: number[] }[];

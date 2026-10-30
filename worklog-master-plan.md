@@ -372,3 +372,23 @@ Philippe a testé sur Pages et rapporté 7 chantiers. Audit au code fait le mêm
 
 ### Ordre d'exécution (claim Muse, 2026-10-30)
 B1 studs (A1) → B2 eau (A5) → B3 bouton Build selon verdict qa-touch (A4) → B4 kiln visible + recettes Technic générées (A3) → B5 retrait redstone (A2) → B6 modèles en main + liste items (A6). Fermeture de chaque ligne = mesuré + retest Pages de Philippe.
+
+---
+
+## 22. Catalogue de véhicules + contrôles véhicule (ordres de Philippe, 2026-10-30 ~16h06-16h07 PDT)
+
+### 22.1 Le catalogue (le modèle = une liste de pièces Technic relatives)
+- [ ] **Format modèle** : un véhicule = la liste de ses pièces (id, orientation, position relative à une ancre) + nom + auteur. C'est le format que la couche Technic sauvegarde déjà — un modèle est un assemblage portable, rien d'autre.
+- [ ] **Catalogue persistant HORS monde** : les modèles du joueur vivent dans un catalogue (stockage local du jeu, clé séparée des mondes) qui **survit à la suppression d'un monde**. Sauver le véhicule qu'on regarde/conduit dans le catalogue = un geste.
+- [ ] **Véhicules préfabriqués** : un set de départ (buggy, camion, tracteur/excavatrice…) — assemblages VALides au sens de `vehicleFromAssembly` (hub + moteur + ≥2 roues), vérifiés headless avant d'entrer au catalogue.
+- [ ] **Le vendeur spécial + le hangar** : dans CERTAINS villages, un **commerce** — un gros garage/hangar mécanique décoré (pièces exposées, véhicules en montre) avec un **vendeur mécanicien** qui vend les modèles préfabriqués (prix en matière : ingots + cuivre selon les pièces du modèle). Worldgen : le hangar est une structure générée comme les sites, le vendeur est un trader spécialisé.
+- [ ] **Charger un modèle — la loi matière** : en **Creative**, le modèle se pose directement. En **Survival**, il faut AVOIR les matériaux (les pièces) : les pièces payées se posent pour vrai; les pièces manquantes se posent en **hologrammes transparents** (le modèle est incomplet, visible comme tel) et se complètent plus tard quand le joueur a les pièces (le geste « compléter » remplit les hologrammes restants). Un hologramme n'est ni solide ni conduisible tant qu'il manque des pièces structurelles.
+- [ ] **Publier en ligne** : phase 1 = codes de partage (le modèle encodé en texte, copiable/collant — aucun serveur requis, le catalogue importe un code). Phase 2 (serveur) : publication dans un catalogue en ligne partagé entre joueurs — requiert le backend, à brancher sur l'infra existante quand elle sera choisie. Ne jamais simuler un en ligne qui n'existe pas.
+- [ ] **Modifier** : un modèle chargé redevient un assemblage ordinaire (on ajoute/retire des pièces), re-savable au catalogue sous le même nom ou un nouveau.
+
+### 22.2 Contrôles véhicule (même ordre)
+- [ ] **Bouton Entrer/Sortir** : un bouton dédié (tactile : visible quand on vise un hub conduisible, et pendant la conduite pour sortir) — l'entrée/sortie ne doit plus dépendre seulement du geste « use » sur le hub et du parcage au sneak. Clavier/manette gardent use/parcage; le bouton appelle le même geste.
+- [ ] **Commandes adaptées au véhicule** : en conduite tactile, le cluster d'actions devient un cluster de conduite (gauche/droite, gaz/frein, parcage) au lieu des boutons miner/poser qui n'ont aucun sens au volant. Le stick de marche peut rester le volant, mais les boutons dédiés sont la référence.
+
+### Phasage (claim Muse à l'inscription)
+P-A format modèle + catalogue local persistant + sauver/charger (Creative direct, Survival matière + hologrammes) → P-B préfabriqués + contrôles véhicule (§22.2) → P-C vendeur + hangar worldgen → P-D partage (codes, puis serveur). Fermeture par phase = mesuré + verdict Pages de Philippe.

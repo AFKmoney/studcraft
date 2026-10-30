@@ -219,6 +219,28 @@ export const RECIPES: Recipe[] = [
   r("boots-leather", "Leather boots", "4 pelts", [[ID.Pelt, 4]], ID.BootsLeather, 1, { shape: [ID.Pelt, 0, ID.Pelt, ID.Pelt, 0, ID.Pelt], w: 3, h: 2, cat: "gear" }),
   r("lamp", "Lamp", "1 window + 1 amber — shines on its own, no switch", [[ID.Glass, 1], [ID.Amber, 1]], ID.Lamp, 1, { shape: [ID.Glass, ID.Amber], w: 1, h: 2, cat: "build" }),
   r("hard", "Kiln brick", "4 cobble + 1 coal", [[C, 4], [ID.Coal, 1]], ID.Hard, 1, { cat: "build" }),
+  // B7 (2026-10-30): the switches are back, on the energy model — they
+  // control neighbouring Technic parts; power comes from hubs and fuel.
+  r("lever", "Lever", "1 stick + 1 cobble — a switch: flips the machines beside it on or off", [[S, 1], [C, 1]], ID.Lever, 1, { shape: [S, C], w: 1, h: 2, cat: "build" }),
+  r("plate", "Pressure plate", "2 plastic ingots — the machines beside it run while you stand on it", [[ID.PlasticIngot, 2]], ID.Plate, 1, { shape: [ID.PlasticIngot, ID.PlasticIngot], w: 2, h: 1, cat: "build" }),
+  r("solar-switch", "Solar switch", "3 windows + 3 crystals + 3 plank slabs — switches neighbouring machines on by day; use it to flip to night mode", [[ID.Glass, 3], [ID.Crystal, 3], [ID.SlabPlanks, 3]], ID.Daylight, 1, {
+    shape: [ID.Glass, ID.Glass, ID.Glass, ID.Crystal, ID.Crystal, ID.Crystal, ID.SlabPlanks, ID.SlabPlanks, ID.SlabPlanks],
+    w: 3,
+    h: 3,
+    cat: "build",
+  }),
+  r("watcher", "Watcher", "6 cobble + 2 copper + 1 quartz — when the block it faces changes, it toggles the machines beside it", [[C, 6], [ID.Copper, 2], [ID.White, 1]], ID.Observer, 1, {
+    shape: [C, C, C, ID.Copper, ID.Copper, ID.White, C, C, C],
+    w: 3,
+    h: 3,
+    cat: "build",
+  }),
+  r("target-block", "Target", "1 hay bale + 4 red bricks — hit it with an arrow to toggle the machines beside it", [[ID.Hay, 1], [ID.Red, 4]], ID.Target, 1, {
+    shape: [0, ID.Red, 0, ID.Red, ID.Hay, ID.Red, 0, ID.Red, 0],
+    w: 3,
+    h: 3,
+    cat: "build",
+  }),
   r("tnt", "Blast brick", "5 blast dust + 4 sand", [[ID.Powder, 5], [ID.Sand, 4]], ID.TNT, 1, {
     shape: [ID.Powder, ID.Sand, ID.Powder, ID.Sand, ID.Powder, ID.Sand, ID.Powder, ID.Sand, ID.Powder],
     w: 3,

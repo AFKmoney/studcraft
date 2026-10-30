@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { ATLAS_COLS, ATLAS_ROWS, BLOCKS, CREATIVE_BAR, ID, TECHNIC, def, faceTile, stairsVariant, type BlockDef } from "./blocks";
-import { TechWorld, ORIENTS, composeO, bbox as techBbox, spec as techSpec, type Part as TechPart, type Plan as TechPlan, type Target as TechTarget } from "./technic";
+import { TechWorld, ORIENTS, composeO, worldCells, bbox as techBbox, spec as techSpec, type Part as TechPart, type Plan as TechPlan, type Target as TechTarget } from "./technic";
 import { buildTechnicGeometry } from "./technicGeo";
 import { fuelFromMelt, parkPoses, refuel as vehRefuel, stepVehicle as stepVeh, vehicleFromAssembly, type Vehicle, type VPart } from "./vehicle";
 import { FUEL, type Channel } from "./p5bProto";
@@ -3794,6 +3794,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     for (const beam of beamMeshes.values()) scene.remove(beam);
     beamMeshes.clear();
     comps.clear();
+    switchCells.clear();
     signs.clear();
     FS.clearFireState(); // v4.15
     CH.clearChips(); // v4.17
@@ -3942,6 +3943,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     for (const j of data.jukeboxes ?? []) jukeDiscs.set(j.x + "," + j.y + "," + j.z, j.disc);
     shulkerQueue = (data.shulkerQueue ?? []).map((q) => ({ ids: q.ids.slice(), ns: q.ns.slice() }));
     for (const c of data.comps ?? []) comps.set(c.x + "," + c.y + "," + c.z, { dir: c.dir, delay: c.delay });
+    switchCells.clear();
+    for (const s of data.switches ?? []) switchCells.set(s.x + "," + s.y + "," + s.z, { prev: -1 });
     signs.clear();
     for (const s of data.signs ?? []) signs.set(s.x + "," + s.y + "," + s.z, s.t);
     // v4.15: restore fire state (cells are validated by tickFire on load).
@@ -6792,6 +6795,71 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
   }
 
+  // ── Switches & sensors (B7, 2026-10-30) ─────────────────────────────
+  // The keepable ex-redstone items, re-logic'd onto the energy model
+  // (Philippe: « rediriger vers notre modèle d'énergie »). No wires, no
+  // signal levels: a switch block directly sets the `on` state of
+  // Technic parts in its 6 neighbouring cells. The parts still draw
+  // their power from hub batteries and fuel — a switch is a CONTROL,
+  // never a power source. Autonomous switches (solar, watcher) register
+  // themselves in switchCells at placement; levers, plates and targets
+  // are event-driven and need no registry.
+  const switchCells = new Map<string, { prev: number }>();
+  const SWITCH_DIRS: ReadonlyArray<readonly [number, number]> = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+  function applySwitch(x: number, y: number, z: number, mode: "on" | "off" | "toggle") {
+    let touched = false;
+    for (const [ox, oy, oz] of NEIGHBORS6) {
+      const cx = x + ox;
+      const cy = y + oy;
+      const cz = z + oz;
+      for (const p of tech.parts.values()) {
+        for (const c of worldCells(p)) {
+          if (c.x === cx && c.y === cy && c.z === cz) {
+            p.on = mode === "toggle" ? !p.on : mode === "on";
+            touched = true;
+            break;
+          }
+        }
+      }
+    }
+    if (touched) saveDirty = true;
+  }
+
+  let switchAcc = 0;
+  function tickSwitches(dt: number) {
+    switchAcc += dt;
+    if (switchAcc < 0.4) return;
+    switchAcc = 0;
+    if (switchCells.size === 0) return;
+    const sunUp = Math.sin(worldTime * Math.PI * 2) > 0.05;
+    for (const [k, st] of [...switchCells.entries()]) {
+      const [x, y, z] = k.split(",").map(Number);
+      const id = world.get(x, y, z);
+      if (id !== ID.Daylight && id !== ID.DaylightInv && id !== ID.Observer) {
+        switchCells.delete(k);
+        continue;
+      }
+      const far = Math.hypot(x - player.x, z - player.z) > 48;
+      if (id === ID.Observer) {
+        const comp = comps.get(k);
+        if (!comp) continue;
+        const d = SWITCH_DIRS[comp.dir];
+        const watched = world.get(x - d[0], y, z - d[1]);
+        if (st.prev === -1) st.prev = watched;
+        else if (watched !== st.prev) {
+          st.prev = watched;
+          if (!far) applySwitch(x, y, z, "toggle");
+        }
+        continue;
+      }
+      const want = (id === ID.Daylight) === sunUp ? 1 : 0;
+      if (st.prev !== want) {
+        st.prev = want;
+        if (!far) applySwitch(x, y, z, want ? "on" : "off");
+      }
+    }
+  }
+
   function facingDir() {
     const fx = -Math.sin(player.yaw);
     const fz = -Math.cos(player.yaw);
@@ -6800,6 +6868,18 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   }
 
   function useBlock(hit: { id: number; x: number; y: number; z: number }) {
+    if (hit.id === ID.Daylight || hit.id === ID.DaylightInv) {
+      const next = hit.id === ID.Daylight ? ID.DaylightInv : ID.Daylight;
+      if (world.set(hit.x, hit.y, hit.z, next)) {
+        markDirtyAt(hit.x, hit.z);
+        const st = switchCells.get(hit.x + "," + hit.y + "," + hit.z);
+        if (st) st.prev = -1;
+        say(next === ID.DaylightInv ? "Night switch mode" : "Solar switch mode");
+        audio.place();
+        saveDirty = true;
+      }
+      return true;
+    }
     if (hit.id === ID.CropRipe) {
       world.set(hit.x, hit.y, hit.z, ID.Air);
       if (!creative) {
@@ -6855,7 +6935,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     if (block.lever) {
       const next = hit.id === ID.Lever ? ID.LeverOn : ID.Lever;
-      if (world.set(hit.x, hit.y, hit.z, next)) markDirtyAt(hit.x, hit.z);
+      if (world.set(hit.x, hit.y, hit.z, next)) {
+        markDirtyAt(hit.x, hit.z);
+        applySwitch(hit.x, hit.y, hit.z, next === ID.LeverOn ? "on" : "off");
+      }
       audio.place();
       return true;
     }
@@ -7171,6 +7254,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       say("The shulker box kept its contents");
     }
     if (!creative) spend(held, 1);
+    if (placeId === ID.Daylight || placeId === ID.DaylightInv || placeId === ID.Observer) {
+      switchCells.set(px + "," + py + "," + pz, { prev: -1 });
+      if (placeId === ID.Observer) comps.set(px + "," + py + "," + pz, { dir: facingDir(), delay: 1 });
+    }
     if (held === ID.Torch) bumpQuest("place", "torch");
     burst(px + 0.5, py + 0.8, pz + 0.5, heldDef.color, 6);
     audio.place();
@@ -8193,6 +8280,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (world.get(gx, py, gz) === ID.Plate) {
         world.set(gx, py, gz, ID.PlateOn);
         markDirtyAt(gx, gz);
+        applySwitch(gx, py, gz, "on");
       }
     }
     if (plateKey && plateKey !== nextPlate) {
@@ -8200,6 +8288,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (world.get(px, py, pz) === ID.PlateOn) {
         world.set(px, py, pz, ID.Plate);
         markDirtyAt(px, pz);
+        applySwitch(px, py, pz, "off");
       }
       plateKey = "";
     }
@@ -8254,6 +8343,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           }
         }
         if (hitBlockId === ID.Target) {
+          applySwitch(bx, by, bz, "toggle");
           audio.note(16);
           say("Bullseye!", 1200);
         }
@@ -10944,6 +11034,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         const [x, y, z] = key.split(",").map(Number);
         return { x, y, z, dir: c.dir, delay: c.delay };
       }),
+      switches: [...switchCells.keys()].map((key) => {
+        const [x, y, z] = key.split(",").map(Number);
+        return { x, y, z };
+      }),
       signs: [...signs.entries()].map(([key, t]) => {
         const [x, y, z] = key.split(",").map(Number);
         return { x, y, z, t };
@@ -12752,6 +12846,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         }
       }
       tickHoppers(dt);
+      tickSwitches(dt);
       tickFire(dt);
       tickFurnaces(dt);
       lightAcc += dt;
