@@ -2,6 +2,8 @@ import * as THREE from "three";
 import { ATLAS_COLS, ATLAS_ROWS, BLOCKS, CREATIVE_BAR, ID, TECHNIC, def, faceTile, stairsVariant, type BlockDef } from "./blocks";
 import { TechWorld, ORIENTS, composeO, bbox as techBbox, spec as techSpec, type Part as TechPart, type Plan as TechPlan, type Target as TechTarget } from "./technic";
 import { buildTechnicGeometry } from "./technicGeo";
+import { fuelFromMelt, parkPoses, refuel as vehRefuel, stepVehicle as stepVeh, vehicleFromAssembly, type Vehicle, type VPart } from "./vehicle";
+import { FUEL, type Channel } from "./p5bProto";
 import { createAudio } from "./audio";
 import { STUD_H, STUD_OFFSETS, STUD_R, buildChunk, type Surface } from "./mesher";
 import * as FS from "./fireState";
@@ -322,6 +324,7 @@ declare global {
       placeTechAt?: (id: number, o: number, qx: number, qy: number, qz: number) => boolean;
       getTechnic?: () => [number, number, number, number, number, number][];
       stepTechnic?: (dt: number) => { parts: number; jammed: boolean; omegas: Record<string, number>; angles: Record<string, number> };
+      getVehicle?: () => { pos: { x: number; y: number; z: number }; vel: number; yaw: number; fuel: number; battery: number; load: number; parts: number } | null;
       spinTech?: () => number;
       getMineState?: () => { mine: number; time: number; key: string; target: string };
       getIntegrity?: () => { total: number; supported: number; stressed: string[]; falling: number; stress: Record<string, number>; sag: Record<string, number> };
@@ -648,6 +651,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     outN: number;
     cook: number;
     burn: number;
+    // P5b: fractional Fuel distilled from smelted pellets (0.25 each),
+    // paid out as whole Fuel items. Rides the {...f} save spread.
+    fuelAcc?: number;
   };
   const furnaces = new Map<string, Furn>();
   const chests = new Map<string, { ids: number[]; ns: number[] }>();
@@ -3962,6 +3968,16 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const p = tech.add(id, o, [qx, qy, qz]);
       p.on = on !== 0;
     }
+    // P5b restore: channel bindings + hub fuel/battery reserves,
+    // keyed by lattice position (see the P5b block at toggleTechPart).
+    motorChannelByQ.clear();
+    for (const [k, ch] of data.vehBind ?? []) motorChannelByQ.set(k, ch as Channel);
+    hubChannelByQ.clear();
+    for (const [k, ch] of data.vehHubCh ?? []) hubChannelByQ.set(k, ch as Channel);
+    vehFuelByQ.clear();
+    for (const [k, n] of data.vehFuel ?? []) vehFuelByQ.set(k, n);
+    vehBattByQ.clear();
+    for (const [k, n] of data.vehBatt ?? []) vehBattByQ.set(k, n);
     techRevSeen = tech.rev;
     syncTechMeshes();
     for (const [x, y, z] of data.tufts ?? []) TS.tuftGone.add(TS.tkey(x, y, z));
@@ -5187,6 +5203,183 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     say(def(p.id).name + (p.on ? " — on" : " — off"));
     audio.place();
     saveDirty = true;
+  }
+
+  // ================= P5b VEHICLES (Muse wiring, 2026-10-30) =========
+  // A Technic assembly becomes ONE kinematic body (vehicle.ts): the
+  // player builds it on the lattice, "use"s its hub to drive it, and
+  // sneaks to park it back onto the lattice, part for part. Bindings
+  // and energy reserves are keyed by lattice position ("qx,qy,qz") so
+  // they survive save/load (uids do not — the technic save format
+  // carries no uid). See WORKLOG 2026-10-30 (P5b claim) for the full
+  // record: controls, energy model, parking rule.
+  const CHANNELS: Channel[] = ["A", "B", "C", "D"];
+  const nextChannel = (c: Channel): Channel => CHANNELS[(CHANNELS.indexOf(c) + 1) % CHANNELS.length];
+  const qKey = (q: readonly number[]) => q[0] + "," + q[1] + "," + q[2];
+  const motorChannelByQ = new Map<string, Channel>();
+  const hubChannelByQ = new Map<string, Channel>();
+  const vehFuelByQ = new Map<string, number>();
+  const vehBattByQ = new Map<string, number>();
+  type VehEnt = {
+    v: Vehicle;
+    group: THREE.Group;
+    baseQuat: THREE.Quaternion;
+    meshes: { vp: VPart; mesh: THREE.Mesh; base: THREE.Matrix4 }[];
+  };
+  let vehEnt: VehEnt | null = null;
+
+  /** The connected assembly a part belongs to: parts whose world
+   *  AABBs touch (within a hair) are one build. */
+  function techComponent(uid0: number): TechPart[] {
+    const parts = [...tech.parts.values()];
+    const boxes = new Map(parts.map((p) => [p.uid, techPartAabb(p.id, p.o, p.q)]));
+    const touch = (a: { c: number[]; s: number[] }, b: { c: number[]; s: number[] }) =>
+      Math.abs(a.c[0] - b.c[0]) <= (a.s[0] + b.s[0]) / 2 + 0.06 &&
+      Math.abs(a.c[1] - b.c[1]) <= (a.s[1] + b.s[1]) / 2 + 0.06 &&
+      Math.abs(a.c[2] - b.c[2]) <= (a.s[2] + b.s[2]) / 2 + 0.06;
+    const seen = new Set([uid0]);
+    const queue = [uid0];
+    const out: TechPart[] = [];
+    while (queue.length) {
+      const u = queue.pop()!;
+      const p = tech.parts.get(u);
+      if (!p) continue;
+      out.push(p);
+      const bp = boxes.get(u)!;
+      for (const q of parts) {
+        if (!seen.has(q.uid) && touch(bp, boxes.get(q.uid)!)) {
+          seen.add(q.uid);
+          queue.push(q.uid);
+        }
+      }
+    }
+    return out;
+  }
+
+  function placeVehGroup() {
+    if (!vehEnt) return;
+    const { v, group } = vehEnt;
+    group.position.set(v.pos.x, v.pos.y, v.pos.z);
+    const yawQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), v.yaw - v.yaw0);
+    group.quaternion.copy(yawQ).multiply(vehEnt.baseQuat);
+    group.rotateX(v.pitch);
+    group.rotateZ(v.roll);
+    // Wheel spin, in each wheel's own geometry space (its prim axis).
+    for (const { vp, mesh, base } of vehEnt.meshes) {
+      if (vp.role !== "wheel") continue;
+      const prim = techSpec(vp.id)?.prim ?? 2;
+      const axis = new THREE.Vector3(prim === 0 ? 1 : 0, prim === 1 ? 1 : 0, prim === 2 ? 1 : 0);
+      const spin = new THREE.Matrix4().makeRotationAxis(axis, v.wheelSpin);
+      mesh.matrix.multiplyMatrices(base, spin);
+    }
+  }
+
+  /** "Use" on a hub whose assembly is a complete vehicle: drive it.
+   *  Returns false (with the reason said) when it is not one yet. */
+  function tryEnterVehicle(hubPart: TechPart): boolean {
+    if (vehEnt) {
+      say("Already driving — sneak to park first");
+      return false;
+    }
+    const asm = techComponent(hubPart.uid);
+    // No wheels at all: a stationary machine (hub + battery + motor on
+    // a bench) — not a vehicle attempt; the caller falls back to the
+    // plain on/off toggle, as before P5b.
+    if (!asm.some((p) => p.id === ID.Wheel)) return false;
+    const bindings = new Map<number, Channel>();
+    for (const p of asm) {
+      const ch = motorChannelByQ.get(qKey(p.q));
+      if (ch) bindings.set(p.uid, ch);
+    }
+    const hk = qKey(hubPart.q);
+    const { vehicle, missing } = vehicleFromAssembly(asm, {
+      bindings,
+      hubChannel: hubChannelByQ.get(hk) ?? "A",
+      battery: vehBattByQ.get(hk) ?? 1,
+      fuel: vehFuelByQ.get(hk) ?? 0,
+    });
+    if (missing.length) {
+      say("Not a vehicle yet — missing: " + missing.join(", "));
+      return false;
+    }
+    if (hubPart.on === false) {
+      toggleTechPart(hubPart);
+      say("Hub on — use it again to drive");
+      return false;
+    }
+    // The assembly leaves the lattice; the SAME parts, poses and
+    // geometry become the vehicle body (build == run).
+    for (const p of asm) tech.remove(p.uid);
+    syncTechMeshes();
+    const om = ORIENTS[vehicle.frameO >= 0 ? vehicle.frameO : 0];
+    const baseM = new THREE.Matrix4().set(om[0], om[1], om[2], 0, om[3], om[4], om[5], 0, om[6], om[7], om[8], 0, 0, 0, 0, 1);
+    const group = new THREE.Group();
+    const meshes = vehicle.parts.map((vp) => {
+      const mesh = new THREE.Mesh(techGeoOf(vp.id), techMatSolid);
+      mesh.matrixAutoUpdate = false;
+      const base = new THREE.Matrix4();
+      techBaseMatrix(vp.localO, [vp.localPos.x * 4, vp.localPos.y * 4, vp.localPos.z * 4], base);
+      mesh.matrix.copy(base);
+      group.add(mesh);
+      return { vp, mesh, base };
+    });
+    scene.add(group);
+    vehEnt = { v: vehicle, group, baseQuat: new THREE.Quaternion().setFromRotationMatrix(baseM), meshes };
+    placeVehGroup();
+    say("Driving — W/S throttle, A/D steer, Shift park · Fuel " + vehicle.fuel.toFixed(1) + "/" + FUEL.tankCapacity + " · Battery " + Math.round(vehicle.battery * 100) + "%");
+    audio.place();
+    saveDirty = true;
+    return true;
+  }
+
+  /** Park the driven vehicle back onto the lattice (yaw snapped to a
+   *  quarter turn, positions to the half-module lattice, every part
+   *  re-tested). False — and nothing changes — when it cannot fit. */
+  function leaveVehicle(): boolean {
+    if (!vehEnt) return false;
+    const ent = vehEnt;
+    const poses = parkPoses(ent.v);
+    if (!poses) return false;
+    for (const ps of poses) {
+      if (tech.test(ps.id, ps.o, ps.q, (bx, by, bz) => def(world.get(bx, by, bz)).solid) < 0) return false;
+    }
+    // Reserves + bindings follow the hub / motors to their new keys.
+    for (const ps of poses) {
+      const added = tech.add(ps.id, ps.o, ps.q, ps.uid);
+      const vp = ent.v.parts.find((p) => p.uid === ps.uid);
+      if (vp) added.on = vp.on;
+      if (vp?.role === "motor") motorChannelByQ.set(qKey(ps.q), vp.channel);
+      if (vp?.role === "hub") {
+        hubChannelByQ.set(qKey(ps.q), ent.v.hubChannel);
+        vehFuelByQ.set(qKey(ps.q), ent.v.fuel);
+        vehBattByQ.set(qKey(ps.q), ent.v.battery);
+      }
+    }
+    scene.remove(ent.group);
+    vehEnt = null;
+    syncTechMeshes();
+    player.x = ent.v.pos.x + 1.6;
+    player.z = ent.v.pos.z;
+    player.y = ent.v.pos.y + 1.2;
+    player.vy = 0;
+    say("Parked — it's a build again");
+    saveDirty = true;
+    return true;
+  }
+
+  /** Save-time fallback: if the vehicle cannot be parked while
+   *  serializing, its parts drop as items at the body — a save never
+   *  deletes a part (the migration law). */
+  function dropVehicleParts() {
+    if (!vehEnt) return;
+    const ent = vehEnt;
+    for (const vp of ent.v.parts) dropItem(vp.id, 1, ent.v.pos.x, ent.v.pos.y + 0.5, ent.v.pos.z);
+    scene.remove(ent.group);
+    vehEnt = null;
+    player.x = ent.v.pos.x;
+    player.z = ent.v.pos.z;
+    player.y = ent.v.pos.y + 1;
+    player.vy = 0;
   }
 
   // Save conversion (Technic étape 4): a Technic part stored as a P0
@@ -10996,6 +11189,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   }
 
   function packSave(): SaveV1 {
+    // P5b: a driven vehicle's parts are off-lattice — park before
+    // serializing; if it cannot park, the parts drop as items at the
+    // body (dropVehicleParts). A save never deletes a part.
+    if (vehEnt && !leaveVehicle()) dropVehicleParts();
     const edits: [number, number, number, number][] = [];
     let n = 0;
     for (const [key, id] of world.edits) {
@@ -11062,6 +11259,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }),
       bricks: [...bricks.values()].map((b) => [b.id, b.sx, b.sy, b.sz] as [number, number, number, number]),
       technic: [...tech.parts.values()].map((p) => [p.id, p.o, p.q[0], p.q[1], p.q[2], p.on === false ? 0 : 1] as [number, number, number, number, number, number]),
+      vehBind: [...motorChannelByQ.entries()],
+      vehHubCh: [...hubChannelByQ.entries()],
+      vehFuel: [...vehFuelByQ.entries()],
+      vehBatt: [...vehBattByQ.entries()],
       welds: [...welds].map((w) => {
         const [a, b] = w.split("|");
         const [ax, ay, az] = a.split(",").map(Number);
@@ -11622,9 +11823,31 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       // Place button on a part: with a Technic part in hand, the
       // planner pre-pass above owns placement; with anything else in
-      // hand, a drive part (crank / motor / hub / battery) toggles.
-      if (!TECHNIC_SET.has(hotbar[slot]) && tspec?.drive && sample.first && sample.place && !prevPlace) {
-        toggleTechPart(tpart);
+      // hand (P5b gestures in **bold**): a HUB whose assembly is a
+      // complete vehicle is DRIVEN; a placed REMOTE cycles its hub's
+      // channel; sneak+use on a MOTOR cycles the channel that motor
+      // is bound to; any other drive part toggles on/off as before.
+      if (!TECHNIC_SET.has(hotbar[slot]) && sample.first && sample.place && !prevPlace) {
+        if (tpart.id === ID.TechHub) {
+          if (!tryEnterVehicle(tpart)) toggleTechPart(tpart);
+        } else if (tpart.id === ID.Remote) {
+          const hub = techComponent(tpart.uid).find((p) => p.id === ID.TechHub);
+          if (hub) {
+            const nx = nextChannel(hubChannelByQ.get(qKey(hub.q)) ?? "A");
+            hubChannelByQ.set(qKey(hub.q), nx);
+            say("Hub listening on channel " + nx);
+            audio.place();
+            saveDirty = true;
+          }
+        } else if (sample.sneak && tspec?.drive === "motor") {
+          const nx = nextChannel(motorChannelByQ.get(qKey(tpart.q)) ?? "A");
+          motorChannelByQ.set(qKey(tpart.q), nx);
+          say(def(tpart.id).name + " bound to channel " + nx);
+          audio.place();
+          saveDirty = true;
+        } else if (tspec?.drive) {
+          toggleTechPart(tpart);
+        }
       }
     } else if (useBrick && bHit) {
       // P0: the crosshair is on a snapped brick.
@@ -11935,6 +12158,30 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (sample.sneak) {
         mount = null;
         player.y += 1.1;
+      }
+    }
+
+    // P5b: driving a converted Technic vehicle — the player rides the
+    // body (the mount pattern); sneak parks it back onto the lattice.
+    if (vehEnt) {
+      const v = vehEnt.v;
+      if (sample.sneak) {
+        if (!leaveVehicle()) say("No room to park here — the build won't fit the lattice");
+      } else {
+        // Refuel gesture: hold a Fuel item and press use while driving.
+        if (sample.place && hotbar[slot] === ID.Fuel && vehRefuel(v, 1) > 0) {
+          if (!creative) spend(ID.Fuel, 1);
+          say("Fuel " + v.fuel.toFixed(1) + " / " + FUEL.tankCapacity);
+        }
+        stepVeh(v, dt, { throttle: sample.fwd, steer: sample.str, channel: v.hubChannel }, (x, z) => groundY(x, z));
+        placeVehGroup();
+        player.x = v.pos.x;
+        player.z = v.pos.z;
+        player.y = v.pos.y + 1.05;
+        player.vx = 0;
+        player.vy = 0;
+        player.vz = 0;
+        player.grounded = true;
       }
     }
 
@@ -12645,6 +12892,18 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           if (f.inN <= 0) f.in = 0;
           f.out = product;
           f.outN += 1;
+          // P5b (Muse): the Foundry's second yield — smelting pellets
+          // (the only road to a PlasticIngot) also distils FUEL at
+          // 0.25/pellet (the FUEL numbers in p5bProto.ts), paid out as
+          // whole Fuel items beside the kiln. Matter is conserved:
+          // pellets → ingot + fuel, nothing from nowhere.
+          if (product === ID.PlasticIngot) {
+            f.fuelAcc = (f.fuelAcc ?? 0) + fuelFromMelt(1);
+            while (f.fuelAcc >= 1) {
+              f.fuelAcc -= 1;
+              dropItem(ID.Fuel, 1, f.x + 0.5, f.y + 1.25, f.z + 0.5);
+            }
+          }
           gainXp(product === ID.Ingot || product === ID.Tin || product === ID.Copper || product === ID.Amber || product === ID.Chrome || product === ID.Sapphire || product === ID.Resin || product === ID.Prism ? 2 : 1);
           saveDirty = true;
         }
@@ -13166,6 +13425,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       for (const [g, a] of tech.gAngle) angles[g] = a;
       return { parts: tech.parts.size, jammed: tech.jammed, omegas, angles };
     },
+    // P5b QA witness (inert in play): the driven vehicle, if any.
+    getVehicle: () => (vehEnt ? { pos: { ...vehEnt.v.pos }, vel: vehEnt.v.vel, yaw: vehEnt.v.yaw, fuel: vehEnt.v.fuel, battery: vehEnt.v.battery, load: vehEnt.v.load, parts: vehEnt.v.parts.length } : null),
     spinTech: () => ++techSpin,
     // P0 QA witness (qa99b11): mining progress on the current target —
     // key "B:…" = brick branch, voxel key = classic branch, "" = no mining.

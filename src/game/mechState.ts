@@ -59,6 +59,16 @@ export function frac(n: number, d: number): Frac {
   return { n: n / g, d: d / g };
 }
 
+/** The differential's one job: output = (A + B) / 2, in exact fractions.
+ *  This is THE implementation — mechLink's stepMech feeds diff outputs
+ *  through it, and the P5b vehicle layer (vehicle.ts) drives its driven
+ *  wheel pair through it too. (Extracted 2026-10-30, P5b wiring: the
+ *  formula used to live inline in mechLink AND as a dead copy in
+ *  p5bProto — one implementation now, three call sites.) */
+export function diffOutput(a: Frac, b: Frac): Frac {
+  return frac(a.n * b.d + b.n * a.d, a.d * b.d * 2);
+}
+
 function mul(a: Frac, n: number, d: number): Frac {
   return frac(a.n * n, a.d * d);
 }

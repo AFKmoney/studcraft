@@ -72,6 +72,13 @@ export type SaveV1 = {
   bricks?: [number, number, number, number][]; // P0 stud grid: [id, sx, sy, sz] — stud coords (sx = 2 × block x), y stays cell-aligned
   welds?: [number, number, number, number, number, number][]; // P2: welded brick pairs [sx1, sy1, sz1, sx2, sy2, sz2] (stud coords of both bricks)
   technic?: [number, number, number, number, number, number][]; // Technic 1:1 layer: [id, o, qx, qy, qz, on] — o = orientation index (0..23), q = half-module lattice coords (world blocks = q / 4), on = 0/1
+  // P5b (Muse, 2026-10-30): vehicle bindings/state, keyed by the part's
+  // lattice position "qx,qy,qz" (stable across save/load, unlike uids):
+  // motor channel bindings, hub channels, hub fuel + battery reserves.
+  vehBind?: [string, string][];
+  vehHubCh?: [string, string][];
+  vehFuel?: [string, number][];
+  vehBatt?: [string, number][];
   worldDays?: number;
 };
 

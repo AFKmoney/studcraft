@@ -1,10 +1,18 @@
-// P5b — complete minimal drive system (not just a demo).
-// Motors M/L/XL with Power Functions numbers.
-// Hub + battery + remote channels A–D.
-// One kinematic body per vehicle. Mass/center from parts.
-// Wheels = suspension raycasts. Diff = (A+B)/2.
-// Battery drains under load. Fuel design numbers included.
-// Build geometry == run geometry.
+import { diffOutput, frac } from "./mechState.ts";
+
+// P5b — prototype + spec constants (Grok, 2026-10-30).
+// Motors M/L/XL with Power Functions numbers; hub channels A–D;
+// FUEL design numbers; massOf/centerOf/suspRay helpers.
+//
+// The WIRED system lives in vehicle.ts (Muse chantier, same day):
+// assembly→vehicle conversion, real channel binding, terrain
+// suspension, the shared differential, the battery/generator/fuel
+// energy model, game wiring. This module stays as the constants
+// base + the original isolated prototype (makeVehicle/stepVehicle
+// are fixtures now — the game's vehicles come from real assemblies).
+// Energy model (decided in the wiring claim, WORKLOG 2026-10-30):
+// motors are ELECTRIC → battery, drained by torque load; FUEL is
+// melted plastic burned by the hub GENERATOR to recharge it.
 
 export type Vec3 = { x: number; y: number; z: number };
 
@@ -87,8 +95,12 @@ export function suspRay(groundY: number, wheelY: number): number {
   return Math.max(0, Math.min(1, 1 - travel / SUSP_LEN));
 }
 
+/** Delegates to mechState.diffOutput — the ONE differential
+ *  implementation (mechLink's stepMech + vehicle.ts use it too).
+ *  The local copy that lived here was dead code; deleted 2026-10-30. */
 export function diff(left: number, right: number): number {
-  return (left + right) / 2;
+  const f = diffOutput(frac(left, 1), frac(right, 1));
+  return f.n / f.d;
 }
 
 /** Step. Battery drains under load. Stops when empty. */
@@ -112,7 +124,8 @@ export function stepVehicle(v: ProtoVehicle, dt: number, groundY = 0): ProtoVehi
   return v;
 }
 
-/** Fuel design numbers (for combustion motors, later). */
+/** Fuel design numbers: plastic melt → fuel for the hub generator
+ *  (vehicle.ts). No combustion motor exists in the 1:1 catalogue. */
 export const FUEL = {
   meltPlasticYield: 0.25, // 1 plastic block → 0.25 fuel units
   tankCapacity: 4,

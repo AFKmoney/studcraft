@@ -474,6 +474,12 @@ export const ID = {
   // water (right-click water with 402 in hand). The grade is an ID, not
   // metadata: inventory stores counts per ID only.
   TemperedIngot: 403,
+  // P5b (Muse wiring, 2026-10-30): Fuel — plastic melted at the
+  // Foundry, distilled as a Kiln side-yield (0.25 per pellet, the
+  // FUEL numbers in p5bProto.ts). Burns in a vehicle hub's generator
+  // to recharge its battery (vehicle.ts). ID 470: 408/409 stay free
+  // (historic gaps), the registry's max was 469.
+  Fuel: 470,
   // P6 step 4 / P7 tool moulds (Muse): plastic tools cast at the
   // Foundry — the mould is the shape, the ingot is the stock. Tier 2
   // (stone class), 120 uses: moulded plastic, honestly mid-table.
@@ -959,6 +965,7 @@ item(ID.Shears, "Shears", "#c5ccd3", { maxUse: 80 });
 item(ID.Welder, "Welding torch", "#f07820", { maxUse: 120 });
 item(ID.Pellets, "Plastic pellets", "#e8dcc0");
 item(ID.PlasticIngot, "Plastic ingot", "#d9c58f");
+item(ID.Fuel, "Fuel", "#d98a2b");
 item(ID.TemperedIngot, "Tempered ingot", "#a8d8e8");
 gear(ID.PlasticPick, "Plastic pick", "#d9c58f", "pick", 2, 120);
 gear(ID.PlasticSword, "Plastic blade", "#d9c58f", "sword", 2, 120);
