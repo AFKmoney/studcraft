@@ -2117,22 +2117,43 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
 
     if (id === ID.Bow || id === ID.Crossbow) {
+      // Rebuilt 2026-10-29 (Philippe's photo: the old bow read as a
+      // beige lump). The old model was TWO short straight boxes angled
+      // at 0.42 rad — a stubby chevron, no arc — plus a string cylinder
+      // that was too short (0.30 for a 0.337 tip span) and offset from
+      // the limb tips, so it floated detached. Now: each limb is THREE
+      // segments walked along a real arc (the joints meet by
+      // construction, LEGO-faceted curve), the string spans tip to tip
+      // exactly, and the arrow sits on the grip.
       const woodMat = skin(0x7c522b);
       const stringMat = skin(0xe8e4dc);
       const gripMat = skin(0x4a2e16);
       const tipMat = skin(0xb0b6be);
       const fletchMat = skin(0xd82e22);
-      addBoxPart(group, 0.034, 0.08, 0.036, 0.03, 0, 0, gripMat);
-      const uLimb = addBoxPart(group, 0.028, 0.15, 0.030, 0.005, 0.10, 0, woodMat);
-      uLimb.rotation.z = 0.42;
-      const lLimb = addBoxPart(group, 0.028, 0.15, 0.030, 0.005, -0.10, 0, woodMat);
-      lLimb.rotation.z = -0.42;
-      addCylPart(group, 0.005, 0.005, 0.30, -0.048, 0, 0, stringMat, 6);
-      // Knocked LEGO arrow
-      const arr = addCylPart(group, 0.008, 0.008, 0.24, 0.01, 0, 0, woodMat, 8);
+      addBoxPart(group, 0.034, 0.08, 0.036, 0.012, 0, 0, gripMat);
+      const segAngles = [0.16, 0.42, 0.68];
+      const segLen = 0.09;
+      let tipX = 0, tipY = 0;
+      for (const sign of [1, -1] as const) {
+        let px = 0.012, py = sign * 0.03;
+        for (const a of segAngles) {
+          const dx = -Math.sin(a), dy = sign * Math.cos(a);
+          const seg = addBoxPart(group, 0.026, segLen + 0.012, 0.028, px + (dx * segLen) / 2, py + (dy * segLen) / 2, 0, woodMat);
+          seg.rotation.z = sign > 0 ? a : Math.PI - a;
+          px += dx * segLen;
+          py += dy * segLen;
+        }
+        addBoxPart(group, 0.030, 0.026, 0.032, px, py, 0, tipMat);
+        if (sign > 0) { tipX = px; tipY = py; }
+      }
+      // String: one thin span, tip to tip exactly.
+      addBoxPart(group, 0.006, tipY * 2, 0.006, tipX, 0, 0, stringMat);
+      // Nocked LEGO arrow, resting on the grip, pointing +x.
+      const arr = addCylPart(group, 0.007, 0.007, 0.30, 0.0, 0, 0, woodMat, 8);
       arr.rotation.z = Math.PI / 2;
-      addBoxPart(group, 0.032, 0.026, 0.026, 0.13, 0, 0, tipMat);
-      addBoxPart(group, 0.032, 0.032, 0.010, -0.09, 0, 0, fletchMat);
+      addBoxPart(group, 0.030, 0.024, 0.024, 0.165, 0, 0, tipMat);
+      addBoxPart(group, 0.010, 0.034, 0.030, -0.135, 0, 0, fletchMat);
+      addBoxPart(group, 0.030, 0.034, 0.010, -0.135, 0, 0, fletchMat);
       return { group, isTool: true, flames };
     }
 
