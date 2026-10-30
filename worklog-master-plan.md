@@ -107,3 +107,8 @@ La bibliothèque de pièces converge vers le catalogue LEGO réel complet (Syste
   1. Merge as-is (dungeon v1 maintenant, moules plus tard)
   2. Attendre que Grok ajoute les moules dans le loot, puis merge.
 - Décision en attente de Philippe.
+
+
+**2026-10-30 : Philippe décide d'ajouter les items Foundry dans le loot, puis merge.**
+- Pellets (401), PlasticIngot (402), TemperedIngot (403), PlasticPick/Sword, TPlasticPick ajoutés à la table dungeon.
+- Merge de la branche `grok/r3-dungeon-designs` vers main demandé.
