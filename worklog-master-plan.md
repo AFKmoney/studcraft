@@ -54,8 +54,8 @@ La bibliothèque de pièces converge vers le catalogue LEGO réel complet (Syste
 
 **Question ouverte :** seuil exact d'ancrage (studs vs contacts de face) et si les arbres restent un cas spécial ou rejoignent le système général.
 
-### P5b · Conduite — design d'un véhicule qui roule (EN COURS — Grok)
-**Claim :** `EN COURS (Grok)` — design d'abord.
+### P5b · Conduite — prototype Creative conduisible LIVRÉ et mergé (2026-10-30) ; mesure Pages + verdict Philippe en attente
+**Claim :** FAIT (Muse) — câblage livré sur `claude/p5b-wiring` et mergé sur main `500428318d59ba7f28c7665c55c8b2653ab516de` après le go de Philippe ; le module de Grok sert de socle.
 
 **Design :**
 - Une construction Technic devient un **corps cinématique unique** (masse + centre de masse calculés des pièces).
@@ -65,7 +65,7 @@ La bibliothèque de pièces converge vers le catalogue LEGO réel complet (Syste
 - Plus petit véhicule : 4 roues + chassis + 1 moteur + hub. Il roule sur le terrain en suivant la physique cinématique (pas de Physijs/cannon full rigid body par pièce).
 - Représentation build == run : la même géométrie sert à la fois pour le build et pour la simulation de conduite.
 
-**Prochaine étape :** prototype minimal (4 roues + moteur) en mode créatif, mesuré sur Pages.
+**Prochaine étape :** mesurer le prototype minimal (4 roues + moteur) en mode créatif **sur Pages** et obtenir le verdict de Philippe — en attente ; d'ici là, P5b reste « prêt pour retest », pas « fini ».
 
 ### P7 · Schéma matière — mat/mold + chaîne silicium (EN COURS — Grok)
 **Claim :** `EN COURS (Grok)` — fichiers: `src/game/blocks.ts` (BlockDef), `src/game/recipes.ts` ou fonderie.
@@ -177,12 +177,12 @@ Pas de redstone. Le cœur tourne : graphe de rotation local et borné.
 
 ### P5b · Électrique + conduite (LE gros morceau restant)
 
-- [ ] Moteurs électriques câblés à la couche 1:1 (tailles = couple/vitesse : M 405 rpm/11 Ncm, L 390/18, XL 220/40, servo ±90° — mesures Power Functions, LEGO ne publie rien)
-  - **EN COURS (Grok)** — P5b complet sur branche grok/p5b-proto. Moteurs M/L/XL (405/390/220 rpm, 11/18/40 Ncm), hub+batterie+remote canaux A–D, un corps cinématique, suspension raycast, diff (A+B)/2, batterie qui draine, chiffres fuel. Tests 6/6. Scale en main intouché.
-- [ ] Hub/batterie + télécommande à canaux A–D : le joueur LIE un hub à sa machine
-- [ ] **Conduite : un véhicule construit roule pour vrai sur le terrain** — UN corps cinématique par construction (masse/centre calculés des pièces), roues = raycasts de suspension, différentiel (A+B)/2. Jamais un corps rigide par brique, jamais de représentation build ≠ run
-- [ ] **CARBURANT (ordre de Philippe 2026-10-30 — n'était PAS au plan)** : fondre du plastique donne aussi du **fuel** (la Fonderie gagne un deuxième produit — la matière boucle : P6 nourrit les machines). À designer en chiffres : item fuel + réservoir, quels moteurs brûlent du fuel (combustion) vs électriques (batterie), taux de consommation selon la charge, recharge/drain de batterie, comportement à sec (la machine s'arrête, jamais de magie). Aucune énergie de nulle part : chaque joule répond « fait de quoi »
-- [ ] **Contrôle des machines sur TOUS les appareils (ordre de Philippe 2026-10-30)** : la télécommande canaux A–D doit exister au **tactile** (télécommande à l'écran) et à la **manette** (sticks/gâchettes), pas juste au clavier; et le **mode construction Tab** doit être atteignable et pilotable au tactile + à la manette (entrée dans le mode, caméra au vol aux sticks, rotation des pièces) — la v2 poussée 2026-10-30 est clavier seulement, c'est une limite assumée à fermer ici
+- [x] Moteurs électriques câblés à la couche 1:1 (tailles = couple/vitesse : M 405 rpm/11 Ncm, L 390/18, XL 220/40, servo ±90° — mesures Power Functions, LEGO ne publie rien) — câblés dans vehicle.ts/game.ts et prouvés par les tests de conduite ; le servo sert à la direction, pas à la propulsion
+  - **LIVRÉ (Muse, merge 2026-10-30 `5004283…`)** — à partir du socle de Grok (constantes PF du proto) : conversion d'assemblage, corps cinématique unique, suspension par raycasts terrain, différentiel partagé de mech, batterie drainée par charge-couple. Tests src/game 66/66 + tsc 0 sur l'arbre mergé.
+- [x] Hub/batterie + télécommande à canaux A–D : le joueur LIE un hub à sa machine — binding réel testé, contrôle négatif inclus (mauvais canal = aucun mouvement)
+- [x] **Conduite : un véhicule construit roule pour vrai sur le terrain** — UN corps cinématique par construction (masse/centre calculés des pièces), roues = raycasts de suspension, différentiel (A+B)/2. Jamais un corps rigide par brique, jamais de représentation build ≠ run — jouable en Créatif ; mesure Pages + verdict de Philippe encore dus
+- [x] **CARBURANT (ordre de Philippe 2026-10-30 — n'était PAS au plan)** : fondre du plastique donne aussi du **fuel** (la Fonderie gagne un deuxième produit — la matière boucle : P6 nourrit les machines). À designer en chiffres : item fuel + réservoir, quels moteurs brûlent du fuel (combustion) vs électriques (batterie), taux de consommation selon la charge, recharge/drain de batterie, comportement à sec (la machine s'arrête, jamais de magie). Aucune énergie de nulle part : chaque joule répond « fait de quoi » — **LIVRÉ (2026-10-30)** : item Fuel (ID 470), Kiln 0,25/pellet, réservoir 4, moteurs électriques sur batterie, générateur du hub au fuel, arrêt à sec prouvé sur un véhicule en mouvement
+- [ ] **Contrôle des machines sur TOUS les appareils (ordre de Philippe 2026-10-30)** : la télécommande canaux A–D doit exister au **tactile** (télécommande à l'écran) et à la **manette** (sticks/gâchettes), pas juste au clavier; et le **mode construction Tab** doit être atteignable et pilotable au tactile + à la manette (entrée dans le mode, caméra au vol aux sticks, rotation des pièces) — la v2 poussée 2026-10-30 est clavier seulement, c'est une limite assumée à fermer ici — **NON livré par le merge P5b** : la conduite réutilise le sample d'input existant, mais la télécommande tactile dédiée et le mode construction tactile/manette restent ouverts
 
 ### P5c · Pneumatique complet + vérins + machines qui travaillent
 
@@ -325,7 +325,7 @@ Carte mesurée livrée : `~/workspace/your_files/studcraft/carte-du-repo.html` (
 
 - [x] **R3 · Le donjon** (§8) — FAIT côté code (voir §8) ; reste la mesure en jeu + le verdict Pages de Philippe.
 - [ ] **Gravité universelle — scoping** (§12) : écrire le design du scan de support par composantes (ancrage bedrock) AVANT tout code.
-- [ ] **P5b · Conduite** (§7) : design d'abord (corps cinématique unique, liaison hub, canaux), puis le plus petit véhicule qui roule pour vrai.
+- [x] **P5b · Conduite** (§7) : prototype Creative conduisible livré et mergé (2026-10-30 — corps cinématique unique, liaison hub, canaux, fuel) ; reste la mesure sur Pages + le verdict de Philippe.
 - [ ] **P7 · Schéma matière** (§9) : `mat`/`mold` dans BlockDef + chaîne silicium en une étape mesurée.
 - [ ] **qa-reg → verdicts** (§15) : finir la batterie en cours, livrer le rapport ce qui marche / ce qui est cassé.
 
