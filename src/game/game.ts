@@ -5287,6 +5287,30 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     return { sx: Math.round(bx * 2), sy: py, sz: Math.round(bz * 2) };
   }
 
+  // Placement assist (Philippe, 2026-10-29, photo of his wall ledge):
+  // "je veux placer une brique sur les deux studs que je pointe ou
+  // juste un stud — je peux pas." When the snapped candidate is blocked
+  // (a wall rises beside the ledge, the brick would clip a neighbour),
+  // placement used to refuse outright. The assist now tries the 8
+  // neighbouring stud positions (±1 stud per axis, straight nudges
+  // first) and takes the first that fits — aiming at two exposed studs
+  // lands the brick ON those studs. Used by BOTH placement paths and
+  // BOTH ghost paths, so the ghost always shows what the click will do.
+  // Blocked everywhere: returns the primary candidate (ghost red, click
+  // falls through to classic voxel placement, exactly as before).
+  function brickSnapAssist(px: number, py: number, pz: number, nx: number, ny: number, nz: number) {
+    const cand = brickSnap(px, py, pz, nx, ny, nz);
+    if (!cand) return null;
+    const fits = (sx: number, sz: number) => brickSpaceFree(sx, cand.sy, sz) && !brickHitsPlayer(sx / 2, cand.sy, sz / 2);
+    if (fits(cand.sx, cand.sz)) return cand;
+    const tries: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+    for (const [ox, oz] of tries) {
+      const sx = cand.sx + ox, sz = cand.sz + oz;
+      if (fits(sx, sz)) return { sx, sy: cand.sy, sz };
+    }
+    return cand;
+  }
+
   function brickEligible(id: number, d: BlockDef) {
     return (
       d.placeable &&
@@ -5433,7 +5457,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // ---- P1: structural integrity (Muse, master plan P1) -----------------
   // A brick holds by the studs it actually covers. Studs covered from
   // below (voxel ground quadrants + bricks underneath, per 1x1-stud
-  // quadrant, cap 4): >= 2 covered = ANCHORED. Support then propagates:
+  // quadrant, cap 4): >= 1 covered = ANCHORED (was >= 2 until
+  // Philippe's 2026-10-29 corner-stud recalibration — see
+  // computeIntegrity). Support then propagates:
   // stacked on a supported brick (any stud overlap) inherits its
   // cantilever count; a purely horizontal side-clutch step adds 1, max 2
   // steps — the 3rd brick of a free cantilever is unsupported.
@@ -5513,15 +5539,20 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
 
   function maxWeightForStuds(studs: number): number {
     if (studs <= 0) return 0;
-    if (studs === 1) return 1; // only itself
-    if (studs === 2) return 3;
+    if (studs === 1) return 2; // itself + one more (recalibrated 2026-10-29, Philippe: corner-stud builds must hold)
+    if (studs === 2) return 4;
     return 99; // 3–4 studs hold a stack
   }
 
   function computeIntegrity() {
     const cant = new Map<string, number>();
     const all = [...bricks.values()];
-    for (const b of all) if (studsCoveredBelow(b) >= 2) cant.set(brickKey(b.sx, b.sy, b.sz), 0);
+    // Recalibrated 2026-10-29 (Philippe): ONE covered stud anchors the
+    // brick itself — real LEGO clutch holds on a single corner stud, and
+    // the old >= 2 seed made every 1-stud landing over a voxel block
+    // fall within a scan (voxels can't grant support by propagation).
+    // Strength still scales with coverage via maxWeightForStuds below.
+    for (const b of all) if (studsCoveredBelow(b) >= 1) cant.set(brickKey(b.sx, b.sy, b.sz), 0);
     let changed = true;
     while (changed) {
       changed = false;
@@ -5776,7 +5807,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const dy = Math.floor(b.sy + 0.5 + bh.ny * 1.01);
     const dz = Math.floor(b.sz / 2 + 0.5 + bh.nz * 1.01);
     if (brickEligible(held, heldDef)) {
-      const cand = brickSnap(dx, dy, dz, bh.nx, bh.ny, bh.nz);
+      const cand = brickSnapAssist(dx, dy, dz, bh.nx, bh.ny, bh.nz);
       if (cand && brickSpaceFree(cand.sx, cand.sy, cand.sz) && !brickHitsPlayer(cand.sx / 2, cand.sy, cand.sz / 2)) {
         placeBrickNow(held, cand.sx, cand.sy, cand.sz);
         return;
@@ -7049,7 +7080,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // Fluids block brick placement even though classic placement allows
     // filling them (brickSpaceFree enforces it).
     if (brickEligible(held, heldDef)) {
-      const cand = brickSnap(px, py, pz, hit.nx, hit.ny, hit.nz);
+      const cand = brickSnapAssist(px, py, pz, hit.nx, hit.ny, hit.nz);
       if (cand && brickSpaceFree(cand.sx, cand.sy, cand.sz) && !brickHitsPlayer(cand.sx / 2, cand.sy, cand.sz / 2)) {
         placeBrickNow(held, cand.sx, cand.sy, cand.sz);
         return;
@@ -11440,7 +11471,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         const dx = Math.floor(bk.sx / 2 + 0.5 + bHit.nx * 1.01);
         const dy = Math.floor(bk.sy + 0.5 + bHit.ny * 1.01);
         const dz = Math.floor(bk.sz / 2 + 0.5 + bHit.nz * 1.01);
-        const cand = brickEligible(heldId, hd) ? brickSnap(dx, dy, dz, bHit.nx, bHit.ny, bHit.nz) : null;
+        const cand = brickEligible(heldId, hd) ? brickSnapAssist(dx, dy, dz, bHit.nx, bHit.ny, bHit.nz) : null;
         if (cand) {
           const ok = brickSpaceFree(cand.sx, cand.sy, cand.sz) && !brickHitsPlayer(cand.sx / 2, cand.sy, cand.sz / 2) && (creative || (inv[heldId] ?? 0) > 0);
           updateGhostGeo(heldId);
@@ -11573,7 +11604,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         const py = hit.y + hit.ny;
         const pz = hit.z + hit.nz;
         // P0: when the aim snaps to the stud lattice, the ghost shows the BRICK.
-        const cand = !freePlace && brickEligible(held, def(held)) ? brickSnap(px, py, pz, hit.nx, hit.ny, hit.nz) : null;
+        const cand = !freePlace && brickEligible(held, def(held)) ? brickSnapAssist(px, py, pz, hit.nx, hit.ny, hit.nz) : null;
         if (cand) {
           const ok = brickSpaceFree(cand.sx, cand.sy, cand.sz) && !brickHitsPlayer(cand.sx / 2, cand.sy, cand.sz / 2) && (creative || (inv[held] ?? 0) > 0);
           updateGhostGeo(held);

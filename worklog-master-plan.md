@@ -43,7 +43,8 @@ La bibliothèque de pièces converge vers le catalogue LEGO réel complet (Syste
 ## 3. Pilier Plastique — les fondations
 
 - [x] **P0 · Grille de studs** (Muse, qa99 7/7) : couche briques sur lattice de studs, running bond, terrain voxel intact
-- [x] **P1 · Intégrité structurelle** (Muse, qa100/qa101/qa102) : ancrage ≥2 studs couverts, cantilever max 2, stress → détachement en entité qui se re-pose
+- [x] **P1 · Intégrité structurelle** (Muse, qa100/qa101/qa102) : ancrage par studs couverts, cantilever max 2, stress → détachement en entité qui se re-pose
+  - [ ] Recalibrage coins (Philippe, 2026-10-29) : **≥1 stud couvert ancre la brique** (avant ≥2 — un coin sur voxel tombait toujours), poids 1 stud → 2 / 2 studs → 4, + **assist de snap** (positions voisines ±1 stud si la visée est bloquée; fantôme = clic). Fait + vérifié code/tests — *(en attente verdict Philippe)*
   - [ ] Question ouverte : à seuil 0,12 s, le sag progressif n'a plus le temps de se développer (les briques tiennent puis tombent d'un coup). Restaurer un sag visible = cadence de scan plus fine que le seuil — décision Philippe
 - [x] **P2 · Soudure v1** (Muse, qa103/qa104) : le Welder (ID 400) soude deux briques qui se touchent, le support traverse le joint, minage refusé sur soudé (cisailles seulement), joints persistés
   - [ ] P2 résidu : cordon de soudure VISIBLE rendu au joint
@@ -207,6 +208,7 @@ Pas de redstone. Le cœur tourne : graphe de rotation local et borné.
 - [ ] qa96 restes : s3b (sonde settle du topple), s4 (Wither — le harnais est mort, pas le jeu), s5 (FX — aucun verdict n'existe, les deux logs sont vides)
 - [ ] qa97 : performance (chiffres relatifs au rig seulement — le verdict perf est l'A54 de Philippe)
 - [ ] qa-bow : voir BUG-2 (§13)
+- [ ] Re-mesurer qa100/qa101/qa102 sous le recalibrage studs (§3) : les classifications « unsupported » à 1 stud changent par design
 
 ## 16. Lag (de worklog2, item 3 — ouvert)
 
