@@ -252,6 +252,8 @@ Pas de redstone. Le cœur tourne : graphe de rotation local et borné.
   - [x] Fix de Grok : seuil de stress des briques 0,75 s → 0,12 s; `spawnFaller` et l'atterrissage lisent la couche briques
   - [x] Vérification Muse : 3/3 cas journalisés MESURÉS PASS + régression P1 au nouveau seuil
   - [x] Défaut collatéral trouvé par la mesure : `TEMPERED_STRESS_MAX` était un littéral périmé (12,5× au lieu de l'invariant 2×) — corrigé (`0f557775`)
+  - [ ] **Sable flottant : FAIL MESURÉ AU CALME (qa-reg run n°3, 2026-10-30)** — un bloc de sable posé en l'air (gy+4) n'est JAMAIS tombé (sa case de départ le contient toujours après 40 polls, fenêtre calme, 0 erreur). Chantier code OUVERT : pourquoi le scan faller ne ramasse pas cette case (déclencheur = voisinage d'une casse seulement? rayon de scan centré joueur? le setBlock du rig ne produit pas l'update qu'une pose/minage réel produit — à trancher au code, puis re-mesurer)
+  - [ ] **Topple « un seul support » : FAIL au critère du rig (qa-reg run n°3, au calme)** — le cas du frère : aucun topple observé après la coupe de base. À déterminer au code : le composant n'est jamais tombé (vrai bogue contre la loi des 2 supports) OU il est tombé en fallers droits (le critère toppleCount ne le voit pas). Lecture du code d'abord, re-mesure ensuite
   - [ ] Retest Pages de Philippe
 - [ ] **BUG-4 · Pièces invisibles dans l'inventaire Créatif**
   - [x] Fix système poussé (`b9204a76`) : catalogue dérivé du registre (voir §10)
@@ -259,7 +261,7 @@ Pas de redstone. Le cœur tourne : graphe de rotation local et borné.
   - [ ] Retest Pages de Philippe
 - [ ] **BUG-5 · Aucun loot en Créatif**
   - [x] Cause : tout le rendement de `breakBlock` était dans `if (!creative)`; mesuré PASS au rig
-  - [ ] Confirmation qa-reg : run n°1 (sous contention) = drop de terre CONFIRMÉ au sol ({id:2} dans dropList — la casse produit bien le drop), ramassage non prouvé à la fenêtre du rig; run n°2 en fenêtre calme en cours pour trancher (la plainte du 2026-10-29 soir, « on peut pas récupérer de la terre », sera fermée par cette mesure)
+  - [x] Confirmation qa-reg : **MESURÉ PASS au calme (run n°3, 2026-10-30)** — casse de terre en Créatif : drop {id:2} au sol ET ramassage prouvé (inventaire 0→1); même résultat pour la bûche. La plainte du 2026-10-29 soir (« on peut pas récupérer de la terre ») est fermée au niveau rig : les échecs du run n°1 étaient la contention. Reste le retest Pages de Philippe ci-dessous
   - [ ] Retest Pages de Philippe
 - [ ] **BUG-6 · Un coffre brisé perdait son contenu**
   - [x] Cause : aucune branche `ID.Chest` dans `breakBlock`; mesuré PASS au rig
@@ -282,7 +284,7 @@ Pas de redstone. Le cœur tourne : graphe de rotation local et borné.
 
 ## 15. Dettes QA (à mesurer, dans l'ordre de la file)
 
-- [ ] qa-reg : **run n°1 TERMINÉ (2026-10-30 ~10:39 PDT, 0 erreur JS)** sous contention lourde (load 7–10, co-tenants NeonForge, dilatation SwiftShader) — D topple coupe médiane **PASS** (signal positif malgré la dilatation); A terre / B bûche : drop confirmé, ramassage FAIL à la fenêtre du rig; C sable : FAIL (jamais tombé à la fenêtre); E un seul support (cas du frère) : FAIL (toppleSeen=0). **Run n°2 relancé en fenêtre calme (load ~1) pour trancher A/B/C/E** — un FAIL sous contention n'est pas un verdict de bogue; un PASS calme fermera, un FAIL calme ouvrira le chantier code
+- [x] qa-reg : **run n°3 TERMINÉ en fenêtre calme (2026-10-30, load ~0,7, 0 erreur JS)** — run n°1 (contention) : D PASS, A/B/C/E FAIL à la fenêtre; run n°2 tué par un remplacement de VM (aucun cas). **Verdicts du run calme : A terre PASS (drop + ramassage inv 0→1), B bûche PASS (inv 0→1), D topple coupe médiane PASS** — les FAILs de ramassage du run n°1 étaient des artefacts de contention. **C sable FAIL confirmé au calme** (la case de départ contient toujours le sable après 40 polls) → chantier code ouvert sous BUG-3. **E un seul support FAIL au critère du rig** (aucun topple observé) → à déterminer au code (composant jamais tombé vs tombé en fallers droits, invisibles à toppleCount)
 - [x] qa-dungeon-unit : MESURÉ PASS au niveau fonction (2026-10-30 ~09:41 PDT) — la vraie `stockChest` (head `c3448644`) sur 2 000 coffres dungeon : gate mesuré 28,4 %, 0 mismatch de sélection (hash seed+777), les 7 matériaux de moules de boss présents, 0 fuite sur 1 500 coffres contrôles (deep/castle/wild), garde « bin pré-rempli » OK. Reste dû : la mesure EN JEU (spawn 7 % jamais rencontré au rig) + verdict Pages de Philippe
 - [ ] qa96 restes : s3b (sonde settle du topple), s4 (Wither — le harnais est mort, pas le jeu), s5 (FX — aucun verdict n'existe, les deux logs sont vides)
 - [ ] qa97 : performance (chiffres relatifs au rig seulement — le verdict perf est l'A54 de Philippe)
