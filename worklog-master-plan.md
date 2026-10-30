@@ -130,7 +130,7 @@ Casser → plastique (rendement par bloc, les mobs en droppent) → fondre → c
 - [x] Étape 5b : moules guardian (16 → GuardianPlate) + pharaoh (12 → PharaohCrown) (tests 44/44)
 - [x] **qa111 PASS COMPLET** : les 6 moules de boss mesurés en jeu (témoins 350/325/600/775/475/425, 0 erreur)
 - [ ] Fermeture P6 : retest Pages de Philippe → File de verdicts (§13)
-- [ ] Moules rares : la boucle se ferme par le donjon R3 (§8)
+- [x] Moules rares : la boucle se ferme par le donjon R3 (§8) — les « moules » sont des RECETTES de Fonderie (pas des items) : les coffres de donjon droppent leurs MATÉRIAUX (Fang, Cinder, Prism, Sapphire, Scale, GuardianSpike, PharaohGold) en bonus rare (28 %, 1 par coffre) ; gates de niveau 12/16/22 intacts. Code vérifié (tsc 0, 44/44) — fermeture définitive = mesure en jeu + verdict Pages de Philippe
 
 ## 5. P4 · Son plastique
 
@@ -195,7 +195,7 @@ Pas de redstone. Le cœur tourne : graphe de rotation local et borné.
 
 - [x] R1 : 4 chaînes de quêtes, 38 quêtes, journal par chaîne
 - [x] R2 : boss (Wither refait en vrai boss, dragon poli — dans v4.18)
-- [ ] **R3 : le donjon** — site souterrain, les moules rares de la Fonderie cachés dedans (ferme la boucle P6)
+- [x] **R3 : le donjon** — mergé sur main (PR #3, 2026-10-30, vérifié par Muse : tsc 0, 44/44, docs intacts) + matériaux des moules de boss dans les coffres (finition Muse). Fermeture définitive = mesure en jeu (spawn 7 % jamais rencontré au rig) + verdict Pages de Philippe
 - [ ] R4 : identité de construction + loot nommé rare
 
 ## 9. P7 · Objets, matériaux, équipement — refonte par la matière
@@ -314,7 +314,7 @@ Carte mesurée livrée : `~/workspace/your_files/studcraft/carte-du-repo.html` (
 
 ## Prochains moves — UNCLAIMED (protocole Rythme : prendre le dernier, claim avant de coder)
 
-- [ ] **R3 · Le donjon** (§8) — ferme la boucle des moules rares de P6. Le plus petit chantier qui ferme un pilier entier.
+- [x] **R3 · Le donjon** (§8) — FAIT côté code (voir §8) ; reste la mesure en jeu + le verdict Pages de Philippe.
 - [ ] **Gravité universelle — scoping** (§12) : écrire le design du scan de support par composantes (ancrage bedrock) AVANT tout code.
 - [ ] **P5b · Conduite** (§7) : design d'abord (corps cinématique unique, liaison hub, canaux), puis le plus petit véhicule qui roule pour vrai.
 - [ ] **P7 · Schéma matière** (§9) : `mat`/`mold` dans BlockDef + chaîne silicium en une étape mesurée.
@@ -326,3 +326,8 @@ Carte mesurée livrée : `~/workspace/your_files/studcraft/carte-du-repo.html` (
 - Table dungeon avec items Foundry (Pellets, PlasticIngot, TemperedIngot, PlasticPick/Sword, TPlasticPick).
 - Mergé dans main via PR #3 (branche propre depuis main actuel).
 - Boucle P6 : les coffres du donjon donnent maintenant du feedstock Foundry + outils plastiques.
+
+### R3 — vérification + finition des moules (Muse, 2026-10-30)
+- Merge PR #3 VÉRIFIÉ après coup (la règle « vérifier avant merge » a été contournée par l'ordre direct de Philippe à Grok) : head `75a04279` resynchronisé, tsc 0, tests 44/44 ; WORKLOG intact (4 619 lignes, aucune troncature), master plan +7/−0 ; world.ts = le code vérifié sur la branche.
+- RÉSERVE levée autrement : la table de Grok ne contenait AUCUN moule — et pour cause, les moules de boss sont des recettes (`recipes.ts` bmold-*), pas des items. Finition Muse dans `loot.ts` : le bonus rare des coffres de donjon (gate hash > 0,72) donne 1 matériau de moule de boss (pool de 7, choix déterministe) au lieu du Diamond générique. La boucle P6 est nourrie, les gates (niveau + lingots trempés + Fonderie) restent entiers.
+- Reste dû : rencontrer un donjon en jeu (spawn 7 % des colonnes éligibles) — aucune mesure de rig à ce jour, ni pour la structure ni pour les coffres.

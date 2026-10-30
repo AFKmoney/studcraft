@@ -255,6 +255,10 @@ export function stockChest(bin: { ids: number[]; ns: number[] }, x: number, y: n
     bin.ids[slot] = stack[0];
     bin.ns[slot] = stack[1];
   }
+  // R3/P6: the boss "moulds" are Foundry recipes, not items — a dungeon chest's
+  // rare bonus is therefore one of the materials those recipes consume, so the
+  // dungeon feeds the mould loop while the level gates (12/16/22) stay intact.
+  const DUNGEON_BOSS_MATS = [ID.Fang, ID.Cinder, ID.Prism, ID.Sapphire, ID.Scale, ID.GuardianSpike, ID.PharaohGold];
   if ((kind === "deep" || kind === "mine" || kind === "shrine" || isMajor) && hash3(x, y, z, seed + 333) > 0.72) {
     const slot = bin.ids.findIndex((id) => !id);
     if (slot >= 0) {
@@ -269,7 +273,9 @@ export function stockChest(bin: { ids: number[]; ns: number[] }, x: number, y: n
                 ? ID.GuardianSpike
                 : kind === "castle" || kind === "mansion"
                   ? ID.IllagerBadge
-                  : ID.Diamond;
+                  : kind === "dungeon"
+                    ? DUNGEON_BOSS_MATS[Math.floor(hash3(x, y + 99, z, seed + 777) * DUNGEON_BOSS_MATS.length) % DUNGEON_BOSS_MATS.length]
+                    : ID.Diamond;
       bin.ns[slot] = 1;
     }
   }
