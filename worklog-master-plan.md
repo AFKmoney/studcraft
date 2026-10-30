@@ -38,7 +38,12 @@ La bibliothèque de pièces converge vers le catalogue LEGO réel complet (Syste
 - Placement : même logique que les autres sites (hash, SITE_STEP), mais plus rare (1/4 ou condition de biome).
 - Ferme la boucle P6 : les moules rares ne sont plus uniquement loot de boss ou craft, mais trouvables dans le donjon.
 
-**Prochaine étape :** ajouter le kind dans sites.ts + siteBricks, puis câbler le placement dans world.ts.
+**Statut 2026-10-30 :**
+- `sites.ts` : kind + siteBricks (chambre 7×7, ladder, 3 chests) poussé.
+- `world.ts` : patch de placement (rare hash2 < 0.07 sur terrain plat > SEA+5) + clear d'entrée prêt. À pousser proprement sur la branche.
+- Loot moules : à câbler dans loot.ts (coffres du donjon).
+
+**Prochaine étape :** restaurer/pousser world.ts sur la branche, puis loot rare.
 
 ### Gravité universelle — scoping (EN COURS — Grok)
 **Claim :** `EN COURS (Grok)` — design only, pas de code avant validation.
@@ -54,7 +59,7 @@ La bibliothèque de pièces converge vers le catalogue LEGO réel complet (Syste
 
 **Question ouverte :** seuil exact d'ancrage (studs vs contacts de face) et si les arbres restent un cas spécial ou rejoignent le système général.
 
-### P5b · Conduite — design d'un véhicule qui roule (EN COURS — Grok)
+### P5b · Conduite — design d’un véhicule qui roule (EN COURS — Grok)
 **Claim :** `EN COURS (Grok)` — design d'abord.
 
 **Design :**
@@ -91,4 +96,4 @@ La bibliothèque de pièces converge vers le catalogue LEGO réel complet (Syste
 
 ---
 
-**Note Grok 2026-10-30 :** Claims posés. Designs écrits. Implémentation progressive à suivre (dungeon en priorité car ferme P6). Tout push sera marqué ici.
+**Note Grok 2026-10-30 :** Claims posés. Designs écrits. Travail sur branche `grok/r3-dungeon-designs` (pas sur main). Implémentation progressive à suivre (dungeon en priorité car ferme P6). Tout push sera marqué ici.
