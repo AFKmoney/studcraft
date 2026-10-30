@@ -340,3 +340,35 @@ Carte mesurée livrée : `~/workspace/your_files/studcraft/carte-du-repo.html` (
 - Merge PR #3 VÉRIFIÉ après coup (la règle « vérifier avant merge » a été contournée par l'ordre direct de Philippe à Grok) : head `75a04279` resynchronisé, tsc 0, tests 44/44 ; WORKLOG intact (4 619 lignes, aucune troncature), master plan +7/−0 ; world.ts = le code vérifié sur la branche.
 - RÉSERVE levée autrement : la table de Grok ne contenait AUCUN moule — et pour cause, les moules de boss sont des recettes (`recipes.ts` bmold-*), pas des items. Finition Muse dans `loot.ts` : le bonus rare des coffres de donjon (gate hash > 0,72) donne 1 matériau de moule de boss (pool de 7, choix déterministe) au lieu du Diamond générique. La boucle P6 est nourrie, les gates (niveau + lingots trempés + Fonderie) restent entiers.
 - Reste dû : rencontrer un donjon en jeu (spawn 7 % des colonnes éligibles) — aucune mesure de rig à ce jour, ni pour la structure ni pour les coffres.
+
+---
+
+## 21. Audit de fermeture — retours de jeu de Philippe (2026-10-30 ~15h37 PDT, session A54 sur 8fa2ec2c)
+
+Philippe a testé sur Pages et rapporté 7 chantiers. Audit au code fait le même jour (Muse) — verdicts ci-dessous, AUCUN basé sur une impression : chaque ligne cite son endroit dans le code. Exécution par batches, gate entre chaque (tsc 0, tests, build, push, déploiement). **EN COURS (Muse)** — fichiers : `mesher.ts`, `game.ts`, `GameView.tsx`, `styles.css`, `recipes.ts`, `blocks.ts`.
+
+### A1 · Studs — DEUX défauts confirmés
+- [ ] **Terrain hexagonal** : `mesher.ts` `STUD_N = 6` (passe lag de Grok, 8→6 « encore rond à cette taille » — faux à l'œil : un hexagone). Les studs du sol doivent être RONDS comme ceux des briques. Fix : `STUD_N` → 12; coût triangles assumé et noté, mesure perf qa97 derrière.
+- [ ] **Dessin DANS les studs des briques placées** : `brickGeo` (game.ts) pose des cylindres 16 segments (ronds ✓) mais remappe l'UV du stud sur la tuile top ENTIÈRE de l'atlas → le dessin de la tuile (cercle + arcs) se réimprime dans chaque stud = les « 4 demi-cercles » de Philippe. Fix : les studs échantillonnent une zone UNIE de la tuile (ou couleur plate du def) — rond et plastique, aucun dessin. Vérifier le ghost au passage.
+
+### A2 · Redstone — un moteur Minecraft complet encore vivant (viole la loi P5 « jamais de redstone », 2026-10-28)
+- [ ] `tickRedstone` (game.ts, ~800 lignes) : dust/repeater/comparator/hopper/daylight (298)/night sensor (299)/target + ignition TNT; catégorie « Redstone » au livre de Crafting (2 recettes), filtre GameView, icônes dédiées. Nos machines sont moteurs + batteries + fuel — le système d'alimentation redstone doit PARTIR. Les capteurs utiles (lumière) reviendront re-logic en P5d (électrique), pas avant. Migration save : les blocs redstone d'un monde chargé sont convertis (composants → air; capteurs/blocs pleins → pellets selon le rendement, la matière ne disparaît pas). Chantier propre, claim séparé au moment de couper.
+
+### A3 · Machines / fuel — la boucle EXISTE au code, mais invisible et INCOMPLÈTE
+- Constat code : Kiln craftable (8 cobble), SMELT pellets→ingots 1:1, fuel distillé 0,25/pellet payé en items Fuel à côté du kiln (`fuelAcc`), 14 recettes de moulage au livre (cat. Build), ingot trempé — tout est là. Philippe n'a rien trouvé : le problème est réel et il est triple.
+- [ ] **TROU RÉEL — créer des pièces Technic en Survival : IMPOSSIBLE.** Zéro recette pour les 99 pièces (débris/donjon seulement). Fix : recettes de moulage Technic GÉNÉRÉES depuis le registre `technic.ts` (coût = masse réelle de la pièce → pellets/ingots), fondues au Kiln comme les autres moulages.
+- [ ] **Progression du kiln invisible** (plainte directe) : l'état `cook`/`burn` existe (`Furn`), la barre existe (GameView, `hud.furnace.cook`) — déterminer pourquoi Philippe ne la voit pas bouger (rafraîchissement du panneau? ouverture au tactile?) et corriger; mesure rig à l'appui.
+- [ ] **Découvrabilité** : rien dans le jeu ne raconte la chaîne casser → pellets → kiln → ingots → moules → fuel. Fix minimal : les recettes nommées pour ce qu'elles font + une quête P6 qui marche le joueur dans la boucle une fois.
+
+### A4 · Bouton Build (▦) sur mobile — « fonctionne pas »
+- [ ] Code + CSS présents (8fa2ec2c, `sc-touch-build` stylé dans styles.css). MAIS la capture de Philippe à 15h14 montre l'ANCIEN HUD (Pause + Bag seulement, pas de ▦) : sa session roulait un build en cache. Rig qa-touch lancé (taps CDP réels, oracle `getBuildMode`) : s'il passe, le code est bon et le remède = cache (fermer/rouvrir l'onglet) + on durcit quand même le retour visuel à l'entrée du mode. S'il échoue, fix du handler avant tout le reste.
+
+### A5 · Eau dans l'inventaire — confirmé au code
+- [ ] `ID.Water` : `hard: 0,15`, aucun `drop` défini → casser un bloc d'eau donne l'item Water. Aucun sens (la chaudière et la bouteille existent pour ça). Fix : les fluides (Water/Lava) ne donnent RIEN au minage; la collecte reste Bucket (scoop en place, game.ts remplissage) + Bottle à la source si absent.
+
+### A6 · Modèles en main + items hors-sujet — audit à compléter
+- [ ] Couverture `buildLegoItem3D` vs registre : les items qui tombent sur le modèle générique (seeds, bouteilles et autres nommés par Philippe) — liste mesurée, puis modèles faits depuis les mêmes maths (règle asset).
+- [ ] Items sans rôle dans le système plastique/mécanique/électrique : LISTE soumise à Philippe AVANT tout retrait (règle suppression : jamais sur une instruction ambiguë).
+
+### Ordre d'exécution (claim Muse, 2026-10-30)
+B1 studs (A1) → B2 eau (A5) → B3 bouton Build selon verdict qa-touch (A4) → B4 kiln visible + recettes Technic générées (A3) → B5 retrait redstone (A2) → B6 modèles en main + liste items (A6). Fermeture de chaque ligne = mesuré + retest Pages de Philippe.
