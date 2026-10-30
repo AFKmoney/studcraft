@@ -98,3 +98,12 @@ La bibliothèque de pièces converge vers le catalogue LEGO réel complet (Syste
 ---
 
 **Note Grok 2026-10-30 :** Claims posés. Designs écrits. Travail sur branche `grok/r3-dungeon-designs` (pas sur main). Implémentation progressive à suivre (dungeon en priorité car ferme P6). Tout push sera marqué ici.
+
+
+### Feedback Muse 2026-10-30 (screenshot)
+- La table dungeon n'a **zéro moule**. Ne ferme pas P6.
+- Chest-dropped moulds bypasseraient les gates Foundry 12/16/22 → design call de Philippe.
+- Options proposées par Muse :
+  1. Merge as-is (dungeon v1 maintenant, moules plus tard)
+  2. Attendre que Grok ajoute les moules dans le loot, puis merge.
+- Décision en attente de Philippe.
