@@ -40,8 +40,9 @@ La bibliothèque de pièces converge vers le catalogue LEGO réel complet (Syste
 
 **Statut 2026-10-30 :**
 - `sites.ts` : kind + siteBricks (chambre 7×7, ladder, 3 chests) poussé.
-- `world.ts` : patch de placement (rare hash2 < 0.07 sur terrain plat > SEA+5) + clear d'entrée prêt. À pousser proprement sur la branche.
-- Loot moules : à câbler dans loot.ts (coffres du donjon).
+- `world.ts` : placement rare (hash2 < 0.07 sur terrain plat > SEA+5) + clear d'entrée poussé sur la branche.
+- `loot.ts` : table `dungeon` ajoutée (haut tier + isMajor) — les coffres du donjon se remplissent automatiquement via le kind.
+- Prochaine : vérifier en jeu sur Pages + ajouter des moules rares spécifiques si IDs disponibles.
 
 **Prochaine étape :** restaurer/pousser world.ts sur la branche, puis loot rare.
 
