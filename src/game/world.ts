@@ -1427,7 +1427,7 @@ export class World {
         const site = this.siteAt(gx, gz);
         if (!site) continue;
         if (site.x + 8 < baseX || site.x - 3 >= baseX + CS || site.z + 8 < baseZ || site.z - 3 >= baseZ + CS) continue;
-        if (site.kind !== "wreck" && site.kind !== "mine" && site.kind !== "reef") {
+        if (site.kind !== "wreck" && site.kind !== "mine" && site.kind !== "reef" && site.kind !== "dungeon") {
           const rad = site.kind === "outpost" || site.kind === "tomb" ? 6 : 5;
           const floor =
             site.kind === "cairn" ? ID.Snow : site.kind === "shrine" ? ID.Hard : site.kind === "tomb" ? ID.Sand : ID.Grass;
@@ -1442,6 +1442,13 @@ export class World {
           for (let dz = 0; dz < 5; dz++) {
             for (let dx = 0; dx < 5; dx++) {
               for (let dy = 1; dy <= 3; dy++) this.force(data, baseX, baseZ, site.x + dx, site.y + dy, site.z + dz, ID.Air);
+            }
+          }
+        }
+        if (site.kind === "dungeon") {
+          for (let dz = 0; dz < 7; dz++) {
+            for (let dx = 0; dx < 7; dx++) {
+              for (let dy = 1; dy <= 4; dy++) this.force(data, baseX, baseZ, site.x + dx, site.y + dy, site.z + dz, ID.Air);
             }
           }
         }
@@ -1494,6 +1501,7 @@ export class World {
     else if (biome === "Fen" || biome === "Deep fen") kind = roll < 0.5 ? "camp" : "shrine";
     else if (biome === "Desert") kind = roll < 0.5 ? "tomb" : roll < 0.78 ? "ruin" : "outpost";
     else if (biome === "Sand flats") kind = roll < 0.48 ? "ruin" : roll < 0.75 ? "outpost" : "mine";
+    else if (hash2(gx, gz, this.seed + 1300) < 0.07 && h > SEA + 5 && max - min <= 8) kind = "dungeon";
     else {
       const bag: SiteKind[] = ["ruin", "camp", "mine", "outpost", "patch", "shrine"];
       kind = bag[Math.floor(roll * bag.length) % bag.length];
