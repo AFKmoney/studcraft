@@ -75,6 +75,10 @@ export type Hud = {
   dayCount: number;
   mine: number;
   targetName: string;
+  /** A drive Technic part (hub/motor/remote/battery) is under the crosshair: the touch UI shows its Channel button. */
+  techAim: boolean;
+  /** Build mode (Tab / fly camera) is on: the touch UI shows fly + rotation controls. */
+  buildMode: boolean;
   signEdit: { x: number; y: number; z: number; text: string } | null;
   seed: number;
   seedText: string;
@@ -131,6 +135,11 @@ export type TouchState = {
   place: boolean;
   /** Momentary pulse from the touch "tourner" button: cycles the Technic placement variant. Consumed (reset to false) by the game loop. */
   spin: boolean;
+  /** Touch sneak (hold): parking a vehicle, channel binding, plain sneak — touch had NO sneak source before (P5b all-devices line, 2026-10-30). */
+  sneak: boolean;
+  /** Touch build-mode fly up/down (hold buttons, shown in build mode). */
+  flyUp: boolean;
+  flyDown: boolean;
 };
 
 export type Quality = "auto" | "high" | "balanced" | "performance";
@@ -166,6 +175,12 @@ export type GameApi = {
   enter: (kind: EnterKind, worldId?: string) => void;
   resume: () => void;
   pauseGame: () => void;
+  /** Build mode (Tab) for the touch Build button — the pad uses the L3+R3 chord in pollPad. */
+  toggleBuildMode: () => void;
+  /** One 90° rotation step of the held Technic part (touch build-mode buttons). */
+  rotatePart: (axis: number, dir: number) => void;
+  /** Replay the Technic use gesture on the aimed part (touch Channel button — la télécommande à l'écran). */
+  techUse: () => void;
   setQuality: (q: Quality) => void;
   quit: () => void;
   respawn: () => void;
@@ -325,6 +340,7 @@ declare global {
       getTechnic?: () => [number, number, number, number, number, number][];
       stepTechnic?: (dt: number) => { parts: number; jammed: boolean; omegas: Record<string, number>; angles: Record<string, number> };
       getVehicle?: () => { pos: { x: number; y: number; z: number }; vel: number; yaw: number; fuel: number; battery: number; load: number; parts: number } | null;
+      getBuildMode?: () => { on: boolean; fly: boolean; techHeld: boolean; wantO: number | null };
       spinTech?: () => number;
       getMineState?: () => { mine: number; time: number; key: string; target: string };
       getIntegrity?: () => { total: number; supported: number; stressed: string[]; falling: number; stress: Record<string, number>; sag: Record<string, number> };
@@ -436,6 +452,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     dayCount: 1,
     mine: 0,
     targetName: "",
+    techAim: false,
+    buildMode: false,
     signEdit: null as { x: number; y: number; z: number; text: string } | null,
     seed: 0,
     seedText: "",
@@ -477,7 +495,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     pad: "",
     padActive: false,
   };
-  const touch: TouchState = { moveX: 0, moveY: 0, jump: false, mine: false, place: false, spin: false };
+  const touch: TouchState = { moveX: 0, moveY: 0, jump: false, mine: false, place: false, spin: false, sneak: false, flyUp: false, flyDown: false };
   // ── Controller (v4.0) ───────────────────────────────────────────────────
   // Gameplay layout (Xbox name · PlayStation name):
   //   LS move · RS look · A/✕ jump · RT/R2 mine-attack · LT/L2 place-use
@@ -519,7 +537,13 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     padIn.mine = e.down(BTN.RT);
     padIn.place = e.down(BTN.LT);
     padIn.sneak = e.down(BTN.B) || e.down(BTN.R3);
-    if (e.pressed(BTN.L3)) padSprint = !padSprint;
+    // Build mode on the pad (all-devices line): L3+R3 pressed together
+    // toggles it — every other button already has a job, and the chord
+    // can't fire by accident in play. The chord eats the L3 sprint
+    // toggle for that press.
+    const bmChord = e.down(BTN.L3) && e.down(BTN.R3) && (e.pressed(BTN.L3) || e.pressed(BTN.R3));
+    if (bmChord) toggleBuildMode();
+    else if (e.pressed(BTN.L3)) padSprint = !padSprint;
     if (mv.m < 0.2) padSprint = false; // like a stick-click sprint: stopping ends it
     padIn.sprint = padSprint;
     if (e.pressed(BTN.START)) {
@@ -531,18 +555,31 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       return;
     }
     if (e.pressed(BTN.Y)) keys.add("KeyF"); // poll() swaps the off-hand on KeyF
-    if (e.pressed(BTN.LB) || e.pressed(BTN.LEFT)) api.setSlot(slot - 1);
-    if (e.pressed(BTN.RB) || e.pressed(BTN.RIGHT)) api.setSlot(slot + 1);
+    // In build mode with a Technic part in hand, the bumpers and the
+    // D-pad ROTATE the part (Philippe's axes: bumpers/D-pad L/R yaw
+    // and roll, D-pad U/D pitch) instead of their play jobs — the
+    // same contextual-remap precedent as DOWN cycling spells.
+    const bmPart = freePlace && TECHNIC_SET.has(hotbar[slot]);
+    if (e.pressed(BTN.LB)) { if (bmPart) rotateHeldPart(1, 1); else api.setSlot(slot - 1); }
+    if (e.pressed(BTN.RB)) { if (bmPart) rotateHeldPart(1, -1); else api.setSlot(slot + 1); }
+    if (e.pressed(BTN.LEFT)) { if (bmPart) rotateHeldPart(2, 1); else api.setSlot(slot - 1); }
+    if (e.pressed(BTN.RIGHT)) { if (bmPart) rotateHeldPart(2, -1); else api.setSlot(slot + 1); }
     if (e.pressed(BTN.UP)) {
-      settings.third = !settings.third;
-      emit();
+      if (bmPart) rotateHeldPart(0, -1);
+      else {
+        settings.third = !settings.third;
+        emit();
+      }
     }
     if (e.pressed(BTN.DOWN)) {
-      const list = spellsFor(skills);
-      if (!list.length) say("Learn Spark to cast");
+      if (bmPart) rotateHeldPart(0, 1);
       else {
-        spellIx = (spellIx + 1) % list.length;
-        say(list[spellIx].name);
+        const list = spellsFor(skills);
+        if (!list.length) say("Learn Spark to cast");
+        else {
+          spellIx = (spellIx + 1) % list.length;
+          say(list[spellIx].name);
+        }
       }
     }
     if (e.pressed(BTN.VIEW)) {
@@ -554,7 +591,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (settings.haptics && hud.padActive) rumble(activePad(), strong, weak, ms);
   }
   function isSneaking() {
-    return keys.has("ShiftLeft") || keys.has("ShiftRight") || padIn.sneak;
+    return keys.has("ShiftLeft") || keys.has("ShiftRight") || padIn.sneak || touch.sneak;
   }
   function isSprinting() {
     return keys.has("ControlLeft") || keys.has("ControlRight") || padIn.sprint;
@@ -3431,6 +3468,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   function emit() {
     if (phase !== "play") {
       touch.mine = touch.place = touch.jump = false;
+      touch.sneak = touch.flyUp = touch.flyDown = false;
       mouseMine = mousePlace = false;
       holdLatch = true;
     }
@@ -4938,6 +4976,39 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // NOT the character. The player stays parked; this pose flies, and the
   // aim ray is cast from it, so you build what the camera looks at.
   const fly = { on: false, x: 0, y: 0, z: 0 };
+  /** Build mode toggle — ONE implementation for Tab, the gamepad
+   * L3+R3 chord and the touch Build button (all-devices line,
+   * 2026-10-30). Anchors the 30x30 box under the player's feet and
+   * starts the fly camera at its centre; leaving clears the wanted
+   * orientation and hides the box. */
+  function toggleBuildMode() {
+    if (phase !== "play") return;
+    freePlace = !freePlace;
+    if (freePlace) {
+      plate.on = true;
+      plate.cx = Math.floor(player.x);
+      plate.cz = Math.floor(player.z);
+      plate.topY = world.heightAt(plate.cx, plate.cz) + 1;
+      fly.x = plate.cx + 0.5;
+      fly.z = plate.cz + 0.5;
+      fly.y = plate.topY + 5;
+      fly.on = true;
+    } else {
+      techWantO = null;
+      fly.on = false;
+      plate.on = false;
+    }
+    hud.buildMode = freePlace;
+    say(freePlace ? "Build mode — fly camera in the 30×30 box · fly: arrows / stick · up/down: Space/C, A/B, ▲▼ buttons · rotate part: WASD/QE, D-pad/bumpers, buttons" : "Build mode off");
+    emit();
+  }
+  /** One 90° step of the held Technic part's wanted orientation about
+   * a world axis — shared by the WASD/QE keys, the gamepad build-mode
+   * mapping and the touch rotation buttons. */
+  function rotateHeldPart(axis: 0 | 1 | 2, dir: 1 | -1) {
+    const base = techPlanLive?.o ?? techWantO;
+    if (base !== null && base !== undefined) techWantO = composeO(base, axis, dir);
+  }
   const plateGroup = new THREE.Group();
   {
     const fill = new THREE.Mesh(
@@ -5205,6 +5276,38 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     saveDirty = true;
   }
 
+  // The "use" gesture on a placed Technic part (P5b): a HUB whose
+  // assembly is a complete vehicle is DRIVEN (else toggled); a placed
+  // REMOTE cycles its hub's channel; sneak+use on a MOTOR cycles the
+  // channel that motor is bound to; any other drive part toggles on/off.
+  // One implementation for every device: the frame loop calls it on the
+  // place edge (mouse/touch/pad LT), and the touch "Channel" button
+  // calls it on the currently aimed part (api.techUse) — the button is
+  // the télécommande à l'écran of the all-devices line (2026-10-30).
+  function techUseAction(p: TechPart, sneak: boolean) {
+    const tspec = techSpec(p.id);
+    if (p.id === ID.TechHub) {
+      if (!tryEnterVehicle(p)) toggleTechPart(p);
+    } else if (p.id === ID.Remote) {
+      const hub = techComponent(p.uid).find((q) => q.id === ID.TechHub);
+      if (hub) {
+        const nx = nextChannel(hubChannelByQ.get(qKey(hub.q)) ?? "A");
+        hubChannelByQ.set(qKey(hub.q), nx);
+        say("Hub listening on channel " + nx);
+        audio.place();
+        saveDirty = true;
+      }
+    } else if (sneak && tspec?.drive === "motor") {
+      const nx = nextChannel(motorChannelByQ.get(qKey(p.q)) ?? "A");
+      motorChannelByQ.set(qKey(p.q), nx);
+      say(def(p.id).name + " bound to channel " + nx);
+      audio.place();
+      saveDirty = true;
+    } else if (tspec?.drive) {
+      toggleTechPart(p);
+    }
+  }
+
   // ================= P5b VEHICLES (Muse wiring, 2026-10-30) =========
   // A Technic assembly becomes ONE kinematic body (vehicle.ts): the
   // player builds it on the lattice, "use"s its hub to drive it, and
@@ -5227,6 +5330,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     meshes: { vp: VPart; mesh: THREE.Mesh; base: THREE.Matrix4 }[];
   };
   let vehEnt: VehEnt | null = null;
+  /** uid of the Technic part under the crosshair this frame (-1 = none):
+   * the touch Channel button replays the use gesture on it. */
+  let aimTechUid = -1;
 
   /** The connected assembly a part belongs to: parts whose world
    *  AABBs touch (within a hair) are one build. */
@@ -11558,6 +11664,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const nearBlock = Math.min(hit ? hit.dist : Infinity, bHit ? bHit.t : Infinity, tDist);
     const blockFirst = !mob || nearBlock < mobT;
     hud.targetName = "";
+    aimTechUid = -1;
+    hud.techAim = false;
     hud.mine = 0;
     highlight.visible = false;
     ghost.visible = false;
@@ -11827,27 +11935,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       // complete vehicle is DRIVEN; a placed REMOTE cycles its hub's
       // channel; sneak+use on a MOTOR cycles the channel that motor
       // is bound to; any other drive part toggles on/off as before.
+      aimTechUid = tHit.uid;
+      hud.techAim = !!tspec?.drive;
       if (!TECHNIC_SET.has(hotbar[slot]) && sample.first && sample.place && !prevPlace) {
-        if (tpart.id === ID.TechHub) {
-          if (!tryEnterVehicle(tpart)) toggleTechPart(tpart);
-        } else if (tpart.id === ID.Remote) {
-          const hub = techComponent(tpart.uid).find((p) => p.id === ID.TechHub);
-          if (hub) {
-            const nx = nextChannel(hubChannelByQ.get(qKey(hub.q)) ?? "A");
-            hubChannelByQ.set(qKey(hub.q), nx);
-            say("Hub listening on channel " + nx);
-            audio.place();
-            saveDirty = true;
-          }
-        } else if (sample.sneak && tspec?.drive === "motor") {
-          const nx = nextChannel(motorChannelByQ.get(qKey(tpart.q)) ?? "A");
-          motorChannelByQ.set(qKey(tpart.q), nx);
-          say(def(tpart.id).name + " bound to channel " + nx);
-          audio.place();
-          saveDirty = true;
-        } else if (tspec?.drive) {
-          toggleTechPart(tpart);
-        }
+        techUseAction(tpart, sample.sneak);
       }
     } else if (useBrick && bHit) {
       // P0: the crosshair is on a snapped brick.
@@ -12612,7 +12703,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       // WASD fly too when no Technic part is held (with a part, WASD
       // rotate it — his 2026-10-29 mapping), Space/C = up/down,
       // Shift = fast. The pose is clamped inside the 30x30x30 box.
-      const sp = ((keys.has("ShiftLeft") || keys.has("ShiftRight")) ? 21 : 9) * dt;
+      const sp = ((keys.has("ShiftLeft") || keys.has("ShiftRight") || padIn.sprint) ? 21 : 9) * dt;
       const cp = Math.cos(player.pitch);
       const fx = -Math.sin(player.yaw) * cp, fy = Math.sin(player.pitch), fz = -Math.cos(player.yaw) * cp;
       const rx = Math.cos(player.yaw), rz = -Math.sin(player.yaw);
@@ -12622,6 +12713,26 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (keys.has("ArrowDown") || (keys.has("KeyS") && !partHeld)) { mx -= fx; my -= fy; mz -= fz; }
       if (keys.has("ArrowRight") || (keys.has("KeyD") && !partHeld)) { mx += rx; mz += rz; }
       if (keys.has("ArrowLeft") || (keys.has("KeyA") && !partHeld)) { mx -= rx; mz -= rz; }
+      // Gamepad (all-devices line): the left stick flies under the
+      // same part-held rule as WASD (D-pad/bumpers rotate instead);
+      // A = up, B = down, L3 sprint = fast (in sp above).
+      if (!partHeld && (padIn.x !== 0 || padIn.y !== 0)) {
+        mx += fx * padIn.y + rx * padIn.x;
+        my += fy * padIn.y;
+        mz += fz * padIn.y + rz * padIn.x;
+      }
+      if (padIn.jump) my += 1;
+      if (padIn.sneak) my -= 1;
+      // Touch: the move stick flies ALWAYS (rotation has its own
+      // on-screen buttons, so there is no key conflict to gate on);
+      // the ▲/▼ hold buttons go up/down.
+      if (touch.moveX !== 0 || touch.moveY !== 0) {
+        mx += fx * touch.moveY + rx * touch.moveX;
+        my += fy * touch.moveY;
+        mz += fz * touch.moveY + rz * touch.moveX;
+      }
+      if (touch.flyUp) my += 1;
+      if (touch.flyDown) my -= 1;
       if (keys.has("Space")) my += 1;
       if (keys.has("KeyC")) my -= 1;
       const ml = Math.hypot(mx, my, mz);
@@ -13171,8 +13282,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           : null;
         if (rk) {
           e.preventDefault();
-          const base = techPlanLive?.o ?? techWantO;
-          if (base !== null && base !== undefined) techWantO = composeO(base, rk[0], rk[1]);
+          rotateHeldPart(rk[0], rk[1]);
           return;
         }
       }
@@ -13187,25 +13297,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       if (e.code === "Tab" && phase === "play") {
         e.preventDefault();
-        freePlace = !freePlace;
-        if (freePlace) {
-          // the box anchors under your feet and the fly camera starts at
-          // its centre, above the plate — you build from the camera
-          plate.on = true;
-          plate.cx = Math.floor(player.x);
-          plate.cz = Math.floor(player.z);
-          plate.topY = world.heightAt(plate.cx, plate.cz) + 1;
-          fly.x = plate.cx + 0.5;
-          fly.z = plate.cz + 0.5;
-          fly.y = plate.topY + 5;
-          fly.on = true;
-        } else {
-          techWantO = null;
-          fly.on = false;
-          plate.on = false;
-        }
-        say(freePlace ? "Build mode — fly camera in the 30×30 box · arrows fly · Space/C up/down · WASD/QE rotate the part" : "Build mode off");
-        emit();
+        toggleBuildMode();
       }
       if (e.code === "KeyE" && (phase === "play" || phase === "inventory") && !hud.ask && !hud.signEdit) {
         api.toggleInventory();
@@ -13266,6 +13358,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         mouseMine = false;
         mousePlace = false;
         touch.mine = touch.place = touch.jump = false;
+        touch.sneak = touch.flyUp = touch.flyDown = false;
         touch.moveX = touch.moveY = 0;
         if (sessionStarted) saveWorld();
         // Phones keep <audio> playing in the background; and a hidden tab should
@@ -13427,6 +13520,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     },
     // P5b QA witness (inert in play): the driven vehicle, if any.
     getVehicle: () => (vehEnt ? { pos: { ...vehEnt.v.pos }, vel: vehEnt.v.vel, yaw: vehEnt.v.yaw, fuel: vehEnt.v.fuel, battery: vehEnt.v.battery, load: vehEnt.v.load, parts: vehEnt.v.parts.length } : null),
+    // All-devices QA witness (inert in play): build-mode state for the
+    // touch/pad rig — toggled via the DOM Build button, rotated via
+    // the DOM rotation buttons.
+    getBuildMode: () => ({ on: freePlace, fly: fly.on, techHeld: TECHNIC_SET.has(hotbar[slot]), wantO: techWantO }),
     spinTech: () => ++techSpin,
     // P0 QA witness (qa99b11): mining progress on the current target —
     // key "B:…" = brick branch, voxel key = classic branch, "" = no mining.
@@ -13928,6 +14025,18 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (phase !== "play") return;
       phase = "pause";
       emit();
+    },
+    toggleBuildMode() {
+      toggleBuildMode();
+    },
+    rotatePart(axis: number, dir: number) {
+      if (!freePlace || phase !== "play") return;
+      rotateHeldPart((axis % 3) as 0 | 1 | 2, dir < 0 ? -1 : 1);
+    },
+    techUse() {
+      if (phase !== "play" || aimTechUid < 0) return;
+      const p = tech.parts.get(aimTechUid);
+      if (p) techUseAction(p, isSneaking());
     },
     resume() {
       if (phase !== "pause") return;

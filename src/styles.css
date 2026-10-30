@@ -2114,7 +2114,8 @@ kbd {
 }
 
 .sc-touch-pause,
-.sc-touch-bag {
+.sc-touch-bag,
+.sc-touch-build {
   position: absolute;
   display: grid;
   place-items: center;
@@ -2190,6 +2191,100 @@ kbd {
   bottom: 18px;
   width: 70px;
   height: 70px;
+}
+
+/* All-devices P5b controls (2026-10-30): build-mode toggle, sneak,
+   channel (la télécommande à l'écran), fly up/down, part rotation. */
+.sc-touch-build {
+  top: calc(72px + var(--safe-t));
+  right: calc(12px + var(--safe-r));
+  font-size: 22px;
+}
+
+.sc-touch-build.on {
+  background: rgba(245, 197, 24, 0.35);
+  border-color: rgba(245, 197, 24, 0.7);
+}
+
+.sc-touch-channel {
+  position: absolute;
+  right: calc(24px + var(--safe-r));
+  bottom: calc(300px + var(--safe-b));
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border: 2px solid rgba(140, 220, 255, 0.45);
+  border-radius: 50%;
+  background: rgba(20, 60, 90, 0.55);
+  color: var(--sc-text);
+  font-weight: 700;
+  font-size: 15px;
+  pointer-events: auto;
+  touch-action: manipulation;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+}
+
+.sc-hold.sneak {
+  right: 172px;
+  bottom: 140px;
+  width: 52px;
+  height: 52px;
+  font-size: 18px;
+}
+
+.sc-touch-fly {
+  position: absolute;
+  left: calc(30px + var(--safe-l));
+  bottom: calc(246px + var(--safe-b));
+  width: 60px;
+  height: 136px;
+  pointer-events: none;
+}
+
+.sc-hold.flyup,
+.sc-hold.flydown {
+  left: 0;
+  width: 60px;
+  height: 60px;
+  font-size: 18px;
+}
+
+.sc-hold.flyup {
+  top: 0;
+}
+
+.sc-hold.flydown {
+  bottom: 0;
+}
+
+.sc-touch-rot {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(10px + var(--safe-b));
+  display: flex;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.sc-rot-btn {
+  width: 46px;
+  height: 46px;
+  border: 2px solid rgba(255, 236, 205, 0.25);
+  border-radius: 12px;
+  background: rgba(14, 10, 7, 0.55);
+  color: var(--sc-text);
+  font-weight: 700;
+  font-size: 16px;
+  pointer-events: auto;
+  touch-action: manipulation;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.sc-rot-btn:active {
+  background: rgba(245, 197, 24, 0.35);
+  border-color: rgba(245, 197, 24, 0.7);
 }
 
 /* ── Inventory hub ──────────────────────────────────────────────────────── */

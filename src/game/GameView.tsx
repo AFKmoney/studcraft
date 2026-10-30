@@ -1461,7 +1461,13 @@ function TouchControls({ game }: { game: GameApi }) {
     game.touch.place = false;
     game.touch.jump = false;
     game.touch.spin = false;
+    game.touch.sneak = false;
+    game.touch.flyUp = false;
+    game.touch.flyDown = false;
   };
+  const hud = game.hud;
+  const heldId = hud.hotbar[hud.slot]?.id ?? -1;
+  const techHeld = TECHNIC_IDS.has(heldId);
   return (
     <div className="sc-touch" data-silent>
       <div
@@ -1521,6 +1527,67 @@ function TouchControls({ game }: { game: GameApi }) {
       >
         <BagIcon size={22} />
       </button>
+      <button
+        className={"sc-touch-build" + (hud.buildMode ? " on" : "")}
+        aria-label="Build mode"
+        onClick={() => {
+          allUp();
+          buzz(10);
+          game.toggleBuildMode();
+        }}
+      >
+        ▦
+      </button>
+      {hud.techAim && (
+        <button
+          className="sc-touch-channel"
+          aria-label="Use or cycle channel on the aimed part"
+          onClick={() => {
+            buzz(10);
+            game.techUse();
+          }}
+        >
+          CH
+        </button>
+      )}
+      {hud.buildMode && (
+        <>
+          <div className="sc-touch-fly">
+            <HoldButton className="flyup" label="Fly up" onHold={(v) => (game.touch.flyUp = v)} buzz={buzz}>
+              ▲
+            </HoldButton>
+            <HoldButton className="flydown" label="Fly down" onHold={(v) => (game.touch.flyDown = v)} buzz={buzz}>
+              ▼
+            </HoldButton>
+          </div>
+          {techHeld && (
+            <div className="sc-touch-rot">
+              {(
+                [
+                  [1, 1, "A", "Rotate part — same as the A key (yaw)"],
+                  [1, -1, "D", "Rotate part — same as the D key (yaw)"],
+                  [0, -1, "W", "Rotate part — same as the W key (pitch)"],
+                  [0, 1, "S", "Rotate part — same as the S key (pitch)"],
+                  [2, 1, "Q", "Rotate part — same as the Q key (roll)"],
+                  [2, -1, "E", "Rotate part — same as the E key (roll)"],
+                ] as [number, number, string, string][]
+              ).map(([axis, dir, label, aria]) => (
+                <button
+                  key={label}
+                  className="sc-rot-btn"
+                  aria-label={aria}
+                  onClick={() => {
+                    buzz(6);
+                    game.rotatePart(axis, dir);
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
       <div className="sc-touch-actions">
         <HoldButton className="mine" label="Mine or attack" onHold={(v) => (game.touch.mine = v)} buzz={buzz}>
           <PickIcon size={30} />
@@ -1530,6 +1597,9 @@ function TouchControls({ game }: { game: GameApi }) {
         </HoldButton>
         <HoldButton className="jump" label="Jump" onHold={(v) => (game.touch.jump = v)} buzz={buzz}>
           <JumpIcon size={28} />
+        </HoldButton>
+        <HoldButton className="sneak" label="Sneak — park vehicle, bind channel" onHold={(v) => (game.touch.sneak = v)} buzz={buzz}>
+          ▼
         </HoldButton>
         <HoldButton
           className="spin"
