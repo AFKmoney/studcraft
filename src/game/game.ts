@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { ATLAS_COLS, ATLAS_ROWS, BLOCKS, CREATIVE_BAR, ID, TECHNIC, def, faceTile, stairsVariant, type BlockDef } from "./blocks";
-import { TechWorld, ORIENTS, bbox as techBbox, spec as techSpec, type Part as TechPart, type Plan as TechPlan, type Target as TechTarget } from "./technic";
+import { TechWorld, ORIENTS, composeO, bbox as techBbox, spec as techSpec, type Part as TechPart, type Plan as TechPlan, type Target as TechTarget } from "./technic";
 import { buildTechnicGeometry } from "./technicGeo";
 import { createAudio } from "./audio";
 import { STUD_H, STUD_OFFSETS, STUD_R, buildChunk, type Surface } from "./mesher";
@@ -2596,15 +2596,44 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       // hand GRIPS the part: the clip closes on the part's body along
       // its long axis, like a tool handle — the part is held BY the
       // hand, never perched on top of it.
-      const f = (11 / 16) / 0.32;
+      // Flat parts (gears, turntables, panels, wheels — thickness under
+      // 30% of the span): face-on they wall off the whole screen and the
+      // centre grip left the clip floating on the face (Philippe's
+      // screenshots, 2026-10-29). Present them like a plate held by its
+      // rim instead: clip on the rim at the end of the long axis, bore
+      // along the rim tangent, the part tipped around the grip so its
+      // face reads at an angle, and the biggest flat parts shrink a
+      // touch more (still the largest things in hand — not a shield).
+      const dims = [size.x, size.y, size.z];
+      const ord = [0, 1, 2].sort((a, b) => dims[b] - dims[a]); // long, mid, thin
+      // flat = thin in ONE axis with the other two comparable (disc /
+      // plate). A beam is thin in TWO axes and keeps the handle grip.
+      const flat = dims[ord[2]] < dims[ord[0]] * 0.3 && dims[ord[1]] > dims[ord[0]] * 0.45 && dims[ord[0]] > 0.2;
+      const shrink = flat ? Math.min(1, 0.62 / dims[ord[0]]) : 1;
+      const f = ((11 / 16) / 0.32) * shrink;
       M = MC_HANDHELD.clone()
         .multiply(new THREE.Matrix4().makeTranslation(0.5, 0.5, 0.5))
         .multiply(new THREE.Matrix4().makeRotationY(Math.PI / 2))
         .multiply(new THREE.Matrix4().makeScale(f, f, f))
         .multiply(new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z));
-      const longAxis = size.x >= size.y && size.x >= size.z ? new THREE.Vector3(1, 0, 0) : size.y >= size.z ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1);
-      const grip = new THREE.Vector3(c.x, box.min.y + size.y * 0.35, c.z).applyMatrix4(M);
-      const shaft = longAxis.transformDirection(M);
+      const axisVec = (a: number) => (a === 0 ? new THREE.Vector3(1, 0, 0) : a === 1 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1));
+      let grip: THREE.Vector3;
+      let shaft: THREE.Vector3;
+      if (flat) {
+        const rim = c.clone();
+        rim.setComponent(ord[0], rim.getComponent(ord[0]) + dims[ord[0]] * 0.5);
+        grip = rim.applyMatrix4(M);
+        shaft = axisVec(ord[1]).transformDirection(M);
+        // tip the part around the grip point (invariant under the tip):
+        // the face leans forward like a plate you're looking down at
+        M = new THREE.Matrix4().makeTranslation(grip.x, grip.y, grip.z)
+          .multiply(new THREE.Matrix4().makeRotationX(-0.82))
+          .multiply(new THREE.Matrix4().makeTranslation(-grip.x, -grip.y, -grip.z))
+          .multiply(M);
+      } else {
+        grip = new THREE.Vector3(c.x, box.min.y + size.y * 0.35, c.z).applyMatrix4(M);
+        shaft = axisVec(ord[0]).transformDirection(M);
+      }
       const mouthT = ARM_OUT.clone().negate();
       placeArm(grip, shaft, mouthT, ARM_SCALE * 0.82);
     } else if (isTool) {
@@ -2659,6 +2688,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   }
   const vm = { equip: 1, land: 0, swayX: 0, swayY: 0, lastYaw: 0, lastPitch: 0, wasGrounded: true, fallV: 0, sprint: 0, place: 0 };
   const _identityQ = new THREE.Quaternion();
+  const _qaTmp = new THREE.Quaternion();
 
   // Positioned at z = -0.27 with scale 0.56 so all 3D parts stay > camera.near (0.08) and < player HW (0.34)
   // while using full hardware Z-buffer depth testing for crisp 3D self-occlusion!
@@ -3168,6 +3198,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     moltenMat = settings.realistic ? moltenStd : moltenLam;
     for (const mesh of brickMeshes.values()) {
       mesh.material = opaqueMat;
+      mesh.castShadow = settings.realistic;
+      mesh.receiveShadow = settings.realistic;
+    }
+    techMatSolid = settings.realistic ? techMatStd : techMatLam;
+    for (const mesh of techMeshes.values()) {
+      mesh.material = techMatSolid;
       mesh.castShadow = settings.realistic;
       mesh.receiveShadow = settings.realistic;
     }
@@ -4848,7 +4884,17 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   scene.add(techGroup);
   const techMeshes = new Map<number, THREE.Mesh>();
   const techGeos = new Map<number, THREE.BufferGeometry>();
-  const techMatSolid = new THREE.MeshLambertMaterial({ vertexColors: true });
+  const techMatLam = new THREE.MeshLambertMaterial({ vertexColors: true });
+  // SRN world shading on the Technic layer (Philippe, 2026-10-29): the
+  // parts are LEGO plastic like everything else in the world — the flat
+  // Lambert they shipped with read as raw CG next to the SRN bricks
+  // (his giant grey turntable screenshot). Same sirenizeWorld treatment
+  // as the world set; seams gentler (a part is ONE moulded piece, not a
+  // stack of block cells). Lambert stays as the non-realistic fallback,
+  // mirroring opaqueMat's Std/Lam pair.
+  const techMatStd = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0, envMapIntensity: 0.45 });
+  sirenizeWorld(techMatStd, 0.3, 1, "srn-world-technic-1");
+  let techMatSolid: THREE.Material = settings.realistic ? techMatStd : techMatLam;
   const techGhostMat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.45, depthWrite: false });
   const techGhostMesh = new THREE.Mesh(new THREE.BufferGeometry(), techGhostMat);
   techGhostMesh.visible = false;
@@ -4857,6 +4903,37 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   scene.add(techGhostMesh);
   let techGhostId = 0;
   let techSpin = 0; // cycles plan() variants (R key / touch "tourner" button)
+  // Build mode (Tab) — Philippe, 2026-10-29, "tout pensé en LEGO
+  // Technic": a 30x30-STUD work plate (15x15 blocks = 60x60 half-module
+  // lattice cells) projected on the ground, and orientation keys that
+  // dial the held part's orientation in 90° steps about the world axes.
+  let techWantO: number | null = null; // dialled orientation; null = planner's choice
+  let techPlanLive: TechPlan | null = null; // latest aim-frame ghost plan (keys compose from it)
+  let techTgtKey = ""; // target identity the dialled orientation belongs to
+  let techWantHeld = -1;
+  const plate = { on: false, cx: 0, cz: 0, topY: 0 };
+  const plateGroup = new THREE.Group();
+  {
+    const fill = new THREE.Mesh(
+      new THREE.PlaneGeometry(15, 15),
+      new THREE.MeshBasicMaterial({ color: 0x86d7ff, transparent: true, opacity: 0.1, depthWrite: false }),
+    );
+    fill.rotation.x = -Math.PI / 2;
+    plateGroup.add(fill);
+    const pts: number[] = [];
+    for (let i = -30; i <= 30; i++) {
+      const a = i * 0.5; // one line per stud (1 block = 2 studs)
+      pts.push(a, 0, -7.5, a, 0, 7.5, -7.5, 0, a, 7.5, 0, a);
+    }
+    const grid = new THREE.BufferGeometry();
+    grid.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+    plateGroup.add(new THREE.LineSegments(grid, new THREE.LineBasicMaterial({ color: 0x86d7ff, transparent: true, opacity: 0.25 })));
+    const border = new THREE.BufferGeometry();
+    border.setAttribute("position", new THREE.Float32BufferAttribute([-7.5, 0, -7.5, 7.5, 0, -7.5, 7.5, 0, -7.5, 7.5, 0, 7.5, 7.5, 0, 7.5, -7.5, 0, 7.5, -7.5, 0, 7.5, -7.5, 0, -7.5], 3));
+    plateGroup.add(new THREE.LineSegments(border, new THREE.LineBasicMaterial({ color: 0xbfeaff, transparent: true, opacity: 0.85 })));
+  }
+  plateGroup.visible = false;
+  scene.add(plateGroup);
   let techRevSeen = -1;
 
   const EMPTY_TECH_GEO = new THREE.BufferGeometry();
@@ -4985,10 +5062,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     if (keys.has("KeyR")) {
       keys.delete("KeyR");
       techSpin++;
+      techWantO = null; // back to the planner's cycling
     }
     if (touch.spin) {
       touch.spin = false;
       techSpin++;
+      techWantO = null;
     }
     if (tech.parts.size === 0) return;
     tech.step(dt, techPowered);
@@ -11008,10 +11087,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       keys.delete("KeyF");
       emit();
     }
-    if (keys.has("KeyW") || keys.has("ArrowUp")) fwd += 1;
-    if (keys.has("KeyS") || keys.has("ArrowDown")) fwd -= 1;
-    if (keys.has("KeyD") || keys.has("ArrowRight")) str += 1;
-    if (keys.has("KeyA") || keys.has("ArrowLeft")) str -= 1;
+    // Build mode with a Technic part in hand: WASD rotate the part
+    // (keydown handler), the arrow keys keep walking.
+    const buildRot = freePlace && TECHNIC_SET.has(hotbar[slot]);
+    if (keys.has("ArrowUp") || (keys.has("KeyW") && !buildRot)) fwd += 1;
+    if (keys.has("ArrowDown") || (keys.has("KeyS") && !buildRot)) fwd -= 1;
+    if (keys.has("ArrowRight") || (keys.has("KeyD") && !buildRot)) str += 1;
+    if (keys.has("ArrowLeft") || (keys.has("KeyA") && !buildRot)) str -= 1;
     if (steerOverride) str += -steerOverride;
     fwd += touch.moveY;
     str += touch.moveX;
@@ -11225,26 +11307,68 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // after the aim chain below; the block ghost is force-hidden
     // whenever a Technic part is held.
     hideTechGhost();
+    // Build plate anchor: the last top face aimed at pins the bench;
+    // the plate then stays put while you work on it.
+    if (freePlace) {
+      if (hit && hit.ny === 1) {
+        plate.on = true;
+        plate.cx = hit.x;
+        plate.cz = hit.z;
+        plate.topY = hit.y + 1;
+      } else if (bHit && bHit.ny === 1) {
+        plate.on = true;
+        plate.cx = Math.floor(bHit.brick.sx / 2);
+        plate.cz = Math.floor(bHit.brick.sz / 2);
+        plate.topY = bHit.brick.sy + 1;
+      }
+    }
+    plateGroup.visible = freePlace && plate.on && phase === "play";
+    if (plateGroup.visible) plateGroup.position.set(plate.cx + 0.5, plate.topY + 0.02, plate.cz + 0.5);
     let techPlanNow: TechPlan | null = null;
+    techPlanLive = null;
     const heldTechId = hotbar[slot];
     if (TECHNIC_SET.has(heldTechId) && blockFirst) {
       const look: [number, number, number] = [rdx, rdy, rdz];
       let tgt: TechTarget | null = null;
-      if (useTech && tHit) tgt = { kind: "part", uid: tHit.uid, point: tHit.point, n: tHit.n, cell: tHit.cell };
-      else if (useBrick && bHit) {
+      let tKey = "";
+      if (useTech && tHit) {
+        tgt = { kind: "part", uid: tHit.uid, point: tHit.point, n: tHit.n, cell: tHit.cell };
+        tKey = `p${tHit.uid}:${tHit.n[0]},${tHit.n[1]}`;
+      } else if (useBrick && bHit) {
         const bk = bHit.brick;
         const ax = bHit.nx !== 0 ? 0 : bHit.ny !== 0 ? 1 : 2;
         const sg = ax === 0 ? bHit.nx : ax === 1 ? bHit.ny : bHit.nz;
         const mb = ax === 0 ? bk.sx / 2 : ax === 1 ? bk.sy : bk.sz / 2;
         tgt = { kind: "face", point: [aimPt.x * 4, aimPt.y * 4, aimPt.z * 4], n: [ax as 0 | 1 | 2, sg], face: sg > 0 ? (mb + 1) * 4 : mb * 4 };
+        tKey = `b${bk.sx},${bk.sy},${bk.sz}:${ax},${sg}`;
       } else if (hit) {
         const ax = hit.nx !== 0 ? 0 : hit.ny !== 0 ? 1 : 2;
         const sg = ax === 0 ? hit.nx : ax === 1 ? hit.ny : hit.nz;
         const mb = ax === 0 ? hit.x : ax === 1 ? hit.y : hit.z;
         tgt = { kind: "face", point: [aimPt.x * 4, aimPt.y * 4, aimPt.z * 4], n: [ax as 0 | 1 | 2, sg], face: sg > 0 ? (mb + 1) * 4 : mb * 4 };
+        tKey = `v${hit.x},${hit.y},${hit.z}:${ax},${sg}`;
+      }
+      if (!tgt && freePlace && plate.on && rdy < -0.001) {
+        // aiming at the hologram itself (air over the bench): the plate
+        // is a placeable top face anywhere inside its 30x30 studs
+        const t = (plate.topY - roy) / rdy;
+        if (t > 0 && t <= 18) {
+          const px = rox + rdx * t;
+          const pz = roz + rdz * t;
+          if (Math.abs(px - (plate.cx + 0.5)) <= 7.5 && Math.abs(pz - (plate.cz + 0.5)) <= 7.5) {
+            tgt = { kind: "face", point: [px * 4, plate.topY * 4, pz * 4], n: [1, 1], face: plate.topY * 4 };
+            tKey = "plate";
+          }
+        }
       }
       if (tgt) {
-        techPlanNow = tech.plan(heldTechId, tgt, look, techSpin, techSolidAt);
+        if (tKey !== techTgtKey || heldTechId !== techWantHeld) {
+          techTgtKey = tKey;
+          techWantHeld = heldTechId;
+          techWantO = null; // a new target starts from the planner's choice
+        }
+        techPlanNow = tech.plan(heldTechId, tgt, look, techSpin, techSolidAt, techWantO ?? undefined);
+        techPlanLive = techPlanNow;
         if (techPlanNow) {
           const ok = (creative || (inv[heldTechId] ?? 0) > 0) && !techHitsPlayer(heldTechId, techPlanNow.o, techPlanNow.q);
           showTechGhost(heldTechId, techPlanNow, ok);
@@ -12132,10 +12256,15 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       // whole arm swept the forearm and its open end across the screen)
       viewBrick.quaternion.identity();
       const g = fpsArmGroup.position;
-      heldBrickGroup.quaternion.copy(qa).multiply(heldBase.quat);
-      heldBrickGroup.position.copy(heldBase.pos).sub(g).applyQuaternion(qa).add(g);
+      // Technic parts chop at half amplitude (Philippe, 2026-10-29): the
+      // full wrist arc on a wide flat part sweeps it across the centre of
+      // the screen on every mining hit — same centre-screen family as
+      // the bare-hand bug, one layer up.
+      _qaTmp.copy(_identityQ).slerp(qa, TECHNIC_SET.has(lastHeldId) ? 0.5 : 1);
+      heldBrickGroup.quaternion.copy(_qaTmp).multiply(heldBase.quat);
+      heldBrickGroup.position.copy(heldBase.pos).sub(g).applyQuaternion(_qaTmp).add(g);
       const aq = fpsArmGroup.quaternion;
-      fpsClaw.quaternion.copy(aq).invert().multiply(qa).multiply(aq).multiply(clawRest);
+      fpsClaw.quaternion.copy(aq).invert().multiply(_qaTmp).multiply(aq).multiply(clawRest);
     }
     void arc; void strike; void heldIsTool;
   }
@@ -12667,6 +12796,27 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         return;
       }
       if (!fresh || phase === "dead") return;
+      // Build mode (Tab): WASD / Q E rotate the held Technic part in
+      // 90° steps about the WORLD axes (Philippe, 2026-10-29) — A/D
+      // yaw, W/S pitch, Q/E roll, Shift+Q/E pitch (the other axis).
+      // Outside build mode Q/E keep their jobs (spell cycle, inventory)
+      // and WASD walk (see poll()'s buildRot gate).
+      if (freePlace && phase === "play" && TECHNIC_SET.has(hotbar[slot])) {
+        const rk =
+          e.code === "KeyA" ? ([1, 1] as const)
+          : e.code === "KeyD" ? ([1, -1] as const)
+          : e.code === "KeyW" ? ([0, -1] as const)
+          : e.code === "KeyS" ? ([0, 1] as const)
+          : e.code === "KeyQ" ? (e.shiftKey ? ([0, -1] as const) : ([2, 1] as const))
+          : e.code === "KeyE" ? (e.shiftKey ? ([0, 1] as const) : ([2, -1] as const))
+          : null;
+        if (rk) {
+          e.preventDefault();
+          const base = techPlanLive?.o ?? techWantO;
+          if (base !== null && base !== undefined) techWantO = composeO(base, rk[0], rk[1]);
+          return;
+        }
+      }
       if (e.code === "KeyQ" && phase === "play") {
         const list = spellsFor(skills);
         if (!list.length) say("Learn Spark to cast");
@@ -12679,7 +12829,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (e.code === "Tab" && phase === "play") {
         e.preventDefault();
         freePlace = !freePlace;
-        say(freePlace ? "Free place" : "Snap place");
+        if (!freePlace) techWantO = null;
+        say(freePlace ? "Build mode — 30×30 plate · WASD / Q E rotate the part" : "Build mode off");
         emit();
       }
       if (e.code === "KeyE" && (phase === "play" || phase === "inventory") && !hud.ask && !hud.signEdit) {

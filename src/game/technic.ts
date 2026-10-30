@@ -551,6 +551,26 @@ export const axOf = (o: number, a: Ax): [Ax, number] => {
   return [a, 1];
 };
 
+const ORIENT_INDEX = new Map<string, number>(ORIENTS.map((m, i) => [m.join(","), i]));
+/** Orientation index of R · ORIENTS[o], R a ±90° turn about a world axis
+ *  (0=x, 1=y, 2=z; dir +1 = right-hand rule). The 24 orientations form a
+ *  group, so the composed orientation always exists. Build-mode rotation
+ *  keys (WASD / Q E) dial orientations in with this. */
+export function composeO(o: number, axis: 0 | 1 | 2, dir: 1 | -1): number {
+  // R for +90° about the axis, row-major (columns are the images of e_x,e_y,e_z)
+  const R: Mat =
+    axis === 0 ? [1, 0, 0, 0, 0, -1, 0, 1, 0] : axis === 1 ? [0, 0, 1, 0, 1, 0, -1, 0, 0] : [0, -1, 0, 1, 0, 0, 0, 0, 1];
+  if (dir < 0) {
+    // inverse of a rotation matrix is its transpose
+    const t = [R[0], R[3], R[6], R[1], R[4], R[7], R[2], R[5], R[8]];
+    for (let i = 0; i < 9; i++) R[i] = t[i];
+  }
+  const m = ORIENTS[o];
+  const out: Mat = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) out[r * 3 + c] = R[r * 3] * m[c] + R[r * 3 + 1] * m[3 + c] + R[r * 3 + 2] * m[6 + c];
+  return ORIENT_INDEX.get(out.join(",")) ?? o;
+}
+
 // =====================================================================
 // OCCUPANCY — half-module sub-cells. Holes accept shafts; nothing else
 // may share space. Cells are typed: S solid, P/A hole, p/a shaft.
@@ -739,8 +759,10 @@ export class TechWorld {
     return null;
   }
 
-  /** where would held part `id` go for this aim? spin cycles the alternatives */
-  plan(id: number, tg: Target, look: V3, spin: number, solidAt?: (x: number, y: number, z: number) => boolean): Plan | null {
+  /** where would held part `id` go for this aim? spin cycles the alternatives.
+   *  wantO (build-mode rotation keys): place with EXACTLY this orientation —
+   *  a seating candidate with it, the flat-face anchor with it, or null. */
+  plan(id: number, tg: Target, look: V3, spin: number, solidAt?: (x: number, y: number, z: number) => boolean, wantO?: number): Plan | null {
     const s = S.get(id);
     if (!s) return null;
     const cands: (Plan & { score: number })[] = [];
@@ -806,30 +828,48 @@ export class TechWorld {
           }
       }
     }
+    // One flat-on-the-face attempt with an explicit orientation: anchor
+    // the part's reference connection on the aimed face (the same maths
+    // the ranked loop below uses per orientation), valid iff test() seats it.
+    const tryFace = (o: number): Plan | null => {
+      const face = tg.kind === "face" ? tg.face : tg.cell[tg.n[0]] + (tg.n[1] > 0 ? 1 : 0);
+      const ref = refConn(s);
+      const [lo, hi] = bbox(id, o);
+      const q: V3 = [0, 0, 0];
+      const r = rot(o, [ref.c[0] * 2, ref.c[1] * 2, ref.c[2] * 2]);
+      const [rax] = axOf(o, ref.ax);
+      for (let a = 0; a < 3; a++) {
+        if (a === tg.n[0]) {
+          q[a] = tg.n[1] > 0 ? face - lo[a] : face - hi[a];
+          if (rax !== a && mod2(q[a] + r[a]) !== 1) q[a] += tg.n[1];
+        } else {
+          const v = tg.point[a] - r[a];
+          let x = Math.round(v);
+          if (rax !== a && mod2(x + r[a]) !== 1) x += v > x ? 1 : -1;
+          q[a] = x;
+        }
+      }
+      const links = this.test(id, o, q, solidAt);
+      return links >= 0 ? { o, q, links } : null;
+    };
+    if (wantO !== undefined) {
+      // The player dialled this orientation in: honour it exactly — a
+      // seating candidate with it, the flat-face anchor with it, or
+      // nothing (the ghost shows red; never silently place differently).
+      const mine = cands.filter((c) => c.o === wantO);
+      if (mine.length) {
+        mine.sort((a, b) => b.score - a.score);
+        return { o: mine[0].o, q: mine[0].q, links: mine[0].links };
+      }
+      if (cands.length) return null;
+      return tryFace(wantO);
+    }
     if (!cands.length) {
       // flat on the face (block face, or the face of a Technic part)
-      const face = tg.kind === "face" ? tg.face : tg.cell[tg.n[0]] + (tg.n[1] > 0 ? 1 : 0);
       const ranked = faceOrients(s, tg.n, look);
-      const ref = refConn(s);
       for (let i = 0; i < ranked.length; i++) {
-        const o = ranked[(i + spin) % ranked.length];
-        const [lo, hi] = bbox(id, o);
-        const q: V3 = [0, 0, 0];
-        const r = rot(o, [ref.c[0] * 2, ref.c[1] * 2, ref.c[2] * 2]);
-        const [rax] = axOf(o, ref.ax);
-        for (let a = 0; a < 3; a++) {
-          if (a === tg.n[0]) {
-            q[a] = tg.n[1] > 0 ? face - lo[a] : face - hi[a];
-            if (rax !== a && mod2(q[a] + r[a]) !== 1) q[a] += tg.n[1];
-          } else {
-            const v = tg.point[a] - r[a];
-            let x = Math.round(v);
-            if (rax !== a && mod2(x + r[a]) !== 1) x += v > x ? 1 : -1;
-            q[a] = x;
-          }
-        }
-        const links = this.test(id, o, q, solidAt);
-        if (links >= 0) return { o, q, links };
+        const got = tryFace(ranked[(i + spin) % ranked.length]);
+        if (got) return got;
       }
       return null;
     }
