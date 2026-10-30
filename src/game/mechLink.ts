@@ -1,7 +1,7 @@
 // P5 world adapter. Block cells are 2 studs apart, which is the catalog
 // distance for 16T+16T and 8T+24T. Does not import game.ts or save.ts.
 
-import { integrateMech, putMech, resetParts, solveMech, speedAt, strokeAt, type Axis, type Frac, type MechKind } from "./mechState.ts";
+import { diffOutput, integrateMech, putMech, resetParts, solveMech, speedAt, strokeAt, type Axis, type Frac, type MechKind } from "./mechState.ts";
 
 export type MechBlockIds = {
   axle: number;
@@ -341,7 +341,7 @@ export function stepMech(
   for (const c of diffs) {
     const a = speedAt(c.x * 2, (c.y - 1) * 2, c.z * 2);
     const b = speedAt(c.x * 2, (c.y + 1) * 2, c.z * 2);
-    const avg = { n: a.n * b.d + b.n * a.d, d: a.d * b.d * 2 };
+    const avg = diffOutput(a, b);
     if (!avg.n) continue;
     feeds.push({ x: (c.x + 1) * 2, y: c.y * 2, z: c.z * 2, s: avg });
   }
