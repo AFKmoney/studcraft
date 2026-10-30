@@ -178,6 +178,7 @@ Pas de redstone. Le cœur tourne : graphe de rotation local et borné.
 ### P5b · Électrique + conduite (LE gros morceau restant)
 
 - [ ] Moteurs électriques câblés à la couche 1:1 (tailles = couple/vitesse : M 405 rpm/11 Ncm, L 390/18, XL 220/40, servo ±90° — mesures Power Functions, LEGO ne publie rien)
+  - **EN COURS (Grok)** — prototype P5b minimal qui roule. Branche: grok/p5b-proto. Fichiers: src/game/p5bProto.ts (nouveau). Scale en main intouché.
 - [ ] Hub/batterie + télécommande à canaux A–D : le joueur LIE un hub à sa machine
 - [ ] **Conduite : un véhicule construit roule pour vrai sur le terrain** — UN corps cinématique par construction (masse/centre calculés des pièces), roues = raycasts de suspension, différentiel (A+B)/2. Jamais un corps rigide par brique, jamais de représentation build ≠ run
 - [ ] **CARBURANT (ordre de Philippe 2026-10-30 — n'était PAS au plan)** : fondre du plastique donne aussi du **fuel** (la Fonderie gagne un deuxième produit — la matière boucle : P6 nourrit les machines). À designer en chiffres : item fuel + réservoir, quels moteurs brûlent du fuel (combustion) vs électriques (batterie), taux de consommation selon la charge, recharge/drain de batterie, comportement à sec (la machine s'arrête, jamais de magie). Aucune énergie de nulle part : chaque joule répond « fait de quoi »
