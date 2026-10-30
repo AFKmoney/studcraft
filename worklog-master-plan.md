@@ -210,7 +210,7 @@ Pas de redstone. Le cœur tourne : graphe de rotation local et borné.
 - [ ] qa96 restes : s3b (sonde settle du topple), s4 (Wither — le harnais est mort, pas le jeu), s5 (FX — aucun verdict n'existe, les deux logs sont vides)
 - [ ] qa97 : performance (chiffres relatifs au rig seulement — le verdict perf est l'A54 de Philippe)
 - [x] qa-bow : MESURÉ PASS (voir BUG-2 §13) — reste seulement le retest Pages de Philippe
-- [ ] Re-mesurer qa100/qa101/qa102 sous le recalibrage studs (§3) : les classifications « unsupported » à 1 stud changent par design
+- [ ] Re-mesurer qa100/qa101/qa102 sous le recalibrage studs (§3) — **harnais recalibrés par la boucle (20:33)** : qa102/qa101 v3 (les anciennes assertions sag /0,75 sont impossibles : stress max 0,12 + scan gate 0,25 → détachement au premier scan, sag inobservable — observation de design ouverte), qa100 re-dérivé au code (verdict attendu inchangé : 10/8/{C3,F}); mesures au rig encore dues (fenêtre calme + dist 8091 frais)
 
 ## 16. Lag (de worklog2, item 3 — ouvert)
 
