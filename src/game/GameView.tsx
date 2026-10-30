@@ -1860,6 +1860,11 @@ function BinPage({ game }: { game: GameApi }) {
             Held: <strong>{hud.cursor ? def(hud.cursor).name : "None"}</strong>
           </span>
         </div>
+        {hud.cursor > 0 && (
+          <div className="sc-item-bubble" key={hud.cursor}>
+            <ItemIcon id={hud.cursor} /> {def(hud.cursor).name}
+          </div>
+        )}
         <div className="sc-chips sc-bin-chips">
           {(
             [
