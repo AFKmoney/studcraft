@@ -2630,6 +2630,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           .multiply(new THREE.Matrix4().makeRotationX(-0.82))
           .multiply(new THREE.Matrix4().makeTranslation(-grip.x, -grip.y, -grip.z))
           .multiply(M);
+        // The HAND tips WITH the part (Philippe's photo, 2026-10-30: the
+        // claw kept the pre-tip bore, so it sat 47° off the rim — perched
+        // on top of the plate instead of clamping it). Same rotation,
+        // same axis: hand and part aligned by construction.
+        shaft = shaft.applyAxisAngle(X_AXIS, -0.82);
       } else {
         grip = new THREE.Vector3(c.x, box.min.y + size.y * 0.35, c.z).applyMatrix4(M);
         shaft = axisVec(ord[0]).transformDirection(M);
@@ -4059,7 +4064,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     for (const c of cells) {
       // Debris-site Technic finds join the Technic layer, not bricks.
       if (TECHNIC_SET.has(c.id)) {
-        convertLegacyTechBrick(c.id, c.x * 2, c.y, c.z * 2);
+        convertLegacyTechBrick(c.id, c.x * 2, c.y, c.z * 2, true);
         continue;
       }
       if (!brickSpaceFree(c.x * 2, c.y, c.z * 2)) continue;
@@ -5152,16 +5157,20 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // with the planner, flat on the floor of its old cell; if no pose
   // fits, try the raw lattice origin; if even that collides, drop it
   // as an item — a migration never deletes a part.
-  function convertLegacyTechBrick(id: number, sx: number, sy: number, sz: number) {
+  function convertLegacyTechBrick(id: number, sx: number, sy: number, sz: number, off = false) {
     const face = sy * 4;
     const plan = tech.plan(id, { kind: "face", point: [sx * 2 + 2, face, sz * 2 + 2], n: [1, 1], face }, [0, 0, 1], 0, techSolidAt);
     if (plan) {
-      tech.add(id, plan.o, plan.q);
+      const p = tech.add(id, plan.o, plan.q);
+      // Debris finds spawn OFF (Philippe, 2026-10-30: a found crank/motor
+      // must not run by itself — the player switches it on).
+      if (off) p.on = false;
       return;
     }
     const q: [number, number, number] = [sx * 2, sy * 4, sz * 2];
     if (tech.test(id, 0, q, techSolidAt) >= 0) {
-      tech.add(id, 0, q);
+      const p = tech.add(id, 0, q);
+      if (off) p.on = false;
       return;
     }
     dropItem(id, 1, sx / 2 + 0.5, sy + 1.2, sz / 2 + 0.5);
