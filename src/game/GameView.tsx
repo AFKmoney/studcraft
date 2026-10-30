@@ -1886,7 +1886,7 @@ function BinPage({ game }: { game: GameApi }) {
 function CraftPage({ game }: { game: GameApi }) {
   const hud = game.hud;
   const bench = hud.panel === "bench";
-  const [book, setBook] = useState<"all" | "build" | "tools" | "magic" | "gear" | "food" | "redstone" | "technic">("all");
+  const [book, setBook] = useState<"all" | "build" | "tools" | "magic" | "gear" | "food" | "technic">("all");
   const [search, setSearch] = useState("");
   const [sel, setSel] = useState("");
   const [onlyCan, setOnlyCan] = useState(false);
@@ -1958,7 +1958,7 @@ function CraftPage({ game }: { game: GameApi }) {
         <div className="sc-search sc-craft-search">
           <input
             type="search"
-            placeholder="Search 125+ LEGO recipes (pickaxe, torch, redstone, armor, food…)"
+            placeholder="Search LEGO recipes (pickaxe, torch, technic, armor, food…)"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             aria-label="Search recipes"
@@ -1981,7 +1981,6 @@ function CraftPage({ game }: { game: GameApi }) {
               ["gear", "Armor & Gear"],
               ["food", "Food"],
               ["magic", "Arcane"],
-              ["redstone", "Redstone"],
               ["technic", "Technic"],
             ] as const
           ).map(([cat, label]) => (

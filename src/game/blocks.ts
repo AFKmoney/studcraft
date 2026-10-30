@@ -1557,6 +1557,17 @@ export const CATALOG_EXCLUDED: Record<number, string> = {
   [ID.StairsCobble2]: "rotation state of StairsCobble0",
   [ID.StairsCobble3]: "rotation state of StairsCobble0",
   [ID.DaylightInv]: "inverted state of Daylight",
+  [ID.Dust]: "redstone — retired 2026-10-30 (audit §21 A2)",
+  [ID.RedTorch]: "redstone — retired 2026-10-30 (audit §21 A2)",
+  [ID.Repeater]: "redstone — retired 2026-10-30 (audit §21 A2)",
+  [ID.Comparator]: "redstone — retired 2026-10-30 (audit §21 A2)",
+  [ID.Observer]: "redstone — retired 2026-10-30 (audit §21 A2)",
+  [ID.Lever]: "redstone — retired 2026-10-30 (audit §21 A2)",
+  [ID.Plate]: "redstone — retired 2026-10-30 (audit §21 A2)",
+  [ID.Daylight]: "redstone — retired 2026-10-30 (audit §21 A2)",
+  [ID.Target]: "redstone — retired 2026-10-30 (audit §21 A2)",
+  [ID.Piston]: "redstone pusher — retired 2026-10-30 (the mech Actuator is the pusher now)",
+  [ID.Dispenser]: "redstone launcher — retired 2026-10-30 (audit §21 A2)",
   [ID.Fire]: "world fire, not an item",
   [ID.Melted]: "world melt form, not an item",
   [ID.CrankOn]: "turning state of Crank",
@@ -1567,6 +1578,28 @@ export const CATALOG_EXCLUDED: Record<number, string> = {
 export const CATALOG: number[] = BLOCKS.filter(
   (d) => d && !(d.id in CATALOG_EXCLUDED),
 ).map((d) => d.id);
+
+// ── Redstone retirement (Philippe, 2026-10-30 — audit §21 A2) ──────────
+// The signal engine is deleted from game.ts: in Studs, power is motors,
+// hub batteries and fuel — never redstone (his law since 2026-10-28).
+// These defs stay registered so old worlds load and render, but they are
+// unplaceable, out of the Creative catalogue (above), uncraftable (their
+// recipes are deleted), and breaking one returns its plastic as pellets
+// instead of a dead component. The Lamp is re-logic'd, not retired: it is
+// simply a lamp now — place it and it shines, no switch (see below).
+export const RETIRED_REDSTONE: number[] = [
+  ID.Dust, ID.DustOn, ID.RedTorch, ID.RedTorchOn, ID.Repeater, ID.RepeaterOn,
+  ID.Comparator, ID.ComparatorOn, ID.Observer, ID.ObserverOn, ID.Lever, ID.LeverOn,
+  ID.Plate, ID.PlateOn, ID.Daylight, ID.DaylightInv, ID.Target, ID.Piston, ID.Dispenser,
+];
+for (const id of RETIRED_REDSTONE) {
+  const d = BLOCKS[id];
+  if (d) {
+    d.placeable = false;
+    d.drop = ID.Pellets;
+  }
+}
+if (BLOCKS[ID.Lamp]) BLOCKS[ID.Lamp].light = 6;
 
 /** Parts the player can take from the Technic bin. Click-states stay out. */
 export const TECHNIC = [

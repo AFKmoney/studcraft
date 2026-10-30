@@ -14,7 +14,7 @@ export type Recipe = {
   h?: number;
   lvl?: number;
   skill?: string;
-  cat?: "build" | "tools" | "magic" | "gear" | "food" | "redstone" | "technic";
+  cat?: "build" | "tools" | "magic" | "gear" | "food" | "technic";
 };
 
 const P = ID.Planks;
@@ -217,34 +217,7 @@ export const RECIPES: Recipe[] = [
   r("shell-leather", "Leather shell", "8 pelts", [[ID.Pelt, 8]], ID.ChestLeather, 1, { shape: [ID.Pelt, 0, ID.Pelt, ID.Pelt, ID.Pelt, ID.Pelt, ID.Pelt, ID.Pelt, ID.Pelt], w: 3, h: 3, cat: "gear" }),
   r("legs-leather", "Leather legs", "7 pelts", [[ID.Pelt, 7]], ID.LegsLeather, 1, { shape: [ID.Pelt, ID.Pelt, ID.Pelt, ID.Pelt, 0, ID.Pelt, ID.Pelt, 0, ID.Pelt], w: 3, h: 3, cat: "gear" }),
   r("boots-leather", "Leather boots", "4 pelts", [[ID.Pelt, 4]], ID.BootsLeather, 1, { shape: [ID.Pelt, 0, ID.Pelt, ID.Pelt, 0, ID.Pelt], w: 3, h: 2, cat: "gear" }),
-  r("dust", "Red dust", "1 red → 4", [[ID.Red, 1]], ID.Dust, 4, { shape: [ID.Red], w: 1, h: 1, cat: "build" }),
-  r("lever", "Lever", "1 stick + 1 cobble", [[S, 1], [C, 1]], ID.Lever, 1, { shape: [S, C], w: 1, h: 2, cat: "build" }),
-  r("lamp", "Lamp", "1 dust + 1 window", [[ID.Dust, 1], [ID.Glass, 1]], ID.Lamp, 1, { shape: [ID.Dust, ID.Glass], w: 1, h: 2, cat: "build" }),
-  r("piston", "Pusher", "1 ingot + 4 cobble + 1 dust", [[I, 1], [C, 4], [ID.Dust, 1]], ID.Piston, 1, {
-    shape: [C, I, C, C, ID.Dust, C],
-    w: 3,
-    h: 2,
-    cat: "build",
-  }),
-  r("red-torch", "Red torch", "1 dust + 1 stick", [[ID.Dust, 1], [S, 1]], ID.RedTorch, 1, { shape: [ID.Dust, S], w: 1, h: 2, cat: "build" }),
-  r("repeater", "Repeater", "2 red torches + 1 dust + 3 cobble", [[ID.RedTorch, 2], [ID.Dust, 1], [C, 3]], ID.Repeater, 1, {
-    shape: [ID.RedTorch, ID.Dust, ID.RedTorch, C, C, C],
-    w: 3,
-    h: 2,
-    cat: "build",
-  }),
-  r("comparator", "Comparator", "1 red torch + 1 quartz + 3 cobble", [[ID.RedTorch, 1], [ID.White, 1], [C, 3]], ID.Comparator, 1, {
-    shape: [0, ID.RedTorch, 0, ID.White, 0, 0, C, C, C],
-    w: 3,
-    h: 3,
-    cat: "build",
-  }),
-  r("observer", "Observer", "6 cobble + 2 dust + 1 quartz", [[C, 6], [ID.Dust, 2], [ID.White, 1]], ID.Observer, 1, {
-    shape: [C, C, C, ID.Dust, ID.Dust, ID.White, C, C, C],
-    w: 3,
-    h: 3,
-    cat: "build",
-  }),
+  r("lamp", "Lamp", "1 window + 1 amber — shines on its own, no switch", [[ID.Glass, 1], [ID.Amber, 1]], ID.Lamp, 1, { shape: [ID.Glass, ID.Amber], w: 1, h: 2, cat: "build" }),
   r("hard", "Kiln brick", "4 cobble + 1 coal", [[C, 4], [ID.Coal, 1]], ID.Hard, 1, { cat: "build" }),
   r("tnt", "Blast brick", "5 blast dust + 4 sand", [[ID.Powder, 5], [ID.Sand, 4]], ID.TNT, 1, {
     shape: [ID.Powder, ID.Sand, ID.Powder, ID.Sand, ID.Powder, ID.Sand, ID.Powder, ID.Sand, ID.Powder],
@@ -405,8 +378,8 @@ export const RECIPES: Recipe[] = [
     h: 2,
     cat: "build",
   }),
-  r("note", "Chime", "8 planks + 1 dust", [[P, 8], [ID.Dust, 1]], ID.Note, 1, {
-    shape: [P, P, P, P, ID.Dust, P, P, P, P],
+  r("note", "Chime", "8 planks + 1 resin", [[P, 8], [ID.Resin, 1]], ID.Note, 1, {
+    shape: [P, P, P, P, ID.Resin, P, P, P, P],
     w: 3,
     h: 3,
     cat: "build",
@@ -767,18 +740,6 @@ export const RECIPES: Recipe[] = [
     w: 3,
     h: 3,
     cat: "gear",
-  }),
-  r("daylight-sensor", "Daylight sensor", "3 windows + 3 crystals + 3 plank slabs — powers redstone by sun or moon", [[ID.Glass, 3], [ID.Crystal, 3], [ID.SlabPlanks, 3]], ID.Daylight, 1, {
-    shape: [ID.Glass, ID.Glass, ID.Glass, ID.Crystal, ID.Crystal, ID.Crystal, ID.SlabPlanks, ID.SlabPlanks, ID.SlabPlanks],
-    w: 3,
-    h: 3,
-    cat: "redstone",
-  }),
-  r("target-block", "Target block", "1 hay bale + 4 red dust — pulses when hit by arrows or bolts", [[ID.Hay, 1], [ID.Dust, 4]], ID.Target, 1, {
-    shape: [0, ID.Dust, 0, ID.Dust, ID.Hay, ID.Dust, 0, ID.Dust, 0],
-    w: 3,
-    h: 3,
-    cat: "redstone",
   }),
   r("axle", "Axle", "3 sticks", [[ID.Stick, 3]], ID.Axle, 1, {
     shape: [0, ID.Stick, 0, 0, ID.Stick, 0, 0, ID.Stick, 0],
