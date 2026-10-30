@@ -4757,3 +4757,7 @@ Philippe a testé la couche tactile/manette sur Pages et rapporté 7 chantiers d
 - **Terrain rond** : `mesher.ts` `STUD_N` 6 → 12. Le 6 segments de la passe lag v4.19 donnait des hexagones — l'œil de Philippe a tranché : TOUS les studs sont ronds. Coût : ~2× les triangles de studs du mesher; mesure perf qa97 due derrière (si le FPS A54 en prend un coup, on revient AVEC les chiffres, pas avant).
 - **Aucun dessin dans les studs des briques** : `brickGeo` remappait l'UV de chaque stud sur la tuile top ENTIÈRE de l'atlas → les filets de studs peints dans la tuile se réimprimaient dans le stud 3D (les « 4 demi-cercles »). Les studs échantillonnent maintenant un mini-patch autour du CENTRE de la tuile — la même couleur unie que les studs du mesher (qui échantillonne le point central). Même passage : les studs des sous-pièces de débris passent 10 → 12 segments.
 - **Gate** : tsc 0, tests 66/66, build OK. Fermeture = son retest Pages (rond partout, studs propres) + qa97 perf.
+
+## 2026-10-30 ~16h00 PDT — B2 EAU livré (audit §21 A5, Muse)
+
+- `ID.Water` : `drop: -1` + `placeable: false`; `ID.Lava` : `drop: -1` (déjà non-plaçable). Casser un fluide ne met plus RIEN dans l'inventaire — le rendement générique de `breakBlock` (`block.drop || id`) tombait sur l'item Water, et le chemin explosion (10243) respecte le même `drop !== -1`. La collecte reste la chaudière (scoop en place) et la bouteille. Vérifié avant de couper : AUCUNE recette/quête/loot ne consomme l'item Water. Gate : tsc 0, tests 66/66.

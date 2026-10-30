@@ -638,6 +638,10 @@ put(
     solid: false,
     fluid: true,
     hard: 0.15,
+    // Philippe 2026-10-30: breaking water must NOT put water in the
+    // inventory — the Bucket and the empty Bottle are how you carry it.
+    drop: -1,
+    placeable: false,
   }),
 );
 put(b(ID.Log, "Wood", "#6b3e22", "#a56b3c", "#6b3e22", "#4e2c18", { hard: 2 }));
@@ -903,6 +907,7 @@ put(
     placeable: false,
     hard: 0.2,
     light: 1,
+    drop: -1, // same law as Water: fluids are carried in buckets, never mined into the inventory
   }),
 );
 put(b(ID.EndStone, "Pale brick", "#efe6b8", "#f7f1cc", "#ddd4a4", "#c8be8e", { hard: 3, tough: true, need: 1 }));
