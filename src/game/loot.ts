@@ -127,6 +127,13 @@ const TABLES: Record<string, Stack[]> = {
     [ID.Obsidian, 1],
     [ID.Gapple, 1],
     [ID.Bone, 2],
+    // Foundry items (P6 loop): pellets, plastic/tempered ingots, plastic tools
+    [ID.Pellets, 4],
+    [ID.PlasticIngot, 2],
+    [ID.TemperedIngot, 1],
+    [ID.PlasticPick, 1],
+    [ID.PlasticSword, 1],
+    [ID.TPlasticPick, 1],
   ],
   deep: [
     [ID.Gold, 2],
