@@ -280,6 +280,7 @@ Pas de redstone. Le cœur tourne : graphe de rotation local et borné.
 ## 15. Dettes QA (à mesurer, dans l'ordre de la file)
 
 - [ ] qa-reg (en cours) : récolte terre/bûche, gravité sable, topple petite coupe + cas « un seul support » (le cas du frère)
+- [x] qa-dungeon-unit : MESURÉ PASS au niveau fonction (2026-10-30 ~09:41 PDT) — la vraie `stockChest` (head `c3448644`) sur 2 000 coffres dungeon : gate mesuré 28,4 %, 0 mismatch de sélection (hash seed+777), les 7 matériaux de moules de boss présents, 0 fuite sur 1 500 coffres contrôles (deep/castle/wild), garde « bin pré-rempli » OK. Reste dû : la mesure EN JEU (spawn 7 % jamais rencontré au rig) + verdict Pages de Philippe
 - [ ] qa96 restes : s3b (sonde settle du topple), s4 (Wither — le harnais est mort, pas le jeu), s5 (FX — aucun verdict n'existe, les deux logs sont vides)
 - [ ] qa97 : performance (chiffres relatifs au rig seulement — le verdict perf est l'A54 de Philippe)
 - [x] qa-bow : MESURÉ PASS (voir BUG-2 §13) — reste seulement le retest Pages de Philippe
