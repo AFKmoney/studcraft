@@ -2350,6 +2350,260 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return { group, isTool: true, flames };
     }
 
+    // 4b2. NAMED ITEMS WITH REAL SHAPES (B8, 2026-10-30 — Philippe:
+    // seeds, bottles and friends « pas designés dans la main »). The
+    // audit measured 109 items on the flat-tile fallback below; bottles
+    // already had their flask (above). These are the distinctive rest,
+    // modelled from the same simple maths as everything else.
+    if (d.armor > 0) {
+      // Every armour piece, by slot (the 3 post-hoc sets name their slot
+      // here: HelmChrome is a cap, PlatePrism a shell, ResinBoots boots).
+      const slot = d.armorSlot || (id === ID.HelmChrome ? 1 : id === ID.PlatePrism ? 2 : 4);
+      const mat = skin(baseHex);
+      const trim = skin(shiftHex(baseHex, 1.18));
+      if (slot === 1) {
+        addCylPart(group, 0.055, 0.105, 0.09, 0, 0.01, 0, mat, 12);
+        addCylPart(group, 0.02, 0.02, 0.03, 0, 0.07, 0, trim, 10);
+      } else if (slot === 2) {
+        addBoxPart(group, 0.2, 0.22, 0.07, 0, 0, 0, mat);
+        addBoxPart(group, 0.22, 0.05, 0.08, 0, 0.1, 0, trim);
+      } else if (slot === 3) {
+        addBoxPart(group, 0.08, 0.22, 0.06, -0.055, 0, 0, mat);
+        addBoxPart(group, 0.08, 0.22, 0.06, 0.055, 0, 0, mat);
+      } else {
+        addBoxPart(group, 0.08, 0.07, 0.15, -0.055, -0.03, 0.02, mat);
+        addBoxPart(group, 0.08, 0.07, 0.15, 0.055, -0.03, 0.02, mat);
+        addBoxPart(group, 0.085, 0.09, 0.08, -0.055, 0.05, -0.02, trim);
+        addBoxPart(group, 0.085, 0.09, 0.08, 0.055, 0.05, -0.02, trim);
+      }
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Seeds || id === ID.Wheat) {
+      // A little pouch with grains poking out of the top.
+      addBoxPart(group, 0.13, 0.1, 0.09, 0, -0.03, 0, skin(0x9a7434));
+      addBoxPart(group, 0.14, 0.03, 0.1, 0, 0.03, 0, skin(0x7c5a26));
+      const grainMat = skin(id === ID.Seeds ? 0xd8c98a : 0xe8b93c);
+      for (const [ox, oz] of [[-0.03, 0.01], [0.02, -0.02], [0.04, 0.025], [-0.01, -0.03]] as const) {
+        addCylPart(group, 0.016, 0.02, 0.025, ox, 0.055, oz, grainMat, 8);
+      }
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Boat) {
+      const hull = skin(baseHex);
+      addBoxPart(group, 0.3, 0.05, 0.16, 0, -0.05, 0, hull);
+      addBoxPart(group, 0.3, 0.09, 0.03, 0, 0, -0.065, hull);
+      addBoxPart(group, 0.3, 0.09, 0.03, 0, 0, 0.065, hull);
+      addBoxPart(group, 0.03, 0.09, 0.1, -0.135, 0, 0, hull);
+      addBoxPart(group, 0.03, 0.09, 0.1, 0.135, 0, 0, hull);
+      addBoxPart(group, 0.32, 0.025, 0.18, 0, 0.05, 0, skin(shiftHex(baseHex, 1.15)));
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Cart) {
+      const bed = skin(baseHex);
+      const dark = skin(0x3a3e45);
+      addBoxPart(group, 0.26, 0.04, 0.16, 0, 0, 0, bed);
+      addBoxPart(group, 0.26, 0.07, 0.02, 0, 0.05, -0.07, bed);
+      addBoxPart(group, 0.26, 0.07, 0.02, 0, 0.05, 0.07, bed);
+      for (const [ox, oz] of [[-0.09, -0.085], [0.09, -0.085], [-0.09, 0.085], [0.09, 0.085]] as const) {
+        addCylPart(group, 0.045, 0.045, 0.02, ox, -0.055, oz, dark, 12).rotation.x = Math.PI / 2;
+      }
+      addCylPart(group, 0.012, 0.012, 0.16, 0.17, 0.01, -0.05, dark, 8).rotation.z = Math.PI / 2;
+      addCylPart(group, 0.012, 0.012, 0.16, 0.17, 0.01, 0.05, dark, 8).rotation.z = Math.PI / 2;
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Saddle) {
+      const leather = skin(0x8a5a2b);
+      addBoxPart(group, 0.2, 0.04, 0.16, 0, 0.02, 0, leather);
+      addBoxPart(group, 0.22, 0.03, 0.05, 0, -0.03, -0.075, leather);
+      addBoxPart(group, 0.22, 0.03, 0.05, 0, -0.03, 0.075, leather);
+      addCylPart(group, 0.025, 0.03, 0.05, 0, 0.07, -0.04, skin(0xd8b93c), 10);
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Compass || id === ID.Clock) {
+      addCylPart(group, 0.1, 0.1, 0.028, 0, 0, 0, skin(id === ID.Clock ? 0xf5c518 : 0x8e959e), 16);
+      addCylPart(group, 0.085, 0.085, 0.03, 0, 0.002, 0, skin(0xf4f0e4), 16);
+      addBoxPart(group, 0.02, 0.012, 0.13, 0, 0.02, 0, skin(id === ID.Clock ? 0x2a2d33 : 0xd82e22));
+      if (id === ID.Clock) addBoxPart(group, 0.012, 0.012, 0.08, 0.02, 0.02, 0.02, skin(0x2a2d33)).rotation.y = 0.7;
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Map || id === ID.Paper) {
+      const sheet = addBoxPart(group, 0.24, 0.012, 0.18, 0, 0, 0, skin(id === ID.Map ? 0xe8d8a8 : 0xf4f0e4));
+      sheet.rotation.y = 0.25;
+      if (id === ID.Map) addBoxPart(group, 0.16, 0.014, 0.03, 0, 0.004, 0, skin(0xb8524a)).rotation.y = 0.55;
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Book || id === ID.EnchBook || id === ID.Tome) {
+      const cover = skin(id === ID.Book ? 0x8a3b2a : baseHex);
+      if (id !== ID.Book) {
+        cover.emissive = new THREE.Color(baseHex);
+        cover.emissiveIntensity = 0.25;
+      }
+      addBoxPart(group, 0.17, 0.05, 0.13, 0, 0, 0, skin(0xf4ecd8));
+      addBoxPart(group, 0.18, 0.018, 0.14, 0, 0.032, 0, cover);
+      addBoxPart(group, 0.18, 0.018, 0.14, 0, -0.032, 0, cover);
+      addBoxPart(group, 0.02, 0.05, 0.14, -0.085, 0, 0, cover);
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.DiscA || id === ID.DiscB || id === ID.DiscC || id === ID.DiscD || id === ID.DiscE) {
+      addCylPart(group, 0.11, 0.11, 0.018, 0, 0, 0, skin(0x1c1e24), 20);
+      addCylPart(group, 0.045, 0.045, 0.02, 0, 0.001, 0, skin(baseHex), 14);
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Shears) {
+      const steel = skin(0xb8c2cc);
+      addBoxPart(group, 0.03, 0.16, 0.012, -0.02, 0.06, 0, steel).rotation.z = 0.16;
+      addBoxPart(group, 0.03, 0.16, 0.012, 0.02, 0.06, 0, steel).rotation.z = -0.16;
+      addCylPart(group, 0.032, 0.032, 0.014, -0.045, -0.07, 0, steel, 10);
+      addCylPart(group, 0.032, 0.032, 0.014, 0.045, -0.07, 0, steel, 10);
+      return { group, isTool: true, flames };
+    }
+
+    if (id === ID.Firework) {
+      addCylPart(group, 0.035, 0.035, 0.17, 0, 0.03, 0, skin(baseHex), 10);
+      addCylPart(group, 0.001, 0.035, 0.06, 0, 0.145, 0, skin(0xd84a3a), 10);
+      addCylPart(group, 0.008, 0.008, 0.14, 0.03, -0.08, 0, skin(0x9a7434), 6);
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.DragonEgg) {
+      const egg = skin(0x2a1838);
+      egg.emissive = new THREE.Color(0x7c3aed);
+      egg.emissiveIntensity = 0.18;
+      addCylPart(group, 0.055, 0.095, 0.2, 0, 0, 0, egg, 12);
+      addCylPart(group, 0.03, 0.055, 0.06, 0, 0.12, 0, egg, 10);
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.WitherSkull) {
+      const bone = skin(0xd8d4c8);
+      addBoxPart(group, 0.15, 0.14, 0.13, 0, 0.02, 0, bone);
+      addBoxPart(group, 0.1, 0.06, 0.1, 0, -0.07, 0, bone);
+      addBoxPart(group, 0.035, 0.04, 0.02, -0.04, 0.03, -0.07, skin(0x14161a));
+      addBoxPart(group, 0.035, 0.04, 0.02, 0.04, 0.03, -0.07, skin(0x14161a));
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Horn) {
+      addCylPart(group, 0.012, 0.055, 0.22, 0, 0, 0, skin(baseHex), 10).rotation.z = 0.35;
+      addCylPart(group, 0.06, 0.05, 0.04, -0.075, -0.09, 0, skin(shiftHex(baseHex, 1.2)), 10).rotation.z = 0.35;
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Lead || id === ID.String) {
+      const coil = skin(id === ID.Lead ? 0x9a7434 : 0xf0ead8);
+      addCylPart(group, 0.075, 0.075, 0.03, 0, -0.02, 0, coil, 14);
+      addCylPart(group, 0.06, 0.06, 0.03, 0, 0.012, 0, coil, 14);
+      addCylPart(group, 0.012, 0.012, 0.12, 0.07, -0.05, 0, coil, 6).rotation.z = 0.5;
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.NameTag) {
+      const tag = addBoxPart(group, 0.14, 0.012, 0.09, 0, 0, 0, skin(0xe8e2d2));
+      tag.rotation.y = -0.3;
+      addCylPart(group, 0.014, 0.014, 0.016, -0.05, 0.002, 0, skin(0x8e959e), 8);
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Feather) {
+      const plume = addBoxPart(group, 0.05, 0.16, 0.012, 0, 0.02, 0, skin(0xf4f2ec));
+      plume.rotation.z = 0.3;
+      addCylPart(group, 0.006, 0.006, 0.2, 0, 0.01, 0, skin(0xd8d2c4), 6).rotation.z = 0.3;
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Fang) {
+      addCylPart(group, 0.001, 0.04, 0.2, 0, 0, 0, skin(0xf4ecd8), 10).rotation.z = 0.15;
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Antler) {
+      const ant = skin(0xa8885c);
+      addCylPart(group, 0.016, 0.022, 0.2, 0, 0, 0, ant, 8).rotation.z = -0.25;
+      addCylPart(group, 0.01, 0.014, 0.1, 0.045, 0.05, 0, ant, 6).rotation.z = -0.9;
+      addCylPart(group, 0.008, 0.012, 0.08, -0.03, 0.08, 0, ant, 6).rotation.z = 0.4;
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Scale) {
+      const sc = skin(baseHex);
+      addBoxPart(group, 0.13, 0.02, 0.1, -0.03, -0.02, 0, sc).rotation.z = 0.2;
+      addBoxPart(group, 0.13, 0.02, 0.1, 0.035, 0.005, 0, sc).rotation.z = 0.2;
+      addBoxPart(group, 0.13, 0.02, 0.1, 0, 0.03, 0, skin(shiftHex(baseHex, 1.15))).rotation.z = 0.2;
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Cinder) {
+      const rock = skin(0x2e2a28);
+      const ember = skin(0xff5a12);
+      ember.emissive = new THREE.Color(0xff4500);
+      ember.emissiveIntensity = 0.8;
+      addBoxPart(group, 0.13, 0.1, 0.11, 0, -0.02, 0, rock).rotation.y = 0.4;
+      addBoxPart(group, 0.07, 0.05, 0.06, 0.02, 0.045, 0, ember).rotation.y = 0.9;
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Frost) {
+      const ice = skin(0xbfe8ff);
+      ice.emissive = new THREE.Color(0x7cc4ff);
+      ice.emissiveIntensity = 0.3;
+      addCylPart(group, 0.001, 0.045, 0.2, 0, 0, 0, ice, 6);
+      addCylPart(group, 0.001, 0.03, 0.11, 0.045, -0.03, 0, ice, 6).rotation.z = -0.5;
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Slime) {
+      addCylPart(group, 0.09, 0.105, 0.09, 0, -0.02, 0, skin(0x62c84a), 12);
+      addCylPart(group, 0.05, 0.07, 0.05, 0, 0.045, 0, skin(0x7ed468), 10);
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.ShulkerShell) {
+      const sh = skin(0x9a5cb8);
+      addBoxPart(group, 0.16, 0.05, 0.14, 0, 0.03, 0, sh).rotation.z = 0.12;
+      addBoxPart(group, 0.16, 0.05, 0.14, 0, -0.045, 0, skin(0x7c3e96)).rotation.z = -0.08;
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Eye) {
+      const eyeM = skin(0xf4f0e4);
+      addCylPart(group, 0.075, 0.075, 0.1, 0, 0, 0, eyeM, 12);
+      addCylPart(group, 0.035, 0.035, 0.03, 0, 0.045, 0, skin(baseHex), 10);
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Totem) {
+      // The Last Stud: a golden stud on a little plinth.
+      addBoxPart(group, 0.14, 0.04, 0.14, 0, -0.05, 0, skin(0x8a6d1f));
+      addCylPart(group, 0.05, 0.05, 0.09, 0, 0.015, 0, skin(0xf5c518), 14);
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.RawIron || id === ID.Bronze || id === ID.Flint) {
+      // Raw chunks: two rough lumps, never a neat tile.
+      const lump = skin(baseHex);
+      addBoxPart(group, 0.13, 0.09, 0.11, -0.02, -0.02, 0, lump).rotation.y = 0.5;
+      addBoxPart(group, 0.09, 0.07, 0.08, 0.05, 0.03, 0.02, skin(shiftHex(baseHex, 1.12))).rotation.y = 1.1;
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Powder || id === ID.Wisp || id === ID.BaseBrew || id === ID.Wart || id === ID.Shell || id === ID.GravelBar || id === ID.InkSac) {
+      // Small loose matter: a little heap of the stuff in its own colour.
+      const heap = skin(baseHex);
+      addCylPart(group, 0.02, 0.09, 0.06, 0, -0.03, 0, heap, 10);
+      addCylPart(group, 0.03, 0.035, 0.03, 0.05, -0.045, 0.03, skin(shiftHex(baseHex, 1.1)), 8);
+      addCylPart(group, 0.025, 0.03, 0.025, -0.05, -0.048, -0.02, skin(shiftHex(baseHex, 0.9)), 8);
+      return { group, isTool: false, flames };
+    }
+
     // 4c. EVERY OTHER NON-BLOCK ITEM (string, feather, paper, dust, shells…):
     // a small 1×2 LEGO tile in the item's colour — small enough to sit in the
     // hand, never a full brick.
