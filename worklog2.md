@@ -3,7 +3,7 @@ Date: 2026-10-29
 
 ## To-do (7 items)
 
-1. **Scale held Technic** — DONE. Facteur de normalisation passé de 0.55 à 0.32 (0.32 × spec.hand / maxDim). Pièces à taille comparable aux items normaux. QA: tsc 0, technic.test.ts 3/3 pass.
+1. **Scale held Technic** — DONE (remplacé par la vision proportionnelle de Philippe, 2026-10-29). Le fix 0.32 de Grok (0.55 → 0.32, normalisation uniforme) a été supersédé le soir même : mesuré à l'étape 7, il rendait toutes les pièces à la même taille en main (un pin 2 modules = un frame 15 modules). **Vision en vigueur : tailles PROPORTIONNELLES** — taille fixe par module (0,11/module dans buildLegoItem3D, plafond 0,85 pour les plus grosses pièces), facteur pipeline CONSTANT dans placeHeldMinecraft (aucune re-normalisation par maxDim), et la main LEGO serre la pièce sur son corps (placeArm), pas posée par-dessus. Poussé par Muse (`dad9180d`) : tsc 0, tests 44/44, build OK. Fermeture = l'œil de Philippe sur Pages. NE PAS revenir à une normalisation uniforme.
 2. **Viseur vert rapetissé** — DONE. CSS 40px → 28px.  Les cercles noirs sous les briques se font recouvrir par le cercle vert du viseur. Réduire le rayon du viseur pour que les trous noirs restent visibles et complets (air de blocs Lego).
 3. **Lag** — Investigated. Mesher builds on demand (not every tick). Likely QA loop or stud count.  Le jeu lag énormément. Suspects : mesher CPU qui rebuild la géométrie à chaque tick (chaque stud = mesh séparé), ou la boucle QA qui tourne en parallèle. Vérifier lequel en premier.
 4. **Troncs d'arbres à plat** — DONE. Logs land in a horizontal line at ground level.  Quand un arbre est abattu, les blocs doivent tomber sur le côté, comme un tronc qui tombe au sol, pas rester droits empilés.
