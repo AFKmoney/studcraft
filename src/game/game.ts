@@ -5577,14 +5577,20 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const r = Math.floor(tile / ATLAS_COLS);
     const du = 1 / ATLAS_COLS;
     const dv = 1 / ATLAS_ROWS;
-    const u0 = c * du + du * 0.08;
-    const u1 = (c + 1) * du - du * 0.08;
-    const vTop = 1 - r * dv - dv * 0.08;
-    const vBot = 1 - (r + 1) * dv + dv * 0.08;
+    // Philippe 2026-10-30: a stud is round PLASTIC — no drawing inside it.
+    // The old remap stretched the WHOLE top tile over each stud, so the
+    // tile's own painted stud fillets re-printed inside the 3D stud (the
+    // "4 demi-cercles"). The chunk mesher samples the tile CENTRE point
+    // for its studs (flat colour); bricks now sample a tiny patch around
+    // that same centre (between the 4 painted studs = plain base colour).
+    const cu = (c + 0.5) * du;
+    const cv = 1 - (r + 0.5) * dv;
+    const pu = du * 0.04;
+    const pv = dv * 0.04;
     for (const [ox, oz] of STUD_OFFSETS) {
       const cyl = new THREE.CylinderGeometry(STUD_R, STUD_R, STUD_H, 16);
       const uv = cyl.getAttribute("uv") as THREE.BufferAttribute;
-      for (let i = 0; i < uv.count; i++) uv.setXY(i, u0 + uv.getX(i) * (u1 - u0), vBot + uv.getY(i) * (vTop - vBot));
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, cu + (uv.getX(i) - 0.5) * 2 * pu, cv + (uv.getY(i) - 0.5) * 2 * pv);
       cyl.translate(ox - 0.5, 0.49 + STUD_H / 2, oz - 0.5);
       parts.push(cyl);
     }
@@ -8803,7 +8809,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const sh = sr * 0.68;
     for (let ix = 0; ix < nx; ix++) {
       for (let iz = 0; iz < nz; iz++) {
-        const cyl = new THREE.CylinderGeometry(sr * 0.92, sr, sh, 10);
+        const cyl = new THREE.CylinderGeometry(sr * 0.92, sr, sh, 12);
         cyl.translate(-w / 2 + (w / nx) * (ix + 0.5), h / 2 + sh / 2, -d / 2 + (d / nz) * (iz + 0.5));
         parts.push(cyl);
       }

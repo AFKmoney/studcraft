@@ -93,7 +93,7 @@ export const STUD_OFFSETS = [
   [0.26, 0.74],
   [0.74, 0.74],
 ] as const;
-const STUD_N = 6; // v4.19: 8→6 segments — still round at stud size, −25 % stud triangles
+const STUD_N = 12; // Philippe 2026-10-30: EVERY stud is ROUND — 6 segments read as hexagons on device. 12 costs ~2x the 6-seg stud triangles; perf re-measure owed (qa97).
 const STUD_TOP_R = STUD_R * 0.91;
 const STUD_COS = new Float32Array(STUD_N);
 const STUD_SIN = new Float32Array(STUD_N);
