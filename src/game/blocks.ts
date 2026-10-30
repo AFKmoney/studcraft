@@ -1463,16 +1463,16 @@ put(b(ID.Liftarm13, "Liftarm 1×13", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9",
 put(b(ID.Liftarm15, "Liftarm 1×15", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9", { hard: 0.4 }));
 put(b(ID.Frame711, "Frame 7×11", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9", { hard: 0.4 }));
 put(b(ID.Frame1115, "Frame 11×15", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9", { hard: 0.4 }));
-put(b(ID.AxlePin, "Axle pin", "#7c3aed", "#7c3aed", "#7c3aed", "#7c3aed", { hard: 0.4 }));
+put(b(ID.AxlePin, "Axle pin", "#3d454e", "#3d454e", "#3d454e", "#3d454e", { hard: 0.4 }));
 put(b(ID.Towball, "Pin with towball", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
 // Minor CAT-02 variants
 put(b(ID.Thin7, "Thin liftarm 1×7", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9", { hard: 0.4 }));
-put(b(ID.Pin3L, "Pin 3L friction", "#7c3aed", "#7c3aed", "#7c3aed", "#7c3aed", { hard: 0.4 }));
+put(b(ID.Pin3L, "Pin 3L friction", "#3d454e", "#3d454e", "#3d454e", "#3d454e", { hard: 0.4 }));
 put(b(ID.Pin3LFree, "Pin 3L free", "#f4f4f4", "#f4f4f4", "#f4f4f4", "#f4f4f4", { hard: 0.4 }));
 put(b(ID.AxleStop3, "Axle with stop 3L", "#6c6e68", "#6c6e68", "#6c6e68", "#6c6e68", { hard: 0.4 }));
 put(b(ID.AxleStop5, "Axle with stop 5L", "#6c6e68", "#6c6e68", "#6c6e68", "#6c6e68", { hard: 0.4 }));
 // Axle lengths
-put(b(ID.Axle2, "Axle 2L", "#fe8a18", "#fe8a18", "#fe8a18", "#fe8a18", { hard: 0.4 }));
+put(b(ID.Axle2, "Axle 2L", "#3d454e", "#3d454e", "#3d454e", "#3d454e", { hard: 0.4 }));
 put(b(ID.Axle4, "Axle 4L", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
 put(b(ID.Axle6, "Axle 6L", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
 put(b(ID.Axle8, "Axle 8L", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));

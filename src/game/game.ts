@@ -5178,15 +5178,20 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   scene.add(techGroup);
   const techMeshes = new Map<number, THREE.Mesh>();
   const techGeos = new Map<number, THREE.BufferGeometry>();
-  const techMatLam = new THREE.MeshLambertMaterial({ vertexColors: true });
-  // SRN world shading on the Teks layer (Philippe, 2026-10-29): the
-  // parts are STUDS plastic like everything else in the world — the flat
-  // Lambert they shipped with read as raw CG next to the SRN bricks
-  // (his giant grey turntable screenshot). Same sirenizeWorld treatment
-  // as the world set; seams gentler (a part is ONE moulded piece, not a
-  // stack of block cells). Lambert stays as the non-realistic fallback,
+  // Non-realistic fallback: Phong (cheap Blinn specular sheen — modern
+  // Lambert has no specular term at all, so it cannot fake the metal).
+  const techMatLam = new THREE.MeshPhongMaterial({ vertexColors: true, specular: 0x8a97a5, shininess: 48 });
+  // SRN world shading on the Teks layer, with the METALLIC LAW
+  // (Philippe, 2026-10-30, plan section 23): Teks parts are HARDWARE,
+  // not plastic — high metalness, low roughness, strong speculars, the
+  // exact opposite of the bricks' matte ABS satin. One material change
+  // here restyles every placed part, vehicle and held part at once;
+  // colours under it read as anodized metal. Same sirenizeWorld
+  // treatment as the world set; seams gentler (a part is ONE piece of
+  // hardware, not a stack of block cells). Lambert stays as the
+  // non-realistic fallback (specular sheen instead of true metalness),
   // mirroring opaqueMat's Std/Lam pair.
-  const techMatStd = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0, envMapIntensity: 0.45 });
+  const techMatStd = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.24, metalness: 0.85, envMapIntensity: 0.9 });
   sirenizeWorld(techMatStd, 0.3, 1, "srn-world-teks-1");
   let techMatSolid: THREE.Material = settings.realistic ? techMatStd : techMatLam;
   const techGhostMat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.45, depthWrite: false });
