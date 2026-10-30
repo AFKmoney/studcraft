@@ -99,7 +99,7 @@ Pas de redstone. Le cœur tourne : graphe de rotation local et borné.
   - [ ] Échelle en main PROPORTIONNELLE + main qui serre la pièce (décision de Philippe 2026-10-29, poussé `dad9180d`) *(en attente verdict Philippe)*
 - [x] Nettoyage : retirer le câblage électrique P5b de Grok (mechLink moteurs/hub/batterie) — DONE (Grok). Bloc drive motor/hub/battery retiré de stepMech. Tests 17/17. Scale en main intouché.
 - [x] Modèle d'arbalète distinct — DONE (Grok). Crossbow a son propre modèle (stock + prod horizontal + corde courte), plus le modèle de l'arc.
-- [x] Lag mesher — DONE (Grok). STUD_N 8→6 (−25 % triangles studs). Time-box 6 ms déjà en place. QA loop reste le principal suspect.
+- [ ] Lag mesher — première passe faite par Grok (`cb7c919b`) : STUD_N 8→6 (−25 % triangles sur les studs), time-box 6 ms déjà en place. Pas de mesure avant/après : fermeture = verdict perf de Philippe + profilage §16 (la boucle QA reste le principal suspect sur la machine partagée).
 - [ ] Manivelles des sites de débris : elles spawnent `on=1` et tournent toutes seules — bug ou feature? Décision Philippe
 
 ### P5b · Électrique + conduite (LE gros morceau restant)
@@ -171,7 +171,7 @@ Pas de redstone. Le cœur tourne : graphe de rotation local et borné.
   - [x] Modèle en main reconstruit (photo de Philippe : l'ancien était 2 boîtes droites + une corde flottante = un bloc beige) : branches en 3 segments sur un vrai arc, corde pointe-à-pointe (`5d7a41b5`)
   - [x] Mesure rig FAITE (boucle 2026-10-29 ~20:20, sur le build du head `5e2a2482` qui contient le modèle reconstruit) — en **Survival** (plus strict que le Créatif écrit ici) : nom exact « Bow » ✓, craft recette `bow` (Stick 3→0, String 3→0, Bow pris = durabilité 80/80) ✓, contrôle négatif sans flèche (aucun tir) ✓, tir ×2 (projectiles 0→1→2, flèches 5→4→3) ✓, 0 erreur de page. Détail au WORKLOG 20:20 boucle.
   - [ ] Retest Pages de Philippe (silhouette + tir)
-  - [ ] Dette liée : le Crossbow porte encore le modèle de l'arc — modèle d'arbalète distinct à faire
+  - [x] Dette liée : modèle d'arbalète distinct — fait par Grok (`0b9f60cb` : stock + prod horizontal + corde courte) *(silhouette en attente verdict Philippe)*
 - [ ] **BUG-3 · Gravité (briques et sable)**
   - [x] Fix de Grok : seuil de stress des briques 0,75 s → 0,12 s; `spawnFaller` et l'atterrissage lisent la couche briques
   - [x] Vérification Muse : 3/3 cas journalisés MESURÉS PASS + régression P1 au nouveau seuil
