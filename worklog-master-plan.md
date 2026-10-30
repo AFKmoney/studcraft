@@ -296,7 +296,9 @@ Pas de redstone. Le cœur tourne : graphe de rotation local et borné.
 - [x] v1 : 99/99 rendues de la vraie géométrie, transparentes, en jeu (étape 6)
 - [ ] v2 : silhouettes retravaillées (meilleurs angles/lumière) dans le lab d'icônes hors-ligne — après le verdict de Philippe sur la v1 (le Converoyeur 363 est le moins lisible : dalle quasi noire)
 
-## 18. Nettoyage du repo (EN ATTENTE de l'OK de Philippe sur la liste exacte)
+## 18. Nettoyage du repo (DÉCISION DE PHILIPPE 2026-10-30 : oui — mais APRÈS la fin du master plan, pas maintenant)
+
+**Décision (2026-10-30 ~10:05 PDT) :** « il va falloir remapper quand on aura fini et delete les vieux code ; pas tout suite ». Donc : quand le master plan sera terminé → **refaire la carte au head du moment** (le repo aura changé depuis la carte du 2026-10-29), re-vérifier la liste morte contre la carte fraîche, supprimer le vieux code, puis re-vérifier tsc 0 + tests + build. **Rien n'est supprimé avant ce moment-là**, et la liste exacte reste confirmée par Philippe au moment de l'exécution (sa loi post-purge).
 
 Carte mesurée livrée : `~/workspace/your_files/studcraft/carte-du-repo.html` (512 fichiers suivis; le jeu vivant = 34 fichiers).
 
