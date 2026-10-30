@@ -319,3 +319,10 @@ Carte mesurée livrée : `~/workspace/your_files/studcraft/carte-du-repo.html` (
 - [ ] **P5b · Conduite** (§7) : design d'abord (corps cinématique unique, liaison hub, canaux), puis le plus petit véhicule qui roule pour vrai.
 - [ ] **P7 · Schéma matière** (§9) : `mat`/`mold` dans BlockDef + chaîne silicium en une étape mesurée.
 - [ ] **qa-reg → verdicts** (§15) : finir la batterie en cours, livrer le rapport ce qui marche / ce qui est cassé.
+
+
+### R3 merged 2026-10-30
+- Placement rare + clear d'entrée dans world.ts.
+- Table dungeon avec items Foundry (Pellets, PlasticIngot, TemperedIngot, PlasticPick/Sword, TPlasticPick).
+- Mergé dans main via PR #3 (branche propre depuis main actuel).
+- Boucle P6 : les coffres du donjon donnent maintenant du feedstock Foundry + outils plastiques.
