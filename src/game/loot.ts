@@ -116,6 +116,18 @@ const TABLES: Record<string, Stack[]> = {
     [ID.Emerald, 1],
     [ID.Clay, 4],
   ],
+  dungeon: [
+    [ID.Gold, 3],
+    [ID.Emerald, 2],
+    [ID.Diamond, 1],
+    [ID.Book, 2],
+    [ID.Torch, 6],
+    [ID.Lantern, 1],
+    [ID.Ingot, 2],
+    [ID.Obsidian, 1],
+    [ID.Gapple, 1],
+    [ID.Bone, 2],
+  ],
   deep: [
     [ID.Gold, 2],
     [ID.Coal, 6],
@@ -221,7 +233,8 @@ export function stockChest(bin: { ids: number[]; ns: number[] }, x: number, y: n
     kind === "witch_hut" ||
     kind === "castle" ||
     kind === "mansion" ||
-    kind === "monument";
+    kind === "monument" ||
+    kind === "dungeon";
   const n = (isMajor ? 5 : 3) + Math.floor(hash2(x, z, seed + y + 17) * 3);
   for (let i = 0; i < n; i++) {
     const roll = hash3(x, y + i * 5, z, seed + 90 + i);
