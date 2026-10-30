@@ -180,6 +180,8 @@ Pas de redstone. Le cœur tourne : graphe de rotation local et borné.
 - [ ] Moteurs électriques câblés à la couche 1:1 (tailles = couple/vitesse : M 405 rpm/11 Ncm, L 390/18, XL 220/40, servo ±90° — mesures Power Functions, LEGO ne publie rien)
 - [ ] Hub/batterie + télécommande à canaux A–D : le joueur LIE un hub à sa machine
 - [ ] **Conduite : un véhicule construit roule pour vrai sur le terrain** — UN corps cinématique par construction (masse/centre calculés des pièces), roues = raycasts de suspension, différentiel (A+B)/2. Jamais un corps rigide par brique, jamais de représentation build ≠ run
+- [ ] **CARBURANT (ordre de Philippe 2026-10-30 — n'était PAS au plan)** : fondre du plastique donne aussi du **fuel** (la Fonderie gagne un deuxième produit — la matière boucle : P6 nourrit les machines). À designer en chiffres : item fuel + réservoir, quels moteurs brûlent du fuel (combustion) vs électriques (batterie), taux de consommation selon la charge, recharge/drain de batterie, comportement à sec (la machine s'arrête, jamais de magie). Aucune énergie de nulle part : chaque joule répond « fait de quoi »
+- [ ] **Contrôle des machines sur TOUS les appareils (ordre de Philippe 2026-10-30)** : la télécommande canaux A–D doit exister au **tactile** (télécommande à l'écran) et à la **manette** (sticks/gâchettes), pas juste au clavier; et le **mode construction Tab** doit être atteignable et pilotable au tactile + à la manette (entrée dans le mode, caméra au vol aux sticks, rotation des pièces) — la v2 poussée 2026-10-30 est clavier seulement, c'est une limite assumée à fermer ici
 
 ### P5c · Pneumatique complet + vérins + machines qui travaillent
 
@@ -215,6 +217,7 @@ Pas de redstone. Le cœur tourne : graphe de rotation local et borné.
 - [ ] Dissoudre l'équipement par paliers de minerai à mesure que les équivalents moulés arrivent — **règle de migration : un item retiré d'une sauvegarde se convertit en pellets selon son rendement de fonte** (la matière ne disparaît jamais)
 - [ ] Crafting réduit aux basics; la progression passe par les machines (Fonderie, électronique)
 - [ ] Machines qui gagnent des niveaux : effet chiffré RÉEL et VISIBLE — le look change, l'effet se ressent en jeu, l'UI montre les stats avant/après. Un upgrade invisible n'est pas livré
+- [ ] **Arbres d'upgrades par machine (à spécifier, ordre de Philippe 2026-10-30)** : la loi ci-dessus existe, mais aucun arbre n'est écrit — Fonderie (vitesse de fonte, rendement, capacité fuel?), machine électronique, hub/batterie (capacité, canaux), moteurs (couple/vitesse par niveau) : chaque machine reçoit ses niveaux chiffrés quand son système arrive (P5b/P7), payés en matière du système, jamais en monnaie inventée
 
 ## 11. Sites de débris
 
