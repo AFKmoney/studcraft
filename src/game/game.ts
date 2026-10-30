@@ -4428,23 +4428,22 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // v4.18 — Teardown gravity for trees (Philippe 2026-10-28: « tu coupes un
   // arbre, il tombe, et ce qui touche au sol en premier casse »). When a log
   // is cut, the connected log+leaves component above it topples as one rigid
-  // body if nothing else holds it up and it really is a tree (canopy ≥ 6
-  // leaves — log cabins with beams do not fall). Light by doctrine: one
-  // InstancedMesh, analytic rotation, no physics engine.
+  // body. Philippe 2026-10-29: « que l'arbre tombe même si tu coupes en
+  // haut, en bas, peu importe » — no tree-shape gates any more (no minimum
+  // canopy or trunk), a cut ANYWHERE drops what is above it, and ONE
+  // remaining support point does not hold it (it takes 2+). Light by
+  // doctrine: one merged mesh, analytic rotation, no physics engine.
   function tryTopple(x: number, y: number, z: number) {
-    if (world.get(x, y + 1, z) !== ID.Log) return;
+    const above = world.get(x, y + 1, z);
+    if (above !== ID.Log && above !== ID.Leaves) return;
     const key = (cx: number, cy: number, cz: number) => cx + "," + cy + "," + cz;
     const cells: { dx: number; dy: number; dz: number; id: number }[] = [];
     const seen = new Set<string>([key(x, y + 1, z)]);
     const stack: [number, number, number][] = [[x, y + 1, z]];
-    let leaves = 0;
-    let logs = 0;
     while (stack.length) {
       const [cx, cy, cz] = stack.pop()!;
       const id = world.get(cx, cy, cz);
       if (id !== ID.Log && id !== ID.Leaves) continue;
-      if (id === ID.Leaves) leaves++;
-      else logs++;
       cells.push({ dx: cx - x, dy: cy - y, dz: cz - z, id });
       if (cells.length > 320) return; // not a tree — a forest/build: leave it
       for (const [ox, oy, oz] of NEIGHBORS6) {
@@ -4454,15 +4453,19 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         stack.push([nx, ny, nz]);
       }
     }
-    if (leaves < 6 || logs < 2) return;
     const inTree = new Set(cells.map((c) => key(x + c.dx, y + c.dy, z + c.dz)));
+    // Support rule (Philippe 2026-10-29: « il reste un stub, il tombe »):
+    // count the points where the component still rests on something solid
+    // outside itself. 0 or 1 = it falls; 2+ = genuinely held, leave it.
+    let supports = 0;
     for (const c of cells) {
       if (c.id !== ID.Log) continue;
       const bx = x + c.dx, by = y + c.dy - 1, bz = z + c.dz;
       if (bx === x && by === y && bz === z) continue; // the cut cell (now air)
       const below = world.get(bx, by, bz);
-      if (below && def(below).solid && !inTree.has(key(bx, by, bz))) return; // held up by something else
+      if (below && def(below).solid && !inTree.has(key(bx, by, bz))) supports++;
     }
+    if (supports >= 2) return;
     // Fall away from the player, snapped to the nearest axis — but only if
     // the fall SWEEP is clear. The rigid trunk used to rotate straight
     // through hills and builds (Philippe, 2026-10-29: the felled wood went
