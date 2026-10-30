@@ -4463,10 +4463,39 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const below = world.get(bx, by, bz);
       if (below && def(below).solid && !inTree.has(key(bx, by, bz))) return; // held up by something else
     }
-    // Fall away from the player, snapped to the nearest axis.
+    // Fall away from the player, snapped to the nearest axis — but only if
+    // the fall SWEEP is clear. The rigid trunk used to rotate straight
+    // through hills and builds (Philippe, 2026-10-29: the felled wood went
+    // right into clipping instead of falling clean, the other way). Test
+    // the four axis directions in preference order (away, sideways,
+    // sideways, toward): sweep every cell through the arc; a direction is
+    // blocked if a cell would pass through a solid block outside the tree
+    // or dip under the terrain surface mid-fall. All four blocked = keep
+    // the preferred direction (the settle logic handles the landing).
     let ax = x + 0.5 - player.x;
     let az = z + 0.5 - player.z;
     if (Math.abs(ax) > Math.abs(az)) { ax = Math.sign(ax) || 1; az = 0; } else { az = Math.sign(az) || 1; ax = 0; }
+    const sweepClear = (dx: number, dz: number) => {
+      const axisV = new THREE.Vector3(dz, 0, -dx);
+      const v = new THREE.Vector3();
+      for (let deg = 10; deg <= 80; deg += 10) {
+        const ang = (deg * Math.PI) / 180;
+        for (const c of cells) {
+          v.set(c.dx, c.dy, c.dz).applyAxisAngle(axisV, ang);
+          const bx = Math.floor(x + 0.5 + v.x), by = Math.floor(y + v.y), bz = Math.floor(z + 0.5 + v.z);
+          if (by < groundY(bx, bz)) return false;
+          const bid = world.get(bx, by, bz);
+          if (bid && def(bid).solid && !inTree.has(key(bx, by, bz))) return false;
+        }
+      }
+      return true;
+    };
+    if (!sweepClear(ax, az)) {
+      const candidates: [number, number][] = [[-az, ax], [az, -ax], [-ax, -az]];
+      for (const [cdx, cdz] of candidates) {
+        if (sweepClear(cdx, cdz)) { ax = cdx; az = cdz; break; }
+      }
+    }
     const mesh = new THREE.Mesh(toppleGeoFor(cells), opaqueMat);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
