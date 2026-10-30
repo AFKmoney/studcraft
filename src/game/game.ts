@@ -4916,7 +4916,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   let techPlanLive: TechPlan | null = null; // latest aim-frame ghost plan (keys compose from it)
   let techTgtKey = ""; // target identity the dialled orientation belongs to
   let techWantHeld = -1;
+  const BOX_H = 15; // the build box is a 30-stud cube: 15 x BOX_H x 15 blocks
   const plate = { on: false, cx: 0, cz: 0, topY: 0 };
+  // Build mode (Philippe, 2026-10-30): a FREE-FLY camera inside the box —
+  // NOT the character. The player stays parked; this pose flies, and the
+  // aim ray is cast from it, so you build what the camera looks at.
+  const fly = { on: false, x: 0, y: 0, z: 0 };
   const plateGroup = new THREE.Group();
   {
     const fill = new THREE.Mesh(
@@ -4936,6 +4941,38 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const border = new THREE.BufferGeometry();
     border.setAttribute("position", new THREE.Float32BufferAttribute([-7.5, 0, -7.5, 7.5, 0, -7.5, 7.5, 0, -7.5, 7.5, 0, 7.5, 7.5, 0, 7.5, -7.5, 0, 7.5, -7.5, 0, 7.5, -7.5, 0, -7.5], 3));
     plateGroup.add(new THREE.LineSegments(border, new THREE.LineBasicMaterial({ color: 0xbfeaff, transparent: true, opacity: 0.85 })));
+    // The full 3D grid of the box (Philippe, 2026-10-30: "un grid pour
+    // pouvoir construire n'importe quelle machine"): stud-spaced
+    // verticals on all four walls, a ring every block of height, the
+    // ceiling grid, and bright corner posts — the volume reads as a
+    // lattice you can build in, not just a floor plate.
+    const wallPts: number[] = [];
+    for (let i = -30; i <= 30; i++) {
+      const a = i * 0.5;
+      wallPts.push(a, 0, -7.5, a, BOX_H, -7.5, a, 0, 7.5, a, BOX_H, 7.5);
+      wallPts.push(-7.5, 0, a, -7.5, BOX_H, a, 7.5, 0, a, 7.5, BOX_H, a);
+    }
+    for (let j = 0; j <= BOX_H; j++) {
+      wallPts.push(-7.5, j, -7.5, 7.5, j, -7.5, -7.5, j, 7.5, 7.5, j, 7.5);
+      wallPts.push(-7.5, j, -7.5, -7.5, j, 7.5, 7.5, j, -7.5, 7.5, j, 7.5);
+    }
+    const walls = new THREE.BufferGeometry();
+    walls.setAttribute("position", new THREE.Float32BufferAttribute(wallPts, 3));
+    plateGroup.add(new THREE.LineSegments(walls, new THREE.LineBasicMaterial({ color: 0x86d7ff, transparent: true, opacity: 0.13 })));
+    const ceilPts: number[] = [];
+    for (let i = -30; i <= 30; i++) {
+      const a = i * 0.5;
+      ceilPts.push(a, BOX_H, -7.5, a, BOX_H, 7.5, -7.5, BOX_H, a, 7.5, BOX_H, a);
+    }
+    const ceil = new THREE.BufferGeometry();
+    ceil.setAttribute("position", new THREE.Float32BufferAttribute(ceilPts, 3));
+    plateGroup.add(new THREE.LineSegments(ceil, new THREE.LineBasicMaterial({ color: 0x86d7ff, transparent: true, opacity: 0.1 })));
+    const postPts: number[] = [];
+    for (const px of [-7.5, 7.5]) for (const pz of [-7.5, 7.5]) postPts.push(px, 0, pz, px, BOX_H, pz);
+    postPts.push(-7.5, BOX_H, -7.5, 7.5, BOX_H, -7.5, 7.5, BOX_H, -7.5, 7.5, BOX_H, 7.5, 7.5, BOX_H, 7.5, -7.5, BOX_H, 7.5, -7.5, BOX_H, 7.5, -7.5, BOX_H, -7.5);
+    const posts = new THREE.BufferGeometry();
+    posts.setAttribute("position", new THREE.Float32BufferAttribute(postPts, 3));
+    plateGroup.add(new THREE.LineSegments(posts, new THREE.LineBasicMaterial({ color: 0xbfeaff, transparent: true, opacity: 0.85 })));
   }
   plateGroup.visible = false;
   scene.add(plateGroup);
@@ -11099,6 +11136,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // Build mode with a Technic part in hand: WASD rotate the part
     // (keydown handler), the arrow keys keep walking.
     const buildRot = freePlace && TECHNIC_SET.has(hotbar[slot]);
+    // Build-mode fly camera: the CHARACTER receives no movement input
+    // at all — he stays parked; the camera integration (frame loop)
+    // reads the keys itself.
+    const flyMode = fly.on && phase === "play";
     if (keys.has("ArrowUp") || (keys.has("KeyW") && !buildRot)) fwd += 1;
     if (keys.has("ArrowDown") || (keys.has("KeyS") && !buildRot)) fwd -= 1;
     if (keys.has("ArrowRight") || (keys.has("KeyD") && !buildRot)) str += 1;
@@ -11108,7 +11149,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     str += touch.moveX;
     str += padIn.x;
     fwd += padIn.y;
-    const jump = keys.has("Space") || touch.jump || padIn.jump;
+    if (flyMode) {
+      fwd = 0;
+      str = 0;
+    }
+    const jump = !flyMode && (keys.has("Space") || touch.jump || padIn.jump);
     let mine = mouseMine || touch.mine || padIn.mine;
     let place = mousePlace || touch.place || padIn.place;
     if (holdLatch) {
@@ -11123,8 +11168,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     return {
       fwd,
       str,
-      sneak: isSneaking(),
-      sprint: isSprinting(),
+      sneak: flyMode ? false : isSneaking(),
+      sprint: flyMode ? false : isSprinting(),
       jump,
       mine,
       place,
@@ -11251,17 +11296,22 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     } else stepTime = 0;
 
     invuln = Math.max(0, invuln - dt);
-    const reach = creative ? 8 : 5.6;
+    const reach = fly.on ? 26 : creative ? 8 : 5.6;
     const rdx = -Math.sin(player.yaw) * Math.cos(player.pitch);
     const rdy = Math.sin(player.pitch);
     const rdz = -Math.cos(player.yaw) * Math.cos(player.pitch);
     // third person: aim along the camera ray (it is parallel to the look
     // direction and passes through the crosshair), reach measured from the eye
-    const tp = settings.third && thirdAim.ok;
-    const rox = tp ? thirdAim.x : player.x;
-    const roy = tp ? thirdAim.y : eyeY;
-    const roz = tp ? thirdAim.z : player.z;
-    const hit = tp ? raycast(thirdAim.x, thirdAim.y, thirdAim.z, rdx, rdy, rdz, reach + thirdAim.back, true) : raycast(player.x, eyeY, player.z, rdx, rdy, rdz, reach, true);
+    // build mode: the ray leaves from the FLY CAMERA, not the character
+    const tp = settings.third && thirdAim.ok && !fly.on;
+    const rox = fly.on ? fly.x : tp ? thirdAim.x : player.x;
+    const roy = fly.on ? fly.y : tp ? thirdAim.y : eyeY;
+    const roz = fly.on ? fly.z : tp ? thirdAim.z : player.z;
+    const hit = fly.on
+      ? raycast(fly.x, fly.y, fly.z, rdx, rdy, rdz, reach, true)
+      : tp
+        ? raycast(thirdAim.x, thirdAim.y, thirdAim.z, rdx, rdy, rdz, reach + thirdAim.back, true)
+        : raycast(player.x, eyeY, player.z, rdx, rdy, rdz, reach, true);
     // P0: bricks are a separate layer — raycast them too; the nearer of
     // (voxel hit, brick hit) owns the crosshair this frame.
     const bHit = bricks.size > 0 ? raycastBricks(rox, roy, roz, rdx, rdy, rdz, reach + (tp ? thirdAim.back : 0)) : null;
@@ -11317,8 +11367,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // whenever a Technic part is held.
     hideTechGhost();
     // Build plate anchor: the last top face aimed at pins the bench;
-    // the plate then stays put while you work on it.
-    if (freePlace) {
+    // the plate then stays put while you work on it. Once the box is
+    // anchored (Tab entry), aiming around never moves it mid-build.
+    if (freePlace && !plate.on) {
       if (hit && hit.ny === 1) {
         plate.on = true;
         plate.cx = hit.x;
@@ -11361,7 +11412,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         // aiming at the hologram itself (air over the bench): the plate
         // is a placeable top face anywhere inside its 30x30 studs
         const t = (plate.topY - roy) / rdy;
-        if (t > 0 && t <= 18) {
+        if (t > 0 && t <= 26) {
           const px = rox + rdx * t;
           const pz = roz + rdz * t;
           if (Math.abs(px - (plate.cx + 0.5)) <= 7.5 && Math.abs(pz - (plate.cz + 0.5)) <= 7.5) {
@@ -11379,7 +11430,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         techPlanNow = tech.plan(heldTechId, tgt, look, techSpin, techSolidAt, techWantO ?? undefined);
         techPlanLive = techPlanNow;
         if (techPlanNow) {
-          const ok = (creative || (inv[heldTechId] ?? 0) > 0) && !techHitsPlayer(heldTechId, techPlanNow.o, techPlanNow.q);
+          // in fly mode the parked character never blocks a placement
+          const ok = (creative || (inv[heldTechId] ?? 0) > 0) && (fly.on || !techHitsPlayer(heldTechId, techPlanNow.o, techPlanNow.q));
           showTechGhost(heldTechId, techPlanNow, ok);
         }
       }
@@ -12305,6 +12357,45 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       camera.lookAt(spawnPoint.x, spawnPoint.y + 1.5, spawnPoint.z);
       fig.group.visible = false;
       viewBrick.visible = false;
+    } else if (fly.on && phase === "play") {
+      // Build mode (Philippe, 2026-10-30): the FREE-FLY camera works the
+      // box; the character stays parked where he stood (poll() feeds him
+      // no input) and no arm/held item floats in the editor view. Mouse
+      // look is unchanged (player yaw/pitch); arrows fly along the look,
+      // WASD fly too when no Technic part is held (with a part, WASD
+      // rotate it — his 2026-10-29 mapping), Space/C = up/down,
+      // Shift = fast. The pose is clamped inside the 30x30x30 box.
+      const sp = ((keys.has("ShiftLeft") || keys.has("ShiftRight")) ? 21 : 9) * dt;
+      const cp = Math.cos(player.pitch);
+      const fx = -Math.sin(player.yaw) * cp, fy = Math.sin(player.pitch), fz = -Math.cos(player.yaw) * cp;
+      const rx = Math.cos(player.yaw), rz = -Math.sin(player.yaw);
+      const partHeld = TECHNIC_SET.has(hotbar[slot]);
+      let mx = 0, my = 0, mz = 0;
+      if (keys.has("ArrowUp") || (keys.has("KeyW") && !partHeld)) { mx += fx; my += fy; mz += fz; }
+      if (keys.has("ArrowDown") || (keys.has("KeyS") && !partHeld)) { mx -= fx; my -= fy; mz -= fz; }
+      if (keys.has("ArrowRight") || (keys.has("KeyD") && !partHeld)) { mx += rx; mz += rz; }
+      if (keys.has("ArrowLeft") || (keys.has("KeyA") && !partHeld)) { mx -= rx; mz -= rz; }
+      if (keys.has("Space")) my += 1;
+      if (keys.has("KeyC")) my -= 1;
+      const ml = Math.hypot(mx, my, mz);
+      if (ml > 0) {
+        fly.x += (mx / ml) * sp;
+        fly.y += (my / ml) * sp;
+        fly.z += (mz / ml) * sp;
+      }
+      if (plate.on) {
+        fly.x = THREE.MathUtils.clamp(fly.x, plate.cx + 0.5 - 7.2, plate.cx + 0.5 + 7.2);
+        fly.z = THREE.MathUtils.clamp(fly.z, plate.cz + 0.5 - 7.2, plate.cz + 0.5 + 7.2);
+        fly.y = THREE.MathUtils.clamp(fly.y, plate.topY + 0.3, plate.topY + BOX_H - 0.3);
+      }
+      camera.position.set(fly.x, fly.y, fly.z);
+      camera.rotation.order = "YXZ";
+      camera.rotation.y = player.yaw;
+      camera.rotation.x = player.pitch;
+      camera.rotation.z = 0;
+      thirdAim.ok = false;
+      fig.group.visible = false;
+      viewBrick.visible = false;
     } else if (settings.third) {
       // v4.17 aim fix: over-the-shoulder camera ALIGNED with the look direction
       // (it used to lookAt the player's back, so the crosshair sat on the
@@ -12838,8 +12929,23 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (e.code === "Tab" && phase === "play") {
         e.preventDefault();
         freePlace = !freePlace;
-        if (!freePlace) techWantO = null;
-        say(freePlace ? "Build mode — 30×30 plate · WASD / Q E rotate the part" : "Build mode off");
+        if (freePlace) {
+          // the box anchors under your feet and the fly camera starts at
+          // its centre, above the plate — you build from the camera
+          plate.on = true;
+          plate.cx = Math.floor(player.x);
+          plate.cz = Math.floor(player.z);
+          plate.topY = world.heightAt(plate.cx, plate.cz) + 1;
+          fly.x = plate.cx + 0.5;
+          fly.z = plate.cz + 0.5;
+          fly.y = plate.topY + 5;
+          fly.on = true;
+        } else {
+          techWantO = null;
+          fly.on = false;
+          plate.on = false;
+        }
+        say(freePlace ? "Build mode — fly camera in the 30×30 box · arrows fly · Space/C up/down · WASD/QE rotate the part" : "Build mode off");
         emit();
       }
       if (e.code === "KeyE" && (phase === "play" || phase === "inventory") && !hud.ask && !hud.signEdit) {
