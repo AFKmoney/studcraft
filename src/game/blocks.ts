@@ -1558,6 +1558,7 @@ export const CATALOG: number[] = BLOCKS.filter(
 
 /** Parts the player can take from the Technic bin. Click-states stay out. */
 export const TECHNIC = [
+  ID.CrossBlock,
   ID.Axle,
   ID.Gear8,
   ID.Gear16,
@@ -1605,7 +1606,6 @@ export const TECHNIC = [
   ID.Angle4,
   ID.Angle5,
   ID.Angle6,
-  ID.CrossBlock,
   ID.Shock,
   ID.Triangle,
   ID.Hub,
@@ -1657,9 +1657,18 @@ export const TECHNIC = [
   ID.Axle4,
   ID.Axle6,
   ID.Axle8,
-] as const;
+  ] as const;
 
-export const COLORS = [ID.Red, ID.Orange, ID.Yellow, ID.Green, ID.Blue, ID.Azure, ID.Pink, ID.White, ID.Black];
+export const COLORS = [ID.Red,
+  ID.Orange,
+  ID.Yellow,
+  ID.Green,
+  ID.Blue,
+  ID.Azure,
+  ID.Pink,
+  ID.White,
+  ID.Black,
+];
 
 export const CREATIVE_BAR = [
   ID.Grass,
