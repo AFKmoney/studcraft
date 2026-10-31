@@ -3355,19 +3355,26 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const mouthT = ARM_OUT.clone().negate();
       placeArm(grip, shaft, mouthT, ARM_SCALE * 0.82);
     } else if (isTool) {
-      // Tester 2026-10-31: the tool display normalizes by HEIGHT —
-      // for a flat, wide tool (the Crossbow: 0.31 wide × 0.053 tall)
-      // that exploded it to ~6× a pick's width on screen. Floor the
-      // length at 60% of the model's widest span so flat tools keep
-      // sane proportions; tall tools (picks, swords, axes) are
-      // untouched because their height already dominates.
-      const len = Math.max(1e-3, size.y, 0.6 * Math.max(size.x, size.z));
-      const upright = id === ID.Torch || id === ID.RedTorch || id === ID.RedTorchOn;
-      // model -> sprite space: handle end at the sprite's bottom-left, shaft on the diagonal (torches stand upright)
-      const f = (upright ? 13 / 16 : 15.5 / 16 * Math.SQRT2 * 0.84) / len;
+      // Tester retest 2026-10-31: TWO framing bugs lived here, both
+      // measured with the real matrix chain in a three.js probe.
+      // (1) The 0.6 span floor still undershot a flat tool's true
+      // length: the Crossbow (0.31 wide × 0.053 tall) got f ≈ 6.2
+      // against a pick's 3.1 and ran off the right edge. len is now
+      // the model's LONGEST dimension — for tall tools that is
+      // size.y, so picks/swords/axes are unchanged.
+      // (2) The upright torch exception (tx 0.5, −30°) pushed the
+      // torch grip to NDC x ≈ 0.75 at 16:9 and past 1.0 at 4:3,
+      // while every other tool's grip sits at ≈ 0.55 — the torch
+      // and the arm hanging off its grip left the frame entirely.
+      // Torches take the standard diagonal display like every other
+      // tool (probe: grip identical to a pick's at aspects 2.22,
+      // 1.78 and 1.33, model inside the pick's screen envelope).
+      const len = Math.max(1e-3, size.x, size.y, size.z);
+      // model -> sprite space: handle end at the sprite's bottom-left, shaft on the diagonal
+      const f = (15.5 / 16 * Math.SQRT2 * 0.84) / len;
       const sprite = new THREE.Matrix4()
-        .makeTranslation(upright ? 0.5 : 2 / 16, 1.5 / 16, 0.5)
-        .multiply(new THREE.Matrix4().makeRotationZ(upright ? -Math.PI / 6 : -Math.PI / 4)) // a torch leans 30°, tools sit on the diagonal
+        .makeTranslation(2 / 16, 1.5 / 16, 0.5)
+        .multiply(new THREE.Matrix4().makeRotationZ(-Math.PI / 4))
         .multiply(new THREE.Matrix4().makeScale(f, f, f))
         .multiply(new THREE.Matrix4().makeTranslation(-c.x, -box.min.y, -c.z));
       M = MC_HANDHELD.clone().multiply(sprite);
@@ -5296,8 +5303,15 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const yieldAt = (dropId: number) => dropItem(dropId, 1, x + 0.5, y + 0.55, z + 0.5);
     if (canDrop) for (let p = 0, py = plasticYield(id) + (plasticYield(id) > 0 && hasAffix(hotbar[slot], "lucky") ? 1 : 0); p < py; p++) yieldAt(ID.Pellets); // R4 Lucky affix
     if (canDrop && id === ID.Leaves) {
-      if (Math.random() < 0.08) yieldAt(ID.Apple);
-      if (Math.random() < 0.12) yieldAt(ID.Stick);
+      // The Leaf brick itself (tester retest 2026-10-31: it had NO
+      // source at all — drop = −1 and this branch paid only fruit —
+      // while the Sapling recipe consumes one). Shears or a silk
+      // tool harvest the block itself; bare hands get fruit/sticks.
+      if (hotbar[slot] === ID.Shears || enchLvl(hotbar[slot], "silk") > 0) yieldAt(ID.Leaves);
+      else {
+        if (Math.random() < 0.08) yieldAt(ID.Apple);
+        if (Math.random() < 0.12) yieldAt(ID.Stick);
+      }
     } else if (canDrop && id === ID.TallGrass) {
       if (Math.random() < 0.4) yieldAt(ID.Seeds);
     } else if (canDrop && (id === ID.Crop || id === ID.Crop1 || id === ID.Crop2 || id === ID.CarrotCrop || id === ID.PotatoCrop || id === ID.BeetCrop)) yieldAt(ID.Seeds);

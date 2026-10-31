@@ -890,10 +890,10 @@ export const RECIPES: Recipe[] = [
     h: 1,
     cat: "build",
   }),
-  r("liftarm5", "Liftarm 1×5", "5 planks", [[ID.Planks, 5]], ID.Liftarm5, 1, {
-    shape: [ID.Planks, ID.Planks, ID.Planks, ID.Planks, ID.Planks],
+  r("liftarm5", "Liftarm 1×5", "1 liftarm3 + 2 planks", [[ID.Liftarm3, 1], [ID.Planks, 2]], ID.Liftarm5, 1, {
+    shape: [ID.Liftarm3, ID.Planks, ID.Planks],
     w: 3,
-    h: 2,
+    h: 1,
     cat: "build",
   }),
   r("liftarm7", "Liftarm 1×7", "1 liftarm5 + 2 planks", [[ID.Liftarm5, 1], [ID.Planks, 2]], ID.Liftarm7, 1, {

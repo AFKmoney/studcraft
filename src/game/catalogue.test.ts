@@ -12,7 +12,7 @@ import {
   storeCatalogue,
   upsertModel,
 } from "./catalogue.ts";
-import { TechWorld } from "./teks.ts";
+import { TechWorld, bbox } from "./teks.ts";
 import { stepVehicle, vehicleFromAssembly } from "./vehicle.ts";
 
 const HUB = 446;
@@ -100,6 +100,75 @@ test("built-in models convert to complete vehicles (P-B validation)", () => {
     const { vehicle, missing } = vehicleFromAssembly(parts, { hubChannel: "A", battery: 1, fuel: 0 });
     assert.deepEqual(missing, [], model.name + " must be a complete vehicle");
     assert.equal(vehicle.parts.length, model.parts.length);
+  }
+});
+
+test("built-in models PLACE under the game's own placement law (B16)", () => {
+  // The conversion tests add() parts unconditionally — but the game
+  // LOADS a model through TechWorld.test() (catalogueLoadModel): a
+  // part whose cells collide with a neighbour's without an
+  // axle-in-hole mating is refused and becomes a hologram. The Rig
+  // Digger shipped with 4 unplaceable servos exactly that way
+  // (tester retest, 2026-10-31: 16 placed, 4 holograms, arm dead).
+  // This replays the load faithfully: flat ground, the game's
+  // grounding rule (lowest part on the surface, lift ≤3, best fit),
+  // then the game's component rule (AABB touch from the hub).
+  for (const model of builtinModels()) {
+    const ground = 63;
+    const solidAt = (_x: number, y: number, _z: number) => y <= ground;
+    const minDqY = Math.min(...model.parts.map((p) => p.dq[1]));
+    const groundQ = (ground + 1) * 4 - minDqY;
+    let best = -1;
+    let anchorY = groundQ;
+    for (let lift = 0; lift <= 3; lift++) {
+      const t = new TechWorld();
+      let fits = 0;
+      for (const mp of model.parts) {
+        const q: [number, number, number] = [mp.dq[0], groundQ + lift * 4 + mp.dq[1], mp.dq[2]];
+        if (t.test(mp.id, mp.o, q, solidAt) >= 0) {
+          t.add(mp.id, mp.o, q);
+          fits++;
+        }
+      }
+      if (fits > best) {
+        best = fits;
+        anchorY = groundQ + lift * 4;
+      }
+      if (fits === model.parts.length) break;
+    }
+    assert.equal(best, model.parts.length, model.name + ": every part must place on flat ground");
+    const tech = new TechWorld();
+    for (const mp of model.parts) tech.add(mp.id, mp.o, [mp.dq[0], anchorY + mp.dq[1], mp.dq[2]]);
+    const parts = [...tech.parts.values()];
+    const boxOf = (p: (typeof parts)[number]) => {
+      const [lo, hi] = bbox(p.id, p.o);
+      return {
+        c: [(p.q[0] + (lo[0] + hi[0]) / 2) / 4, (p.q[1] + (lo[1] + hi[1]) / 2) / 4, (p.q[2] + (lo[2] + hi[2]) / 2) / 4],
+        s: [(hi[0] - lo[0]) / 4, (hi[1] - lo[1]) / 4, (hi[2] - lo[2]) / 4],
+      };
+    };
+    const boxes = new Map(parts.map((p) => [p.uid, boxOf(p)]));
+    const touch = (a: ReturnType<typeof boxOf>, b: ReturnType<typeof boxOf>) =>
+      [0, 1, 2].every((i) => Math.abs(a.c[i] - b.c[i]) <= (a.s[i] + b.s[i]) / 2 + 0.06);
+    const hub = parts.find((p) => p.id === 446);
+    assert.ok(hub, model.name + " has a hub");
+    const seen = new Set([hub.uid]);
+    const queue = [hub.uid];
+    const comp: typeof parts = [];
+    while (queue.length) {
+      const u = queue.pop()!;
+      const p = parts.find((x) => x.uid === u)!;
+      comp.push(p);
+      for (const q of parts) {
+        if (!seen.has(q.uid) && touch(boxes.get(u)!, boxes.get(q.uid)!)) {
+          seen.add(q.uid);
+          queue.push(q.uid);
+        }
+      }
+    }
+    assert.equal(comp.length, parts.length, model.name + ": the placed set is one component under the hub");
+    const { missing } = vehicleFromAssembly(comp, { hubChannel: "A", battery: 1, fuel: 0 });
+    assert.deepEqual(missing, [], model.name + ": the hub component converts to a vehicle");
   }
 });
 

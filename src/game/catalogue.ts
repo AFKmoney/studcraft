@@ -124,13 +124,21 @@ export function builtinModels(): VehicleModel[] {
         P(446, [0, 0, 0]),
         P(447, [0, 7, -4]),
         P(452, [12, -1, 0]),
-        P(450, [0, 7, 0], 4),
+        // B16 (tester retest 2026-10-31): the four servos below sat
+        // where their cells overlapped a neighbour's cells without an
+        // axle-in-hole mating — TechWorld.test refused them all, so
+        // the rig loaded 16/20 with a dead arm. Their positions are
+        // shifted (orientations unchanged) to spots that place
+        // legally AND keep the serial joint chain base→arm→bucket;
+        // the "built-in models PLACE" test in catalogue.test.ts now
+        // replays the real load law so this cannot regress silently.
+        P(450, [-2, 12, 4], 4),
         P(454, [0, 13, 0]),
-        P(450, [10, 15, 0]),
+        P(450, [10, 15, -4]),
         P(454, [16, 19, 0]),
-        P(450, [26, 19, 0]),
+        P(450, [26, 19, 4]),
         P(379, [32, 15, 0]),
-        P(450, [38, 15, 0]),
+        P(450, [38, 18, -4]),
         P(471, [44, 12, 0]),
         // P5d (tester 2026-10-31 noted the builtin carried no sensor):
         // a distance sensor mirrored across from the drive motor, so
