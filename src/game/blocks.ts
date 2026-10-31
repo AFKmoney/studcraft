@@ -1037,9 +1037,9 @@ put(b(ID.TinOre, "Tin ore", "#b7c4b0", "#d5ddd0", "#8e959c", "#6e767e", { hard: 
 put(b(ID.CopperOre, "Copper ore", "#c46a32", "#e07a3d", "#8e959c", "#6e767e", { hard: 1.55, tough: true, need: 1 }));
 put(b(ID.AmberOre, "Amber ore", "#e6a322", "#ffbf3a", "#8e959c", "#6e767e", { hard: 1.7, tough: true, need: 2 }));
 put(b(ID.ChromeOre, "Chrome ore", "#9aa8b2", "#e8eef2", "#7a8188", "#5c646c", { hard: 1.9, tough: true, need: 3 }));
-put(b(ID.SapphireOre, "Sapphire ore", "#1a3a8a", "#2456d6", "#8e959c", "#6e767e", { hard: 2, tough: true, need: 3 }));
+put(b(ID.SapphireOre, "Sapphire ore", "#1a3a8a", "#2456d6", "#8e959c", "#6e767e", { hard: 2, tough: true, need: 3, drop: ID.Sapphire }));
 put(b(ID.ResinOre, "Resin ore", "#5a1848", "#c43a8a", "#3a1028", "#2a0c1c", { hard: 1.8, tough: true, need: 3 }));
-put(b(ID.PrismOre, "Prism ore", "#b48cff", "#f4e8ff", "#6e5a9a", "#3a2858", { hard: 2.4, tough: true, need: 4 }));
+put(b(ID.PrismOre, "Prism ore", "#b48cff", "#f4e8ff", "#6e5a9a", "#3a2858", { hard: 2.4, tough: true, need: 4, drop: ID.Prism }));
 put(b(ID.Basalt, "Basalt", "#3a3a3a", "#4a4a4a", "#2a2a2a", "#1a1a1a", { hard: 1.2, tough: true }));
 put(b(ID.Calcite, "Calcite", "#e8e4dc", "#f4f0e8", "#d0ccc4", "#b8b4ac", { hard: 0.6 }));
 put(b(ID.Tuff, "Tuff", "#6a6a5a", "#7a7a6a", "#5a5a4a", "#4a4a3a", { hard: 1.0, tough: true }));

@@ -895,6 +895,7 @@ function SettingsPanel({ game, onBack }: { game: GameApi; onBack: () => void }) 
             </Row>
             <Row title="FPS counter">
               <Toggle label="FPS counter" on={s.showFps} onChange={(v) => game.setShowFps(v)} />
+              <Toggle label="NPC AI quests (downloads a ~250 MB model in the background)" on={s.npcLlm} onChange={(v) => game.setNpcLlm(v)} />
             </Row>
             <Row title="Graphics adapter" detail={game.hud.gpuWarn || "Rendering on the GPU (high-performance requested)."}>
               <span className="sc-status">{game.hud.gpu || "detecting…"}</span>
@@ -1339,6 +1340,7 @@ function Hud({ game, touchUI }: { game: GameApi; touchUI: boolean }) {
       {hud.gpuWarn && <div className="sc-toast" role="alert" style={{ top: 8, bottom: "auto", maxWidth: 560 }}>⚠ {hud.gpuWarn}</div>}
       <div className="sc-hud-tr">
         {s.showFps && <div className="sc-fps">{hud.fps} FPS · {hud.gpu}</div>}
+        {s.npcLlm && hud.llm && <div className="sc-llm" style={{ position: "absolute", right: 8, bottom: 8, fontSize: 11, opacity: 0.75, pointerEvents: "none", color: "#fff", textShadow: "0 1px 2px #000" }}>{hud.llm}</div>}
         {hud.questTrack && !hud.creative && (
           <div className={"sc-quest" + (hud.questAlert ? " ready" : "")}>
             <ScrollIcon size={16} />
@@ -2471,7 +2473,7 @@ function StationScreen({ game }: { game: GameApi }) {
                       <>Not lit — add fuel: wood (log 3s, planks 1.5s), coal 8s, or burn quality plastic (ingot 6s, tempered 10s).</>
                     )
                   ) : (
-                    <>Everything melts to plastic except gold, diamonds and wood. Commons (dirt, stone) need 12–16 per pellet; rare drops melt 1:1 at high purity. Wood goes in Fuel.</>
+                    <>Everything melts to plastic except water, rare ores and wood. Iron → good (tempered), copper → medium (plastic ingot), the rest → low (pellets); commons need 8–16 per unit. Wood goes in Fuel.</>
                   )}
                 </p>
                 <div className="sc-molten" style={{ border: `1px solid ${hud.furnace.tierColor ?? "#888"}`, borderRadius: 8, padding: "6px 8px", margin: "6px 0" }}>
@@ -2582,8 +2584,12 @@ function StationScreen({ game }: { game: GameApi }) {
             )}
             {hud.panel === "anvil" && (
               <div className="sc-station-body">
-                <MenuButton variant="primary" icon={<HammerIcon size={20} />} onClick={() => game.mend()} hint="Spend 1 ingot">
-                  Mend held tool
+                <p className="sc-status">{game.repairQuote() || "Hold a worn tool, weapon or part."}</p>
+                <MenuButton variant="primary" icon={<HammerIcon size={20} />} onClick={() => game.mend()} hint="Plastic of matching quality: pellets (basic), plastic ingots (tier 2), tempered ingots (tier 3+ / rare). Cost scales with missing durability.">
+                  Repair held tool
+                </MenuButton>
+                <MenuButton icon={<HammerIcon size={20} />} onClick={() => game.salvage()} hint="Melt it back: 50% of its plastic × durability left. Gem-made gear can't be salvaged.">
+                  Salvage held item
                 </MenuButton>
                 <MenuButton icon={<HammerIcon size={20} />} onClick={() => game.temper()} hint="Spend 1 level">
                   Temper held tool

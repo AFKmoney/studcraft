@@ -1,6 +1,6 @@
 import { ID, TEKS, def } from "./blocks.ts";
 import { SPECS, type Spec } from "./teks.ts";
-import { MATERIALS, RARE_MELT, fuelValue, isMeltable, rejectReason } from "./foundry.ts";
+import { MATERIALS, QUALITY_ITEM, QUALITY_VALUE, RARE_MELT, fuelValue, isMeltable, meltRatio, qualityOf, rejectReason, salvageYield } from "./foundry.ts";
 
 export type Recipe = {
   id: string;
@@ -1654,7 +1654,54 @@ for (const [k, v] of Object.entries(RARE_MELT)) {
 }
 
 // v6 material table: plain materials melt to pellets at their ratio.
-for (const k of Object.keys(MATERIALS)) if (isMeltable(+k) && !RARE_MELT[+k]) SMELT[+k] = ID.Pellets;
+for (const k of Object.keys(MATERIALS)) if (isMeltable(+k) && !RARE_MELT[+k]) SMELT[+k] = QUALITY_ITEM[qualityOf(+k)!];
+
+// v6: the refined materials recipes need are CAST from plastic now that
+// their ores melt to plastic (Philippe: nothing may become unobtainable).
+const CASTS: [string, string, number, number, number, number][] = [
+  // id, name, plastic item, plastic n, out, out n
+  ["cast-glass", "Cast glass", ID.Pellets, 2, ID.Glass, 4],
+  ["cast-hard", "Cast hard brick", ID.Pellets, 2, ID.Hard, 4],
+  ["cast-ash", "Cast ash brick", ID.Pellets, 2, ID.Ash, 4],
+  ["cast-tin", "Cast tin", ID.Pellets, 3, ID.Tin, 1],
+  ["cast-resin", "Cast resin", ID.Pellets, 4, ID.Resin, 1],
+  ["cast-amber", "Cast amber", ID.PlasticIngot, 2, ID.Amber, 1],
+  ["cast-copper", "Cast copper", ID.PlasticIngot, 1, ID.Copper, 1],
+  ["cast-chrome", "Cast chrome", ID.PlasticIngot, 2, ID.Chrome, 1],
+  ["cast-iron", "Cast iron ingot", ID.TemperedIngot, 1, ID.Ingot, 1],
+];
+for (const [id, name, pin, pn, out, on] of CASTS) RECIPES.push(r(id, name, `${pn} ${def(pin).name.toLowerCase()} → ${on}`, [[pin, pn]], out, on, { cat: "build" }));
+
+/** Gem/precious inputs: an item crafted from them is not salvageable. */
+export const RARE_INPUTS = new Set<number>([ID.Gold, ID.Diamond, ID.Emerald, ID.Crystal, ID.Sapphire, ID.Prism, ID.GoldOre, ID.DiamondOre]);
+const WOOD = new Set<number>([ID.Log, ID.Planks, ID.SlabPlanks, ID.Stick, ID.Leaves]);
+/** Plastic cost of one unit (LOW units), or -1 if it holds rare inputs. */
+export function plasticCost(id: number, depth = 0): number {
+  if (RARE_INPUTS.has(id)) return -1;
+  if (WOOD.has(id)) return 0;
+  if (id === ID.Pellets) return 1;
+  if (id === ID.PlasticIngot) return QUALITY_VALUE.medium;
+  if (id === ID.TemperedIngot) return QUALITY_VALUE.good;
+  const q = qualityOf(id);
+  if (q && !RARE_MELT[id]) return QUALITY_VALUE[q] / meltRatio(id);
+  if (depth > 6) return 0;
+  const rec = RECIPES.find((x) => x.out === id && !x.special);
+  if (!rec) return 0;
+  let sum = 0;
+  for (const [nid, n] of rec.need) {
+    const c = plasticCost(nid, depth + 1);
+    if (c < 0) return -1;
+    sum += c * n;
+  }
+  return sum / Math.max(1, rec.n);
+}
+/** Salvage a crafted/used item: LOW plastic units (pellets) it yields. */
+export function salvageOf(id: number, dur: number, maxDur: number): { ok: boolean; pellets: number; why?: string } {
+  const c = plasticCost(id);
+  if (c < 0) return { ok: false, pellets: 0, why: "Made with rare materials — not salvageable" };
+  if (c === 0) return { ok: false, pellets: 0, why: "Nothing plastic in it (wood burns as fuel)" };
+  return { ok: true, pellets: salvageYield(c, dur, maxDur) };
+}
 for (const k of Object.keys(MATERIALS)) if (rejectReason(+k)) delete SMELT[+k];
 
 export function fuelTime(id: number): number {

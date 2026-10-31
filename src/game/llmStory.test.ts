@@ -80,3 +80,28 @@ test("director pre-generates, rolls the arc, story persists", async () => {
   d.outcome(g.quest.id, true);
   assert.deepEqual(storyFrom(JSON.parse(JSON.stringify(d.story))), d.story);
 });
+
+import { NpcModel, canRun, MODELS } from "./llm/runtime.ts";
+test("runtime: low memory / no wasm → unsupported; load failure → failed; success → ready", async () => {
+  assert.equal(canRun({ deviceMemory: 2, hasWasm: true, hasWorker: true }).ok, false);
+  assert.equal(canRun({ hasWasm: false, hasWorker: true }).ok, false);
+  assert.equal(canRun({ deviceMemory: 8, hasWasm: true, hasWorker: true }).ok, true);
+  const m = new NpcModel();
+  await m.start({ deviceMemory: 2, hasWasm: true, hasWorker: true });
+  assert.equal(m.state, "unsupported");
+  assert.equal(m.llm(), null);
+  const bad = new NpcModel();
+  await bad.start({ hasWasm: true, hasWorker: true }, async () => ({ Wllama: class { async loadModelFromUrl() { throw new Error("unknown type"); } async createCompletion() { return ""; } } }));
+  assert.equal(bad.state, "failed");
+  const tried: string[] = [];
+  const ok = new NpcModel();
+  await ok.start({ hasWasm: true, hasWorker: true }, async () => ({
+    Wllama: class {
+      async loadModelFromUrl(u: string, o: { progressCallback: (p: { loaded: number; total: number }) => void }) { tried.push(u); o.progressCallback({ loaded: 1, total: 2 }); }
+      async createCompletion() { return { choices: [{ text: "{}" }] }; }
+    },
+  }));
+  assert.equal(ok.state, "ready");
+  assert.equal(ok.model, MODELS[0].name);
+  assert.equal(await ok.llm()!("p", "g", { temperature: 0.4, maxTokens: 10 }), "{}");
+});

@@ -18,6 +18,11 @@ import * as FS from "./fireState";
 import * as TS from "./tuftState";
 import * as CH from "./chipState";
 import { NEIGHBORS, RECIPES, SMELT, SMELT_N, fuelTime, matchGrid, teksCastCost } from "./recipes";
+import { Director, generateQuest, newStory, storyFrom, type WorldView } from "./llm/story";
+import { NpcModel } from "./llm/runtime";
+import { GenPool, poolSize, type WorkerLike } from "./genPool";
+import { repairCost } from "./foundry";
+import { plasticCost, salvageOf } from "./recipes";
 import { AFFIX_INFO, MATERIALS, RARE_MELT, TIERS, cookRate, meltInto, meltRatioStep, rejectReason, poolGlow, pour, stepHeat, tierIndex, type Pool } from "./foundry";
 import { DISCOVER, MOB_XP, ORE_HEAR, ORE_XP, nextPerk, rankTitle, xpNeed } from "./ranks";
 import { manaMaxFor, skillById, spellsFor } from "./skills";
@@ -29,7 +34,7 @@ import { CS, HEIGHT, SEA, World, decorate, folkLayout, inNether, penSheep, paint
 import { DEBRIS_ADVANCED, debrisAt } from "./debris";
 import { stockChest } from "./loot";
 import { banditFolk, civicOf, patrolOf, findStructure, garageOf, structureFolk, structuresNear, structureLabel, structureOwning, stockStructureChest, type StructKind, type Structure } from "./structures";
-import { BOUNTY_ARREST, banditQuests, chiefOf, chiefQuests, COIN, CRIME, guildEntryQuest, guildQuests, GUILDS, mobTag, seenBy, type CrimeKind, type Observer } from "./society";
+import { BOUNTY_ARREST, banditQuests, chiefOf, chiefQuests, COIN, CRIME, guildEntryQuest, guildQuests, GUILDS, guildsIn, makeQuest, type Quest, mobTag, seenBy, type CrimeKind, type Observer } from "./society";
 import { Society } from "./societyState";
 import { classifyRenderer, presetFor, readGl, SOFTWARE_HINT } from "./gpu";
 import { mayYield, spillSlots } from "./yields";
@@ -132,6 +137,7 @@ export type Hud = {
   /** Detected GPU (tier · renderer) and the software-rendering warning. */
   gpu: string;
   gpuWarn: string;
+  llm: string;
   quests: { id: string; name: string; detail: string; n: number; need: number; done: boolean; ready: boolean; reward: string; chain?: string; chainName?: string; from?: string; step?: number; steps?: number; locked?: boolean }[];
   questAlert: string;
   questTrack: string;
@@ -192,6 +198,7 @@ export type GameApi = {
     sharpness: number;
     fov: number;
     showFps: boolean;
+    npcLlm: boolean;
     music: number;
     sfx: number;
     haptics: boolean;
@@ -257,6 +264,8 @@ export type GameApi = {
   setSignText: (t: string) => void;
   cancelSignEdit: () => void;
   mend: () => void;
+  salvage: () => void;
+  repairQuote: () => string;
   temper: () => void;
   brew: (kind: string) => void;
   beacon: (buff: string) => void;
@@ -282,6 +291,7 @@ export type GameApi = {
   setSharpness: (n: number) => void;
   setFov: (n: number) => void;
   setShowFps: (on: boolean) => void;
+  setNpcLlm: (on: boolean) => void;
   setMusic: (n: number) => void;
   setSfx: (n: number) => void;
   setHaptics: (on: boolean) => void;
@@ -368,6 +378,10 @@ declare global {
       toggleInv?: () => void;
       getHamlet?: () => { x: number; y: number; z: number } | null;
       getChunks?: () => number;
+      socMobsQa?: () => { soc: string; name: string; role: string; x: number; y: number; z: number }[];
+      openFurnaceQa?: () => boolean;
+      getGpuQa?: () => string;
+      getGenStats?: () => { workers: number; adopted: number; wasted: number; ms: number; meshN: number; meshMs: number };
       /** QA: stop/restart the frame loop so a capture sees a still frame. */
       hold?: (on: boolean) => void;
       getRes?: () => string;
@@ -455,6 +469,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     sharpness: savedSettings?.sharpness ?? 0.5,
     fov: savedSettings?.fov ?? 72,
     showFps: savedSettings?.showFps ?? false,
+    npcLlm: savedSettings?.npcLlm ?? true,
     music: savedSettings?.music ?? 0.7,
     sfx: savedSettings?.sfx ?? 0.9,
     haptics: savedSettings?.haptics ?? true,
@@ -550,6 +565,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     netStatus: "",
     gpu: "",
     gpuWarn: "",
+    llm: "",
     quests: [],
     questAlert: "",
     questTrack: "",
@@ -864,6 +880,25 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let tradeStock: Record<string, number[]> = {};
   let reputation: Record<string, number> = {};
   let society = new Society(); // PR 6: contracts, bounties, guilds (societyState.ts)
+  // NPC LLM (llm/*.ts): on by default, loads in the background once the
+  // world is playable; procedural quests until (or unless) it is ready.
+  const director = new Director();
+  const npcModel = new NpcModel();
+  npcModel.onChange = () => {
+    hud.llm = npcModel.label();
+    director.llm = settings.npcLlm ? npcModel.llm() : null;
+    emit();
+  };
+  let npcModelTimer: ReturnType<typeof setTimeout> | null = null;
+  function startNpcModel(delayMs: number) {
+    if (!settings.npcLlm || npcModelTimer || typeof window === "undefined") return;
+    npcModelTimer = setTimeout(() => {
+      npcModelTimer = null;
+      const nav = navigator as Navigator & { deviceMemory?: number };
+      void npcModel.start({ deviceMemory: nav.deviceMemory, hasWasm: typeof WebAssembly !== "undefined", hasWorker: typeof Worker !== "undefined" });
+    }, delayMs);
+  }
+  startNpcModel(20000);
   let traderKeySet: string | null = null;
   let prevWorldTime = 0;
   function repKeyFor(x: number, z: number): string {
@@ -4266,6 +4301,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       sharpness: settings.sharpness,
       fov: settings.fov,
       showFps: settings.showFps,
+      npcLlm: settings.npcLlm,
       music: settings.music,
       sfx: settings.sfx,
       haptics: settings.haptics,
@@ -4632,6 +4668,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     tradeStock = {};
     reputation = {};
     society = new Society();
+    director.story = newStory();
     traderKeySet = null;
   }
 
@@ -4905,6 +4942,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     for (const [k, v] of Object.entries(data.tradeStock ?? {})) tradeStock[k] = v.slice();
     reputation = { ...(data.reputation ?? {}) };
     society = Society.from(data.society);
+    director.story = storyFrom(data.story);
     traderKeySet = null;
     hotbar = data.hotbar?.length === 9 ? [...data.hotbar] : [...CREATIVE_BAR];
     for (const k of Object.keys(inv)) delete inv[Number(k)];
@@ -5032,10 +5070,24 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     meshes.set(key, list);
   }
 
+  // CPU pool (genPool.ts): world generation runs ahead in Web Workers;
+  // world.ensure() on the main thread stays the fallback.
+  let genPool: GenPool | null = null;
+  const meshStats = { n: 0, ms: 0 };
+  function prefetchGen(cx: number, cz: number, r: number) {
+    if (typeof Worker === "undefined") return;
+    genPool ??= new GenPool(() => new Worker(new URL("./genWorker.ts", import.meta.url), { type: "module" }) as unknown as WorkerLike, poolSize(navigator.hardwareConcurrency));
+    const ring: { cx: number; cz: number; d: number }[] = [];
+    const R2 = r + 1;
+    for (let dz = -R2; dz <= R2; dz++) for (let dx = -R2; dx <= R2; dx++) if (dx * dx + dz * dz <= R2 * R2 + 0.01) ring.push({ cx: cx + dx, cz: cz + dz, d: dx * dx + dz * dz });
+    ring.sort((a, b) => a.d - b.d);
+    genPool.prefetch(world, ring);
+  }
   function stream(budget: number) {
     const r = effRadius();
     const cx = Math.floor(player.x / CS);
     const cz = Math.floor(player.z / CS);
+    prefetchGen(cx, cz, r);
     const need: { cx: number; cz: number; d: number; key: string }[] = [];
     for (let dz = -r; dz <= r; dz++) {
       for (let dx = -r; dx <= r; dx++) {
@@ -5058,7 +5110,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const tier = tierFor(item.d);
       if (meshes.has(item.key) && !dirty.has(item.key) && chunkTier.get(item.key) === tier) continue;
       if (meshed >= 1 && performance.now() - meshStart > 6) break;
+      const t0 = performance.now();
       rebuild(item.cx, item.cz, item.key, tier);
+      meshStats.n++;
+      meshStats.ms += performance.now() - t0;
       dirty.delete(item.key);
       left--;
       meshed++;
@@ -11008,6 +11063,33 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     saveDirty = true;
     emit();
   }
+  /** A pre-generated LLM quest for this giver if one is ready and new. */
+  function storyQuest(gk: string, proc: () => Quest | null): Quest | null {
+    const g = director.take(gk);
+    if (g && g.source === "llm" && !society.done.has(g.quest.id) && !society.active.some((a) => a.q.id === g.quest.id)) return g.quest;
+    return proc();
+  }
+  function prefetchStory(gk: string, v: Structure, mob: Mob, kind: "chief" | "guild", giver: Quest["giver"], proc: () => Quest | null) {
+    if (!director.llm) return;
+    const key = socKey(v);
+    const st = society.st(key);
+    const view: WorldView = {
+      zone: v.zone,
+      timeWord: "day",
+      structures: structuresNear(world, v.x, v.z, 1).filter((s) => s !== v).map((s) => s.kind).slice(0, 4),
+      bossUp: mobs.some((m) => !m.dead && !!m.bossOf),
+      npc: { name: giver.name, role: kind, guild: kind === "guild" ? gk.split(":")[1] : "", mood: st.rep < 0 ? "wary" : "warm", met: society.done.size },
+      player: {
+        level: hud.level ?? 0, coins: inv[COIN] ?? 0, rep: st.rep, bounty: st.bounty, jailed: 0, crimes: Math.round(st.bounty / 5),
+        guilds: GUILDS.filter((g) => society.member(g)).map((g) => g.id),
+        rare: Object.keys(RARE_MELT).map(Number).filter((id) => (inv[id] ?? 0) > 0).map((id) => def(id).name),
+        done: society.done.size, failed: 0,
+      },
+      guildsHere: guildsIn(v.gx, v.gz, v.zone, seed).map((g) => g.id),
+    };
+    const fallback = () => proc() ?? makeQuest(giver, v.zone, seed, 9, society.done.size, ["fetch"]);
+    director.prefetch(gk, () => generateQuest(director.llm, view, director.story, giver, kind, fallback, { seed, slot: 7, epoch: society.done.size }));
+  }
   function societyTalk(mob: Mob): boolean {
     const v = villageAround(mob.homeX ?? mob.x, mob.homeZ ?? mob.z);
     const sneak = isSneaking();
@@ -11038,8 +11120,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         say(name + ": Out of my hall, criminal.");
         return true;
       }
-      const q = society.next(chiefQuests(v.gx, v.gz, v.zone, seed, society.epoch("chief:" + key)));
+      const proc = () => society.next(chiefQuests(v.gx, v.gz, v.zone, seed, society.epoch("chief:" + key)));
+      const q = storyQuest("chief:" + key, proc);
       say(name + " — " + (q ? society.accept(q) : "Finish what I asked first (quest board → Contracts)."), 6000);
+      prefetchStory("chief:" + key, v, mob, "chief", { kind: "chief", key, name }, proc);
       saveDirty = true;
       return true;
     }
@@ -11051,8 +11135,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         const entry = guildEntryQuest(g, key, v.zone, seed);
         say(g.name + " — prove yourself to join. " + society.accept(entry), 6000);
       } else {
-        const q = society.next(guildQuests(g, key, v.zone, seed, society.epoch(society.epochKey("guild", key, g))));
+        const proc = () => society.next(guildQuests(g, key, v.zone, seed, society.epoch(society.epochKey("guild", key, g))));
+        const q = storyQuest("guild:" + g.id + ":" + key, proc);
         say(g.ranks[society.rank(g)] + " — " + (q ? society.accept(q) : "No work right now; finish your contracts."), 6000);
+        if (q) prefetchStory("guild:" + g.id + ":" + key, v, mob, "guild", q.giver, proc);
       }
       saveDirty = true;
       return true;
@@ -13118,6 +13204,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       tradeStock: Object.fromEntries(Object.entries(tradeStock).map(([k, v]) => [k, v.slice()])),
       reputation: { ...reputation },
       society: society.toJSON(),
+      story: director.story,
       folk: folkSpots.map((f) => ({ x: f.x, z: f.z, role: f.role })),
       village: villageAt,
       quests: quests.map((q) => ({ id: q.id, n: q.n, done: q.done })),
@@ -14709,7 +14796,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const product = SMELT[f.in];
       // Foundry pass: an affix may pour tempered ingots, so the output
       // slot accepts either ingot kind when melting pellets.
-      const poursId = product === ID.PlasticIngot && f.affix === "tempered" && (f.charges ?? 0) > 0 ? ID.TemperedIngot : product;
+      const poursId = product === ID.PlasticIngot && f.in === ID.Pellets && f.affix === "tempered" && (f.charges ?? 0) > 0 ? ID.TemperedIngot : product;
       const can = !!product && f.inN > 0 && (f.out === 0 || f.out === poursId) && f.outN < 64 && product !== f.in;
       const flvl = FOUNDRY_LVL[(f.lvl ?? 1) - 1];
       if (f.burn <= 0 && can && f.fuelN > 0 && fuelTime(f.fuel) > 0) {
@@ -14729,14 +14816,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           const yieldN = SMELT_N[inId] ?? 1;
           let distilMul = 1;
           // v6: plain materials melt at their table ratio (many commons → 1 pellet)
-          const ratioRow = product === ID.Pellets && !RARE_MELT[inId] && MATERIALS[inId]?.kind === "plastic";
+          const ratioRow = !RARE_MELT[inId] && MATERIALS[inId]?.kind === "plastic";
           const ratioN = ratioRow ? meltRatioStep(f, inId) : 0;
           if (!ratioRow && (product === ID.Pellets || product === ID.PlasticIngot)) meltInto(f, inId, f.lvl ?? 1, { regrind: (TEKS as readonly number[]).includes(inId) });
           if (RARE_MELT[inId]) {
             say("Rare melt! " + AFFIX_INFO[RARE_MELT[inId].affix].name + " batch — " + AFFIX_INFO[RARE_MELT[inId].affix].desc + " ×" + f.charges, 2600);
             audio.rank();
           }
-          if (product === ID.PlasticIngot) {
+          if (product === ID.PlasticIngot && !ratioRow) {
             const p = pour(f, f.lvl ?? 1, yieldN);
             f.out = p.id;
             f.outN += p.n;
@@ -14752,7 +14839,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           // 0.25/pellet (the FUEL numbers in p5bProto.ts), paid out as
           // whole Fuel items beside the kiln. Matter is conserved:
           // pellets → ingot + fuel, nothing from nowhere.
-          if (product === ID.PlasticIngot) {
+          if (product === ID.PlasticIngot && !ratioRow) {
             f.fuelAcc = (f.fuelAcc ?? 0) + fuelFromMelt(1) * distilMul;
             while (f.fuelAcc >= 1) {
               f.fuelAcc -= 1;
@@ -15506,6 +15593,17 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return site ? { x: site.x, y: site.y, z: site.z } : null;
     },
     getChunks: () => world.chunks.size,
+    socMobsQa: () => mobs.filter((m) => !m.dead && (m.soc || m.role)).map((m) => ({ soc: m.soc ?? "", name: m.socName ?? "", role: String(m.role ?? ""), x: m.x, y: m.y, z: m.z })),
+    openFurnaceQa: () => {
+      const x = Math.floor(player.x) + 2, z = Math.floor(player.z), y = Math.floor(player.y);
+      world.set(x, y, z, ID.Furnace);
+      const f = ensureFurnace(x + "," + y + "," + z, x, y, z);
+      f.in = ID.Cobble; f.inN = 24; f.fuel = ID.Log; f.fuelN = 8;
+      openPanel("furnace", x, y, z);
+      return true;
+    },
+    getGpuQa: () => hud.gpu,
+    getGenStats: () => ({ workers: genPool?.size ?? 0, ...(genPool?.stats ?? { adopted: 0, wasted: 0, ms: 0 }), meshN: meshStats.n, meshMs: meshStats.ms }),
     hold: (on: boolean) => renderer.setAnimationLoop(on ? null : frame),
     getRes: () => hud.renderRes,
     getMobFx: () =>
@@ -16489,12 +16587,35 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const id = hotbar[slot];
       const d = def(id);
       if (!d.maxUse) return say("Hold a worn tool");
-      if (!creative && (inv[ID.Ingot] ?? 0) < 1) return say("Need an ingot");
-      if (!creative) spend(ID.Ingot, 1);
+      // v6 repair: plastic of matching quality, cost ∝ missing durability × tier;
+      // rare (gem-made or tier 3+) gear needs tempered (good) plastic.
+      const cost = repairCost(inv[id] ?? 0, d.maxUse, d.tier ?? 0, plasticCost(id) < 0);
+      if (cost.n <= 0) return say("Already in full shape");
+      if (!creative && (inv[cost.item] ?? 0) < cost.n) return say("Need " + cost.n + " " + def(cost.item).name + " (" + cost.quality + " plastic)");
+      if (!creative) spend(cost.item, cost.n);
       inv[id] = d.maxUse;
       if (!hotbar.includes(id)) hotbar[slot] = id;
-      say("Mended");
+      say("Repaired with " + cost.n + " " + def(cost.item).name);
       emit();
+    },
+    salvage() {
+      const id = hotbar[slot];
+      const d = def(id);
+      if (!id || (!d.maxUse && !d.armor && !plasticCost(id))) return say("Hold a crafted item to salvage");
+      const sv = salvageOf(id, d.maxUse ? (inv[id] ?? 0) : 1, d.maxUse || 1);
+      if (!sv.ok) return say(sv.why ?? "Can't salvage that");
+      if (!creative) spend(id, d.maxUse ? (inv[id] ?? 0) : 1);
+      if (sv.pellets > 0) give(ID.Pellets, sv.pellets);
+      say("Salvaged → " + sv.pellets + " pellets");
+      emit();
+    },
+    repairQuote() {
+      const id = hotbar[slot];
+      const d = def(id);
+      if (!d.maxUse) return "";
+      const c = repairCost(inv[id] ?? 0, d.maxUse, d.tier ?? 0, plasticCost(id) < 0);
+      const sv = salvageOf(id, inv[id] ?? 0, d.maxUse);
+      return d.name + " " + (inv[id] ?? 0) + "/" + d.maxUse + " · repair: " + (c.n ? c.n + " " + def(c.item).name : "—") + " · salvage: " + (sv.ok ? sv.pellets + " pellets" : sv.why);
     },
     temper() {
       const id = hotbar[slot];
@@ -16776,6 +16897,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     setFov(n) {
       settings.fov = Math.max(55, Math.min(100, Math.round(n)));
       persistSettings();
+      emit();
+    },
+    setNpcLlm(on) {
+      settings.npcLlm = on;
+      persistSettings();
+      if (on) startNpcModel(0);
+      else npcModel.stop();
+      hud.llm = npcModel.label();
       emit();
     },
     setShowFps(on) {

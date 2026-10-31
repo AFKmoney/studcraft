@@ -40,6 +40,10 @@ export type SaveV1 = {
     outN: number;
     cook: number;
     burn: number;
+    /** v6 foundry: partial pellet fraction (inputs/ratio), kept across saves */
+    ratioAcc?: number;
+    purity?: number;
+    heat?: number;
   }[];
   comps?: { x: number; y: number; z: number; dir: number; delay: number }[];
   switches?: { x: number; y: number; z: number }[];
@@ -53,6 +57,7 @@ export type SaveV1 = {
   reputation?: Record<string, number>;
   /** PR 6: societyState.ts SocietySave (validated on load). */
   society?: unknown;
+  story?: unknown;
   runes?: [number, string[]][];
   folk?: { x: number; z: number; role: string }[];
   village?: { x: number; z: number } | null;
@@ -111,6 +116,7 @@ export type SettingsSave = {
   sharpness?: number;
   fov?: number;
   showFps?: boolean;
+  npcLlm?: boolean;
   music?: number;
   sfx?: number;
   haptics?: boolean;

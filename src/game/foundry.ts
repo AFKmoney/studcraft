@@ -145,69 +145,83 @@ export function poolGlow(p: Pool, lvl: number): string {
 }
 
 // ── v6 material table (Philippe, 2026-10-31) ─────────────────────────
-// « Tout est plastique sauf l'or, les diamants et le bois. » One data
-// table: every melt ratio (inputs per pellet), its purity push and every
-// fuel value. Common/abundant stuff needs MANY inputs per pellet and
-// barely lifts purity; rare stuff melts near 1:1 and lifts it a lot.
-// Wood is the fuel; quality plastic (ingots) also burns. Gold and
-// diamond are never meltable (currency / upgrade materials).
-// RARE_MELT rows above keep their spike + affix on top of this.
+// « Tout fond en plastique sauf l'eau, les minerais rares et le bois. »
+// One data table: melt ratio (inputs per plastic unit), plastic QUALITY
+// and fuel values. Quality (Philippe): copper (ore + items) → MEDIUM,
+// iron → GOOD, everything else → LOW, ratio scaled by abundance.
+//   low    → Pellets        (then Pellets → Plastic ingot as before)
+//   medium → Plastic ingot  (direct)
+//   good   → Tempered ingot (direct)
+// Wood is the fuel; quality plastic (ingots) also burns. Water, gold,
+// diamond and the gem ores are refused. RARE_MELT rows keep their spike
+// + affix on top (they melt 1:1 to pellets).
+export type Quality = "low" | "medium" | "good";
 export type MatRow =
-  | { kind: "plastic"; ratio: number; purity: number; fuel?: number }
+  | { kind: "plastic"; ratio: number; purity: number; quality: Quality }
   | { kind: "fuel"; fuel: number }
   | { kind: "reject"; why: string };
-const P = (ratio: number, purity: number, fuel?: number): MatRow => ({ kind: "plastic", ratio, purity, fuel });
+const L = (ratio: number, purity: number): MatRow => ({ kind: "plastic", ratio, purity, quality: "low" });
+const M = (ratio: number, purity: number): MatRow => ({ kind: "plastic", ratio, purity, quality: "medium" });
+const G = (ratio: number, purity: number): MatRow => ({ kind: "plastic", ratio, purity, quality: "good" });
+const RARE_ORE = "Rare ore — keep it for trade and upgrades; the kiln won't melt it";
 export const MATERIALS: Record<number, MatRow> = {
-  // never melted
+  // refused
+  [ID.Water]: { kind: "reject", why: "Water just boils off" },
   [ID.Gold]: { kind: "reject", why: "Gold is currency — the kiln won't melt it" },
-  [ID.GoldOre]: { kind: "reject", why: "Gold is currency — the kiln won't melt it" },
+  [ID.GoldOre]: { kind: "reject", why: RARE_ORE },
   [ID.Diamond]: { kind: "reject", why: "Diamonds are for upgrades — the kiln won't melt them" },
-  [ID.DiamondOre]: { kind: "reject", why: "Diamonds are for upgrades — the kiln won't melt them" },
+  [ID.DiamondOre]: { kind: "reject", why: RARE_ORE },
+  [ID.EmeraldOre]: { kind: "reject", why: RARE_ORE },
+  [ID.Emerald]: { kind: "reject", why: "Emeralds are currency" },
+  [ID.CrystalOre]: { kind: "reject", why: RARE_ORE },
+  [ID.SapphireOre]: { kind: "reject", why: RARE_ORE },
+  [ID.PrismOre]: { kind: "reject", why: RARE_ORE },
   // wood = fuel (seconds of burn)
   [ID.Log]: { kind: "fuel", fuel: 3 },
   [ID.Planks]: { kind: "fuel", fuel: 1.5 },
   [ID.SlabPlanks]: { kind: "fuel", fuel: 0.8 },
   [ID.Stick]: { kind: "fuel", fuel: 0.8 },
   [ID.Leaves]: { kind: "fuel", fuel: 0.4 },
-  // common, abundant → large quantities (8–16 : 1), low purity
-  [ID.Dirt]: P(16, 0.5),
-  [ID.Grass]: P(16, 0.5),
-  [ID.Gravel]: P(14, 0.75),
-  [ID.Snow]: P(16, 0.5),
-  [ID.Cobble]: P(12, 1),
-  [ID.Stone]: P(12, 1),
-  [ID.Basalt]: P(10, 1.5),
-  [ID.Sandstone]: P(10, 1.5),
-  [ID.Ice]: P(10, 1),
-  // mid: ores / plastic bricks (3–6 : 1)
-  [ID.Red]: P(2, 3), [ID.Blue]: P(2, 3), [ID.Yellow]: P(2, 3), [ID.White]: P(2, 3), [ID.Black]: P(2, 3),
-  [ID.Orange]: P(2, 3), [ID.Green]: P(2, 3), [ID.Pink]: P(2, 3), [ID.Azure]: P(2, 3),
-  [ID.Obsidian]: P(4, 4),
-  // rarer → small quantities (1–2 : 1), high purity
-  [ID.Crystal]: P(1, 8),
-  // NOTE: Sand→Glass, Clay→Hard, Netherrack→Ash and the metal/gem ores
-  // (iron, tin, copper, chrome, sapphire, amber, resin, prism) keep their
-  // refining rows: 30+ recipes need Glass/Copper/Chrome — open question
-  // for Philippe before turning them into plastic too.
-  // quality plastic: also burnable as fuel
+  // quality plastic also burns
   [ID.PlasticIngot]: { kind: "fuel", fuel: 6 },
   [ID.TemperedIngot]: { kind: "fuel", fuel: 10 },
+  // LOW — abundant commons need large quantities (8–16 : 1)
+  [ID.Dirt]: L(16, 0.5), [ID.Grass]: L(16, 0.5), [ID.Snow]: L(16, 0.5),
+  [ID.Sand]: L(14, 0.75), [ID.Gravel]: L(14, 0.75),
+  [ID.Cobble]: L(12, 1), [ID.Stone]: L(12, 1), [ID.Netherrack]: L(12, 1),
+  [ID.Basalt]: L(10, 1.5), [ID.Sandstone]: L(10, 1.5), [ID.Ice]: L(10, 1),
+  [ID.Clay]: L(8, 2), [ID.Glass]: L(8, 2), [ID.Hard]: L(8, 2), [ID.Ash]: L(8, 2),
+  // LOW — less common: coal, dye ores, tin, chrome, amber/resin ores, bricks
+  [ID.CoalOre]: L(6, 2), [ID.Coal]: L(6, 2),
+  [ID.LapisOre]: L(4, 3), [ID.RedOre]: L(4, 3),
+  [ID.TinOre]: L(4, 3), [ID.Tin]: L(3, 3),
+  [ID.ChromeOre]: L(3, 4), [ID.Chrome]: L(2, 4),
+  [ID.AmberOre]: L(3, 4), [ID.ResinOre]: L(3, 4), [ID.Resin]: L(2, 4),
+  [ID.Obsidian]: L(4, 4),
+  [ID.Red]: L(2, 3), [ID.Blue]: L(2, 3), [ID.Yellow]: L(2, 3), [ID.White]: L(2, 3), [ID.Black]: L(2, 3),
+  [ID.Orange]: L(2, 3), [ID.Green]: L(2, 3), [ID.Pink]: L(2, 3), [ID.Azure]: L(2, 3),
+  // MEDIUM — copper
+  [ID.CopperOre]: M(3, 5), [ID.Copper]: M(2, 5),
+  // GOOD — iron
+  [ID.IronOre]: G(4, 7), [ID.RawIron]: G(3, 7), [ID.Ingot]: G(2, 8), [ID.IronBlock]: G(1, 9),
 };
-// rare drops (RARE_MELT) are 1:1 plastic and keep their bonuses
-for (const k of Object.keys(RARE_MELT)) MATERIALS[+k] ??= P(1, 0);
+// rare drops (RARE_MELT) are 1:1 low plastic (pellets) and keep their bonuses
+for (const k of Object.keys(RARE_MELT)) MATERIALS[+k] = L(1, 0);
 
+export const QUALITY_ITEM: Record<Quality, number> = { low: ID.Pellets, medium: ID.PlasticIngot, good: ID.TemperedIngot };
 export const isMeltable = (id: number) => MATERIALS[id]?.kind === "plastic";
 export const meltRatio = (id: number) => (MATERIALS[id]?.kind === "plastic" ? (MATERIALS[id] as { ratio: number }).ratio : 0);
+export const qualityOf = (id: number): Quality | null => (MATERIALS[id]?.kind === "plastic" ? (MATERIALS[id] as { quality: Quality }).quality : null);
 export function fuelValue(id: number): number {
   const m = MATERIALS[id];
-  return m && m.kind !== "reject" ? (m as { fuel?: number }).fuel ?? 0 : 0;
+  return m?.kind === "fuel" ? m.fuel : 0;
 }
 export function rejectReason(id: number): string | null {
   const m = MATERIALS[id];
   return m?.kind === "reject" ? m.why : null;
 }
-/** Feed one input; returns whole pellets emitted (accumulator on the
- *  pool keeps big ratios exact and deterministic). */
+/** Feed one input; returns whole plastic units emitted (the pool's
+ *  ratioAcc keeps big ratios exact and deterministic; saved with the kiln). */
 export function meltRatioStep(p: Pool & { ratioAcc?: number }, id: number): number {
   const r = meltRatio(id);
   if (!r) return 0;
@@ -217,4 +231,32 @@ export function meltRatioStep(p: Pool & { ratioAcc?: number }, id: number): numb
   let n = 0;
   while (p.ratioAcc >= 1 - 1e-9) { p.ratioAcc -= 1; n++; }
   return n;
+}
+
+// ── salvage + repair (durability) ────────────────────────────────────
+/** Plastic value of one unit of `id` in LOW units (pellet = 1, plastic
+ *  ingot = 2, tempered = 4): raw materials by ratio, crafted items by
+ *  their recipe (see recipes.ts plasticCost). */
+export const QUALITY_VALUE: Record<Quality, number> = { low: 1, medium: 2, good: 4 };
+/** Salvage: a used item yields 50 % of its plastic cost × durability
+ *  left, always strictly less than the craft cost. */
+export function salvageYield(cost: number, dur: number, maxDur: number): number {
+  if (cost <= 0) return 0;
+  const frac = maxDur > 0 ? Math.max(0, Math.min(1, dur / maxDur)) : 1;
+  return Math.min(Math.max(0, Math.ceil(cost) - 1), Math.floor(cost * 0.5 * frac));
+}
+/** Repair: the quality the item needs (tier + rare), and the cost in
+ *  that quality's item for the missing durability. */
+export function repairQuality(tier: number, rare: boolean): Quality {
+  return rare || tier >= 3 ? "good" : tier >= 2 ? "medium" : "low";
+}
+export function repairCost(dur: number, maxDur: number, tier: number, rare: boolean): { quality: Quality; item: number; n: number } {
+  const q = repairQuality(tier, rare);
+  const missing = maxDur > 0 ? Math.max(0, maxDur - dur) / maxDur : 0;
+  const n = missing <= 0 ? 0 : Math.max(1, Math.ceil(missing * (2 + 2 * Math.max(0, tier)) * (rare ? 1.5 : 1)));
+  return { quality: q, item: QUALITY_ITEM[q], n };
+}
+/** Combine two of the same item: durabilities add (+10 % bonus), capped. */
+export function combineDur(a: number, b: number, maxDur: number): number {
+  return Math.min(maxDur, Math.round(a + b + maxDur * 0.1));
 }

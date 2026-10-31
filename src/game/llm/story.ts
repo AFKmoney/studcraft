@@ -119,7 +119,7 @@ export function applyLlm(l: LlmQuest, giver: Quest["giver"], zone: ZoneId, seed:
   const base = makeQuest(giver, zone, seed, slot, epoch, [l.type]);
   const track = { ...base.track };
   if (l.type === "kill" || l.type === "boss") track.tag = l.target;
-  if (l.type === "fetch" || l.type === "diplomacy") track.what = Number(l.target.slice(5)) || track.what;
+  if (l.type === "fetch") track.what = Number(l.target.slice(5)) || track.what;
   if (l.type === "find") {
     track.tag = l.target;
     track.what = l.target === "find:shrine" ? ID.SanctumStud : ID.MechaCore;

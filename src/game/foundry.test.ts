@@ -94,33 +94,56 @@ it("v5 remap: void-glass shard and blink lens melt as rares, the sentinel core s
   assert.ok(RARE_MELT[ID.EnderPearl].purity < RARE_MELT[ID.VoidGlass].purity);
 });
 
-import { MATERIALS, meltRatio, meltRatioStep, fuelValue, rejectReason, isMeltable } from "./foundry.ts";
-import { fuelTime } from "./recipes.ts";
+import { MATERIALS, meltRatio, meltRatioStep, fuelValue, rejectReason, isMeltable, qualityOf, salvageYield, repairCost, combineDur, QUALITY_ITEM } from "./foundry.ts";
+import { fuelTime, plasticCost, salvageOf, RECIPES as ALL_RECIPES } from "./recipes.ts";
 describe("v6 material table", () => {
-  it("ratio scales with rarity: commons 8–16:1, rares 1–2:1", () => {
-    for (const id of [ID.Dirt, ID.Cobble, ID.Stone, ID.Gravel]) assert.ok(meltRatio(id) >= 8 && meltRatio(id) <= 16);
-    for (const id of [ID.Crystal, ...Object.keys(RARE_MELT).map(Number)]) assert.ok(meltRatio(id) >= 1 && meltRatio(id) <= 2);
-    assert.ok((MATERIALS[ID.Crystal] as { purity: number }).purity > (MATERIALS[ID.Dirt] as { purity: number }).purity);
+  it("quality tiers: iron good, copper medium, the rest low", () => {
+    for (const id of [ID.IronOre, ID.RawIron, ID.Ingot]) assert.equal(qualityOf(id), "good");
+    for (const id of [ID.CopperOre, ID.Copper]) assert.equal(qualityOf(id), "medium");
+    for (const id of [ID.Sand, ID.Clay, ID.Netherrack, ID.CoalOre, ID.TinOre, ID.ChromeOre, ID.Stone]) assert.equal(qualityOf(id), "low");
+    assert.equal(SMELT[ID.IronOre], QUALITY_ITEM.good);
+    assert.equal(SMELT[ID.CopperOre], QUALITY_ITEM.medium);
+    assert.equal(SMELT[ID.Sand], ID.Pellets);
+  });
+  it("ratio scales with abundance; rare melts keep 1:1 + bonus", () => {
+    for (const id of [ID.Dirt, ID.Cobble, ID.Stone, ID.Gravel, ID.Sand]) assert.ok(meltRatio(id) >= 8 && meltRatio(id) <= 16);
+    assert.ok(meltRatio(ID.Dirt) > meltRatio(ID.CoalOre) && meltRatio(ID.CoalOre) > meltRatio(ID.Copper));
+    for (const id of Object.keys(RARE_MELT).map(Number)) { assert.equal(meltRatio(id), 1); assert.equal(SMELT[id], ID.Pellets); }
     const p: { purity?: number; ratioAcc?: number } = {};
     let n = 0;
     for (let i = 0; i < 32; i++) n += meltRatioStep(p, ID.Dirt);
     assert.equal(n, 2);
-    assert.equal(meltRatioStep({}, ID.Crystal), 1);
   });
-  it("gold, diamond and wood are never melted", () => {
-    for (const id of [ID.Gold, ID.GoldOre, ID.Diamond, ID.DiamondOre]) {
-      assert.ok(rejectReason(id));
+  it("water, rare ores and wood are never melted", () => {
+    for (const id of [ID.Water, ID.Gold, ID.GoldOre, ID.Diamond, ID.DiamondOre, ID.EmeraldOre, ID.SapphireOre, ID.PrismOre, ID.CrystalOre]) {
+      assert.ok(rejectReason(id), String(id));
       assert.equal(SMELT[id], undefined);
     }
-    for (const id of [ID.Log, ID.Planks]) {
-      assert.equal(isMeltable(id), false);
-      assert.equal(SMELT[id], undefined);
-    }
+    for (const id of [ID.Log, ID.Planks]) { assert.equal(isMeltable(id), false); assert.equal(SMELT[id], undefined); }
   });
   it("wood and quality plastic burn as fuel; gold does not", () => {
     assert.ok(fuelTime(ID.Log) > 0 && fuelTime(ID.Planks) > 0);
     assert.ok(fuelValue(ID.PlasticIngot) > 0 && fuelTime(ID.TemperedIngot) > fuelTime(ID.PlasticIngot));
     assert.equal(fuelTime(ID.Gold), 0);
-    assert.equal(fuelTime(ID.Diamond), 0);
+  });
+  it("salvage: less than craft cost, scales with durability; gem gear refused", () => {
+    assert.equal(salvageYield(10, 100, 100), 5);
+    assert.equal(salvageYield(10, 50, 100), 2);
+    assert.ok(salvageYield(1, 1, 1) < 1);
+    const sword = ALL_RECIPES.find((r) => r.id === "sword-g");
+    if (sword) assert.equal(salvageOf(sword.out, 10, 10).ok, false);
+    const iron = ALL_RECIPES.find((r) => r.need.some(([i]) => i === ID.Ingot) && plasticCost(r.out) > 2);
+    assert.ok(iron, "an iron-made item");
+    const full = salvageOf(iron!.out, 10, 10).pellets, half = salvageOf(iron!.out, 5, 10).pellets;
+    assert.ok(full < plasticCost(iron!.out) && half <= full);
+  });
+  it("repair: cost ∝ missing durability × tier; rare needs good plastic; combine caps", () => {
+    assert.equal(repairCost(10, 10, 1, false).n, 0);
+    const a = repairCost(5, 10, 1, false), b = repairCost(0, 10, 1, false), c = repairCost(0, 10, 3, false);
+    assert.ok(a.n < b.n && b.n < c.n);
+    assert.equal(repairCost(0, 10, 1, false).item, ID.Pellets);
+    assert.equal(repairCost(0, 10, 2, false).item, ID.PlasticIngot);
+    assert.equal(repairCost(0, 10, 1, true).item, ID.TemperedIngot);
+    assert.equal(combineDur(60, 70, 100), 100);
   });
 });
