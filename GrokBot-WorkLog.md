@@ -39,3 +39,16 @@ Journal de travail de studs game tester (Grok Bot) sur StudCraft. Heures en heur
 - Visual tweaks after renders (eye saturation, seam, spider splay, wing raise, Démoulé amt, raptor neck).
 - Ref photos untracked (refs/ in .gitignore); they remain in history from commit e5e7e7c (no force-push done).
 - Tests 130/130 (+NFR decode/normalisation, +v2 part test), tsc 0, build OK. Stats: shots-v2/stats.md. Montages: shots-v2/ref-vs-*.png, montage-*.png.
+
+## v3 — tout démoulé, léger et réaliste (31 oct. 2026, ~11h44 → soir, PDT)
+
+- **NFR** : refit du champ `demoule` (crop 380,360→620,600, réseau 2-48-48-1, 2828 o) : 17,5 → **20,7 dB**. Champ `dragon` élargi (2-44-44-3, 2602 o) : 28,1 → **32,6 dB**. `bossSkin` accepte désormais une carte NFR et `applyBiomeLook` conserve la NFR lors de la recoloration.
+- **Allègement** : `PartBatch` + `v3Optimize` fusionnent les pièces statiques par matériau (en cache). Les petites pièces utilisent un RoundedBox à 1 segment, les tores sont à 6 segments et les flexTube ont deux fois moins de nervures. **Total sur 63 mobs : draw calls 3448 → 1919 ; triangles 567k → 504k.** Grande Presse : 305 → 69 draw calls, 49k → 29k triangles. Démoulé : 135 → 35 draw calls, 38k → 21k triangles. Pétabrique : 70 → 17 draw calls.
+- **Démoulé** : surface densifiée (briques et creux fusionnés), casque plus gros, visière lumineuse unique.
+- **Pétabrique** : vrai petit feu, un seul quad billboard avec bruit fbm, animé et vacillant, sans aucun asset.
+- **Grande Presse** : silhouette basse et horizontale, tête-presse projetée vers l'avant, grandes ailes en treillis Technic noir avec panneaux NFR violets, épines cristal, longue queue. **Dracobraise** : n'est plus une minifig, c'est un mini-dragon quadrupède avec ailes en treillis et panneaux NFR.
+- **Boss et bêtes refaits** : Totem et Golem (robot-grue), Cochonnet (tirelire), Meuhbloc, Mammouth (ravager), Kraken (bouée-œil), Forge-Titan (noyau, flammes), mouton, poule.
+- **PNJ** : villageois en salopette. Les 8 marchands portent tablier, bandoulière et sacoche, avec une silhouette par métier : épicier, forgeron, maçon, berger, commis, mage, ranger, mécano (lunettes, clé, ceinture d'outils).
+- **Tests** : tsc OK, 130/130 tests, build OK. Pattes et userData identiques à la v2 pour les 42 types.
+- **Limites** : cheval, chèvre, loup, renard, chat, squelettes, illageois, piglin, sorcière, etc. ne reçoivent qu'une passe de finition (arêtes arrondies, matériau à reflet, fusion), sans refonte. Pour les petits animaux, les triangles augmentent (arrondis) mais les draw calls baissent. Pas de bloom. Les refs/*.jpg restent dans l'historique (e5e7e7c), sans force-push.
+- Visuels : `shots-v3/` (before/, after/, montage-*.png, ref-vs-dragon.png, ref-vs-demoule.png, stats.md).
