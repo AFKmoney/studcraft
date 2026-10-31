@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { ID } from "./blocks.ts";
 import { RARE_MELT, TIERS, cookRate, meltInto, pour, stepHeat, tierIndex, type Pool } from "./foundry.ts";
-import { SMELT, SMELT_N } from "./recipes.ts";
+import { PLASTIC, RECIPES, SMELT, SMELT_N } from "./recipes.ts";
 
 describe("plastic foundry", () => {
   it("heat rises with fuel, cools without, clamps", () => {
@@ -100,26 +100,26 @@ describe("v6 material table", () => {
   it("quality tiers: iron good, copper medium, the rest low", () => {
     for (const id of [ID.IronOre, ID.RawIron, ID.Ingot]) assert.equal(qualityOf(id), "good");
     for (const id of [ID.CopperOre, ID.Copper]) assert.equal(qualityOf(id), "medium");
-    for (const id of [ID.Sand, ID.Clay, ID.Netherrack, ID.CoalOre, ID.TinOre, ID.ChromeOre, ID.Stone]) assert.equal(qualityOf(id), "low");
-    assert.equal(SMELT[ID.IronOre], QUALITY_ITEM.good);
-    assert.equal(SMELT[ID.CopperOre], QUALITY_ITEM.medium);
-    assert.equal(SMELT[ID.Sand], ID.Pellets);
+    for (const id of [ID.Netherrack, ID.CoalOre, ID.TinOre, ID.ChromeOre, ID.Stone]) assert.equal(qualityOf(id), "low");
+    assert.equal(PLASTIC[ID.IronOre], QUALITY_ITEM.good);
+    assert.equal(PLASTIC[ID.CopperOre], QUALITY_ITEM.medium);
+    assert.equal(PLASTIC[ID.Stone], ID.Pellets);
   });
   it("ratio scales with abundance; rare melts keep 1:1 + bonus", () => {
-    for (const id of [ID.Dirt, ID.Cobble, ID.Stone, ID.Gravel, ID.Sand]) assert.ok(meltRatio(id) >= 8 && meltRatio(id) <= 16);
+    for (const id of [ID.Dirt, ID.Cobble, ID.Stone, ID.Gravel]) assert.ok(meltRatio(id) >= 8 && meltRatio(id) <= 16);
     assert.ok(meltRatio(ID.Dirt) > meltRatio(ID.CoalOre) && meltRatio(ID.CoalOre) > meltRatio(ID.Copper));
-    for (const id of Object.keys(RARE_MELT).map(Number)) { assert.equal(meltRatio(id), 1); assert.equal(SMELT[id], ID.Pellets); }
+    for (const id of Object.keys(RARE_MELT).map(Number)) { assert.equal(meltRatio(id), 1); assert.equal(PLASTIC[id], ID.Pellets); }
     const p: { purity?: number; ratioAcc?: number } = {};
     let n = 0;
     for (let i = 0; i < 32; i++) n += meltRatioStep(p, ID.Dirt);
     assert.equal(n, 2);
   });
   it("water, rare ores and wood are never melted", () => {
-    for (const id of [ID.Water, ID.Gold, ID.GoldOre, ID.Diamond, ID.DiamondOre, ID.EmeraldOre, ID.SapphireOre, ID.PrismOre, ID.CrystalOre]) {
+    for (const id of [ID.Water, ID.Gold, ID.GoldOre, ID.Diamond, ID.DiamondOre, ID.EmeraldOre, ID.SapphireOre, ID.PrismOre, ID.CrystalOre, ID.Sand, ID.Clay]) {
       assert.ok(rejectReason(id), String(id));
-      assert.equal(SMELT[id], undefined);
+      assert.equal(PLASTIC[id], undefined);
     }
-    for (const id of [ID.Log, ID.Planks]) { assert.equal(isMeltable(id), false); assert.equal(SMELT[id], undefined); }
+    for (const id of [ID.Log, ID.Planks, ID.Leaves]) { assert.equal(isMeltable(id), false); assert.equal(PLASTIC[id], undefined); }
   });
   it("wood and quality plastic burn as fuel; gold does not", () => {
     assert.ok(fuelTime(ID.Log) > 0 && fuelTime(ID.Planks) > 0);
@@ -145,5 +145,20 @@ describe("v6 material table", () => {
     assert.equal(repairCost(0, 10, 2, false).item, ID.PlasticIngot);
     assert.equal(repairCost(0, 10, 1, true).item, ID.TemperedIngot);
     assert.equal(combineDur(60, 70, 100), 100);
+  });
+});
+
+describe("v6 final: normal crafting is untouched (plastic is parallel)", () => {
+  it("normal kiln mode keeps the classic smelts", () => {
+    assert.equal(SMELT[ID.Sand], ID.Glass);
+    assert.equal(SMELT[ID.Clay], ID.Hard);
+    assert.equal(SMELT[ID.Log], ID.Coal);
+    assert.equal(SMELT[ID.Cobble], ID.Stone);
+    assert.equal(SMELT[ID.Netherrack], ID.Ash);
+    assert.equal(SMELT[ID.IronOre], ID.Ingot);
+    assert.equal(SMELT[ID.CopperOre], ID.Copper);
+  });
+  it("no normal recipe was remapped to plastic", () => {
+    assert.equal(RECIPES.some((r) => ["cast-glass", "cast-hard", "cast-ash", "cast-tin", "cast-resin", "cast-amber", "cast-copper", "cast-chrome", "cast-iron"].includes(r.id)), false);
   });
 });

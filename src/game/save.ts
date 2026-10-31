@@ -41,7 +41,7 @@ export type SaveV1 = {
     cook: number;
     burn: number;
     /** v6 foundry: partial pellet fraction (inputs/ratio), kept across saves */
-    ratioAcc?: number;
+    ratioAcc?: number; plastic?: boolean;
     purity?: number;
     heat?: number;
   }[];
