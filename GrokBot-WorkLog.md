@@ -31,3 +31,11 @@ Journal de travail de studs game tester (Grok Bot) sur StudCraft. Heures en heur
 - ~10:46 Tests biomes.test.ts + extensions mobMeshes/mobDrops : 127/127 ; tsc 0 erreur ; build OK.
 - ~10:48 Captures headless (biome-shots.html) : 11 biomes, 11 boss, 22 espèces, montages + comparaisons côte à côte avec les refs dans shots-biomes/.
 - ~10:50 Commits, push unique, ouverture de la PR (base main, dépend de PR #4).
+
+## 2026-10-31 — Phase 3 v2: refs-faithful mobs + NFR/SIREN (PDT)
+- 11:10–12:40 Studied NFR-Compressor + skills-nfr (nfr-srn). Added tools/nfr (siren_fit.py, fit_refs.py). Fitted 4 ref crops into SIRENs (fp16 L1, int8 per-block L2/L3) → src/game/nfrFields.ts, decoded into GLSL by `nfrGlsl` and sampled in `nfrSkin`:
+  bombe 854 B / 28.8 dB · demoule 2038 B / 17.5 dB · dragon RGB 1450 B / 28.1 dB · crab 854 B / 24.3 dB.
+- Rewrote buildSpecies (rounded/dome shells, stud domes, 2-segment Technic limbs with ball joints + axles, glowing bezel eyes, gears, flex tubes, crystal spikes), new makeDemoule, Pétabrique v2 (lathe barrel, bands, wind-up key, fuse, flames), Grande Presse v2 (molten hull, crystal spikes, truss wings with translucent NFR panels).
+- Visual tweaks after renders (eye saturation, seam, spider splay, wing raise, Démoulé amt, raptor neck).
+- Ref photos untracked (refs/ in .gitignore); they remain in history from commit e5e7e7c (no force-push done).
+- Tests 130/130 (+NFR decode/normalisation, +v2 part test), tsc 0, build OK. Stats: shots-v2/stats.md. Montages: shots-v2/ref-vs-*.png, montage-*.png.

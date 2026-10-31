@@ -1,0 +1,29 @@
+| Mob | Draw calls avant | après | Triangles avant | après |
+|---|---|---|---|---|
+| creeper | 42 | 70 | 1912 | 18132 |
+| walker | 66 | 135 | 3420 | 38304 |
+| husk | 68 | 137 | 3444 | 38904 |
+| drowned | 70 | 139 | 3524 | 38408 |
+| dragon | 178 | 305 | 3968 | 49388 |
+| raptoclic | 26 | 50 | 564 | 10940 |
+| lianarak | 53 | 66 | 1308 | 15632 |
+| scarabrique | 47 | 62 | 1180 | 13940 |
+| dunosaure | 43 | 126 | 1096 | 26040 |
+| ankylogivre | 43 | 126 | 1096 | 26040 |
+| pingoclic | 26 | 50 | 564 | 10940 |
+| dracobraise | 30 | 48 | 584 | 11404 |
+| crabe-magma | 39 | 67 | 916 | 14188 |
+| scarableu | 47 | 62 | 1180 | 13940 |
+| ankylomousse | 43 | 126 | 1096 | 26040 |
+| crabouge | 39 | 67 | 916 | 14188 |
+| raptonnet | 26 | 50 | 564 | 10940 |
+| arachnoclic | 53 | 66 | 1308 | 15632 |
+| ankyroc | 43 | 126 | 1096 | 26040 |
+| scarabouse | 47 | 62 | 1180 | 13940 |
+| arachnase | 53 | 66 | 1308 | 15632 |
+| drakocre | 30 | 48 | 584 | 11404 |
+| raptor-rouille | 26 | 50 | 564 | 10940 |
+| scarabor | 47 | 62 | 1180 | 13940 |
+| drakosable | 30 | 48 | 584 | 11404 |
+| crabcorail | 39 | 67 | 916 | 14188 |
+| drakazur | 30 | 48 | 584 | 11404 |

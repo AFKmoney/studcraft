@@ -1,0 +1,110 @@
+{
+ "creeper": {
+  "draws": 42,
+  "tris": 1912
+ },
+ "walker": {
+  "draws": 66,
+  "tris": 3420
+ },
+ "husk": {
+  "draws": 68,
+  "tris": 3444
+ },
+ "drowned": {
+  "draws": 70,
+  "tris": 3524
+ },
+ "dragon": {
+  "draws": 178,
+  "tris": 3968
+ },
+ "raptoclic": {
+  "draws": 26,
+  "tris": 564
+ },
+ "lianarak": {
+  "draws": 53,
+  "tris": 1308
+ },
+ "scarabrique": {
+  "draws": 47,
+  "tris": 1180
+ },
+ "dunosaure": {
+  "draws": 43,
+  "tris": 1096
+ },
+ "ankylogivre": {
+  "draws": 43,
+  "tris": 1096
+ },
+ "pingoclic": {
+  "draws": 26,
+  "tris": 564
+ },
+ "dracobraise": {
+  "draws": 30,
+  "tris": 584
+ },
+ "crabe-magma": {
+  "draws": 39,
+  "tris": 916
+ },
+ "scarableu": {
+  "draws": 47,
+  "tris": 1180
+ },
+ "ankylomousse": {
+  "draws": 43,
+  "tris": 1096
+ },
+ "crabouge": {
+  "draws": 39,
+  "tris": 916
+ },
+ "raptonnet": {
+  "draws": 26,
+  "tris": 564
+ },
+ "arachnoclic": {
+  "draws": 53,
+  "tris": 1308
+ },
+ "ankyroc": {
+  "draws": 43,
+  "tris": 1096
+ },
+ "scarabouse": {
+  "draws": 47,
+  "tris": 1180
+ },
+ "arachnase": {
+  "draws": 53,
+  "tris": 1308
+ },
+ "drakocre": {
+  "draws": 30,
+  "tris": 584
+ },
+ "raptor-rouille": {
+  "draws": 26,
+  "tris": 564
+ },
+ "scarabor": {
+  "draws": 47,
+  "tris": 1180
+ },
+ "drakosable": {
+  "draws": 30,
+  "tris": 584
+ },
+ "crabcorail": {
+  "draws": 39,
+  "tris": 916
+ },
+ "drakazur": {
+  "draws": 30,
+  "tris": 584
+ }
+}

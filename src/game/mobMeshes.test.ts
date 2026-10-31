@@ -41,3 +41,14 @@ test("every original species builds a mesh with legs and a head", async () => {
     assert.ok(body.legs.length >= 2 && body.group.userData.head, spec.id);
   }
 });
+
+test("v2 hero mobs are built from bevelled/curved parts, not minifig boxes", async () => {
+  const { buildStuds } = await import("./game.ts");
+  for (const kind of ["creeper", "walker", "husk", "drowned", "dragon"]) {
+    const body = buildStuds(kind, 1);
+    const types = new Set<string>();
+    body.group.traverse((o) => { const m = o as { isMesh?: boolean; geometry?: { type: string } }; if (m.isMesh && m.geometry) types.add(m.geometry.type); });
+    assert.ok([...types].some((t) => t !== "BoxGeometry" && t !== "CylinderGeometry"), `${kind}: ${[...types]}`);
+  }
+  assert.equal(buildStuds("walker", 1).legs.length, 4, "walker keeps legL, legR, armR, armL");
+});
