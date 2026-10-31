@@ -581,7 +581,8 @@ export const RECIPES: Recipe[] = [
     h: 3,
     cat: "tools",
   }),
-  r("void-blade", "Voidblink katana", "2 ender cores + 1 ender pearl + 1 obsidian — end-tier blade", [[ID.VoidCore, 2], [ID.EnderPearl, 1], [ID.Obsidian, 1]], ID.VoidBlade, 1, {
+  r("blink-lens", "Blink lens", "3 void-glass shards — grind a Veilleur-Prisme lens (blink hop)", [[ID.VoidGlass, 3]], ID.EnderPearl, 1, { cat: "tools" }),
+  r("void-blade", "Voidblink katana", "2 sentinel cores + 1 blink lens + 1 obsidian — end-tier blade", [[ID.VoidCore, 2], [ID.EnderPearl, 1], [ID.Obsidian, 1]], ID.VoidBlade, 1, {
     shape: [0, ID.VoidCore, 0, ID.EnderPearl, ID.VoidCore, 0, 0, ID.Obsidian, 0],
     w: 3,
     h: 3,
@@ -1591,6 +1592,7 @@ export const SMELT: Record<number, number> = {
   [ID.RawIron]: ID.Ingot,
   [ID.IronOre]: ID.Ingot,
   [ID.Sand]: ID.Glass,
+  [ID.VoidGlass]: ID.Prism, // v5: rare melt — void glass refines to prism
   [ID.Cobble]: ID.Stone,
   [ID.Log]: ID.Coal,
   [ID.Clay]: ID.Hard,

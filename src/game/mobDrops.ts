@@ -23,7 +23,7 @@ export const MOB_BASE_DROPS: Record<Exclude<MobKind, "boat" | "cart">, readonly 
   husk: [ID.PharaohGold, ID.Bone],
   drowned: [ID.RawMeat, ID.Copper],
   creeper: [ID.Powder], // Pétabrique: popper powder
-  enderman: [ID.EnderPearl, ID.VoidCore], // Vide-Bac: sorter marble + bin core
+  enderman: [ID.VoidGlass, ID.EnderPearl], // Veilleur-Prisme (v5): void-glass shard + blink lens (core = bonus)
   blaze: [ID.Blaze],
   witch: [ID.WitchVenom, ID.PotionHeal], // Mixeuse
   bee: [ID.Wax],

@@ -486,6 +486,7 @@ export const ID = {
   // P5d: sensors — Teks parts (specs in teks.ts), cast at the Foundry.
   SensorDist: 472,
   SensorColor: 473,
+  VoidGlass: 474, // v5: Veilleur-Prisme drop — void-glass shard (rare melt input)
   // P6 step 4 / P7 tool moulds (Muse): plastic tools cast at the
   // Foundry — the mould is the shape, the ingot is the stock. Tier 2
   // (stone class), 120 uses: moulded plastic, honestly mid-table.
@@ -1030,7 +1031,8 @@ put(b(ID.Spawner, "Spawner", "#2a2a32", "#3aaa4c", "#3a3a44", "#1a1a22", { hard:
 put(b(ID.MasterBrick, "Master brick", "#f5c518", "#ffe14a", "#e23b2f", "#b02620", { hard: 5, tough: true, need: 4 }));
 put(b(ID.ChromeBrick, "Chrome brick", "#d5dee6", "#f4f7fa", "#b7c4ce", "#8e9aa6", { hard: 2.4, tough: true, need: 3 }));
 item(ID.Tin, "Tin", "#d5ddd0");
-item(ID.EnderPearl, "Sorter marble", "#2a9a86");
+item(ID.EnderPearl, "Blink lens", "#40f0d0"); // v5: Veilleur-Prisme lens (id 268 unchanged)
+item(ID.VoidGlass, "Void-glass shard", "#6a2ad0");
 item(ID.InkSac, "Stamp ink", "#23232e");
 item(ID.BaseBrew, "Base brew", "#b7c4b0");
 item(ID.PotionRegen, "Regen brew", "#e26a8a");
@@ -1297,7 +1299,7 @@ put(b(ID.GuardianSpike, "Buoy spike", "#3fc4b6", "#5ce0d2", "#2a988c", "#1f746a"
 put(b(ID.PharaohGold, "Scarab relic", "#f5c518", "#ffd84a", "#c99812", "#9a700a", { placeable: false }));
 put(b(ID.WitchVenom, "Mixer essence", "#9b45e4", "#ba6eff", "#732ab5", "#4e1882", { placeable: false }));
 put(b(ID.IllagerBadge, "Raider badge", "#8e959c", "#cfd6dc", "#585e66", "#383d42", { placeable: false }));
-put(b(ID.VoidCore, "Bin core", "#2e9888", "#5cf2dc", "#1b5e54", "#103832", { placeable: false }));
+put(b(ID.VoidCore, "Prism sentinel core", "#2e9888", "#5cf2dc", "#1b5e54", "#103832", { placeable: false }));
 put(b(ID.TidalBlade, "Tidal trident blade", "#32b8cb", "#64e5f5", "#1f8da0", "#146070", { placeable: false, tool: "sword", tier: 4, maxUse: 480 }));
 put(b(ID.PharaohStaff, "Sun pharaoh scepter", "#ffd84a", "#fff088", "#d69b1a", "#9e6d0c", { placeable: false, tool: "sword", tier: 4, maxUse: 460 }));
 put(b(ID.WitchStaff, "Covensoul blade", "#a33de2", "#c875ff", "#7220a8", "#4a1072", { placeable: false, tool: "sword", tier: 4, maxUse: 440 }));

@@ -41,7 +41,7 @@ export const MOB_LABEL: Record<MobKind, string> = {
   stray: "Squelek givré",
   creeper: "Pétabrique",
   spider: "Araignée-Pince",
-  enderman: "Vide-Bac",
+  enderman: "Veilleur-Prisme",
   witch: "Mixeuse",
   slime: "Gélatoc",
   wisp: "Lucion",

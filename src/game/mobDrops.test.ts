@@ -48,3 +48,14 @@ test("every dropped item has a real held model (not the brick-tile fallback)", (
     assert.ok(ok, `${name} (${d.name}) falls to the placeholder tile`);
   }
 });
+
+test("v5 Veilleur-Prisme drops are original and stay craftable", async () => {
+  const { RECIPES, SMELT } = await import("./recipes.ts");
+  const base = mobBaseDrops("enderman");
+  assert.ok(base.includes(ID.VoidGlass) && base.includes(ID.EnderPearl));
+  for (const id of [ID.VoidGlass, ID.EnderPearl, ID.VoidCore]) assert.doesNotMatch(def(id).name, /ender|pearl/i);
+  assert.equal(SMELT[ID.VoidGlass], ID.Prism, "void glass is a rare melt input");
+  const list = RECIPES;
+  assert.ok(list.some((r) => r.out === ID.EnderPearl && r.need.some(([i]) => i === ID.VoidGlass)), "blink lens craftable from drops");
+  assert.ok(list.find((r) => r.id === "void-blade")?.need.some(([i]) => i === ID.EnderPearl), "void-blade still uses the lens");
+});

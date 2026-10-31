@@ -1,0 +1,258 @@
+{
+ "villager": {
+  "draws": 32,
+  "tris": 5436
+ },
+ "golem": {
+  "draws": 37,
+  "tris": 11288
+ },
+ "pig": {
+  "draws": 18,
+  "tris": 3012
+ },
+ "cow": {
+  "draws": 25,
+  "tris": 4978
+ },
+ "sheep": {
+  "draws": 16,
+  "tris": 6672
+ },
+ "chicken": {
+  "draws": 11,
+  "tris": 2660
+ },
+ "horse": {
+  "draws": 23,
+  "tris": 4662
+ },
+ "goat": {
+  "draws": 18,
+  "tris": 4756
+ },
+ "wolf": {
+  "draws": 24,
+  "tris": 3856
+ },
+ "fox": {
+  "draws": 21,
+  "tris": 3516
+ },
+ "cat": {
+  "draws": 30,
+  "tris": 4504
+ },
+ "ravager": {
+  "draws": 24,
+  "tris": 5596
+ },
+ "guardian": {
+  "draws": 10,
+  "tris": 3006
+ },
+ "blaze": {
+  "draws": 30,
+  "tris": 7018
+ },
+ "walker": {
+  "draws": 25,
+  "tris": 15456
+ },
+ "husk": {
+  "draws": 27,
+  "tris": 16056
+ },
+ "drowned": {
+  "draws": 29,
+  "tris": 15560
+ },
+ "skelly": {
+  "draws": 32,
+  "tris": 6840
+ },
+ "stray": {
+  "draws": 33,
+  "tris": 7140
+ },
+ "piglin": {
+  "draws": 33,
+  "tris": 5624
+ },
+ "witch": {
+  "draws": 29,
+  "tris": 5036
+ },
+ "pillager": {
+  "draws": 32,
+  "tris": 5788
+ },
+ "vindicator": {
+  "draws": 29,
+  "tris": 5000
+ },
+ "evoker": {
+  "draws": 30,
+  "tris": 5256
+ },
+ "enderman": {
+  "draws": 12,
+  "tris": 2740
+ },
+ "slime": {
+  "draws": 8,
+  "tris": 1164
+ },
+ "bee": {
+  "draws": 8,
+  "tris": 2624
+ },
+ "squid": {
+  "draws": 11,
+  "tris": 832
+ },
+ "bat": {
+  "draws": 8,
+  "tris": 1712
+ },
+ "axolotl": {
+  "draws": 13,
+  "tris": 3400
+ },
+ "parrot": {
+  "draws": 13,
+  "tris": 1752
+ },
+ "frog": {
+  "draws": 17,
+  "tris": 3264
+ },
+ "wisp": {
+  "draws": 4,
+  "tris": 394
+ },
+ "ghast": {
+  "draws": 18,
+  "tris": 6576
+ },
+ "phantom": {
+  "draws": 8,
+  "tris": 4060
+ },
+ "shulker": {
+  "draws": 6,
+  "tris": 1608
+ },
+ "vex": {
+  "draws": 8,
+  "tris": 992
+ },
+ "wither": {
+  "draws": 8,
+  "tris": 3290
+ },
+ "crab": {
+  "draws": 15,
+  "tris": 2250
+ },
+ "spider": {
+  "draws": 21,
+  "tris": 4196
+ },
+ "creeper": {
+  "draws": 17,
+  "tris": 9062
+ },
+ "dragon": {
+  "draws": 61,
+  "tris": 22802
+ },
+ "raptoclic": {
+  "draws": 28,
+  "tris": 5004
+ },
+ "lianarak": {
+  "draws": 59,
+  "tris": 9008
+ },
+ "scarabrique": {
+  "draws": 48,
+  "tris": 7236
+ },
+ "dunosaure": {
+  "draws": 61,
+  "tris": 11980
+ },
+ "ankylogivre": {
+  "draws": 61,
+  "tris": 11980
+ },
+ "pingoclic": {
+  "draws": 28,
+  "tris": 5004
+ },
+ "dracobraise": {
+  "draws": 56,
+  "tris": 11120
+ },
+ "crabe-magma": {
+  "draws": 43,
+  "tris": 7292
+ },
+ "scarableu": {
+  "draws": 48,
+  "tris": 7236
+ },
+ "ankylomousse": {
+  "draws": 61,
+  "tris": 11980
+ },
+ "crabouge": {
+  "draws": 43,
+  "tris": 7292
+ },
+ "raptonnet": {
+  "draws": 28,
+  "tris": 5004
+ },
+ "arachnoclic": {
+  "draws": 59,
+  "tris": 9008
+ },
+ "ankyroc": {
+  "draws": 61,
+  "tris": 11980
+ },
+ "scarabouse": {
+  "draws": 48,
+  "tris": 7236
+ },
+ "arachnase": {
+  "draws": 59,
+  "tris": 9008
+ },
+ "drakocre": {
+  "draws": 56,
+  "tris": 11120
+ },
+ "raptor-rouille": {
+  "draws": 28,
+  "tris": 5004
+ },
+ "scarabor": {
+  "draws": 48,
+  "tris": 7236
+ },
+ "drakosable": {
+  "draws": 56,
+  "tris": 11120
+ },
+ "crabcorail": {
+  "draws": 43,
+  "tris": 7292
+ },
+ "drakazur": {
+  "draws": 56,
+  "tris": 11120
+ }
+}

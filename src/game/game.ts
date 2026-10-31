@@ -2373,7 +2373,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
 
     if (id === ID.EnderPearl) {
-      // Sorter marble (mob-redesign): the Vide-Bac's glossy sorting ball —
+      // Blink lens (v5, Veilleur-Prisme): glossy lens disc stack with a rim band.
       // three stacked discs approximating a sphere, with a swirl band.
       const mm = skin(baseHex);
       mm.emissive = new THREE.Color(baseHex);
@@ -2393,7 +2393,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       id === ID.Prism ||
       id === ID.Crystal ||
       id === ID.GuardianSpike ||
-      id === ID.VoidCore
+      id === ID.VoidCore ||
+      id === ID.VoidGlass
     ) {
       const gemMat = skin(baseHex);
       gemMat.emissive = new THREE.Color(baseHex);
@@ -17507,10 +17508,10 @@ function cachedGeo(k: string, make: () => THREE.BufferGeometry) {
 const q3 = (n: number) => Number(n.toFixed(3));
 function geoRBox(w: number, h: number, d: number, r = Math.min(w, h, d) * 0.2, segs?: number) {
   // v3: one bevel segment below 12 cm (108 tris instead of 300) — the SNR edge highlight carries the roundness
-  const seg = segs ?? (Math.max(w, h, d) < 0.12 ? 1 : 2);
+  const seg = segs ?? (Math.max(w, h, d) < 0.36 ? 1 : 2); // v5: 1 bevel segment up to 36 cm
   return cachedGeo(`rb:${q3(w)}:${q3(h)}:${q3(d)}:${q3(r)}:${seg}`, () => new RoundedBoxGeometry(w, h, d, seg, Math.min(r, Math.min(w, h, d) * 0.49)));
 }
-function geoBall(r: number, n = 10) {
+function geoBall(r: number, n = 8) {
   return cachedGeo(`ball:${q3(r)}:${n}`, () => new THREE.SphereGeometry(r, n, Math.ceil(n * 0.7)));
 }
 function geoDome(r: number, n = 24) {
@@ -19063,22 +19064,22 @@ function toyEye(parent: THREE.Object3D, x: number, y: number, z: number, r: numb
 }
 /** Generic v3 limb on a pivot that swings on X: hip ball, bevelled upper, knee ball + axle, lower, foot. */
 function v3Limb(parent: THREE.Object3D, x: number, y: number, z: number, o: { w: number; up: number; low: number; upM: THREE.Material; lowM?: THREE.Material; joint: THREE.Material; foot?: THREE.Material; footLen?: number; footW?: number; knee?: number; hip?: boolean }) {
+  // v5 lightening: every part sits directly in the pivot (no knee sub-group),
+  // so v3Optimize merges the leg to one draw per material; joints are 6-seg balls.
   const p = new THREE.Group();
   p.position.set(x, y, z);
   parent.add(p);
-  if (o.hip !== false) put(p, geoBall(o.w * 0.62, 14), o.joint, 0, 0, 0, 0, true);
-  put(p, geoRBox(o.w, o.up, o.w * 1.05, o.w * 0.28), o.upM, 0, -o.up / 2, 0);
-  const k = new THREE.Group();
-  k.position.y = -o.up;
-  k.rotation.x = o.knee ?? 0;
-  p.add(k);
-  put(k, geoBall(o.w * 0.5, 12), o.joint, 0, 0, 0, 0, true);
-  put(k, geoCyl(o.w * 0.16, o.w * 1.25, 8), skin(0x2e3238), 0, 0, 0, 0, true).rotation.z = Math.PI / 2;
-  put(k, geoRBox(o.w * 0.86, o.low, o.w * 0.9, o.w * 0.24), o.lowM ?? o.upM, 0, -o.low / 2, 0);
+  // v5: no hip ball (hidden in the body); the knee ball takes the thigh material so it merges
+  put(p, geoRBox(o.w, o.up, o.w * 1.05, o.w * 0.28, 1), o.upM, 0, -o.up / 2, 0);
+  const kn = o.knee ?? 0, c = Math.cos(kn), s = Math.sin(kn);
+  const at = (d: number, f = 0) => [0, -o.up - d * c - f * s, -d * s + f * c] as const; // point down the shin, rotated by knee
+  put(p, geoBall(o.w * 0.5, 6), o.upM, 0, -o.up, 0, 0, true);
+  const [, ly, lz] = at(o.low / 2);
+  put(p, geoRBox(o.w * 0.86, o.low, o.w * 0.9, o.w * 0.24, 1), o.lowM ?? o.upM, 0, ly, lz, kn);
   if (o.foot) {
     const fl = o.footLen ?? o.w * 1.3;
-    const f = put(k, geoRBox(o.footW ?? o.w * 1.08, o.w * 0.36, fl, o.w * 0.14), o.foot, 0, -o.low - o.w * 0.12, -(fl - o.w) * 0.35, 0, true);
-    f.rotation.x = -(o.knee ?? 0);
+    const [, fy, fz] = at(o.low + o.w * 0.12);
+    put(p, geoRBox(o.footW ?? o.w * 1.08, o.w * 0.36, fl, o.w * 0.14, 1), o.foot, 0, fy, fz - (fl - o.w) * 0.35, 0, true);
   }
   return p;
 }
@@ -19688,31 +19689,55 @@ function makeCat(): StudsBody {
 
 // ─── secondaries ────────────────────────────────────────────────────────────────
 function makeEnderman(): StudsBody {
+  // v5 « Veilleur-Prisme » (Philippe: "le moins minecraft possible"): no tall
+  // black stick-man any more — a hovering void-glass sentinel. A faceted
+  // glass prism core with one big lens eye (the gaze hook), a brick halo,
+  // orbiting brick shards, two floating Technic claw-arms (carry / swing)
+  // and two short stabiliser fins underneath. Nothing touches the ground.
   const g = new THREE.Group();
-  const black = nfrSkin(0x141018, { field: "dragon", plane: "xy", scale: [3, 3], amt: 0.1 }), plate = sheen(0x26202e), eye = transTile(0xd060ff, 0x8a2ad0);
-  const torso = put(g, geoRBox(0.42, 0.62, 0.22, 0.06), black, 0, 1.9, 0);
-  torso.userData.skin = "body";
-  put(g, geoRBox(0.36, 0.1, 0.24, 0.03), plate, 0, 2.18, 0, 0, true);
-  put(g, geoRBox(0.32, 0.12, 0.2, 0.03), plate, 0, 1.56, 0, 0, true);
+  const glass = nfrSkin(0x3a1670, { field: "crab", plane: "xy", scale: [2, 2], amt: 0.2 }, { transparent: true, opacity: 0.82 });
+  const frame = sheen(0x23202b), gold = sheen(0xc9a23a), lensM = transTile(0x40f0d0, 0x18a890);
+  const core = put(g, geoOcta(0.42, 1.45), glass, 0, 1.75, 0);
+  core.userData.skin = "body";
+  core.userData.keep = true;
+  put(g, geoRBox(0.5, 0.12, 0.5, 0.04), frame, 0, 1.75, 0); // waist band
+  put(g, geoRBox(0.22, 0.1, 0.22, 0.03), gold, 0, 2.38, 0); // crown stud
+  put(g, geoRBox(0.14, 0.1, 0.14, 0.03), gold, 0, 1.12, 0); // keel stud
+  const halo = put(g, geoTorus(0.62, 0.035, 16), gold, 0, 1.75, 0, Math.PI / 2, true);
+  halo.rotation.z = 0.25;
+  for (const [x, y, z, r] of [[0.75, 2.2, 0.2, 0.3], [-0.72, 1.3, -0.15, -0.4], [0.2, 2.55, 0.45, 0.6], [-0.35, 2.45, -0.4, 1]] as const) {
+    const sh = put(g, geoRBox(0.16, 0.1, 0.12, 0.02), frame, x, y, z, 0, true);
+    sh.rotation.set(r, r * 1.7, r * 0.6);
+  }
+  // Head = the lens housing, so the gaze / look-at hook turns the eye.
   const head = new THREE.Group();
-  head.position.set(0, 2.24, 0);
+  head.position.set(0, 1.8, -0.36);
   g.add(head);
   g.userData.head = head;
-  put(head, geoRBox(0.4, 0.36, 0.38, 0.06), black, 0, 0.2, 0);
-  put(head, geoRBox(0.32, 0.06, 0.02, 0.01), eye, 0, 0.2, -0.195, 0, true);
-  put(head, geoBall(0.2, 8), transTile(0xb040ff, 0x6a1aa0), 0, 0.2, -0.2, 0, true).scale.set(1.2, 0.25, 0.1);
-  const limb = (x: number, y: number, len: number) => {
+  put(head, geoTorus(0.2, 0.045, 16), frame, 0, 0, -0.06, 0, true);
+  put(head, geoCyl(0.17, 0.05, 16), lensM, 0, 0, -0.06, Math.PI / 2, true);
+  put(head, geoCyl(0.06, 0.06, 10), skin(0x08060c), 0, 0, -0.09, Math.PI / 2, true);
+  // Floating Technic arm: beam + claw, all one material per pivot so it merges.
+  const arm = (x: number) => {
     const p = new THREE.Group();
-    p.position.set(x, y, 0);
+    p.position.set(x, 1.95, 0);
     g.add(p);
-    put(p, geoBall(0.06, 8), plate, 0, 0, 0, 0, true);
-    put(p, geoRBox(0.09, len * 0.5, 0.09, 0.03), black, 0, -len * 0.25, 0);
-    put(p, geoBall(0.05, 8), plate, 0, -len * 0.5, 0, 0, true);
-    put(p, geoRBox(0.08, len * 0.5, 0.08, 0.03), black, 0, -len * 0.75, 0);
+    put(p, geoRBox(0.09, 0.6, 0.09, 0.025, 1), frame, 0, -0.32, 0);
+    put(p, geoRBox(0.16, 0.08, 0.14, 0.025, 1), frame, 0, -0.64, 0);
+    for (const sz of [-1, 1]) put(p, geoRBox(0.04, 0.16, 0.04, 0.01, 1), frame, 0, -0.75, sz * 0.05);
+    put(p, geoRBox(0.1, 0.1, 0.1, 0.02, 1), gold, 0, 0, 0, 0, true);
     return p;
   };
-  const legs = [limb(-0.1, 1.56, 1.56), limb(0.1, 1.56, 1.56), limb(0.28, 2.16, 1.3), limb(-0.28, 2.16, 1.3)];
-  return { group: g, legs, bodyMat: black };
+  const fin = (x: number) => {
+    const p = new THREE.Group();
+    p.position.set(x, 1.2, 0.05);
+    g.add(p);
+    const f = put(p, geoRBox(0.06, 0.42, 0.22, 0.03, 1), frame, 0, -0.2, 0);
+    f.rotation.z = -Math.sign(x) * 0.25;
+    return p;
+  };
+  const legs = [fin(-0.16), fin(0.16), arm(0.62), arm(-0.62)];
+  return { group: g, legs, bodyMat: glass };
 }
 
 function makeSlime(): StudsBody {

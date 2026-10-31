@@ -72,3 +72,8 @@ Journal de travail de studs game tester (Grok Bot) sur StudCraft. Heures en heur
 - Boss : Chef Pilleplot, Pharaon-Presse, Reine-Gélatine héritent des nouveaux corps. Sphinx-Moulé reste sur le Démoulé v2 (demande de Philippe).
 - Hauteurs de vol conservées (bbox vérifiées vs v3), nb de pattes / userData inchangés.
 - Coût : 391 → 613 draw calls, 64k → 150k triangles sur ces 28 mobs (membres articulés + détails). Ordre de grandeur des mobs v3 (cochon 34, vache 41). Détail dans shots-v4/stats.md.
+
+## v5 — Veilleur-Prisme + allègement (2026-10-31)
+- L'enderman (« Vide-Bac », grand bonhomme noir à bâtons) devient le **Veilleur-Prisme** : sentinelle flottante en verre de vide (octaèdre NFR translucide), grosse lentille-œil (= tête, garde le hook du regard), halo doré, éclats de brique en orbite, deux bras Technic flottants à pince, deux ailerons stabilisateurs. Plus aucun contact au sol. 4 pivots/head conservés → animateur, téléport, colère au regard inchangés (code de gameplay non touché).
+- Drops : `VoidGlass` (id **474**, nouveau, « Void-glass shard ») + `EnderPearl` (id **268** inchangé, renommé « Blink lens ») ; bonus `VoidCore` (id **305** inchangé, renommé « Prism sentinel core »). Fonte : SMELT[VoidGlass] = Prism. Recette « blink-lens » : 3 éclats → 1 lentille. void-blade inchangée (mêmes ids). Tests ajoutés (mobDrops.test.ts).
+- Allègement : v3Limb sans sous-groupe genou (une jambe = 1 à 3 draws), pas de bille de hanche, billes 6 segments, geoBall par défaut 8, rbox 1 segment jusqu'à 36 cm.
