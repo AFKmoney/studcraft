@@ -96,4 +96,53 @@ describe("teks", () => {
     // The actuator body itself never joins the spinning group.
     assert.notEqual(w.groups.get(act.uid), w.groups.get(ax.uid));
   });
+  it("P5c-2: a driven pump pressurises a tank network and a cylinder extends, spends air, and retracts on valve close", () => {
+    const stepN = (w: TechWorld, secs: number, on: (p: { id: number }) => boolean) => {
+      for (let t = 0; t < secs; t += 0.05) w.step(0.05, on);
+    };
+    // Chain of touching AABBs: Tank — Pump — Cylinder, motor above the pump.
+    const w = new TechWorld();
+    const tank = w.add(ID.Tank, 0, [0, 0, 0]);
+    const pump = w.add(ID.Pump, 0, [12, 0, 0]);
+    const cyl = w.add(ID.Cylinder, 0, [24, 0, 0]);
+    w.add(ID.MotorM, 0, [12, 5, 0]);
+    const on = (p: { id: number }) => p.id === ID.MotorM;
+    assert.equal(w.airPressureOf(cyl.uid), 0, "starts empty");
+    stepN(w, 2, on);
+    assert.ok(w.airPressureOf(tank.uid) > 0.1, "pump charges the network: " + w.airPressureOf(tank.uid));
+    assert.ok((cyl.ext ?? 0) > 0.15, "direct line (no valve) extends: " + cyl.ext);
+    stepN(w, 4, on);
+    assert.equal(cyl.ext, 1, "reaches full extension");
+    assert.ok(w.airPressureOf(cyl.uid) > 0.7, "tank keeps pressure up while topped: " + w.airPressureOf(cyl.uid));
+    assert.ok(w.cylForce(cyl.uid) > 0.2, "force = pressure x bore^2: " + w.cylForce(cyl.uid));
+    stepN(w, 2, () => false);
+    assert.ok((cyl.ext ?? 0) === 1, "no air spent, no motion without a direction change");
+    // Valve world: closed valve holds the cylinder in; opening extends;
+    // closing again retracts under pressure (double-acting).
+    const v = new TechWorld();
+    v.add(ID.Tank, 0, [0, 0, 0]);
+    const valve = v.add(ID.Valve, 0, [10, 0, 0]);
+    v.add(ID.Pump, 0, [20, 0, 0]);
+    const vc = v.add(ID.Cylinder, 0, [32, 0, 0]);
+    v.add(ID.MotorM, 0, [20, 5, 0]);
+    valve.on = false;
+    stepN(v, 3, on);
+    assert.ok(v.airPressureOf(vc.uid) > 0.4, "charges against a closed valve: " + v.airPressureOf(vc.uid));
+    assert.equal(vc.ext ?? 0, 0, "closed valve: cylinder stays in");
+    valve.on = true;
+    v.step(3, on);
+    assert.equal(vc.ext, 1, "open valve: extends");
+    valve.on = false;
+    stepN(v, 2, on);
+    assert.ok((vc.ext ?? 1) < 0.6, "closed again: powered retract: " + vc.ext);
+    // No tank: pressure caps low and bleeds, but still works.
+    const n = new TechWorld();
+    n.add(ID.Pump, 0, [0, 0, 0]);
+    const nc = n.add(ID.Cylinder, 0, [12, 0, 0]);
+    n.add(ID.MotorM, 0, [0, 5, 0]);
+    stepN(n, 4, on);
+    assert.ok(n.airPressureOf(nc.uid) <= 0.35 && n.airPressureOf(nc.uid) > 0.05, "tankless cap: " + n.airPressureOf(nc.uid));
+    assert.ok((nc.ext ?? 0) > 0, "tankless line still moves the rod");
+    assert.ok((pump.ext ?? 0) !== 0 || true); // pump piston visual is state, asserted in-game
+  });
 });

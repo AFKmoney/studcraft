@@ -50,7 +50,10 @@ export type Spec = {
   // P5c: sliding-rod parts (screw actuators, pumps, air cylinders). The
   // rod ops (flagged `rod` on tube/cyl ops) render translated by
   // ext * stroke along local +X; stroke is in modules.
-  rod?: { stroke: number; kind: "screw" | "pump" | "cyl" };
+  rod?: { stroke: number; kind: "screw" | "pump" | "cyl"; bore?: number };
+  // P5c-2: passive air parts. Air flows between air parts (rod pump/cyl
+  // kinds included) whose world AABBs touch.
+  air?: "tank" | "valve" | "pipe";
   hand?: number; // optional display scale in hand
 };
 
@@ -424,19 +427,19 @@ function rodPart(id: number, part: string, L: number, body: number, rod: number,
 // stroke (modules) a rod of total length L can travel: the rod stays
 // engaged in the body by at least ~1 module at full extension.
 const rodStroke = (L: number) => Math.round((L - L * 0.58 - 1) * 100) / 100;
-put(rodPart(ID.ActMini, "92693", 5, DBG, LBG, 0.5, true).done({ drive: "screw", rod: { stroke: rodStroke(5), kind: "screw" } }));
-put(rodPart(ID.Actuator, "61927", 7, DBG, LBG, 0.6, true).done({ drive: "screw", rod: { stroke: rodStroke(7), kind: "screw" } }));
-put(rodPart(ID.ActXL, "47224", 11, DBG, LBG, 0.7, true).done({ drive: "screw", rod: { stroke: rodStroke(11), kind: "screw" } }));
-put(rodPart(ID.Pump, "19482", 6, LBG, BLU, 0.6, false).done({ rod: { stroke: rodStroke(6), kind: "pump" } }));
-put(rodPart(ID.Cylinder, "19461", 6, LBG, MET, 0.55, false).done({ rod: { stroke: rodStroke(6), kind: "cyl" } }));
-put(rodPart(ID.SpringPump, "2797", 6, TRC, LBG, 0.5, false).op({ k: "helix", ax: 0, c: [0.6, 0, 0], r: 0.33, tr: 0.05, len: 2, turns: 6, col: MET }).done({ rod: { stroke: rodStroke(6), kind: "pump" } }));
+put(rodPart(ID.ActMini, "92693", 5, DBG, LBG, 0.5, true).done({ drive: "screw", rod: { stroke: rodStroke(5), kind: "screw", bore: 0.5 } }));
+put(rodPart(ID.Actuator, "61927", 7, DBG, LBG, 0.6, true).done({ drive: "screw", rod: { stroke: rodStroke(7), kind: "screw", bore: 0.6 } }));
+put(rodPart(ID.ActXL, "47224", 11, DBG, LBG, 0.7, true).done({ drive: "screw", rod: { stroke: rodStroke(11), kind: "screw", bore: 0.7 } }));
+put(rodPart(ID.Pump, "19482", 6, LBG, BLU, 0.6, false).done({ rod: { stroke: rodStroke(6), kind: "pump", bore: 0.6 } }));
+put(rodPart(ID.Cylinder, "19461", 6, LBG, MET, 0.55, false).done({ rod: { stroke: rodStroke(6), kind: "cyl", bore: 0.55 } }));
+put(rodPart(ID.SpringPump, "2797", 6, TRC, LBG, 0.5, false).op({ k: "helix", ax: 0, c: [0.6, 0, 0], r: 0.33, tr: 0.05, len: 2, turns: 6, col: MET }).done({ rod: { stroke: rodStroke(6), kind: "pump", bore: 0.5 } }));
 put(
   new B(ID.SmallPump, "47225", LBG, 0)
     .box([-1.5, -0.5, -1], [0.5, 0.5, 1], DBG)
     .cyl(0, [1.25, 0, 0], 0.45, 1.5, LBG, true, undefined, true)
     .hole([-1, 0, 0], 1, 1, "P")
     .hole([0, 0, 0], 1, 1, "A")
-    .done({ rod: { stroke: 1, kind: "pump" } }),
+    .done({ rod: { stroke: 1, kind: "pump", bore: 0.45 } }),
 );
 put(
   new B(ID.Valve, "19476", LBG, 2)
@@ -448,7 +451,7 @@ put(
     .op({ k: "sphere", c: [0, 1.32, 0], r: 0.2, col: RED })
     .cyl(0, [-1.7, 0, 0], 0.14, 0.4, LBG)
     .cyl(0, [1.7, 0, 0], 0.14, 0.4, LBG)
-    .done(),
+    .done({ air: "valve" }),
 );
 put(
   new B(ID.Tank, "67c01", WHT, 0)
@@ -458,11 +461,11 @@ put(
     .box([1.5, -1.45, -0.5], [2.5, -0.6, 0.5], LBG)
     .hole([-2, -1, 0], 2, 1, "P")
     .hole([2, -1, 0], 2, 1, "P")
-    .done(),
+    .done({ air: "tank" }),
 );
 S.get(ID.Tank)!.discs.push({ c: [0, 0, 0], ax: 0, r: 0.9, len: 6 });
-put(new B(ID.Pipe, "5102", BLU, 0).cyl(0, [0, 0, 0], 0.2, 4, BLU, true, 10).cyl(0, [-1.9, 0, 0], 0.26, 0.2, LBG).cyl(0, [1.9, 0, 0], 0.26, 0.2, LBG).done());
-put(new B(ID.PipeElbow, "4697", LBG, 0).box([-0.3, -0.3, -0.3], [0.3, 0.3, 0.3]).cyl(0, [0.5, 0, 0], 0.18, 0.5, LBG).cyl(1, [0, 0.5, 0], 0.18, 0.5, LBG).cyl(0, [-0.5, 0, 0], 0.18, 0.5, LBG).done());
+put(new B(ID.Pipe, "5102", BLU, 0).cyl(0, [0, 0, 0], 0.2, 4, BLU, true, 10).cyl(0, [-1.9, 0, 0], 0.26, 0.2, LBG).cyl(0, [1.9, 0, 0], 0.26, 0.2, LBG).done({ air: "pipe" }));
+put(new B(ID.PipeElbow, "4697", LBG, 0).box([-0.3, -0.3, -0.3], [0.3, 0.3, 0.3]).cyl(0, [0.5, 0, 0], 0.18, 0.5, LBG).cyl(1, [0, 0.5, 0], 0.18, 0.5, LBG).cyl(0, [-0.5, 0, 0], 0.18, 0.5, LBG).done({ air: "pipe" }));
 // engine: 2850 cylinder, 2851 piston (rod 2853 above)
 put(
   new B(ID.CylBlock, "2850", LBG, 1)
@@ -903,6 +906,79 @@ export class TechWorld {
   gAngle = new Map<number, number>();
   jammed = false;
   private builtRev = -1;
+  // P5c-2: air networks — connected components of air parts (pumps,
+  // cylinders, tanks, valves, pipes) whose world AABBs touch.
+  airNet = new Map<number, number>(); // uid -> network root uid
+  airP = new Map<number, number>(); // network root -> pressure 0..1
+  airTime = 0;
+  private airNeighbours = new Map<number, number[]>(); // air part uid -> touching part uids (any part)
+  private buildAir() {
+    const isAir = (p: Part) => {
+      const s = S.get(p.id);
+      return !!s && (s.air !== undefined || s.rod?.kind === "pump" || s.rod?.kind === "cyl");
+    };
+    const boxes = new Map<number, [V3, V3]>();
+    for (const p of this.parts.values()) {
+      const [lo, hi] = bbox(p.id, p.o);
+      boxes.set(p.uid, [
+        [lo[0] + p.q[0], lo[1] + p.q[1], lo[2] + p.q[2]],
+        [hi[0] + p.q[0], hi[1] + p.q[1], hi[2] + p.q[2]],
+      ]);
+    }
+    const touch = (a: [V3, V3], b: [V3, V3]) => {
+      for (let i = 0; i < 3; i++) if (a[0][i] > b[1][i] + 1 || b[0][i] > a[1][i] + 1) return false;
+      return true;
+    };
+    const airs = [...this.parts.values()].filter(isAir);
+    const par = new Map<number, number>();
+    const find = (a: number): number => {
+      let r = a;
+      while (par.get(r) !== r) r = par.get(r)!;
+      par.set(a, r);
+      return r;
+    };
+    for (const p of airs) par.set(p.uid, p.uid);
+    this.airNeighbours.clear();
+    for (const p of airs) {
+      const ns: number[] = [];
+      for (const o of this.parts.values()) {
+        if (o.uid === p.uid) continue;
+        if (!touch(boxes.get(p.uid)!, boxes.get(o.uid)!)) continue;
+        ns.push(o.uid);
+        if (isAir(o)) par.set(find(p.uid), find(o.uid));
+      }
+      this.airNeighbours.set(p.uid, ns);
+    }
+    const prevP = this.airP;
+    const prevNet = this.airNet;
+    this.airNet.clear();
+    this.airP = new Map();
+    for (const p of airs) {
+      const root = find(p.uid);
+      this.airNet.set(p.uid, root);
+      const old = prevNet.get(p.uid);
+      const oldP = old !== undefined ? (prevP.get(old) ?? 0) : 0;
+      this.airP.set(root, Math.max(this.airP.get(root) ?? 0, oldP));
+    }
+  }
+  /** current air pressure (0..1) of the network a part belongs to */
+  airPressureOf(uid: number): number {
+    const r = this.airNet.get(uid);
+    return r === undefined ? 0 : (this.airP.get(r) ?? 0);
+  }
+  /** P5c: push force of a rod part, in bore² units (π folded in).
+   *  Air cylinders: pressure × bore². Screw actuators: their screw
+   *  advantage (strong, slow) as a constant × bore². */
+  cylForce(uid: number): number {
+    const p = this.parts.get(uid);
+    if (!p) return 0;
+    const s = S.get(p.id);
+    if (!s?.rod) return 0;
+    const bore2 = (s.rod.bore ?? 0.5) ** 2;
+    if (s.rod.kind === "cyl") return this.airPressureOf(uid) * bore2;
+    if (s.rod.kind === "screw") return bore2 * 1.6;
+    return 0;
+  }
   rebuild() {
     if (this.builtRev === this.rev) return;
     this.builtRev = this.rev;
@@ -937,6 +1013,7 @@ export class TechWorld {
       if (!cur || ax.t === "a") this.gAxis.set(g, { p: ax.c, ax: ax.ax });
     }
     for (const g of [...this.gAngle.keys()]) if (!this.gAxis.has(g)) this.gAngle.delete(g);
+    this.buildAir();
   }
   /** gear contacts between groups: [gA, gB, ratio ωB/ωA] */
   meshes(): [number, number, number][] {
@@ -1046,6 +1123,77 @@ export class TechWorld {
         }
       }
       if (w) p.ext = Math.max(0, Math.min(1, (p.ext ?? 0) + ((w / (Math.PI * 2)) / s.rod.stroke) * dt));
+    }
+    // P5c-2: pneumatics. Each air network holds one pressure. A pump
+    // charges it when something drives the pump: a shaft in its input
+    // hole, a spinning neighbour, or a powered motor neighbour (a
+    // cranked neighbour counts — its group spins). A tank raises the
+    // cap to 1 and slows the leak; bare plumbing caps at 0.35 and
+    // bleeds fast. Valves choose the direction: with no valve the line
+    // is direct (pressure extends); any open valve extends; all valves
+    // closed retracts — both strokes are powered (double-acting),
+    // speed ∝ pressure, and working spends air.
+    this.airTime += dt;
+    const nets = new Map<number, Part[]>();
+    for (const p of this.parts.values()) {
+      const r = this.airNet.get(p.uid);
+      if (r === undefined) continue;
+      let a = nets.get(r);
+      if (!a) nets.set(r, (a = []));
+      a.push(p);
+    }
+    for (const [root, members] of nets) {
+      const tanks = members.filter((m) => S.get(m.id)!.air === "tank").length;
+      const cap = tanks > 0 ? 1 : 0.35;
+      let P = Math.min(this.airP.get(root) ?? 0, cap);
+      let drive = 0;
+      for (const m of members) {
+        const s = S.get(m.id)!;
+        if (s.rod?.kind !== "pump") continue;
+        let driven = false;
+        for (const c of worldCells(m)) {
+          if (c.t !== "A") continue;
+          for (const e of this.occ.get(c.key) ?? []) {
+            if (e.uid !== m.uid && e.t === "a" && (om.get(this.groups.get(e.uid)!) ?? 0) !== 0) driven = true;
+          }
+        }
+        if (!driven)
+          for (const nu of this.airNeighbours.get(m.uid) ?? []) {
+            const np = this.parts.get(nu);
+            if (!np) continue;
+            const ns = S.get(np.id)!;
+            if (ns.drive === "motor" && powered(np)) {
+              driven = true;
+              break;
+            }
+            const g = this.groups.get(nu);
+            if (g !== undefined && (om.get(g) ?? 0) !== 0) {
+              driven = true;
+              break;
+            }
+          }
+        if (driven) {
+          drive += m.id === ID.SmallPump ? 0.15 : 0.3;
+          m.ext = 0.5 + 0.5 * Math.sin(this.airTime * 7 + m.uid * 1.7); // the piston works
+        } else m.ext = Math.max(0, (m.ext ?? 0) - 2 * dt);
+      }
+      if (drive > 0) P = Math.min(cap, P + drive * dt);
+      const hasValve = members.some((m) => S.get(m.id)!.air === "valve");
+      const open = !hasValve || members.some((m) => S.get(m.id)!.air === "valve" && m.on !== false);
+      for (const m of members) {
+        const s = S.get(m.id)!;
+        if (s.rod?.kind !== "cyl") continue;
+        const target = open ? 1 : 0;
+        const cur = m.ext ?? 0;
+        const room = target - cur;
+        if (room !== 0 && P > 0) {
+          const stepBy = Math.sign(room) * Math.min(Math.abs(room), P * 1.4 * dt);
+          m.ext = cur + stepBy;
+          P = Math.max(0, P - Math.abs(stepBy) * 0.22);
+        }
+      }
+      P = Math.max(0, P - dt * (tanks > 0 ? 0.004 : 0.03));
+      this.airP.set(root, P);
     }
   }
 }
