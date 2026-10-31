@@ -2470,6 +2470,19 @@ function StationScreen({ game }: { game: GameApi }) {
                     <>Put plastic pellets or ore in Input, and fuel in Fuel.</>
                   )}
                 </p>
+                <div className="sc-molten" style={{ border: `1px solid ${hud.furnace.tierColor ?? "#888"}`, borderRadius: 8, padding: "6px 8px", margin: "6px 0" }}>
+                  <p style={{ margin: 0, fontWeight: 700, color: hud.furnace.tierColor }}>
+                    Molten pool · {hud.furnace.tier ?? "Raw"} · purity {hud.furnace.purity ?? 0}%
+                  </p>
+                  <div aria-label="Heat" style={{ height: 8, borderRadius: 4, background: "#222", overflow: "hidden", margin: "4px 0" }}>
+                    <span style={{ display: "block", height: "100%", width: `${Math.round((hud.furnace.heat ?? 0) * 100)}%`, background: `linear-gradient(90deg, #7a2a10, ${hud.furnace.glow ?? "#ff8040"})`, boxShadow: `0 0 10px ${hud.furnace.glow ?? "#ff8040"}`, transition: "width .3s" }} />
+                  </div>
+                  <small>
+                    Heat {Math.round((hud.furnace.heat ?? 0) * 100)}% — a cold kiln cooks at ¼ speed.
+                    {hud.furnace.affix ? <> · <b>✨ {hud.furnace.affix} ({hud.furnace.charges} pours)</b></> : <> · Melt a rare drop (boss relic, prism, core) for a bonus batch.</>}
+                    {hud.furnace.nextTier ? <> · Upgrade to reach {hud.furnace.nextTier}.</> : null}
+                  </small>
+                </div>
                 <div className={`sc-upg-card lvl${hud.furnace.lvl}`}>
                   <p className="sc-upg-head">Foundry · Level {hud.furnace.lvl} — {hud.furnace.lvlName}</p>
                   <p className="sc-upg-stats">
@@ -2489,7 +2502,7 @@ function StationScreen({ game }: { game: GameApi }) {
                     <p className="sc-muted">Max level — this Foundry runs at full song.</p>
                   )}
                 </div>
-                <p className="sc-hint">Plastic pellets smelt into ingots here — and every pellet smelted also distils Fuel, dropped beside the kiln. Ingots cast bricks and Teks parts from the Crafting book. Tap an item below: ores and food go to Input, fuel to Fuel. Tap a kiln slot to take its stack back.</p>
+                <p className="sc-hint">Plastic pellets smelt into ingots here — higher purity tiers (Fine/Superior/Masterwork) pour bonus ingots, rare melts charge an affix — and every pellet smelted also distils Fuel, dropped beside the kiln. Ingots cast bricks and Teks parts from the Crafting book. Tap an item below: ores and food go to Input, fuel to Fuel. Tap a kiln slot to take its stack back.</p>
                 <BinGrid game={game} onPick={(id) => game.furnaceQuick(id)} />
               </>
             )}

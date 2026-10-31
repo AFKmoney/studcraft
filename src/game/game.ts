@@ -18,6 +18,7 @@ import * as FS from "./fireState";
 import * as TS from "./tuftState";
 import * as CH from "./chipState";
 import { NEIGHBORS, RECIPES, SMELT, SMELT_N, fuelTime, matchGrid, teksCastCost } from "./recipes";
+import { AFFIX_INFO, RARE_MELT, TIERS, cookRate, meltInto, poolGlow, pour, stepHeat, tierIndex, type Pool } from "./foundry";
 import { DISCOVER, MOB_XP, ORE_HEAR, ORE_XP, nextPerk, rankTitle, xpNeed } from "./ranks";
 import { manaMaxFor, skillById, spellsFor } from "./skills";
 import { QUESTS, CHAINS, chainStepOf, questActive, traderOf, tradeLevelFor, TIER_NAMES, TIER_XP, type TraderRole } from "./quests";
@@ -71,7 +72,7 @@ export type Hud = {
   cursor: number;
   panel: "bag" | "bench" | "furnace" | "chest" | "enchant" | "anvil" | "brew" | "trade" | "beacon";
   craftOut: { id: number; n: number } | null;
-  furnace: { in: number; inN: number; fuel: number; fuelN: number; out: number; outN: number; cook: number; burn: number; lvl: number; lvlName: string; cookSecs: number; fuelMul: number; upg: { cost: [number, number][]; ok: boolean; cookSecs: number; fuelMul: number } | null };
+  furnace: { in: number; inN: number; fuel: number; fuelN: number; out: number; outN: number; cook: number; burn: number; lvl: number; lvlName: string; cookSecs: number; fuelMul: number; upg: { cost: [number, number][]; ok: boolean; cookSecs: number; fuelMul: number } | null; heat?: number; purity?: number; tier?: string; tierColor?: string; glow?: string; affix?: string; charges?: number; nextTier?: string };
   chest: { id: number; n: number }[];
   compass: number;
   realm: string;
@@ -767,7 +768,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     // P8: Foundry level (1..3) — cook time / fuel economy from
     // FOUNDRY_LVL. Rides the {...f} save spread; absent = level 1.
     lvl?: number;
-  };
+  } & Pool; // Grok Bot foundry pass: heat / purity / affix ride the save spread
   const furnaces = new Map<string, Furn>();
   const chests = new Map<string, { ids: number[]; ns: number[] }>();
   // Stations (v3.8): state the blocks themselves can't carry — a beacon's
@@ -4278,6 +4279,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         cook: furn.cook / (fl.cook * foundryCookMul()), burn: furn.burn,
         lvl: furn.lvl ?? 1, lvlName: fl.name, cookSecs: Math.round(fl.cook * foundryCookMul() * 10) / 10, fuelMul: fl.fuelMul,
         upg: nxt ? { cost: lvlCostFor(nxt.cost!), ok: lvlAfford(nxt.cost!), cookSecs: Math.round(nxt.cook * foundryCookMul() * 10) / 10, fuelMul: nxt.fuelMul } : null,
+        heat: furn.heat ?? 0, purity: Math.round(furn.purity ?? 0),
+        tier: TIERS[tierIndex(furn.purity ?? 0, furn.lvl ?? 1)].name,
+        tierColor: TIERS[tierIndex(furn.purity ?? 0, furn.lvl ?? 1)].color,
+        glow: poolGlow(furn, furn.lvl ?? 1),
+        affix: furn.affix && (furn.charges ?? 0) > 0 ? AFFIX_INFO[furn.affix].name + " — " + AFFIX_INFO[furn.affix].desc : "",
+        charges: furn.charges ?? 0,
+        nextTier: nxt ? TIERS[Math.min(TIERS.length - 1, tierIndex(100, (furn.lvl ?? 1) + 1))].name : "",
       };
     } else {
       hud.furnace = { in: 0, inN: 0, fuel: 0, fuelN: 0, out: 0, outN: 0, cook: 0, burn: 0, lvl: 1, lvlName: "Foundry", cookSecs: 5, fuelMul: 1, upg: null };
@@ -8326,7 +8334,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
             const belowId = world.get(hx, hy - 1, hz);
             let moved = false;
             if (aboveId === ID.Furnace && (belowId === ID.Chest || belowId === ID.Barrel || belowId === ID.ShulkerBox)) {
-              const f = furnaces.get(hx + ", " + (hy + 1) + ", " + hz);
+              const f = furnaces.get(hx + "," + (hy + 1) + "," + hz); // fix: key had stray spaces, hopper never found the kiln
               if (f && f.out > 0 && f.outN > 0) {
                 const bin = ensureChest(hx + ", " + (hy - 1) + ", " + hz);
                 const slotI = bin.ids.findIndex((id, i) => id === f.out || (bin.ns[i] ?? 0) === 0);
@@ -14622,8 +14630,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     for (const f of furnaces.values()) {
       if (Math.hypot(f.x - player.x, f.z - player.z) > 20) continue;
       if (f.burn > 0) f.burn -= dt;
+      f.heat = stepHeat(f.heat ?? 0, f.burn > 0, f.lvl ?? 1, dt);
       const product = SMELT[f.in];
-      const can = !!product && f.inN > 0 && (f.out === 0 || f.out === product) && f.outN < 64 && product !== f.in;
+      // Foundry pass: an affix may pour tempered ingots, so the output
+      // slot accepts either ingot kind when melting pellets.
+      const poursId = product === ID.PlasticIngot && f.affix === "tempered" && (f.charges ?? 0) > 0 ? ID.TemperedIngot : product;
+      const can = !!product && f.inN > 0 && (f.out === 0 || f.out === poursId) && f.outN < 64 && product !== f.in;
       const flvl = FOUNDRY_LVL[(f.lvl ?? 1) - 1];
       if (f.burn <= 0 && can && f.fuelN > 0 && fuelTime(f.fuel) > 0) {
         f.burn = fuelTime(f.fuel) * (skills.has("kiln") ? 1.6 : 1) * flvl.fuelMul;
@@ -14632,23 +14644,36 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         saveDirty = true;
       }
       if (f.burn > 0 && can) {
-        f.cook += dt;
+        f.cook += dt * cookRate(f);
         if (f.cook >= flvl.cook * foundryCookMul()) {
           f.cook = 0;
           const inId = f.in; // capture BEFORE the decrement zeroes it (the yield keys on the input)
           f.inN -= 1;
           if (f.inN <= 0) f.in = 0;
-          f.out = product;
           // §11 recycling yield; R4 Founder path raises it to ~75%.
           const yieldN = SMELT_N[inId] ?? 1;
-          f.outN += product === ID.Pellets && pathId === "founder" ? Math.ceil(yieldN * 1.5) : yieldN;
+          let distilMul = 1;
+          if (product === ID.Pellets || product === ID.PlasticIngot) meltInto(f, inId, f.lvl ?? 1, { regrind: (TEKS as readonly number[]).includes(inId) });
+          if (RARE_MELT[inId]) {
+            say("Rare melt! " + AFFIX_INFO[RARE_MELT[inId].affix].name + " batch — " + AFFIX_INFO[RARE_MELT[inId].affix].desc + " ×" + f.charges, 2600);
+            audio.rank();
+          }
+          if (product === ID.PlasticIngot) {
+            const p = pour(f, f.lvl ?? 1, yieldN);
+            f.out = p.id;
+            f.outN += p.n;
+            distilMul = p.fuelMul;
+          } else {
+            f.out = product;
+            f.outN += product === ID.Pellets && pathId === "founder" ? Math.ceil(yieldN * 1.5) : yieldN;
+          }
           // P5b (Muse): the Foundry's second yield — smelting pellets
           // (the only road to a PlasticIngot) also distils FUEL at
           // 0.25/pellet (the FUEL numbers in p5bProto.ts), paid out as
           // whole Fuel items beside the kiln. Matter is conserved:
           // pellets → ingot + fuel, nothing from nowhere.
           if (product === ID.PlasticIngot) {
-            f.fuelAcc = (f.fuelAcc ?? 0) + fuelFromMelt(1);
+            f.fuelAcc = (f.fuelAcc ?? 0) + fuelFromMelt(1) * distilMul;
             while (f.fuelAcc >= 1) {
               f.fuelAcc -= 1;
               dropItem(ID.Fuel, 1, f.x + 0.5, f.y + 1.25, f.z + 0.5);

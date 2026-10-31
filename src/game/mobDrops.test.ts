@@ -54,7 +54,10 @@ test("v5 Veilleur-Prisme drops are original and stay craftable", async () => {
   const base = mobBaseDrops("enderman");
   assert.ok(base.includes(ID.VoidGlass) && base.includes(ID.EnderPearl));
   for (const id of [ID.VoidGlass, ID.EnderPearl, ID.VoidCore]) assert.doesNotMatch(def(id).name, /ender|pearl/i);
-  assert.equal(SMELT[ID.VoidGlass], ID.Prism, "void glass is a rare melt input");
+  // integration: the plastic foundry owns rare melts — void glass now melts into the pool (pellets + Swift affix)
+  const { RARE_MELT } = await import("./foundry.ts");
+  assert.ok(RARE_MELT[ID.VoidGlass], "void glass is a rare melt input");
+  assert.equal(SMELT[ID.VoidGlass], ID.Pellets);
   const list = RECIPES;
   assert.ok(list.some((r) => r.out === ID.EnderPearl && r.need.some(([i]) => i === ID.VoidGlass)), "blink lens craftable from drops");
   assert.ok(list.find((r) => r.id === "void-blade")?.need.some(([i]) => i === ID.EnderPearl), "void-blade still uses the lens");
