@@ -24,7 +24,7 @@ import { buildAtlas } from "./textures";
 import { CS, HEIGHT, SEA, World, decorate, folkLayout, inNether, penSheep, paintEndCrystals, END_PILLARS, type Decor, type FolkSpot } from "./world";
 import { DEBRIS_ADVANCED, debrisAt } from "./debris";
 import { stockChest } from "./loot";
-import { findStructure, structureLabel, structureOwning, stockStructureChest, type StructKind } from "./structures";
+import { findStructure, garageOf, structureFolk, structuresNear, structureLabel, structureOwning, stockStructureChest, type StructKind } from "./structures";
 import { mayYield, spillSlots } from "./yields";
 import { Upscaler, upscaleScale } from "./upscale";
 import { BTN, PadEdges, activePad, padBusy, padLabel, rumble, stick } from "./gamepad";
@@ -10774,6 +10774,44 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
   }
 
+  // PR 3: themed-village life (structures.ts) — TEKS dealership display
+  // (real catalogue vehicle + Technic parts on the racks, dressed once
+  // per garage and only into free cells) and the village's traders.
+  const dressedGarages = new Set<string>();
+  function liveStructureVillages() {
+    for (const s of structuresNear(world, player.x, player.z, 1)) {
+      if (s.kind !== "village") continue;
+      if (Math.hypot(s.x + s.w / 2 - player.x, s.z + s.d / 2 - player.z) > 80) continue;
+      const g = garageOf(s, seed);
+      if (!g) continue;
+      const key = s.gx + "," + s.gz;
+      if (!dressedGarages.has(key) && world.get(g.display[0], g.display[1] - 1, g.display[2]) !== ID.Air) {
+        dressedGarages.add(key);
+        const show = builtinModels()[g.model];
+        const A: [number, number, number] = [g.display[0] * 4, g.display[1] * 4 + 5, g.display[2] * 4 + 2];
+        const free = show.parts.every((mp) => tech.test(mp.id, mp.o, [A[0] + mp.dq[0], A[1] + mp.dq[1], A[2] + mp.dq[2]], techSolidAt) >= 0);
+        if (free) for (const mp of show.parts) if (mp.id !== ID.Battery) tech.add(mp.id, mp.o, [A[0] + mp.dq[0], A[1] + mp.dq[1], A[2] + mp.dq[2]]);
+        g.racks.forEach(([x, y, z], i) => {
+          const q: [number, number, number] = [x * 4 + 2, y * 4, z * 4 + 2];
+          if (tech.test(g.rackParts[i], 0, q, techSolidAt) >= 0) tech.add(g.rackParts[i], 0, q);
+        });
+      }
+      const live = mobs.filter((m) => m.kind === "villager" && !m.dead);
+      if (live.length >= 21) continue;
+      for (const spot of structureFolk(s, seed)) {
+        if (live.some((m) => m.homeX !== undefined && m.homeZ !== undefined && Math.hypot(m.homeX - spot.x, m.homeZ - spot.z) < 2)) continue;
+        const mob = spawnKind("villager", spot.x, spot.z);
+        mob.role = spot.role;
+        mob.homeX = spot.x;
+        mob.homeZ = spot.z;
+        mob.roam = true;
+        mob.bodyMat?.color.setHex(traderOf(spot.role as TraderRole).tint);
+        decorateVillagerRole(mob.mesh, spot.role as TraderRole);
+        live.push(mob);
+      }
+    }
+  }
+
   function ensureRoamingFolk() {
     if (flat) return;
     for (let i = mobs.length - 1; i >= 0; i--) {
@@ -10784,6 +10822,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         mobs.splice(i, 1);
       }
     }
+    liveStructureVillages();
     const site = world.nearestHamlet(player.x, player.z, 2);
     if (!site) return;
     if (Math.hypot(site.x + 15 - player.x, site.z + 14 - player.z) > 72) return;

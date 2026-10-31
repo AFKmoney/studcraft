@@ -268,66 +268,127 @@ const LOTS: readonly (readonly [number, number])[] = [
 /** The trader lot (east, on the plaza path): a vehicle workshop. */
 export const GARAGE_LOT = 4;
 
-/** Themed trader garage (extends the hamlet mechanic-hangar rule):
- *  10x10 hall open toward the plaza (vehicles roll in on the path),
- *  workbench corner (furnace, anvil, bench), parts racks of barrels and
- *  crates, a lift with a parked brick buggy, and an outdoor stall. */
+/** Themed TEKS dealership (extends the hamlet mechanic-hangar rule):
+ *  10x10 hall open toward the plaza (vehicles roll in on the path), 6
+ *  high so a Teks vehicle stands on the lift; work corner (furnace,
+ *  anvil, bench), a sales counter where the mechanic trader stands, and
+ *  two-high rack shelves the game dresses with real Technic parts. The
+ *  display vehicle and rack parts are Teks-layer (game-side, see
+ *  garageOf); the voxels here are only the building. */
 function workshop(b: Build, ox: number, oz: number, t: Theme, zone: ZoneId, water: boolean, r: Rnd) {
   const W = 10;
   const D = 10;
-  const wall = t.stone === ID.Moss ? ID.Cobble : t.stone;
+  const H = 6;
+  const wall = t.stone;
   b.box(ox, 0, oz, ox + W - 1, 0, oz + D - 1, water ? t.floor : ID.Cobble);
   if (water) for (const [px, pz] of [[0, 0], [W - 1, 0], [0, D - 1], [W - 1, D - 1], [4, 0], [4, D - 1]] as const) b.put(ox + px, -1, oz + pz, t.post, 2);
-  for (let y = 1; y <= 4; y++) for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
+  for (let y = 1; y <= H; y++) for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
     const edge = x === 0 || z === 0 || x === W - 1 || z === D - 1;
     if (!edge) {
       b.put(ox + x, y, oz + z, ID.Air);
       continue;
     }
-    // west face = vehicle door, 4 wide and 3 tall, toward the plaza
-    if (x === 0 && z >= 3 && z <= 6 && y <= 3) {
+    // west face = vehicle door, 4 wide and 4 tall, toward the plaza
+    if (x === 0 && z >= 3 && z <= 6 && y <= 4) {
       b.put(ox + x, y, oz + z, ID.Air);
       continue;
     }
     const corner = (x === 0 || x === W - 1) && (z === 0 || z === D - 1);
-    b.put(ox + x, y, oz + z, corner ? t.trim : y === 3 && !corner && x > 0 && x % 3 === 1 ? (t.glass === ID.Air ? ID.Glass : t.glass) : wall);
+    b.put(ox + x, y, oz + z, corner ? t.trim : y === 4 && x > 0 && x % 3 === 1 ? (t.glass === ID.Air ? ID.Glass : t.glass) : wall);
   }
-  b.box(ox - 1, 5, oz - 1, ox + W, 5, oz + D, t.roof);
-  b.put(ox, 4, oz + 2, t.light === ID.Torch ? ID.Lantern : t.light);
-  b.put(ox, 4, oz + 7, t.light === ID.Torch ? ID.Lantern : t.light);
+  // door lintel sign band in the theme accent
+  for (let z = 2; z <= 7; z++) b.put(ox, 5, oz + z, t.accent);
+  b.box(ox - 1, H + 1, oz - 1, ox + W, H + 1, oz + D, t.roof);
+  b.put(ox, 6, oz + 2, t.light === ID.Torch ? ID.Lantern : t.light);
+  b.put(ox, 6, oz + 7, t.light === ID.Torch ? ID.Lantern : t.light);
+  b.put(ox + 5, 6, oz + 5, ID.Lantern);
   // work corner (back wall)
   b.put(ox + 8, 1, oz + 1, ID.Furnace);
   b.put(ox + 8, 1, oz + 2, ID.Anvil);
   b.put(ox + 8, 1, oz + 3, ID.Bench);
   b.put(ox + 8, 1, oz + 8, ID.Chest);
-  b.put(ox + 7, 4, oz + 5, ID.Lantern);
-  // parts racks: barrels and iron shelves along the side walls
+  // sales counter (the mechanic stands behind it, at x 8)
+  for (let z = 4; z <= 7; z++) b.put(ox + 7, 1, oz + z, z === 5 ? t.accent : t.floor === ID.Sand ? ID.Planks : t.floor);
+  // Technic rack shelves: two-high iron/barrel stacks, parts go on top (y 3)
   for (let x = 2; x <= 6; x++) {
     b.put(ox + x, 1, oz + 1, x % 2 ? ID.Barrel : ID.IronBlock);
-    if (r(400 + x) > 0.4) b.put(ox + x, 2, oz + 1, x % 2 ? ID.IronBlock : ID.Barrel);
+    b.put(ox + x, 2, oz + 1, ID.IronBlock);
     b.put(ox + x, 1, oz + 8, r(410 + x) > 0.5 ? ID.Barrel : ID.Coal);
   }
-  // lift: two iron posts and a raised deck holding a brick buggy
-  for (const z of [3, 6]) {
-    b.put(ox + 3, 1, oz + z, ID.IronBlock);
-    b.put(ox + 6, 1, oz + z, ID.IronBlock);
+  // lift: four iron posts flanking the display bay
+  for (const z of [2, 7]) {
+    b.put(ox + 1, 1, oz + z, ID.IronBlock);
+    b.put(ox + 5, 1, oz + z, ID.IronBlock);
   }
-  b.box(ox + 3, 2, oz + 4, ox + 6, 2, oz + 5, ID.IronBlock);
-  const paint = [ID.Red, ID.Yellow, ID.Blue, t.accent][Math.floor(r(420) * 4)];
-  for (const [wx, wz] of [[3, 3], [6, 3], [3, 6], [6, 6]] as const) b.put(ox + wx, 2, oz + wz, ID.Black);
-  b.box(ox + 3, 3, oz + 4, ox + 6, 3, oz + 5, paint);
-  b.put(ox + 4, 4, oz + 4, ID.Glass);
-  b.put(ox + 4, 4, oz + 5, ID.Glass);
   // outdoor stall on the plaza side, themed awning
   b.put(ox - 3, 1, oz + 9, t.post);
   b.put(ox - 3, 2, oz + 9, t.post);
   b.put(ox - 1, 1, oz + 9, ID.Barrel);
   b.put(ox - 2, 1, oz + 9, ID.Chest);
   b.box(ox - 3, 3, oz + 8, ox - 1, 3, oz + 9, zone === "arctic" ? ID.White : t.accent);
-  // a broken-down second vehicle on the apron, stripped for parts
-  b.put(ox - 2, 1, oz - 1, ID.Black);
-  b.put(ox - 3, 1, oz - 1, paint);
-  b.put(ox - 3, 2, oz - 1, paint);
+}
+
+/** Folk of a themed village: the mechanic at the TEKS counter plus a
+ *  seed-picked set of traders standing at the house doors / plaza. */
+const VILLAGE_ROLES = ["grocer", "smith", "mason", "herder", "clerk", "mage", "ranger"] as const;
+export function structureFolk(s: Structure, seed: number): { x: number; z: number; role: string }[] {
+  const g = garageOf(s, seed);
+  if (!g) return [];
+  const out: { x: number; z: number; role: string }[] = [{ x: g.counter.x, z: g.counter.z, role: "mechanic" }];
+  const mid = s.w / 2;
+  const spots: [number, number][] = [[mid - 4, mid - 4], [mid + 3, mid - 4], [mid - 4, mid + 3], [mid + 5, mid + 5]];
+  spots.forEach(([dx, dz], i) => {
+    const role = VILLAGE_ROLES[Math.floor(hash2(s.gx * 5 + i, s.gz * 3 - i, seed + 0x401c) * VILLAGE_ROLES.length) % VILLAGE_ROLES.length];
+    out.push({ x: s.x + dx + 0.5, z: s.z + dz + 0.5, role });
+  });
+  return out;
+}
+
+/** Garage origin (relative to the structure) for village kinds. */
+function garageOrigin(s: Structure): [number, number] | null {
+  if (s.kind !== "village") return null;
+  if (s.zone === "desertCity") return [36, 18];
+  const [lx, lz] = LOTS[GARAGE_LOT];
+  return [lx, lz - 1];
+}
+
+export type Garage = {
+  /** Block cell the display vehicle stands on (first air layer). */
+  display: [number, number, number];
+  /** Where the mechanic trader stands, behind the counter. */
+  counter: { x: number; z: number };
+  /** Rack tops (first air cell) for Technic part displays. */
+  racks: [number, number, number][];
+  /** Teks part ids shown on the racks, in rack order. */
+  rackParts: number[];
+  /** Index into builtinModels() of the display vehicle. */
+  model: number;
+};
+
+/** Technic stock shown on the racks, by biome flavour. */
+const RACK_STOCK: readonly number[] = [ID.Liftarm3, ID.Liftarm5, ID.Liftarm7, ID.Axle4, ID.Axle6, ID.Gear8, ID.Gear16, ID.Gear24, ID.Gear40, ID.Bevel12, ID.Pin2L, ID.Wheel];
+
+export function garageOf(s: Structure, seed: number): Garage | null {
+  const o = garageOrigin(s);
+  if (!o) return null;
+  const [ox, oz] = o;
+  const X = s.x + ox;
+  const Z = s.z + oz;
+  const h = hash2(s.gx, s.gz, seed + 0x6a7a);
+  const racks: [number, number, number][] = [];
+  const rackParts: number[] = [];
+  for (let x = 2; x <= 6; x++) {
+    racks.push([X + x, s.y + 3, Z + 1]);
+    rackParts.push(RACK_STOCK[Math.floor(hash2(s.gx * 7 + x, s.gz, seed + 0x6a7b) * RACK_STOCK.length) % RACK_STOCK.length]);
+  }
+  return {
+    display: [X + 3, s.y + 1, Z + 4],
+    counter: { x: X + 8.5, z: Z + 5.5 },
+    racks,
+    rackParts,
+    // the Rig Digger is 13 blocks long: only the Starter Buggy fits the bay
+    model: h < 2 ? 0 : 0,
+  };
 }
 
 function village(t: Theme, zone: ZoneId, r: Rnd): SBrick[] {
@@ -419,7 +480,7 @@ function desertCity(t: Theme, r: Rnd): SBrick[] {
     k++;
     if (ox === 17 && oz === 17) palace(b, ox, oz, t);
     else if (k === 3 + Math.floor(r(40) * 2) * 4) market(b, ox, oz, r);
-    else if (k === 6) workshop(b, ox + 3, oz + 1, t, "desertCity", false, r);
+    else if (k === 6) workshop(b, ox + 3, oz + 1, t, "desertCity", false, r); // origin 36,18: see garageOrigin
     else building(b, ox, oz, t, (s) => r(500 + k * 13 + s));
   }
   return b.out;

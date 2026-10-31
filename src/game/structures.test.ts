@@ -139,6 +139,38 @@ test("every village and the desert city has a trader garage: workbench, racks, l
     const size = S.structSize("village", zone);
     const bricks = S.structureBricks({ x: 0, z: 0, y: 40, w: size, d: size, kind: "village", zone, gx: 0, gz: 0 }, SEED);
     const has = (id: number) => bricks.some((b) => b.id === id);
-    for (const id of [ID.Anvil, ID.Furnace, ID.Bench, ID.Barrel, ID.IronBlock, ID.Black]) assert.ok(has(id), zone + " garage misses " + id);
+    for (const id of [ID.Anvil, ID.Furnace, ID.Bench, ID.Barrel, ID.IronBlock]) assert.ok(has(id), zone + " garage misses " + id);
   }
+});
+
+test("TEKS dealership: display bay, counter and racks are clear air inside the garage", () => {
+  for (const zone of ZONE_IDS) {
+    const size = S.structSize("village", zone);
+    const s = { x: 500, z: -300, y: 40, w: size, d: size, kind: "village" as const, zone, gx: 3, gz: -2 };
+    const g = S.garageOf(s, SEED);
+    assert.ok(g, zone);
+    const cells = new Map<string, number>();
+    for (const b of S.structureBricks(s, SEED)) if (b.mode === 0) cells.set(`${s.x + b.dx},${s.y + b.dy},${s.z + b.dz}`, b.id);
+    const at = (x: number, y: number, z: number) => cells.get(`${Math.floor(x)},${y},${Math.floor(z)}`);
+    assert.equal(at(g.display[0], g.display[1], g.display[2]), ID.Air, zone + " bay");
+    assert.equal(at(g.counter.x, s.y + 1, g.counter.z), ID.Air, zone + " counter spot");
+    assert.notEqual(at(g.counter.x - 1, s.y + 1, g.counter.z), ID.Air, zone + " counter");
+    for (const [x, y, z] of g.racks) {
+      assert.equal(at(x, y - 1, z), ID.IronBlock, zone + " shelf");
+      assert.equal(at(x, y, z), ID.Air, zone + " shelf top");
+    }
+    assert.ok(g.rackParts.every((id) => id > 255), "racks show Teks parts");
+    assert.deepEqual(S.garageOf(s, SEED), g, "deterministic");
+  }
+  assert.equal(S.garageOf({ x: 0, z: 0, y: 30, w: 11, d: 11, kind: "shrine", zone: "plains", gx: 0, gz: 0 }, SEED), null);
+});
+
+test("themed villages get folk: the mechanic stands at the TEKS counter", () => {
+  const s = { x: 500, z: -300, y: 40, w: 34, d: 34, kind: "village" as const, zone: "jungle" as const, gx: 3, gz: -2 };
+  const folk = S.structureFolk(s, SEED);
+  const g = S.garageOf(s, SEED)!;
+  assert.ok(folk.length >= 4);
+  assert.deepEqual(folk[0], { x: g.counter.x, z: g.counter.z, role: "mechanic" });
+  for (const f of folk) assert.ok(f.x >= s.x && f.x <= s.x + s.w && f.z >= s.z && f.z <= s.z + s.d);
+  assert.deepEqual(S.structureFolk(s, SEED), folk);
 });
