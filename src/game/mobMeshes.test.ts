@@ -52,3 +52,18 @@ test("v2 hero mobs are built from bevelled/curved parts, not minifig boxes", asy
   }
   assert.equal(buildStuds("walker", 1).legs.length, 4, "walker keeps legL, legR, armR, armL");
 });
+
+test("villager and trader arms stay separate swinging pivots, clear of the torso", async () => {
+  const { decorateVillagerRole } = await import("./game.ts");
+  for (const role of [undefined, "grocer", "smith", "mason", "herder", "clerk", "mage", "ranger", "mechanic"]) {
+    const body = buildStuds("villager" as never, 1);
+    decorateVillagerRole(body.group, role as never);
+    const arms = body.group.children.filter((c) => c.userData.arm);
+    assert.equal(arms.length, 2, `${role}: two arm pivots`);
+    assert.ok(body.legs.includes(arms[0]) && body.legs.includes(arms[1]), `${role}: arms driven by the animator`);
+    for (const a of arms) {
+      assert.ok(a.children.length > 0, `${role}: arm has its own meshes`);
+      assert.ok(Math.abs(a.position.x) / a.scale.x > 0.22, `${role}: shoulder offset leaves a gap`);
+    }
+  }
+});

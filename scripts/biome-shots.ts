@@ -61,14 +61,19 @@ if (q.get("species")) {
   for (const role of [undefined, "grocer", "smith", "mason", "herder", "clerk", "mage", "ranger", "mechanic"] as const) {
     const g = buildStuds("villager", 1).group;
     decorateVillagerRole(g, role);
-    g.position.x = x;
-    x += 1.0;
+    const i = Math.round(x);
+    g.position.set((i % 5) * 0.95, 0, Math.floor(i / 5) * 1.3);
+    x += 1;
+    if (q.get("swing")) for (const c of g.children) if (c.userData.arm) c.rotation.x = c.userData.arm * 0.7; // animator pose: arms swing
     root.add(g);
   }
-  root.position.x = -x / 2 + 0.5;
+  root.position.x = -1.9;
   title = "Villageois + marchands";
 } else {
-  one(buildStuds(q.get("kind") ?? "creeper", 1).group);
+  const kg = buildStuds(q.get("kind") ?? "creeper", 1).group;
+  if (q.get("role")) decorateVillagerRole(kg, q.get("role") as Parameters<typeof decorateVillagerRole>[1]);
+  if (q.get("swing")) for (const c of kg.children) if (c.userData.arm) c.rotation.x = c.userData.arm * 0.7; // walk-cycle arm swing
+  one(kg);
   title = displayName({ kind: q.get("kind") ?? "creeper" });
 }
 root.updateMatrixWorld(true);

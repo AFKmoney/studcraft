@@ -17792,6 +17792,8 @@ type StudsBody = { group: THREE.Group; legs: THREE.Object3D[]; bodyMat: THREE.Me
 function makeFig(shirt: number, pants: number, hairCol: number, face: FigFace, headCol = 0xf3d37a): StudsBody {
   const g = new THREE.Group();
   const shirtM = skin(shirt);
+  // v3.1: sleeves a shade darker than the torso so the arms read as separate parts
+  const sleeveM = skin(new THREE.Color(shirt).multiplyScalar(0.78).getHex());
   const pantsM = skin(pants);
   const headM = skin(headCol);
   const hairM = skin(hairCol);
@@ -17837,17 +17839,21 @@ function makeFig(shirt: number, pants: number, hairCol: number, face: FigFace, h
   put(g, geoCyl(0.092, 0.07, 12), headM, 0, 0.96, 0, 0, true); // Neck post
   put(g, geoCyl(0.105, 0.018, 12), black, 0, 0.945, 0, 0, true); // Crisp neck collar shadow ring
 
-  // 4. Curved Cylindrical Arms with Shoulder Sockets tucked flush into Torso (Zero Gap)
+  // 4. Arms v3.1 (Philippe: "les bras fusionnés au corps"): each arm is its own pivot group,
+  // hung 4 cm clear of the tapered torso, on a dark ball-joint shoulder that reads as a separate
+  // part and swings with the animator (legs[2]/[3]); v3Optimize only merges inside the pivot.
   const makeFigureArm = (side: -1 | 1) => {
     const pivot = new THREE.Group();
-    pivot.position.set(side * 0.195, 0.88, 0);
+    pivot.position.set(side * 0.235, 0.88, 0);
     pivot.rotation.z = -side * 0.11; // Slight outward flare matching tapered torso
-    // Rounded shoulder ball tucked into torso cavity
-    const sh = put(pivot, geoCyl(0.056, 0.09, 10), shirtM, 0, -0.02, 0, 0, true);
+    pivot.userData.arm = side;
+    put(pivot, geoBall(0.05, 10), black, -side * 0.03, -0.01, 0, 0, true); // shoulder ball-joint
+    const sh = put(pivot, geoCyl(0.058, 0.07, 10), sleeveM, side * 0.025, -0.03, 0, 0, true); // shoulder cap
     sh.rotation.z = Math.PI / 2;
+    put(pivot, geoCyl(0.055, 0.02, 10), black, side * 0.04, -0.2, 0.0, 0.04, true); // elbow seam
     // Upper & forearm angled segments
-    put(pivot, geoCyl(0.052, 0.18, 10, 0.056), shirtM, side * 0.035, -0.11, 0.01, -0.10);
-    put(pivot, geoCyl(0.048, 0.16, 10, 0.052), shirtM, side * 0.042, -0.25, -0.015, 0.18);
+    put(pivot, geoCyl(0.052, 0.18, 10, 0.056), sleeveM, side * 0.035, -0.11, 0.01, -0.10);
+    put(pivot, geoCyl(0.048, 0.16, 10, 0.052), sleeveM, side * 0.042, -0.25, -0.015, 0.18);
     // Wrist pin
     put(pivot, geoCyl(0.034, 0.055, 8), headM, side * 0.042, -0.34, -0.035, 0.22, true);
     // Open 270° C-Clamp STUDS Hand oriented to grip forward
@@ -18894,52 +18900,57 @@ export function decorateVillagerRole(group: THREE.Group, role?: TraderRole) {
   const strap = put(kit, geoRBox(0.04, 0.5, 0.25, 0.01), leather, 0, 0.72, 0, 0, true);
   strap.rotation.z = 0.7;
   strap.scale.z = 1.02;
-  put(kit, geoRBox(0.13, 0.12, 0.07, 0.025), leather, -0.22, 0.52, 0.02, 0, true); // satchel
-  put(kit, geoRBox(0.13, 0.04, 0.075, 0.012), darkM, -0.22, 0.575, 0.02, 0, true);
-  put(kit, geoCyl(0.012, 0.01, 8), goldM, -0.22, 0.55, -0.02, Math.PI / 2, true);
-  const hand = (x: number) => [x, 0.5, -0.16] as const;
+  // satchel rides on the back hip so the arm stays free
+  put(kit, geoRBox(0.15, 0.12, 0.07, 0.025), leather, -0.08, 0.56, 0.15, 0, true);
+  put(kit, geoRBox(0.15, 0.04, 0.075, 0.012), darkM, -0.08, 0.615, 0.15, 0, true);
+  put(kit, geoCyl(0.012, 0.01, 8), goldM, -0.08, 0.59, 0.19, Math.PI / 2, true);
+  // tools are held in the right claw: parented to the arm pivot so they swing with the arm
+  const armR = group.children.find((c) => c.userData.arm === 1) ?? kit;
+  const armL = group.children.find((c) => c.userData.arm === -1) ?? kit;
+  const H = armR === kit ? [0.28, 0.5, -0.16] : [0.042, -0.4, -0.07];
+  const hand = (_x: number) => [H[0], H[1], H[2]] as const;
   if (role === "grocer") {
     put(head, geoLathe("hat-straw", [[0, 0.1], [0.12, 0.1], [0.15, 0.03], [0.28, 0.01], [0.28, 0]], 18), sheen(0xe8c455), 0, 0.26, 0, 0, true);
     put(head, geoTorus(0.15, 0.015, 16), sheen(0xc83228), 0, 0.29, 0, Math.PI / 2, true);
     const [x, y, z] = hand(0.28);
-    put(kit, geoRBox(0.2, 0.1, 0.14, 0.02), woodM, x, y - 0.04, z, 0, true); // produce crate
-    for (const k of [-0.05, 0, 0.05]) put(kit, geoBall(0.035, 8), sheen(k ? 0xd8322a : 0xf09030), x + k, y + 0.03, z, 0, true);
+    put(armR, geoRBox(0.2, 0.1, 0.14, 0.02), woodM, x, y - 0.04, z, 0, true); // produce crate
+    for (const k of [-0.05, 0, 0.05]) put(armR, geoBall(0.035, 8), sheen(k ? 0xd8322a : 0xf09030), x + k, y + 0.03, z, 0, true);
   } else if (role === "smith") {
     put(head, geoLathe("hat-smith", [[0, 0.12], [0.15, 0.11], [0.16, 0]], 16), sheen(0x3a3e46), 0, 0.24, 0, 0, true);
     put(head, geoRBox(0.24, 0.05, 0.05, 0.01), ironM, 0, 0.27, -0.14, 0, true);
     const [x, y, z] = hand(0.28);
-    put(kit, geoCyl(0.018, 0.3, 8), woodM, x, y + 0.04, z, 0.4, true);
-    put(kit, geoRBox(0.1, 0.06, 0.15, 0.015), ironM, x, y + 0.16, z - 0.06, 0, true); // hammer head
-    put(kit, geoRBox(0.5, 0.12, 0.28, 0.03), sheen(0x3b2618), 0, 0.89, 0.01, 0, true); // leather shoulder guard
+    put(armR, geoCyl(0.018, 0.3, 8), woodM, x, y + 0.04, z, 0.4, true);
+    put(armR, geoRBox(0.1, 0.06, 0.15, 0.015), ironM, x, y + 0.16, z - 0.06, 0, true); // hammer head
+    put(kit, geoRBox(0.34, 0.1, 0.26, 0.03), sheen(0x3b2618), 0, 0.89, 0.01, 0, true); // leather yoke (arms stay free)
   } else if (role === "mason") {
     put(head, geoDome(0.17, 16), sheen(0xe23b2f), 0, 0.25, 0, 0, true);
     put(head, geoRBox(0.24, 0.025, 0.12, 0.01), sheen(0xe23b2f), 0, 0.255, -0.14, 0, true);
     const [x, y, z] = hand(0.28);
-    put(kit, geoRBox(0.03, 0.03, 0.12, 0.01), woodM, x, y, z, 0, true);
-    put(kit, geoPlate("trowel", [[-0.05, 0], [0.05, 0], [0, 0.12]], 0.012), ironM, x, y, z - 0.06, -Math.PI / 2, true);
-    put(kit, geoRBox(0.16, 0.08, 0.08, 0.01), sheen(0xb8483a), -0.28, 0.48, -0.12, 0, true); // brick
+    put(armR, geoRBox(0.03, 0.03, 0.12, 0.01), woodM, x, y, z, 0, true);
+    put(armR, geoPlate("trowel", [[-0.05, 0], [0.05, 0], [0, 0.12]], 0.012), ironM, x, y, z - 0.06, -Math.PI / 2, true);
+    put(armL, geoRBox(0.16, 0.08, 0.08, 0.01), sheen(0xb8483a), -H[0], H[1], H[2], 0, true); // brick
   } else if (role === "herder") {
     put(head, geoLathe("hat-ranch", [[0, 0.13], [0.11, 0.13], [0.13, 0.03], [0.27, 0.02], [0.29, 0.05], [0.29, 0.03]], 18), sheen(0x6b3e22), 0, 0.25, 0, 0, true);
-    put(kit, geoRBox(0.48, 0.12, 0.28, 0.05), sheen(0xf4f1ea), 0, 0.89, 0, 0, true); // wool mantle
-    put(kit, geoCyl(0.02, 0.9, 8), woodM, 0.29, 0.56, -0.12, 0.08, true);
-    put(kit, geoTorus(0.06, 0.016, 12), woodM, 0.29, 1.03, -0.08, 0, true); // crook
+    put(kit, geoRBox(0.34, 0.1, 0.26, 0.04), sheen(0xf4f1ea), 0, 0.89, 0, 0, true); // wool yoke
+    put(armR, geoCyl(0.02, 0.9, 8), woodM, H[0], H[1] + 0.06, H[2], 0, true);
+    put(armR, geoTorus(0.06, 0.016, 12), woodM, H[0], H[1] + 0.53, H[2] + 0.04, 0, true); // crook
   } else if (role === "clerk") {
     for (const sx of [-0.06, 0.06]) put(head, geoTorus(0.03, 0.007, 14), goldM, sx, 0.155, -0.142, 0, true);
     put(head, geoRBox(0.04, 0.008, 0.008, 0.002), goldM, 0, 0.155, -0.142, 0, true);
     put(head, geoLathe("hat-clerk", [[0, 0.1], [0.14, 0.1], [0.15, 0.01], [0.18, 0]], 16), sheen(0x1f4e9e), 0, 0.26, 0, 0, true);
-    put(kit, geoRBox(0.04, 0.16, 0.12, 0.01), sheen(0xb82820), -0.27, 0.6, -0.1, 0, true); // ledger
-    put(kit, geoCyl(0.006, 0.14, 6), skin(0xf4f1ea), 0.27, 0.52, -0.16, 0.5, true); // quill
+    put(armL, geoRBox(0.12, 0.16, 0.04, 0.01), sheen(0xb82820), -H[0], H[1] + 0.05, H[2], 0, true); // ledger
+    put(armR, geoCyl(0.006, 0.14, 6), skin(0xf4f1ea), H[0], H[1] + 0.03, H[2], 0.5, true); // quill
   } else if (role === "mage") {
     put(head, geoLathe("hat-mage", [[0, 0.52], [0.04, 0.4], [0.1, 0.2], [0.15, 0.05], [0.26, 0.01], [0.26, 0]], 18), sheen(0x5e2ca5), 0, 0.25, 0, 0, true);
     put(head, geoTorus(0.15, 0.014, 16), goldM, 0, 0.31, 0, Math.PI / 2, true);
-    put(kit, geoRBox(0.42, 0.56, 0.03, 0.01), sheen(0x3a1468), 0, 0.66, 0.135, 0, true); // cape
-    put(kit, geoCyl(0.02, 0.9, 8), woodM, 0.29, 0.56, -0.13, 0.12, true);
-    put(kit, geoOcta(0.05, 1.6), transTile(0x64f5e8, 0x24b8a8), 0.29, 1.04, -0.18, 0, true);
+    put(kit, geoRBox(0.32, 0.56, 0.03, 0.01), sheen(0x3a1468), 0, 0.66, 0.135, 0, true); // cape
+    put(armR, geoCyl(0.02, 0.9, 8), woodM, H[0], H[1] + 0.06, H[2], 0, true);
+    put(armR, geoOcta(0.05, 1.6), transTile(0x64f5e8, 0x24b8a8), H[0], H[1] + 0.55, H[2], 0, true);
   } else if (role === "ranger") {
     put(head, geoDome(0.16, 14), sheen(0x1d5526), 0, 0.24, 0.02, 0, true).scale.set(1.05, 0.9, 1.1);
     put(head, geoPlate("feather", [[0, 0], [0.025, 0.16], [-0.01, 0.15]], 0.01), sheen(0xe23b2f), 0.13, 0.3, 0.0, 0, true).rotation.set(0, 0, -0.3);
     put(kit, geoCyl(0.055, 0.32, 10), leather, 0.09, 0.78, 0.15, 0.2, true); // quiver
-    put(kit, geoTube("bow", [[0.3, 0.34, -0.14], [0.33, 0.52, -0.2], [0.3, 0.7, -0.14]], 0.012), woodM, 0, 0, 0, 0, true);
+    put(armL, geoTube("bow2", [[0, -0.2, 0], [0.03, 0, -0.06], [0, 0.2, 0]], 0.012), woodM, -H[0], H[1], H[2], 0, true);
   } else {
     // mechanic: goggles strapped on a cap, wrench, tool belt — the gearhead trader
     put(head, geoLathe("cap-mech", [[0, 0.08], [0.14, 0.07], [0.145, 0]], 16), sheen(0x4a4f58), 0, 0.25, 0.01, 0, true);
@@ -18948,11 +18959,11 @@ export function decorateVillagerRole(group: THREE.Group, role?: TraderRole) {
       put(head, geoCyl(0.04, 0.03, 14), sheen(0x6b4426), sx, 0.27, -0.12, Math.PI / 2 - 0.4, true);
       put(head, geoCyl(0.03, 0.035, 14), transTile(0x7ad8ff, 0x1a6a9a), sx, 0.27, -0.135, Math.PI / 2 - 0.4, true);
     }
-    put(kit, geoRBox(0.44, 0.07, 0.26, 0.02), leather, 0, 0.54, 0, 0, true); // tool belt
+    put(kit, geoRBox(0.4, 0.07, 0.26, 0.02), leather, 0, 0.54, 0, 0, true); // tool belt
     for (const sx of [-0.12, 0.12]) put(kit, geoRBox(0.05, 0.08, 0.04, 0.01), ironM, sx, 0.5, -0.14, 0, true);
     const [x, y, z] = hand(0.28);
-    put(kit, geoRBox(0.025, 0.22, 0.02, 0.008), ironM, x, y + 0.04, z, 0.4, true);
-    put(kit, geoTorus(0.03, 0.01, 10), ironM, x, y + 0.16, z - 0.05, 0.4, true);
+    put(armR, geoRBox(0.025, 0.22, 0.02, 0.008), ironM, x, y + 0.04, z, 0.4, true);
+    put(armR, geoTorus(0.03, 0.01, 10), ironM, x, y + 0.16, z - 0.05, 0.4, true);
     const gr = gear(kit, goldM, ironM, 0.04, 0.02, 8);
     gr.position.set(-0.22, 0.52, 0.06);
   }
@@ -19226,7 +19237,7 @@ function makeVillager(): StudsBody {
   put(g, geoRBox(0.34, 0.3, 0.03, 0.01), work, 0, 0.69, -0.12, 0, true); // overall bib
   for (const sx of [-0.1, 0.1]) put(g, geoRBox(0.04, 0.24, 0.02, 0.008), work, sx, 0.85, -0.12, 0, true); // straps
   for (const sx of [-0.1, 0.1]) put(g, geoCyl(0.014, 0.01, 10), skin(0xc8a040), sx, 0.82, -0.137, Math.PI / 2, true); // buttons
-  put(g, geoRBox(0.42, 0.05, 0.25, 0.015), skin(0x3a2616), 0, 0.53, 0, 0, true); // belt
+  put(g, geoRBox(0.4, 0.05, 0.25, 0.015), skin(0x3a2616), 0, 0.53, 0, 0, true); // belt (inside the arm gap)
   put(g, geoRBox(0.09, 0.09, 0.06, 0.02), skin(0x6b4426), 0.16, 0.5, -0.13, 0, true); // pouch
   put(g, geoTorus(0.12, 0.025, 18), sheen(0x6b4426), 0, 0.945, 0, Math.PI / 2, true); // collar
   v3Finish(built);

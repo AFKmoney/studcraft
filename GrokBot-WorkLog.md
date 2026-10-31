@@ -52,3 +52,9 @@ Journal de travail de studs game tester (Grok Bot) sur StudCraft. Heures en heur
 - **Tests** : tsc OK, 130/130 tests, build OK. Pattes et userData identiques à la v2 pour les 42 types.
 - **Limites** : cheval, chèvre, loup, renard, chat, squelettes, illageois, piglin, sorcière, etc. ne reçoivent qu'une passe de finition (arêtes arrondies, matériau à reflet, fusion), sans refonte. Pour les petits animaux, les triangles augmentent (arrondis) mais les draw calls baissent. Pas de bloom. Les refs/*.jpg restent dans l'historique (e5e7e7c), sans force-push.
 - Visuels : `shots-v3/` (before/, after/, montage-*.png, ref-vs-dragon.png, ref-vs-demoule.png, stats.md).
+
+## v3.1 — bras séparés (31 oct. 2026, 12h12 PDT)
+- Retour de Philippe : les bras des villageois étaient fusionnés au corps. `makeFig` : chaque bras est un pivot distinct, écarté de 4 cm du torse (épaule à ±0,235), avec une rotule d'épaule sombre, une couture au coude et des manches un ton plus foncé. Le correctif touche toutes les figurines humanoïdes : villageois, squelettes, piglin, sorcière, illageois.
+- Marchands : la sacoche passe sur la hanche arrière. Empiècements, cape et ceinture sont rétrécis pour ne plus couvrir les bras. Les outils (houlette, bâton, marteau, clé, truelle, arc, registre, cagette) sont tenus dans la pince et suivent donc le balancement.
+- Nouveau test : 2 pivots de bras par villageois et marchand, pilotés par l'animateur (legs[2]/[3]), avec un écart à l'épaule. 131/131 tests, tsc et build OK.
+- Montage : `shots-v3/montage-pnj-bras.png` (avant, après au repos, après bras balancés).
