@@ -2526,6 +2526,40 @@ function StationScreen({ game }: { game: GameApi }) {
                     </li>
                   ))}
                 </ul>
+                {hud.trader === "Mechanic" && hud.prefabs.length > 0 && (
+                  <>
+                    <p className="sc-label">Vehicles — drive away today</p>
+                    <ul className="sc-offers">
+                      {hud.prefabs.map((p) => (
+                        <li key={p.name}>
+                          <button className="sc-offer" disabled={!p.afford} onClick={() => game.buyPrefab(p.name)}>
+                            <span className="sc-offer-side">
+                              <span className="sc-offer-ic">
+                                <ItemIcon id={ID.PlasticIngot} />
+                              </span>
+                              <b>×{p.ingots}</b>
+                            </span>
+                            {p.copper > 0 && (
+                              <span className="sc-offer-side">
+                                <span className="sc-offer-ic">
+                                  <ItemIcon id={ID.Copper} />
+                                </span>
+                                <b>×{p.copper}</b>
+                              </span>
+                            )}
+                            <span className="sc-arrow">→</span>
+                            <span className="sc-offer-text">
+                              <strong>{p.name}</strong>
+                              <small>
+                                {p.parts} parts · delivered in front of you{p.afford ? "" : " · not enough matter"}
+                              </small>
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
                 <p className="sc-hint">Stock restocks every morning and afternoon. Trading builds your name here.</p>
                 {hud.trader === "Clerk" && <QuestList hud={hud} onClaim={(id) => game.claim(id)} />}
               </div>

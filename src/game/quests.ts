@@ -10,7 +10,7 @@ export function tradeLevelFor(xp: number): number {
   return xp >= TIER_XP[2] ? 3 : xp >= TIER_XP[1] ? 2 : 1;
 }
 
-export type TraderRole = "grocer" | "smith" | "mason" | "herder" | "clerk" | "mage" | "ranger";
+export type TraderRole = "grocer" | "smith" | "mason" | "herder" | "clerk" | "mage" | "ranger" | "mechanic";
 
 export const TRADERS: Record<TraderRole, { name: string; blurb: string; offers: Offer[]; tint: number }> = {
   grocer: {
@@ -120,6 +120,19 @@ export const TRADERS: Record<TraderRole, { name: string; blurb: string; offers: 
       { pay: ID.String, pn: 6, out: ID.Emerald, on: 2, tier: 2 },
       { pay: ID.Emerald, pn: 20, out: ID.Elytra, on: 1, tier: 3 },
       { pay: ID.Feather, pn: 10, out: ID.Emerald, on: 3, tier: 3 },
+    ],
+  },
+  mechanic: {
+    name: "Mechanic",
+    blurb: "Teks parts, cast true. Whole vehicles off the stand — pay the matter it is made of, drive away.",
+    tint: 0x71808f,
+    offers: [
+      { pay: ID.Copper, pn: 8, out: ID.Emerald, on: 1 },
+      { pay: ID.Emerald, pn: 3, out: ID.Wheel, on: 1 },
+      { pay: ID.Emerald, pn: 2, out: ID.Axle2, on: 2 },
+      { pay: ID.Emerald, pn: 6, out: ID.Battery, on: 1, tier: 2 },
+      { pay: ID.Emerald, pn: 8, out: ID.MotorM, on: 1, tier: 2 },
+      { pay: ID.Emerald, pn: 10, out: ID.TechHub, on: 1, tier: 3 },
     ],
   },
 };

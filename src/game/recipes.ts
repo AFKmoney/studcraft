@@ -1585,6 +1585,19 @@ export const RECIPES: Recipe[] = [
 // Electric parts also take Copper — the conductor; plastic alone makes
 // no motor. Cast from the Crafting book (Teks tab) with ingots the
 // Kiln smelted from pellets.
+/** The Survival casting cost of one Teks part (plastic ingots +
+ *  copper for electrics) — single source of truth: the generated
+ *  casting recipes below AND the mechanic vendor's prefab prices
+ *  (section 22 P-C) both price from here. */
+export function teksCastCost(id: number): { ingots: number; copper: number } {
+  const s = SPECS.get(id);
+  if (!s) return { ingots: 1, copper: 0 };
+  return {
+    ingots: Math.max(1, Math.min(24, Math.round(specVolumeBlocks(s) * 2))),
+    copper: s.drive === "motor" ? 2 : s.drive === "power" ? 4 : 0,
+  };
+}
+
 function specVolumeBlocks(s: Spec): number {
   let v = 0;
   for (const [a, b] of s.boxes) v += Math.abs(b[0] - a[0]) * Math.abs(b[1] - a[1]) * Math.abs(b[2] - a[2]);
@@ -1592,15 +1605,15 @@ function specVolumeBlocks(s: Spec): number {
   return v / 8; // spec units are modules; 1 block = 2 modules per side
 }
 for (const s of SPECS.values()) {
-  const ingots = Math.max(1, Math.min(24, Math.round(specVolumeBlocks(s) * 2)));
+  const { ingots, copper } = teksCastCost(s.id);
   const need: [number, number][] = [[ID.PlasticIngot, ingots]];
   let extra = "";
-  if (s.drive === "motor") {
-    need.push([ID.Copper, 2]);
+  if (copper > 0 && s.drive === "motor") {
+    need.push([ID.Copper, copper]);
     extra = " + 2 copper (motor windings)";
   }
-  if (s.drive === "power") {
-    need.push([ID.Copper, 4]);
+  if (copper > 0 && s.drive === "power") {
+    need.push([ID.Copper, copper]);
     extra = " + 4 copper (power bus)";
   }
   RECIPES.push(

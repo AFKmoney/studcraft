@@ -1616,6 +1616,10 @@ export type Decor = {
   sheep: { x: number; z: number }[];
   folk: FolkSpot[];
   village: { x: number; z: number } | null;
+  /** Section 22 P-C: the mechanic's hangar apron anchor (block
+   *  coords + ground height) when this decor built a village —
+   *  game.ts parks the display vehicle there. */
+  hangar?: { x: number; y: number; z: number };
 };
 
 const COTTAGES: [number, number, number, number][] = [
@@ -1706,6 +1710,7 @@ export function folkLayout(x0: number, z0: number): FolkSpot[] {
     { x: x0 + 14.5, z: z0 + 10.5, role: "clerk" },
     { x: x0 + 8.5, z: z0 + 8.5, role: "mage" },
     { x: x0 + 19.5, z: z0 + 8.5, role: "ranger" },
+    { x: x0 + 32.5, z: z0 + 12.5, role: "mechanic" },
   ];
 }
 
@@ -1745,7 +1750,7 @@ export function decorate(world: World, sx: number, sz: number, town = true): Dec
     const row = findPad(world, sx, sz, 5, 12);
     if (row) stampPalette(world, row.x, world.heightAt(row.x, row.z), row.z);
   }
-  return { sheep: [...sheep, ...built.sheep], folk: built.folk, village: { x: site.x, z: site.z } };
+  return { sheep: [...sheep, ...built.sheep], folk: built.folk, village: { x: site.x, z: site.z }, hangar: built.hangar };
 }
 
 function stampStarterMetals(world: World, sx: number, sz: number) {
@@ -2104,9 +2109,47 @@ function stampVillage(world: World, x0: number, ground: number, z0: number) {
   world.set(mx + 3, ground + 1, mz, ID.Log);
   world.set(mx + 1, ground + 1, mz, ID.Chest);
   world.set(mx + 2, ground + 1, mz, ID.Bench);
+  // ── Mechanic's hangar-garage (section 22 P-C) ──────────────────
+  // An annex east of the village pad: levelled yard, a wide-open
+  // stone workshop (no door — vehicles roll in), work corner inside,
+  // lamps on the apron. The display vehicle is game-side (Teks parts
+  // are not voxel blocks); the apron anchor goes back in the return.
+  const hx = x0 + 30;
+  const hz = z0 + 4;
+  levelPad(world, hx, hz, 16, 18, ground);
+  for (let x = 0; x < 16; x++) {
+    for (let z = 0; z < 18; z++) world.set(hx + x, ground, hz + z, ID.Cobble);
+  }
+  for (let x = 4; x < 16; x++) {
+    for (let z = 2; z < 16; z++) {
+      const edgeX = x === 4 || x === 15;
+      const edgeZ = z === 2 || z === 15;
+      if (!edgeX && !edgeZ) continue;
+      // The west wall is the vehicle door: 6 wide, 4 tall, wide open.
+      if (x === 4 && z >= 6 && z <= 11) continue;
+      for (let y = 1; y <= 5; y++) world.set(hx + x, ground + y, hz + z, ID.Stone);
+    }
+  }
+  for (let x = 3; x < 17; x++) {
+    for (let z = 1; z < 17; z++) world.set(hx + x, ground + 6, hz + z, ID.Planks);
+  }
+  world.set(hx + 14, ground + 1, hz + 4, ID.Furnace);
+  world.set(hx + 14, ground + 1, hz + 6, ID.Anvil);
+  world.set(hx + 14, ground + 1, hz + 12, ID.Chest);
+  world.set(hx + 13, ground + 1, hz + 12, ID.Chest);
+  world.set(hx + 14, ground + 1, hz + 9, ID.Bench);
+  world.set(hx + 5, ground + 1, hz + 3, ID.Cobble);
+  world.set(hx + 5, ground + 2, hz + 3, ID.Lamp);
+  world.set(hx + 5, ground + 1, hz + 14, ID.Cobble);
+  world.set(hx + 5, ground + 2, hz + 14, ID.Lamp);
+  world.set(hx + 1, ground + 1, hz + 5, ID.Cobble);
+  world.set(hx + 1, ground + 2, hz + 5, ID.Lamp);
+  world.set(hx + 1, ground + 1, hz + 12, ID.Cobble);
+  world.set(hx + 1, ground + 2, hz + 12, ID.Lamp);
   return {
     sheep: penSheep(x0, z0),
     folk: folkLayout(x0, z0),
+    hangar: { x: hx + 8, y: ground, z: hz + 9 },
   };
 }
 

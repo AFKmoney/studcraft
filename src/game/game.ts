@@ -4,13 +4,13 @@ import { TechWorld, ORIENTS, composeO, worldCells, bbox as techBbox, spec as tec
 import { buildTeksGeometry } from "./teksGeo";
 import { fuelFromMelt, parkPoses, refuel as vehRefuel, stepVehicle as stepVeh, vehicleFromAssembly, type Vehicle, type VPart } from "./vehicle";
 import { FUEL, type Channel } from "./p5bProto";
-import { builtinModels, decodeModel, encodeModel, loadCatalogue, modelFromParts, removeModel, storeCatalogue, upsertModel } from "./catalogue";
+import { builtinModels, decodeModel, encodeModel, loadCatalogue, modelFromParts, removeModel, storeCatalogue, upsertModel, type VehicleModel } from "./catalogue";
 import { createAudio } from "./audio";
 import { STUD_H, STUD_OFFSETS, STUD_R, buildChunk, type Surface } from "./mesher";
 import * as FS from "./fireState";
 import * as TS from "./tuftState";
 import * as CH from "./chipState";
-import { NEIGHBORS, RECIPES, SMELT, fuelTime, matchGrid } from "./recipes";
+import { NEIGHBORS, RECIPES, SMELT, fuelTime, matchGrid, teksCastCost } from "./recipes";
 import { DISCOVER, MOB_XP, ORE_HEAR, ORE_XP, nextPerk, rankTitle, xpNeed } from "./ranks";
 import { manaMaxFor, skillById, spellsFor } from "./skills";
 import { QUESTS, CHAINS, chainStepOf, questActive, traderOf, tradeLevelFor, TIER_NAMES, TIER_XP, type TraderRole } from "./quests";
@@ -101,6 +101,7 @@ export type Hud = {
   beaconBuff: string;
   bookshelves: number;
   offers: { pay: number; pn: number; out: number; on: number; payName: string; outName: string; tier: number; locked: boolean; stock: number }[];
+  prefabs: { name: string; parts: number; ingots: number; copper: number; afford: boolean }[];
   reputation: number;
   repWord: string;
   traderLevel: string;
@@ -189,6 +190,7 @@ export type GameApi = {
   /** Enter the aimed hub's vehicle, or park + exit the driven one (touch Enter/Park button, §22.2 2026-10-30). */
   enterExitVehicle: () => void;
   /** Vehicle catalogue (section 22 P-A): persistent, outside worlds. */
+  buyPrefab: (name: string) => void;
   catalogueList: () => { name: string; author: string; parts: number; builtin?: boolean }[];
   catalogueSave: (name: string) => void;
   catalogueLoad: (name: string) => void;
@@ -352,6 +354,9 @@ declare global {
       getBricks?: () => [number, number, number, number][];
       placeTechAt?: (id: number, o: number, qx: number, qy: number, qz: number) => boolean;
       getTeks?: () => [number, number, number, number, number, number][];
+      getPrefabs?: () => { name: string; parts: number; ingots: number; copper: number; afford: boolean }[];
+      buyPrefabQa?: (name: string) => void;
+      getVillageAt?: () => { x: number; z: number } | null;
       getCatalogue?: () => { name: string; parts: number }[];
       catalogueSaveQa?: (name: string) => boolean;
       catalogueLoadQa?: (name: string) => { placed: number; holo: number };
@@ -494,6 +499,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     reputation: 0,
     repWord: "Stranger",
     offers: [],
+    prefabs: [],
     traderLevel: "",
     traderNext: "",
     netStatus: "",
@@ -3903,6 +3909,19 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       locked: (o.tier ?? 1) > tLv,
       stock: tStocks[oi] ?? 0,
     }));
+    hud.prefabs =
+      traderRole === "mechanic"
+        ? builtinModels().map((m) => {
+            const price = prefabPrice(m);
+            return {
+              name: m.name,
+              parts: m.parts.length,
+              ingots: price.ingots,
+              copper: price.copper,
+              afford: creative || ((inv[ID.PlasticIngot] ?? 0) >= price.ingots && (inv[ID.Copper] ?? 0) >= price.copper),
+            };
+          })
+        : [];
     let alert = "";
     const isDoneQ = (id: string) => quests.find((p) => p.id === id)?.done ?? false;
     hud.quests = QUESTS.map((q) => {
@@ -4121,6 +4140,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       sheep: dist < 90 ? [...built.sheep, ...penSheep(site.x, site.z)] : built.sheep,
       folk: dist < 180 ? folkLayout(site.x, site.z) : [],
       village: { x: site.x, z: site.z },
+      hangar: built.hangar,
     };
   }
 
@@ -4141,6 +4161,16 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     sheepSpots = built.sheep;
     folkSpots = built.folk;
     villageAt = built.village;
+    if (built.hangar) {
+      // Section 22 P-C showroom: the Starter Buggy on display inside
+      // the hangar — no battery, so it is a showpiece, not a free car.
+      const show = builtinModels()[0];
+      const A: [number, number, number] = [built.hangar.x * 4, (built.hangar.y + 1) * 4 + 5, built.hangar.z * 4];
+      for (const mp of show.parts) {
+        if (mp.id === ID.Battery) continue;
+        tech.add(mp.id, mp.o, [A[0] + mp.dq[0], A[1] + mp.dq[1], A[2] + mp.dq[2]]);
+      }
+    }
     player.x = s.x;
     player.y = s.y;
     player.z = s.z;
@@ -4300,6 +4330,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         const have = new Set(folkSpots.map((f) => f.role));
         if (!have.has("mage")) folkSpots.push({ x: villageAt.x + 8.5, z: villageAt.z + 8.5, role: "mage" });
         if (!have.has("ranger")) folkSpots.push({ x: villageAt.x + 19.5, z: villageAt.z + 8.5, role: "ranger" });
+        if (!have.has("mechanic")) folkSpots.push({ x: villageAt.x + 32.5, z: villageAt.z + 12.5, role: "mechanic" });
       }
       sheepSpots = [
         { x: player.x + 4, z: player.z + 2 },
@@ -5616,6 +5647,19 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     say("Saved to catalogue: " + name + " (" + model.parts.length + " parts)");
     audio.place();
     return true;
+  }
+
+  /** Section 22 P-C: a prefab's price is the matter it is made of —
+   *  the real casting cost of every part (recipes.teksCastCost). */
+  function prefabPrice(model: VehicleModel): { ingots: number; copper: number } {
+    let ingots = 0;
+    let copper = 0;
+    for (const p of model.parts) {
+      const c = teksCastCost(p.id);
+      ingots += c.ingots;
+      copper += c.copper;
+    }
+    return { ingots, copper };
   }
 
   function catalogueLoadModel(name: string): { placed: number; holo: number } {
@@ -13644,6 +13688,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     },
     getTeks: () => [...tech.parts.values()].map((p) => [p.id, p.o, p.q[0], p.q[1], p.q[2], p.on === false ? 0 : 1] as [number, number, number, number, number, number]),
     // Section 22 P-A QA hooks (inert in play).
+    getPrefabs: () => hud.prefabs,
+    buyPrefabQa: (name: string) => api.buyPrefab(name),
+    getVillageAt: () => villageAt,
     getCatalogue: () => loadCatalogue().map((m) => ({ name: m.name, parts: m.parts.length })),
     catalogueSaveQa: (name: string) => catalogueSaveCurrent(name),
     catalogueLoadQa: (name: string) => catalogueLoadModel(name),
@@ -14850,6 +14897,42 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       addInv(r.out, 1);
       say(def(r.out).name);
+      emit();
+    },
+    buyPrefab(name) {
+      const model = builtinModels().find((m) => m.name === name);
+      if (!model || traderRole !== "mechanic") return;
+      const key = curTraderKey();
+      if (repAtKey(key) <= -50) return say("This hamlet won't trade with you — your name is mud here.");
+      const price = prefabPrice(model);
+      if (!creative) {
+        if ((inv[ID.PlasticIngot] ?? 0) < price.ingots) return say("Need " + price.ingots + " plastic ingots for the " + name + " — the vehicle is priced by the matter in it.");
+        if ((inv[ID.Copper] ?? 0) < price.copper) return say("Need " + price.copper + " copper for the " + name + " — motors and power eat copper.");
+      }
+      const dir = new THREE.Vector3();
+      camera.getWorldDirection(dir);
+      const A: [number, number, number] = [
+        Math.floor(camera.position.x + dir.x * 3.5) * 4,
+        Math.floor(player.y) * 4,
+        Math.floor(camera.position.z + dir.z * 3.5) * 4,
+      ];
+      for (const mp of model.parts) {
+        const q: [number, number, number] = [A[0] + mp.dq[0], A[1] + mp.dq[1], A[2] + mp.dq[2]];
+        if (tech.test(mp.id, mp.o, q, techSolidAt) < 0 || techHitsPlayer(mp.id, mp.o, q)) {
+          return say("No room to deliver the " + name + " here — clear some space in front of you.");
+        }
+      }
+      if (!creative) {
+        spend(ID.PlasticIngot, price.ingots);
+        if (price.copper > 0) spend(ID.Copper, price.copper);
+      }
+      for (const mp of model.parts) {
+        tech.add(mp.id, mp.o, [A[0] + mp.dq[0], A[1] + mp.dq[1], A[2] + mp.dq[2]]);
+      }
+      tradeXp[traderRole] = (tradeXp[traderRole] ?? 0) + 1;
+      if (repAtKey(key) < 30) addRep(key, 1);
+      say(name + " delivered — she's yours. Mind the paint.");
+      saveDirty = true;
       emit();
     },
     trade(i) {
