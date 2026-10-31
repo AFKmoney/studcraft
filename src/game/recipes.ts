@@ -159,7 +159,7 @@ export const RECIPES: Recipe[] = [
     h: 2,
     cat: "gear",
   }),
-  r("plate", "Shell", "8 ingots", [[I, 8]], ID.PlateArmor, 1, {
+  r("shell", "Shell", "8 ingots", [[I, 8]], ID.PlateArmor, 1, {
     shape: [I, 0, I, I, I, I, I, I, I],
     w: 3,
     h: 3,
@@ -322,7 +322,7 @@ export const RECIPES: Recipe[] = [
     h: 3,
     cat: "tools",
   }),
-  r("flint", "Spark", "1 iron + 1 cobble", [[I, 1], [C, 1]], ID.Flint, 1, {
+  r("flint", "Striker", "1 iron + 1 cobble", [[I, 1], [C, 1]], ID.Flint, 1, {
     shape: [I, C],
     w: 2,
     h: 1,
@@ -376,8 +376,8 @@ export const RECIPES: Recipe[] = [
     h: 3,
     cat: "build",
   }),
-  r("dispenser", "Launcher", "7 cobble + 1 bow + 1 dust", [[C, 7], [ID.Bow, 1], [ID.Dust, 1]], ID.Dispenser, 1, {
-    shape: [C, C, C, C, ID.Bow, C, C, ID.Dust, C],
+  r("dispenser", "Launcher", "7 cobble + 1 bow + 1 powder", [[C, 7], [ID.Bow, 1], [ID.Powder, 1]], ID.Dispenser, 1, {
+    shape: [C, C, C, C, ID.Bow, C, C, ID.Powder, C],
     w: 3,
     h: 3,
     cat: "build",
@@ -576,7 +576,7 @@ export const RECIPES: Recipe[] = [
     cat: "tools",
   }),
   r("executioner-axe", "Royal executioner axe", "2 illager emblems + 2 ingots + 1 stick — heavy castle & mansion cleaver", [[ID.IllagerBadge, 2], [I, 2], [S, 1]], ID.ExecutionerAxe, 1, {
-    shape: [ID.IllagerBadge, I, ID.IllagerBadge, 0, S, I, 0, S, 0],
+    shape: [ID.IllagerBadge, I, ID.IllagerBadge, 0, S, I, 0, 0, 0],
     w: 3,
     h: 3,
     cat: "tools",
@@ -588,7 +588,7 @@ export const RECIPES: Recipe[] = [
     cat: "tools",
   }),
   r("guardian-plate", "Prismarine carapace", "4 guardian spikes + 2 scales — heavy ocean chestplate", [[ID.GuardianSpike, 4], [ID.Scale, 2]], ID.GuardianPlate, 1, {
-    shape: [ID.GuardianSpike, 0, ID.GuardianSpike, ID.Scale, ID.Scale, ID.Scale, ID.GuardianSpike, ID.GuardianSpike, ID.GuardianSpike],
+    shape: [ID.GuardianSpike, ID.Scale, ID.GuardianSpike, ID.GuardianSpike, ID.Scale, ID.GuardianSpike, 0, 0, 0],
     w: 3,
     h: 3,
     cat: "gear",
@@ -613,7 +613,7 @@ export const RECIPES: Recipe[] = [
   }),
   r("packed-ice", "Packed ice", "4 frost shards", [[ID.Frost, 4]], ID.IceSheet, 1, { cat: "build" }),
   r("loaf", "Camp loaf", "3 grain", [[ID.Wheat, 3]], ID.Bread, 1, { cat: "food" }),
-  r("cookie", "Ash cookie", "2 grain + 1 cinder", [[ID.Wheat, 2], [ID.Cinder, 1]], ID.Cookie, 4, { cat: "food" }),
+  r("ashcookie", "Ash cookie", "2 grain + 1 cinder", [[ID.Wheat, 2], [ID.Cinder, 1]], ID.Cookie, 4, { cat: "food" }),
   r("slices", "Pumpkin slices", "1 pumpkin → 4", [[ID.Pumpkin, 1]], ID.Slice, 4, { shape: [ID.Pumpkin], w: 1, h: 1, cat: "food" }),
   r("melon-cut", "Melon slices", "1 melon → 6", [[ID.Melon, 1]], ID.MelonCut, 6, { shape: [ID.Melon], w: 1, h: 1, cat: "food" }),
   r("honey", "Honey", "1 wax + 1 bottle", [[ID.Wax, 1], [ID.Bottle, 1]], ID.Honey, 1, {
@@ -655,14 +655,14 @@ export const RECIPES: Recipe[] = [
     h: 2,
     cat: "build",
   }),
-  r("compass", "Compass", "4 ingots + 1 red dust", [[I, 4], [ID.Dust, 1]], ID.Compass, 1, {
-    shape: [0, I, 0, I, ID.Dust, I, 0, I, 0],
+  r("compass", "Compass", "4 ingots + 1 resin", [[I, 4], [ID.Resin, 1]], ID.Compass, 1, {
+    shape: [0, I, 0, I, ID.Resin, I, 0, I, 0],
     w: 3,
     h: 3,
     cat: "tools",
   }),
-  r("clock", "Clock", "4 gold + 1 red dust", [[ID.Gold, 4], [ID.Dust, 1]], ID.Clock, 1, {
-    shape: [0, ID.Gold, 0, ID.Gold, ID.Dust, ID.Gold, 0, ID.Gold, 0],
+  r("clock", "Clock", "4 gold + 1 resin", [[ID.Gold, 4], [ID.Resin, 1]], ID.Clock, 1, {
+    shape: [0, ID.Gold, 0, ID.Gold, ID.Resin, ID.Gold, 0, ID.Gold, 0],
     w: 3,
     h: 3,
     cat: "tools",
@@ -1167,7 +1167,7 @@ export const RECIPES: Recipe[] = [
     cat: "build",
   }),
 
-  r("hub", "Teks Hub 4 ports", "1 battery + 2 gears", [[ID.Battery, 1], [ID.Gear16, 2]], ID.TechHub, 1, {
+  r("hub4", "Teks Hub 4 ports", "1 battery + 2 gears", [[ID.Battery, 1], [ID.Gear16, 2]], ID.TechHub, 1, {
     shape: [ID.Gear16, ID.Battery, ID.Gear16],
     w: 3,
     h: 1,
@@ -1198,7 +1198,7 @@ export const RECIPES: Recipe[] = [
     cat: "build",
   }),
   r("remote", "Remote control", "1 hub + 1 stick", [[ID.TechHub, 1], [ID.Stick, 1]], ID.Remote, 1, {
-    shape: [ID.Hub, ID.Stick],
+    shape: [ID.TechHub, ID.Stick],
     w: 2,
     h: 1,
     cat: "build",

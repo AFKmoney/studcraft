@@ -80,7 +80,7 @@ export const COL = {
   TRC: 0xdfe8ec, // trans-clear-ish
   MET: 0x9ba19d, // flat silver
 };
-const { LBG, DBG, BLK, BLU, TAN, RED, YEL, WHT, ORG, GRN, TRC, MET, EMR, GUN, DGM, LED } = COL;
+const { LBG, DBG, BLK, BLU, TAN, RED, WHT, TRC, MET, EMR, GUN, DGM, LED } = COL;
 
 // Real-geometry constants (modules)
 export const HOLE_R = 4.85 / 16; // Ø 4.85 mm
@@ -709,7 +709,10 @@ export function localCells(id: number): Cell[] {
       hi[i] = Math.max(hi[i], p[i]);
     }
   };
-  for (const [a, b] of s.boxes) (grow(a), grow(b));
+  for (const [a, b] of s.boxes) {
+    grow(a);
+    grow(b);
+  }
   const ext = (c: V3, ax: Ax, len: number, r: number) => {
     const a = [...c] as V3;
     const b = [...c] as V3;
@@ -1335,7 +1338,10 @@ function refConn(s: Spec) {
   let bd = Infinity;
   for (const c of all) {
     const d = Math.hypot(c.c[0] * 2 - cen[0], c.c[1] * 2 - cen[1], c.c[2] * 2 - cen[2]);
-    if (d < bd - 1e-6) (bd = d), (best = c);
+    if (d < bd - 1e-6) {
+      bd = d;
+      best = c;
+    }
   }
   return best;
 }

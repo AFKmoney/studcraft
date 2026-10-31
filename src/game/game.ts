@@ -1898,8 +1898,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // spec.hand tweaks the fit). The
     // old hand-modelled Teks shapes that lived here are gone: parts
     // place through the Teks layer now, never as blocks or bricks.
-    if (TEKS_SET.has(id)) {
-      const geo = techGeoOf(id);
+    if (TEKS_SET.has(id) || id === ID.CrankOn || id === ID.ClutchOpen || id === ID.RingLo) {
+      // State-variant block defs (Crank (turning), Clutch (open),
+      // Driving ring low) shadow real Teks parts — in hand they show
+      // their base part's geometry (tester 2026-10-31: they rendered
+      // as full cubes).
+      const geo = techGeoOf(id === ID.CrankOn ? 349 : id === ID.ClutchOpen ? 351 : id === ID.RingLo ? 365 : id);
       geo.computeBoundingBox();
       const bb = geo.boundingBox!;
       const size = new THREE.Vector3();
@@ -1909,15 +1913,20 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const mesh = new THREE.Mesh(geo, techMatSolid);
       const maxDim = Math.max(size.x, size.y, size.z) || 1;
       // PROPORTIONAL hand size (Philippe, 2026-10-29): a fixed size per
-      // module — 0.11 per module of the part's largest dimension, capped
-      // at 0.85 so the biggest frames stay holdable. The old formula
-      // normalized EVERY part to the same 0.32 max dimension (a 2-module
-      // pin rendered the same length as a 15-module frame; measured in
-      // the step-7 QA at 93.5 vs 45.4 px per module). spec.hand stays as
-      // a per-part multiplier on top. placeHeldMinecraft applies a
-      // CONSTANT pipeline factor for Teks (no re-normalization) and
-      // closes the figure hand on the part.
-      const heldSize = Math.min(0.11 * maxDim, 0.85) * (techSpec(id)?.hand ?? 1);
+      // module of the part's largest dimension, capped so the biggest
+      // frames stay holdable. The old formula normalized EVERY part to
+      // the same 0.32 max dimension (a 2-module pin rendered the same
+      // length as a 15-module frame; measured in the step-7 QA at 93.5
+      // vs 45.4 px per module). spec.hand stays as a per-part
+      // multiplier on top. placeHeldMinecraft applies a CONSTANT
+      // pipeline factor for Teks (no re-normalization) and closes the
+      // figure hand on the part.
+      // Tester 2026-10-31: at 0.11/module a 1-module part measured
+      // ~0.24 in display space against 0.4 for a block — every Teks
+      // part read minuscule at the end of the arm (104 items flagged).
+      // The coefficient rises to 0.19 (a 1-module part ≈ block size)
+      // and the cap to 1.0; the per-module PROPORTION is unchanged.
+      const heldSize = Math.min(0.19 * maxDim, 1.0) * (techSpec(id)?.hand ?? 1);
       mesh.scale.setScalar(heldSize / maxDim);
       mesh.position.copy(centre).multiplyScalar(-mesh.scale.x);
       group.add(mesh);
@@ -2232,7 +2241,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return { group, isTool: true, flames };
     }
 
-    if (id === ID.Bow) {
+    if (id === ID.Bow || id === ID.AntlerBow) {
       // Rebuilt 2026-10-29 (Philippe's photo: the old bow read as a
       // beige lump). The old model was TWO short straight boxes angled
       // at 0.42 rad — a stubby chevron, no arc — plus a string cylinder
@@ -2338,17 +2347,21 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       id === ID.Gold ||
       id === ID.Copper ||
       id === ID.Tin ||
+      id === ID.Bronze ||
       id === ID.Chrome ||
       id === ID.Resin ||
       id === ID.Scrap ||
-      id === ID.PharaohGold ||
+      id === ID.PlasticIngot ||
+      id === ID.TemperedIngot ||
       id === ID.IllagerBadge
     ) {
+      // A stepped ingot bar (wide base, narrower crown). Tester
+      // 2026-10-31: the old bar wore a 2×1 stud grid on top and read
+      // as the placeholder brick tile — bars have no studs.
       const mat = skin(baseHex);
       const topMat = skin(shiftHex(baseHex, 1.15));
-      addBoxPart(group, 0.22, 0.065, 0.12, 0, -0.02, 0, mat);
-      addBoxPart(group, 0.19, 0.022, 0.095, 0, 0.022, 0, topMat);
-      addStudGrid(group, 0.18, 0.033, 0.09, 2, 1, topMat, 0, 0, true);
+      addBoxPart(group, 0.24, 0.055, 0.13, 0, -0.026, 0, mat);
+      addBoxPart(group, 0.185, 0.045, 0.095, 0, 0.024, 0, topMat);
       return { group, isTool: false, flames };
     }
 
@@ -2360,8 +2373,6 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       id === ID.Prism ||
       id === ID.Crystal ||
       id === ID.EnderPearl ||
-      id === ID.EyeOfEnder ||
-      id === ID.NetherStar ||
       id === ID.GuardianSpike ||
       id === ID.VoidCore
     ) {
@@ -2375,6 +2386,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
 
     if (d.food) {
+      // Tester 2026-10-31: the generic food model was a studded slab —
+      // the placeholder signature. Each staple below gets its own
+      // silhouette and NO food wears studs.
       const foodMat = skin(baseHex);
       const rimMat = skin(shiftHex(baseHex, 0.80));
       if (id === ID.Apple || id === ID.Gapple) {
@@ -2382,16 +2396,68 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           foodMat.emissive = new THREE.Color(0xffb81c);
           foodMat.emissiveIntensity = 0.35;
         }
-        addCylPart(group, 0.078, 0.068, 0.13, 0, -0.01, 0, foodMat, 12);
-        addCylPart(group, 0.026, 0.028, 0.022, 0, 0.065, 0, foodMat, 10);
-        addBoxPart(group, 0.045, 0.016, 0.024, 0.024, 0.072, 0, skin(0x3ca842));
-      } else if (id === ID.Steak || id === ID.RawMeat) {
-        addBoxPart(group, 0.18, 0.065, 0.13, -0.02, 0, 0, foodMat);
-        addCylPart(group, 0.022, 0.022, 0.09, 0.08, 0, 0, skin(0xf4f0e4), 8).rotation.z = Math.PI / 2;
-        addStudGrid(group, 0.16, 0.032, 0.11, 2, 1, rimMat, -0.02, 0);
+        // Apple silhouette: pinched top and bottom, round middle.
+        addCylPart(group, 0.052, 0.066, 0.045, 0, -0.042, 0, foodMat, 12);
+        addCylPart(group, 0.07, 0.072, 0.05, 0, 0.002, 0, foodMat, 12);
+        addCylPart(group, 0.055, 0.04, 0.04, 0, 0.045, 0, foodMat, 12);
+        addCylPart(group, 0.008, 0.01, 0.045, 0.008, 0.08, 0, skin(0x6b4423), 6);
+        addBoxPart(group, 0.045, 0.014, 0.024, 0.032, 0.085, 0, skin(0x3ca842));
+      } else if (id === ID.Steak || id === ID.RawMeat || id === ID.Cooked) {
+        addBoxPart(group, 0.18, 0.06, 0.13, -0.02, 0, 0, foodMat);
+        addBoxPart(group, 0.15, 0.018, 0.1, -0.02, 0.038, 0, skin(shiftHex(baseHex, 1.18)));
+        addCylPart(group, 0.02, 0.02, 0.085, 0.078, 0, 0, skin(0xf4f0e4), 8).rotation.z = Math.PI / 2;
+      } else if (id === ID.Fish || id === ID.CookedFish) {
+        addBoxPart(group, 0.17, 0.055, 0.075, -0.015, 0, 0, foodMat);
+        addBoxPart(group, 0.07, 0.035, 0.055, 0.085, 0.005, 0, foodMat);
+        const tail = addBoxPart(group, 0.058, 0.058, 0.016, 0.148, 0, 0, rimMat);
+        tail.rotation.z = Math.PI / 4;
+        addCylPart(group, 0.011, 0.011, 0.014, -0.075, 0.012, -0.04, skin(0x14161a), 8).rotation.x = Math.PI / 2;
+      } else if (id === ID.Bread) {
+        addBoxPart(group, 0.19, 0.07, 0.11, 0, -0.025, 0, foodMat);
+        addCylPart(group, 0.052, 0.052, 0.165, 0, 0.028, 0, skin(shiftHex(baseHex, 1.12)), 10).rotation.z = Math.PI / 2;
+      } else if (id === ID.Cookie) {
+        addCylPart(group, 0.082, 0.082, 0.024, 0, 0, 0, foodMat, 14);
+        for (const [ox, oz] of [[-0.035, 0.015], [0.028, -0.025], [0.01, 0.04], [-0.015, -0.042]] as const) {
+          addCylPart(group, 0.011, 0.011, 0.01, ox, 0.014, oz, skin(0x4a2c14), 6);
+        }
+      } else if (id === ID.Slice || id === ID.MelonCut) {
+        addBoxPart(group, 0.17, 0.045, 0.11, 0, -0.01, 0, foodMat);
+        addBoxPart(group, 0.17, 0.05, 0.018, 0, -0.008, 0.055, skin(id === ID.Slice ? 0xd86a1e : 0x3ca842));
+        addBoxPart(group, 0.15, 0.014, 0.09, 0, 0.016, 0, skin(shiftHex(baseHex, 1.15)));
+      } else if (id === ID.Honey) {
+        const jar = skin(0xd8b25a, { transparent: true, opacity: 0.75, depthWrite: false });
+        addCylPart(group, 0.062, 0.07, 0.13, 0, -0.01, 0, jar, 12);
+        addCylPart(group, 0.05, 0.05, 0.045, 0, 0.005, 0, foodMat, 10);
+        addCylPart(group, 0.055, 0.055, 0.022, 0, 0.068, 0, skin(0x9a7434), 10);
+      } else if (id === ID.Stew) {
+        addCylPart(group, 0.055, 0.082, 0.075, 0, -0.025, 0, skin(0x7a4a2c), 12);
+        addCylPart(group, 0.072, 0.072, 0.016, 0, 0.016, 0, foodMat, 12);
+        addCylPart(group, 0.016, 0.016, 0.014, -0.025, 0.026, 0.012, skin(0xe07820), 6);
+        addCylPart(group, 0.014, 0.014, 0.014, 0.03, 0.026, -0.015, skin(0x68a83c), 6);
+      } else if (id === ID.Pie) {
+        addCylPart(group, 0.098, 0.085, 0.042, 0, -0.012, 0, skin(0xc4924a), 14);
+        addCylPart(group, 0.088, 0.088, 0.014, 0, 0.014, 0, foodMat, 14);
+        addBoxPart(group, 0.15, 0.01, 0.026, 0, 0.024, 0, skin(0xc4924a)).rotation.y = 0.6;
+        addBoxPart(group, 0.15, 0.01, 0.026, 0, 0.024, 0, skin(0xc4924a)).rotation.y = -0.6;
+      } else if (id === ID.Carrot) {
+        addCylPart(group, 0.034, 0.004, 0.17, 0, -0.01, 0, foodMat, 10).rotation.z = 0.12;
+        addBoxPart(group, 0.016, 0.055, 0.016, -0.018, 0.085, 0, skin(0x3ca842)).rotation.z = 0.5;
+        addBoxPart(group, 0.016, 0.05, 0.016, 0.014, 0.088, 0.01, skin(0x4cb84e)).rotation.z = -0.35;
+      } else if (id === ID.Potato || id === ID.BakedPotato) {
+        addCylPart(group, 0.055, 0.062, 0.1, -0.01, -0.01, 0, foodMat, 10).rotation.z = Math.PI / 2;
+        addCylPart(group, 0.045, 0.05, 0.07, 0.045, 0.012, 0.012, skin(shiftHex(baseHex, 1.06)), 10).rotation.z = Math.PI / 2;
+        if (id === ID.BakedPotato) addBoxPart(group, 0.09, 0.014, 0.045, 0, 0.048, 0, skin(0xf4ead2));
+      } else if (id === ID.Beetroot) {
+        addCylPart(group, 0.058, 0.045, 0.085, 0, 0.005, 0, foodMat, 12);
+        addCylPart(group, 0.012, 0.002, 0.06, 0, -0.065, 0, rimMat, 6);
+        addBoxPart(group, 0.018, 0.05, 0.018, 0.012, 0.07, 0, skin(0x3ca842)).rotation.z = -0.3;
+        addBoxPart(group, 0.018, 0.045, 0.018, -0.016, 0.068, 0.008, skin(0x4cb84e)).rotation.z = 0.35;
       } else {
-        addBoxPart(group, 0.19, 0.075, 0.12, 0, 0, 0, foodMat);
-        addStudGrid(group, 0.17, 0.038, 0.10, 2, 1, rimMat);
+        // Any other dish: a rounded serving on a small plate — never
+        // the studded slab this branch used to fall back to.
+        addCylPart(group, 0.095, 0.075, 0.018, 0, -0.045, 0, skin(0xd8d4c8), 14);
+        addCylPart(group, 0.062, 0.078, 0.06, 0, -0.008, 0, foodMat, 12);
+        addCylPart(group, 0.035, 0.05, 0.03, 0.012, 0.032, 0.008, skin(shiftHex(baseHex, 1.15)), 10);
       }
       return { group, isTool: false, flames };
     }
@@ -2426,20 +2492,32 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const slot = d.armorSlot || (id === ID.HelmChrome ? 1 : id === ID.PlatePrism ? 2 : 4);
       const mat = skin(baseHex);
       const trim = skin(shiftHex(baseHex, 1.18));
+      // Tester 2026-10-31: the shell was a lone flat plate and read
+      // as the placeholder tile. Every slot gets depth now: a brim
+      // on the cap, a back plate + shoulder pads on the shell, a
+      // waist band + knee pads on the legs, shin guards on boots.
       if (slot === 1) {
         addCylPart(group, 0.055, 0.105, 0.09, 0, 0.01, 0, mat, 12);
+        addCylPart(group, 0.118, 0.118, 0.016, 0, -0.032, 0, trim, 14);
         addCylPart(group, 0.02, 0.02, 0.03, 0, 0.07, 0, trim, 10);
       } else if (slot === 2) {
-        addBoxPart(group, 0.2, 0.22, 0.07, 0, 0, 0, mat);
+        addBoxPart(group, 0.2, 0.22, 0.055, 0, 0, -0.012, mat);
+        addBoxPart(group, 0.18, 0.2, 0.045, 0, -0.005, 0.048, skin(shiftHex(baseHex, 0.88)));
         addBoxPart(group, 0.22, 0.05, 0.08, 0, 0.1, 0, trim);
+        addBoxPart(group, 0.07, 0.045, 0.09, -0.085, 0.115, 0, trim);
+        addBoxPart(group, 0.07, 0.045, 0.09, 0.085, 0.115, 0, trim);
+        addBoxPart(group, 0.21, 0.035, 0.075, 0, -0.1, 0, trim);
       } else if (slot === 3) {
-        addBoxPart(group, 0.08, 0.22, 0.06, -0.055, 0, 0, mat);
-        addBoxPart(group, 0.08, 0.22, 0.06, 0.055, 0, 0, mat);
+        addBoxPart(group, 0.21, 0.045, 0.065, 0, 0.105, 0, trim);
+        addBoxPart(group, 0.08, 0.2, 0.06, -0.055, -0.01, 0, mat);
+        addBoxPart(group, 0.08, 0.2, 0.06, 0.055, -0.01, 0, mat);
+        addBoxPart(group, 0.055, 0.06, 0.02, -0.055, -0.01, -0.038, trim);
+        addBoxPart(group, 0.055, 0.06, 0.02, 0.055, -0.01, -0.038, trim);
       } else {
-        addBoxPart(group, 0.08, 0.07, 0.15, -0.055, -0.03, 0.02, mat);
-        addBoxPart(group, 0.08, 0.07, 0.15, 0.055, -0.03, 0.02, mat);
-        addBoxPart(group, 0.085, 0.09, 0.08, -0.055, 0.05, -0.02, trim);
-        addBoxPart(group, 0.085, 0.09, 0.08, 0.055, 0.05, -0.02, trim);
+        addBoxPart(group, 0.08, 0.07, 0.15, -0.055, -0.055, 0.02, mat);
+        addBoxPart(group, 0.08, 0.07, 0.15, 0.055, -0.055, 0.02, mat);
+        addBoxPart(group, 0.085, 0.13, 0.075, -0.055, 0.03, -0.012, trim);
+        addBoxPart(group, 0.085, 0.13, 0.075, 0.055, 0.03, -0.012, trim);
       }
       return { group, isTool: false, flames };
     }
@@ -2518,8 +2596,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
 
     if (id === ID.DiscA || id === ID.DiscB || id === ID.DiscC || id === ID.DiscD || id === ID.DiscE) {
-      addCylPart(group, 0.11, 0.11, 0.018, 0, 0, 0, skin(0x1c1e24), 20);
-      addCylPart(group, 0.045, 0.045, 0.02, 0, 0.001, 0, skin(baseHex), 14);
+      // Tester 2026-10-31: the disc lay flat, so the generated
+      // display (a Y-rotation) showed it edge-on as a slab. Stand it
+      // up like a record held by its rim.
+      addCylPart(group, 0.11, 0.11, 0.018, 0, 0, 0, skin(0x1c1e24), 20).rotation.x = Math.PI / 2;
+      addCylPart(group, 0.045, 0.045, 0.02, 0, 0.001, 0, skin(baseHex), 14).rotation.x = Math.PI / 2;
       return { group, isTool: false, flames };
     }
 
@@ -2543,8 +2624,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const egg = skin(0x2a1838);
       egg.emissive = new THREE.Color(0x7c3aed);
       egg.emissiveIntensity = 0.18;
-      addCylPart(group, 0.055, 0.095, 0.2, 0, 0, 0, egg, 12);
-      addCylPart(group, 0.03, 0.055, 0.06, 0, 0.12, 0, egg, 10);
+      addCylPart(group, 0.055, 0.095, 0.075, 0, -0.062, 0, egg, 12);
+      addCylPart(group, 0.095, 0.088, 0.07, 0, 0.005, 0, egg, 12);
+      addCylPart(group, 0.03, 0.062, 0.075, 0, 0.07, 0, egg, 12);
+      // Scale flecks so the silhouette reads as an egg, not a pawn.
+      addBoxPart(group, 0.03, 0.02, 0.014, -0.07, 0.01, -0.045, skin(0x4a2a68));
+      addBoxPart(group, 0.026, 0.018, 0.014, 0.062, -0.03, 0.052, skin(0x4a2a68));
+      addBoxPart(group, 0.024, 0.016, 0.014, 0.01, 0.045, -0.07, skin(0x4a2a68));
       return { group, isTool: false, flames };
     }
 
@@ -2652,7 +2738,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return { group, isTool: false, flames };
     }
 
-    if (id === ID.RawIron || id === ID.Bronze || id === ID.Flint) {
+    if (id === ID.RawIron) {
       // Raw chunks: two rough lumps, never a neat tile.
       const lump = skin(baseHex);
       addBoxPart(group, 0.13, 0.09, 0.11, -0.02, -0.02, 0, lump).rotation.y = 0.5;
@@ -2660,12 +2746,197 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return { group, isTool: false, flames };
     }
 
-    if (id === ID.Powder || id === ID.Wisp || id === ID.BaseBrew || id === ID.Wart || id === ID.Shell || id === ID.GravelBar || id === ID.InkSac) {
+    if (id === ID.Flint) {
+      // The Striker (tester 2026-10-31: it rendered as raw lumps): a
+      // dark steel striking bar with a bent tip, gripped like a tool,
+      // plus the knapped stone chunk it strikes against.
+      const steel = skin(0x4a4f57);
+      const stone = skin(0x8a8578);
+      addBoxPart(group, 0.035, 0.2, 0.05, 0, 0.01, 0, steel);
+      addBoxPart(group, 0.035, 0.07, 0.05, 0.028, 0.125, 0, steel).rotation.z = -0.6;
+      addBoxPart(group, 0.07, 0.055, 0.06, -0.055, -0.06, 0, stone).rotation.y = 0.7;
+      return { group, isTool: true, flames };
+    }
+
+    if (id === ID.Welder) {
+      // The Welding torch (tester 2026-10-31: placeholder tile): a
+      // gripped handle, an angled neck and a nozzle with a live tip.
+      const grip = skin(0x36393f);
+      const brass = skin(0xc8963e);
+      addCylPart(group, 0.024, 0.028, 0.17, 0, -0.045, 0, grip, 10);
+      addCylPart(group, 0.016, 0.02, 0.07, 0.02, 0.055, 0, brass, 8).rotation.z = -0.5;
+      addCylPart(group, 0.02, 0.013, 0.045, 0.048, 0.095, 0, brass, 8).rotation.z = -0.5;
+      const tip = skin(0x7cc4ff);
+      tip.emissive = new THREE.Color(0x3aa0ff);
+      tip.emissiveIntensity = 0.9;
+      const flameTip = addCylPart(group, 0.001, 0.011, 0.05, 0.068, 0.125, 0, tip, 8);
+      flameTip.rotation.z = -0.5;
+      flames.push(flameTip);
+      return { group, isTool: true, flames };
+    }
+
+    if (id === ID.Shell) {
+      // Shell chips: two curved shards, not a heap of powder (the
+      // heap set below used to swallow this id).
+      const sh = skin(baseHex);
+      addBoxPart(group, 0.12, 0.018, 0.09, -0.025, -0.015, 0, sh).rotation.z = 0.25;
+      addBoxPart(group, 0.1, 0.018, 0.08, 0.035, 0.012, 0.01, skin(shiftHex(baseHex, 1.12))).rotation.z = -0.15;
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Powder || id === ID.Wisp || id === ID.BaseBrew || id === ID.Wart || id === ID.GravelBar || id === ID.InkSac) {
       // Small loose matter: a little heap of the stuff in its own colour.
       const heap = skin(baseHex);
       addCylPart(group, 0.02, 0.09, 0.06, 0, -0.03, 0, heap, 10);
       addCylPart(group, 0.03, 0.035, 0.03, 0.05, -0.045, 0.03, skin(shiftHex(baseHex, 1.1)), 8);
       addCylPart(group, 0.025, 0.03, 0.025, -0.05, -0.048, -0.02, skin(shiftHex(baseHex, 0.9)), 8);
+      return { group, isTool: false, flames };
+    }
+
+    // 4c0. SMALL MATTER, TROPHIES & BLOCK STATE VARIANTS (tester
+    // 2026-10-31): each of these used to fall to the flat tile below.
+    if (id === ID.PharaohGold) {
+      // The Scarab relic (it rendered as a plain ingot bar): a gold
+      // beetle — oval body, wing-case line, head and legs.
+      const gold = skin(0xd8a828);
+      const dark = skin(0x8a6d1f);
+      addCylPart(group, 0.075, 0.085, 0.05, 0, -0.012, 0, gold, 12);
+      addCylPart(group, 0.038, 0.044, 0.034, 0, 0.042, 0, dark, 10);
+      addBoxPart(group, 0.012, 0.052, 0.056, 0, -0.012, 0, dark);
+      addBoxPart(group, 0.05, 0.012, 0.02, -0.088, -0.032, 0, dark).rotation.z = 0.5;
+      addBoxPart(group, 0.05, 0.012, 0.02, 0.088, -0.032, 0, dark).rotation.z = -0.5;
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.EyeOfEnder) {
+      // A smooth orb with a dark pupil (the gem stack read as a
+      // pawn, and oversized). 
+      const orb = skin(baseHex);
+      orb.emissive = new THREE.Color(baseHex);
+      orb.emissiveIntensity = 0.25;
+      addCylPart(group, 0.045, 0.068, 0.055, 0, -0.028, 0, orb, 12);
+      addCylPart(group, 0.068, 0.045, 0.055, 0, 0.028, 0, orb, 12);
+      addCylPart(group, 0.02, 0.02, 0.02, 0, 0, -0.062, skin(0x0d2b1a), 8).rotation.x = Math.PI / 2;
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.NetherStar) {
+      // A star: two crossed plates + a bright core (the gem stack
+      // read as a generic crystal).
+      const star = skin(0xf8e98a);
+      star.emissive = new THREE.Color(0xffdf5a);
+      star.emissiveIntensity = 0.55;
+      addBoxPart(group, 0.05, 0.19, 0.03, 0, 0, 0, star);
+      addBoxPart(group, 0.19, 0.05, 0.03, 0, 0, 0, star);
+      addBoxPart(group, 0.11, 0.11, 0.028, 0, 0, 0, star).rotation.z = Math.PI / 4;
+      addCylPart(group, 0.032, 0.032, 0.04, 0, 0, 0, skin(0xfff6c8), 10);
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Pellets) {
+      // A handful of plastic pellets: little beads in a loose pile.
+      const bead = skin(baseHex);
+      const bead2 = skin(shiftHex(baseHex, 0.92));
+      for (const [ox, oy, oz, m] of [[-0.045, -0.03, 0.01, bead], [0.04, -0.032, -0.02, bead2], [0.005, -0.034, 0.045, bead], [-0.01, -0.005, -0.005, bead2], [0.055, -0.008, 0.03, bead], [-0.055, -0.006, -0.035, bead]] as const) {
+        addCylPart(group, 0.021, 0.024, 0.026, ox, oy, oz, m, 8);
+      }
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Fuel) {
+      // A fuel canister: squat tank, cap and carry handle.
+      const tank = skin(baseHex);
+      addBoxPart(group, 0.15, 0.16, 0.1, 0, -0.015, 0, tank);
+      addBoxPart(group, 0.09, 0.025, 0.04, 0, 0.078, 0, skin(shiftHex(baseHex, 0.8)));
+      addCylPart(group, 0.02, 0.02, 0.03, 0.05, 0.075, 0, skin(0x36393f), 8);
+      addBoxPart(group, 0.155, 0.03, 0.105, 0, -0.085, 0, skin(shiftHex(baseHex, 0.85)));
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Spark) {
+      // A strike-anywhere spark: a bright ember chunk (the durable
+      // tool that shares its job is the Striker, ID.Flint).
+      const ember = skin(baseHex);
+      ember.emissive = new THREE.Color(0xff8c1a);
+      ember.emissiveIntensity = 0.7;
+      addBoxPart(group, 0.075, 0.06, 0.07, 0, -0.01, 0, skin(0x4a3424)).rotation.y = 0.5;
+      addCylPart(group, 0.028, 0.02, 0.035, 0.005, 0.032, 0, ember, 8);
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Elytra) {
+      // The Glide shell: a curved fan shell, held by its hinge.
+      const sh = skin(baseHex);
+      addCylPart(group, 0.02, 0.105, 0.055, 0, 0.01, 0, sh, 14);
+      addCylPart(group, 0.03, 0.032, 0.03, 0, -0.045, 0, skin(shiftHex(baseHex, 0.85)), 10);
+      addBoxPart(group, 0.012, 0.045, 0.05, 0, 0.012, 0, skin(shiftHex(baseHex, 1.2)));
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Fur || id === ID.Pelt) {
+      // A folded hide: two soft slabs offset like a draped pelt.
+      const hide = skin(baseHex);
+      addBoxPart(group, 0.17, 0.028, 0.13, 0, -0.028, 0, hide).rotation.z = 0.06;
+      addBoxPart(group, 0.155, 0.026, 0.12, 0.012, 0.002, 0.008, skin(shiftHex(baseHex, 1.1))).rotation.z = -0.05;
+      addBoxPart(group, 0.15, 0.024, 0.115, -0.005, 0.03, -0.005, hide).rotation.y = 0.15;
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.Wax) {
+      const wax = skin(baseHex);
+      addBoxPart(group, 0.14, 0.09, 0.11, 0, -0.015, 0, wax).rotation.y = 0.2;
+      addBoxPart(group, 0.11, 0.035, 0.085, 0.005, 0.045, 0, skin(shiftHex(baseHex, 1.1))).rotation.y = 0.45;
+      return { group, isTool: false, flames };
+    }
+
+    if (id === ID.WaxSeal) {
+      const seal = skin(baseHex);
+      addCylPart(group, 0.075, 0.08, 0.022, 0, -0.01, 0, seal, 14).rotation.x = Math.PI / 2;
+      addCylPart(group, 0.032, 0.032, 0.026, 0, -0.01, 0, skin(shiftHex(baseHex, 0.8)), 10).rotation.x = Math.PI / 2;
+      return { group, isTool: false, flames };
+    }
+
+    // Block STATE VARIANTS (Water, Open door, Lit lamp, Lever on,
+    // Pusher, Open gate, Plate down, Magma, Launcher, Packed ice):
+    // shadow defs of real blocks — in hand they read as their block,
+    // in their own colours, never as an item tile.
+    if (id === 44) {
+      // Lever (on): base plate + thrown stick.
+      addBoxPart(group, 0.12, 0.05, 0.09, 0, -0.055, 0, skin(0x8e959c));
+      addCylPart(group, 0.013, 0.016, 0.15, 0.022, 0.025, 0, skin(0x7c522b), 8).rotation.z = -0.55;
+      addCylPart(group, 0.023, 0.023, 0.028, 0.058, 0.088, 0, skin(baseHex), 8);
+      return { group, isTool: false, flames };
+    }
+    if (id === 5 || id === 34 || id === 41 || id === 45 || id === 78 || id === 83 || id === 88 || id === 99 || id === 191) {
+      const watery = id === 5;
+      const glow = id === 41 || id === 88;
+      const matV = watery ? skin(baseHex, { transparent: true, opacity: 0.6, depthWrite: false }) : skin(baseHex);
+      if (glow) {
+        matV.emissive = new THREE.Color(baseHex);
+        matV.emissiveIntensity = id === 41 ? 0.5 : 0.35;
+      }
+      addBoxPart(group, 0.2, 0.18, 0.2, 0, -0.01, 0, matV);
+      addStudGrid(group, 0.18, 0.082, 0.18, 2, 2, watery ? matV : skin(shiftHex(baseHex, 1.1)));
+      return { group, isTool: false, flames };
+    }
+
+    // Retired redstone-era components (catalogue-excluded, old
+    // saves only): honest little mechanisms, not item tiles.
+    if (id === 42 || id === 247) {
+      // Red dust / lit red dust: a pinch of red powder.
+      const heap = skin(baseHex);
+      addCylPart(group, 0.015, 0.075, 0.05, 0, -0.03, 0, heap, 10);
+      addCylPart(group, 0.02, 0.028, 0.024, 0.045, -0.042, 0.025, skin(shiftHex(baseHex, 1.15)), 8);
+      return { group, isTool: false, flames };
+    }
+    if (id === 195 || id === 215 || id === 248 || id === 249 || id === 299) {
+      // Repeater / Comparator / Night switch (and lit variants): a
+      // flat slab with little torch knobs.
+      const slab = skin(0xb8bcc0);
+      addBoxPart(group, 0.17, 0.03, 0.13, 0, -0.04, 0, slab);
+      addCylPart(group, 0.014, 0.016, 0.05, -0.045, -0.005, 0, skin(0xd84a3a), 8);
+      if (id !== 215 && id !== 249) addCylPart(group, 0.014, 0.016, 0.05, 0.045, -0.005, 0, skin(0xd84a3a), 8);
+      addBoxPart(group, 0.05, 0.02, 0.05, 0, -0.018, 0.035, skin(baseHex));
       return { group, isTool: false, flames };
     }
 
@@ -2676,6 +2947,97 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const mat = skin(baseHex);
       addBoxPart(group, 0.17, 0.05, 0.1, 0, 0, 0, mat);
       addStudGrid(group, 0.15, 0.025, 0.08, 2, 1, skin(shiftHex(baseHex, 1.12)), 0, 0, true);
+      return { group, isTool: false, flames };
+    }
+
+    // 4d. PLANTS & PRODUCE IN HAND (tester 2026-10-31): crops and
+    // plants are placeable, so they sailed past 4c into the block
+    // builder below and rendered as full cubes. A held plant is a
+    // little living cluster, never a cube.
+    if (id === ID.Pumpkin || id === ID.Melon) {
+      if (id === ID.Pumpkin) {
+        addCylPart(group, 0.1, 0.106, 0.15, 0, -0.01, 0, skin(baseHex), 12);
+        addCylPart(group, 0.085, 0.09, 0.02, 0, 0.07, 0, skin(shiftHex(baseHex, 1.1)), 12);
+        addCylPart(group, 0.014, 0.018, 0.05, 0.01, 0.1, 0, skin(0x5da244), 8).rotation.z = 0.3;
+      } else {
+        addCylPart(group, 0.082, 0.082, 0.19, 0, 0, 0, skin(baseHex), 12).rotation.z = Math.PI / 2;
+        addCylPart(group, 0.084, 0.084, 0.014, -0.05, 0, 0, skin(0x2f7d3a), 12).rotation.z = Math.PI / 2;
+        addCylPart(group, 0.084, 0.084, 0.014, 0.05, 0, 0, skin(0x2f7d3a), 12).rotation.z = Math.PI / 2;
+      }
+      return { group, isTool: false, flames };
+    }
+
+    if (d.plant || d.crop) {
+      const leafMat = skin(0x4c9a3c);
+      const stemMat = skin(0x5da244);
+      // Mushroom / Red cap
+      if (id === 198 || id === 199) {
+        addCylPart(group, 0.026, 0.036, 0.085, 0, -0.025, 0, skin(0xe8dcc8), 10);
+        addCylPart(group, 0.03, 0.09, 0.055, 0, 0.042, 0, skin(baseHex), 12);
+        if (id === 199) {
+          addCylPart(group, 0.011, 0.011, 0.01, -0.03, 0.066, 0.012, skin(0xf4f1ea), 6);
+          addCylPart(group, 0.009, 0.009, 0.01, 0.035, 0.062, -0.018, skin(0xf4f1ea), 6);
+          addCylPart(group, 0.008, 0.008, 0.01, 0.002, 0.072, 0.032, skin(0xf4f1ea), 6);
+        }
+        return { group, isTool: false, flames };
+      }
+      // Yellow / Red bloom
+      if (id === 23 || id === 24) {
+        addCylPart(group, 0.009, 0.011, 0.13, 0, -0.02, 0, stemMat, 6);
+        addBoxPart(group, 0.05, 0.014, 0.02, 0.025, -0.045, 0, leafMat).rotation.z = 0.5;
+        addCylPart(group, 0.056, 0.056, 0.015, 0, 0.052, 0, skin(baseHex), 12).rotation.x = 0.25;
+        addCylPart(group, 0.02, 0.02, 0.018, 0, 0.058, 0.008, skin(0xf5c518), 8);
+        return { group, isTool: false, flames };
+      }
+      // Berry bush
+      if (id === 204) {
+        addBoxPart(group, 0.14, 0.1, 0.12, 0, -0.01, 0, leafMat);
+        addBoxPart(group, 0.11, 0.08, 0.1, 0.02, 0.055, 0.01, skin(0x5da244));
+        for (const [ox, oy, oz] of [[-0.045, 0.02, -0.045], [0.05, 0.045, 0.03], [0.01, -0.03, 0.05], [-0.02, 0.06, -0.02]] as const) {
+          addCylPart(group, 0.016, 0.016, 0.016, ox, oy, oz, skin(baseHex), 8);
+        }
+        return { group, isTool: false, flames };
+      }
+      // Wheat (mature = grain heads, young = plain stalks)
+      if (id === 38 || id === 230) {
+        for (const [ox, oz, tilt] of [[-0.035, 0.01, 0.14], [0.03, -0.02, -0.11], [0.005, 0.035, 0.05], [-0.01, -0.035, -0.04]] as const) {
+          addCylPart(group, 0.006, 0.008, 0.17, ox, 0.01, oz, id === 38 ? skin(0xd8b93c) : stemMat, 6).rotation.z = tilt;
+          if (id === 38) addCylPart(group, 0.013, 0.017, 0.055, ox + tilt * 0.35, 0.1, oz, skin(baseHex), 6).rotation.z = tilt;
+        }
+        return { group, isTool: false, flames };
+      }
+      // Pumpkin / Melon stems: a curling vine
+      if (id === 237 || id === 238) {
+        addCylPart(group, 0.01, 0.012, 0.08, -0.03, -0.03, 0, stemMat, 6).rotation.z = 0.4;
+        addCylPart(group, 0.009, 0.01, 0.075, 0.005, 0.015, 0.01, stemMat, 6).rotation.z = -0.15;
+        addCylPart(group, 0.007, 0.009, 0.07, 0.035, 0.055, -0.005, skin(baseHex), 6).rotation.z = -0.6;
+        addBoxPart(group, 0.055, 0.012, 0.035, -0.045, 0.005, 0.01, leafMat).rotation.z = 0.4;
+        return { group, isTool: false, flames };
+      }
+      // Crops whose produce shows (Carrots / Potatoes / Beetroots):
+      // leafy tops + the vegetable itself at the base.
+      if (id === 232 || id === 234 || id === 236) {
+        addBoxPart(group, 0.018, 0.07, 0.018, -0.02, 0.045, 0, leafMat).rotation.z = 0.3;
+        addBoxPart(group, 0.018, 0.08, 0.018, 0.018, 0.05, 0.008, leafMat).rotation.z = -0.25;
+        addBoxPart(group, 0.016, 0.06, 0.016, 0.002, 0.04, -0.015, skin(0x5da244)).rotation.x = 0.3;
+        if (id === 232) {
+          addCylPart(group, 0.02, 0.003, 0.085, -0.018, -0.035, 0, skin(baseHex), 8);
+          addCylPart(group, 0.017, 0.003, 0.07, 0.022, -0.042, 0.012, skin(shiftHex(baseHex, 1.1)), 8);
+        } else if (id === 234) {
+          addCylPart(group, 0.04, 0.046, 0.06, -0.022, -0.04, 0, skin(baseHex), 9);
+          addCylPart(group, 0.032, 0.038, 0.05, 0.032, -0.045, 0.014, skin(shiftHex(baseHex, 1.08)), 9);
+        } else {
+          addCylPart(group, 0.042, 0.03, 0.065, 0, -0.032, 0, skin(baseHex), 10);
+        }
+        return { group, isTool: false, flames };
+      }
+      // Every other sprout / shoots / sprig (Sprig, Shoots, Sprouts,
+      // Carrot shoots, Potato shoots, Beet shoots): a tuft of blades,
+      // one tinted by the crop itself.
+      for (const [ox, oz, tilt, m] of [[-0.032, 0.008, 0.3, leafMat], [0.028, -0.014, -0.26, leafMat], [0.002, 0.03, 0.06, skin(baseHex)], [-0.008, -0.03, -0.08, stemMat]] as const) {
+        addBoxPart(group, 0.017, 0.095, 0.028, ox, 0.005, oz, m).rotation.z = tilt;
+      }
+      addCylPart(group, 0.035, 0.045, 0.025, 0, -0.055, 0, skin(0x6b4a2a), 8);
       return { group, isTool: false, flames };
     }
 
@@ -2939,7 +3301,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const size = box.getSize(new THREE.Vector3());
     const d = def(id);
     let M: THREE.Matrix4;
-    if (TEKS_SET.has(id)) {
+    if (TEKS_SET.has(id) || id === ID.CrankOn || id === ID.ClutchOpen || id === ID.RingLo) {
       // Teks parts (Philippe, 2026-10-29): buildStudsItem3D already
       // applied the PROPORTIONAL per-module scale, so this pipeline
       // factor is a CONSTANT — never divide by maxDim here, that is what
@@ -2993,7 +3355,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const mouthT = ARM_OUT.clone().negate();
       placeArm(grip, shaft, mouthT, ARM_SCALE * 0.82);
     } else if (isTool) {
-      const len = Math.max(1e-3, size.y);
+      // Tester 2026-10-31: the tool display normalizes by HEIGHT —
+      // for a flat, wide tool (the Crossbow: 0.31 wide × 0.053 tall)
+      // that exploded it to ~6× a pick's width on screen. Floor the
+      // length at 60% of the model's widest span so flat tools keep
+      // sane proportions; tall tools (picks, swords, axes) are
+      // untouched because their height already dominates.
+      const len = Math.max(1e-3, size.y, 0.6 * Math.max(size.x, size.z));
       const upright = id === ID.Torch || id === ID.RedTorch || id === ID.RedTorchOn;
       // model -> sprite space: handle end at the sprite's bottom-left, shaft on the diagonal (torches stand upright)
       const f = (upright ? 13 / 16 : 15.5 / 16 * Math.SQRT2 * 0.84) / len;
@@ -5943,11 +6311,32 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     const dir = new THREE.Vector3();
     camera.getWorldDirection(dir);
-    const anchorQ: [number, number, number] = [
-      Math.floor(camera.position.x + dir.x * 3.5) * 4,
-      Math.floor(player.y) * 4,
-      Math.floor(camera.position.z + dir.z * 3.5) * 4,
-    ];
+    // Tester 2026-10-31: the anchor used the PLAYER's foot level, but
+    // model dq are hub-relative — a Starter Buggy's wheels sit 7
+    // quarters BELOW the hub, so 8 of its 11 parts spawned inside the
+    // terrain and failed tech.test (only hub, motor and battery
+    // placed). Ground the anchor instead: the model's LOWEST part
+    // rests on the surface at the look point, then lift block by
+    // block (≤3) and keep the height where the most parts fit.
+    const bx = Math.floor(camera.position.x + dir.x * 3.5);
+    const bz = Math.floor(camera.position.z + dir.z * 3.5);
+    const minDqY = Math.min(...model.parts.map((p) => p.dq[1]));
+    const groundQ = (world.heightAt(bx, bz) + 1) * 4 - minDqY;
+    let anchorQ: [number, number, number] = [bx * 4, groundQ, bz * 4];
+    let bestFits = -1;
+    for (let lift = 0; lift <= 3; lift++) {
+      const cand: [number, number, number] = [bx * 4, groundQ + lift * 4, bz * 4];
+      let fits = 0;
+      for (const mp of model.parts) {
+        const q: [number, number, number] = [cand[0] + mp.dq[0], cand[1] + mp.dq[1], cand[2] + mp.dq[2]];
+        if (tech.test(mp.id, mp.o, q, techSolidAt) >= 0 && !techHitsPlayer(mp.id, mp.o, q)) fits++;
+      }
+      if (fits > bestFits) {
+        bestFits = fits;
+        anchorQ = cand;
+      }
+      if (fits === model.parts.length) break;
+    }
     let placed = 0;
     let holo = 0;
     let jointN = 0;
@@ -15295,6 +15684,20 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         return say("Need the " + (skillById(recipe.skill)?.name ?? "skill") + " skill");
       }
       if (recipe.special === "hammer" && hammer) return say("Hammer's already on your belt");
+      // Tester 2026-10-31: the book is a 2×2 hand grid — a recipe whose
+      // shape exceeds 2×2 needs the Crafting Bench panel open, the same
+      // span rule fillGrid already enforced for the manual grid. Every
+      // 3×3 recipe was craftable from anywhere before this gate.
+      if (((recipe.w ?? 1) > 2 || (recipe.h ?? 1) > 2) && panel !== "bench") {
+        return say("Needs a 3×3 Crafting Bench");
+      }
+      // Tester 2026-10-31: re-crafting a tool you already carry silently
+      // REFILLED its durability (give() resets a maxUse item) and burned
+      // the materials — a free repair that eats resources. The inventory
+      // model holds one of each tool; refuse the recraft up front.
+      if (def(recipe.out).maxUse > 0 && (inv[recipe.out] ?? 0) > 0) {
+        return say("You already carry a " + def(recipe.out).name.toLowerCase());
+      }
       const maxBatch = recipe.special || def(recipe.out).maxUse || def(recipe.out).armorSlot ? 1 : Math.max(1, Math.min(64, times));
       let crafted = 0;
       for (let t = 0; t < maxBatch; t++) {

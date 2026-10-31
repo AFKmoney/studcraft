@@ -132,6 +132,11 @@ export function builtinModels(): VehicleModel[] {
         P(379, [32, 15, 0]),
         P(450, [38, 15, 0]),
         P(471, [44, 12, 0]),
+        // P5d (tester 2026-10-31 noted the builtin carried no sensor):
+        // a distance sensor mirrored across from the drive motor, so
+        // the flagship rig demonstrates the sensor layer too. Bind it
+        // to the drive channel with sneak+use to arm obstacle stop.
+        P(472, [0, 7, 4]),
       ],
     },
   ];

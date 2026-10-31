@@ -987,7 +987,7 @@ gear(ID.TPlasticSword, "Tempered plastic blade", "#a8d8e8", "sword", 3, 240);
 gear(ID.TPlasticAxe, "Tempered plastic axe", "#a8d8e8", "axe", 3, 240);
 gear(ID.TPlasticShovel, "Tempered plastic spade", "#a8d8e8", "shovel", 3, 240);
 item(ID.Bone, "Bone", "#f4f1ea");
-item(ID.Flint, "Spark", "#f07820", { maxUse: 40 });
+item(ID.Flint, "Striker", "#f07820", { maxUse: 40 });
 item(ID.Bottle, "Bottle", "#d5f3f6");
 item(ID.PotionHeal, "Mend brew", "#e23b2f", { food: 0 });
 item(ID.PotionSpeed, "Dash brew", "#f5c518");
