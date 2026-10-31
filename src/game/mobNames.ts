@@ -4,6 +4,8 @@
 // so every on-screen mob name goes through this table.
 // Full design: mob-redesign.md (roster §3).
 
+import { BOSS_BY_ID, SPECIES_BY_ID } from "./biomes.ts";
+
 export const MOB_KINDS = [
   "sheep", "creeper", "cow", "walker", "pig", "chicken", "spider", "skelly", "villager", "ghast", "dragon", "horse",
   "phantom", "piglin", "boat", "cart", "frog", "fox", "crab", "wisp", "slime", "wolf", "golem", "wither", "enderman",
@@ -65,4 +67,15 @@ export function mobLabel(kind: string, opts: { tame?: boolean; elder?: boolean }
   if (kind === "wolf" && !opts.tame) return "Clébard-Clip sauvage";
   if (kind === "guardian" && opts.elder) return "Bouée-Sentinelle ancienne";
   return (MOB_LABEL as Record<string, string>)[kind] ?? kind;
+}
+
+// biomes-bosses: original species + biome bosses (labels live with their specs).
+export const SPECIES_LABEL: Readonly<Record<string, string>> = Object.fromEntries([...SPECIES_BY_ID].map(([id, s]) => [id, s.label]));
+export const BOSS_LABEL: Readonly<Record<string, string>> = Object.fromEntries([...BOSS_BY_ID].map(([id, b]) => [id, b.label]));
+/** Display name for a live mob: boss > species > zone variant > kind. */
+export function displayName(m: { kind: string; species?: string; bossOf?: string; variantLabel?: string; tame?: boolean; elder?: boolean }): string {
+  if (m.bossOf && BOSS_LABEL[m.bossOf]) return BOSS_LABEL[m.bossOf];
+  if (m.species && SPECIES_LABEL[m.species]) return SPECIES_LABEL[m.species];
+  if (m.variantLabel) return m.variantLabel;
+  return mobLabel(m.kind as MobKind, { tame: m.tame, elder: m.elder });
 }

@@ -1,5 +1,6 @@
 import { BLOCKS, ID, def } from "./blocks";
 import { hash2, hash3, makeNoise, type Noise } from "./noise";
+import { zoneFor, type ZoneId } from "./biomes";
 import { SITE_STEP, siteBricks, type Site, type SiteKind } from "./sites";
 
 export { SITE_STEP };
@@ -110,6 +111,15 @@ export class World {
     if (this.flat) return "Baseplate";
     if (inNether(x)) return "Nether";
     return this.biomeOf(x, z, this.heightAt(x, z));
+  }
+
+  /** Gameplay zone (biomes.ts) laid over the terrain biome. New zones are
+   *  rolled on their own variant noise, so terrain (and saves) never change. */
+  zoneAt(x: number, z: number): ZoneId | "" {
+    if (this.flat) return "plains";
+    const h = inNether(x) ? 0 : this.heightAt(x, z);
+    const biome = inNether(x) ? "Nether" : this.biomeOf(x, z, h);
+    return zoneFor(biome, h, (salt) => this.noise.fbm(x * 0.006 + salt, z * 0.006 - salt));
   }
 
   private biomeOf(x: number, z: number, h: number): string {
