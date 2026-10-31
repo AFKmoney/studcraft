@@ -174,3 +174,57 @@ test("themed villages get folk: the mechanic stands at the TEKS counter", () => 
   for (const f of folk) assert.ok(f.x >= s.x && f.x <= s.x + s.w && f.z >= s.z && f.z <= s.z + s.d);
   assert.deepEqual(S.structureFolk(s, SEED), folk);
 });
+
+const cellMap = (s: Parameters<typeof S.structureBricks>[0]) => {
+  const cells = new Map<string, number>();
+  for (const b of S.structureBricks(s, SEED)) if (b.mode === 0) cells.set(`${s.x + b.dx},${s.y + b.dy},${s.z + b.dz}`, b.id);
+  return (x: number, y: number, z: number) => cells.get(`${Math.floor(x)},${y},${Math.floor(z)}`);
+};
+
+test("every village and the city: chief manor/castle, guild hall(s), and a cachot with barred cells + evidence chest", () => {
+  for (const zone of ZONE_IDS) {
+    const size = S.structSize("village", zone);
+    const s = { x: 640, z: 128, y: 40, w: size, d: size, kind: "village" as const, zone, gx: 5, gz: 1 };
+    const c = S.civicOf(s, SEED);
+    const at = cellMap(s);
+    assert.ok(c.chief, zone);
+    assert.ok(([undefined, ID.Air] as (number | undefined)[]).includes(at(c.chief.x, s.y + 1, c.chief.z)), zone + " chief stands in air");
+    assert.ok(c.halls.length >= 1 && c.halls.every((h) => at(h.at.x, s.y + 1, h.at.z) === ID.Air || at(h.at.x, s.y + 1, h.at.z) === undefined), zone + " hall");
+    if (zone === "islands") {
+      assert.equal(c.jail, null, "stilt village keeps no flooded cellar");
+      continue;
+    }
+    assert.ok(c.jail && c.jail.cells.length === 3);
+    for (const [x, y, z] of c.jail.cells) {
+      assert.equal(at(x, y, z), ID.Air, zone + " cell");
+      assert.equal(at(x, y + 1, z), ID.Air, zone + " cell headroom");
+      assert.equal(at(x, y, z - 1), ID.Door, zone + " cell door");
+      assert.notEqual(at(x, y - 1, z), ID.Air, zone + " cell floor");
+      assert.ok(y < s.y, "underground");
+    }
+    assert.equal(at(...c.jail.evidence), ID.Chest, zone + " evidence chest");
+    const ladders = S.structureBricks(s, SEED).filter((b) => b.id === ID.Ladder && b.dy < 0).length;
+    assert.ok(ladders >= 6, zone + " ladder down to the cachot");
+  }
+  const city = S.civicOf({ x: 0, z: 0, y: 30, w: S.CITY_W, d: S.CITY_W, kind: "village", zone: "desertCity", gx: 9, gz: 9 }, SEED);
+  assert.equal(city.halls.length, 2);
+  assert.notEqual(city.halls[0].guild.id, city.halls[1].guild.id);
+});
+
+test("bandit camps: rare, placed, palisade + fence stall + hostile spots", () => {
+  let n = 0;
+  let cells = 0;
+  for (let gx = -40; gx < 40; gx++) for (let gz = -40; gz < 40; gz++) {
+    cells++;
+    if (S.cellKind(SEED, gx, gz) === "bandit") n++;
+  }
+  assert.ok(n > 0 && n / cells < 0.06, "rare: " + n + "/" + cells);
+  const s = { x: 256, z: 256, y: 40, w: S.BANDIT_W, d: S.BANDIT_W, kind: "bandit" as const, zone: "canyon" as const, gx: 2, gz: 2 };
+  const bricks = S.structureBricks(s, SEED);
+  assert.ok(bricks.filter((b) => b.dy === 1 && (b.dx === 0 || b.dz === 0)).length > 30, "palisade");
+  assert.ok(bricks.some((b) => b.id === ID.Chest));
+  const f = S.banditFolk(s)!;
+  assert.equal(f.bandits.length, 4);
+  assert.equal(cellMap(s)(f.fence.x, s.y + 1, f.fence.z), undefined, "fence stands in the open");
+  assert.equal(S.structureLootKind(s), "vault");
+});

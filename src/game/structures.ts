@@ -12,6 +12,7 @@
 // pieces, small points of interest, and rare hidden vaults.
 import { ID, def } from "./blocks.ts";
 import { hash2, hash3 } from "./noise.ts";
+import { guildsIn, type Guild } from "./society.ts";
 import { SPECIES_BY_ID, ZONES, type ZoneId } from "./biomes.ts";
 import { stockChest, type LootKind } from "./loot.ts";
 import { DEBRIS_ADVANCED, DEBRIS_RARE } from "./debris.ts";
@@ -26,7 +27,7 @@ const LM_STEP = 256;
 /** Nothing is built closer than this to the spawn hamlet / world origin. */
 export const SPAWN_CLEAR = 112;
 
-export type StructKind = "village" | "shrine" | "mecha" | "poi" | "hidden";
+export type StructKind = "village" | "shrine" | "mecha" | "poi" | "hidden" | "bandit";
 
 export type Structure = {
   x: number; // footprint min corner
@@ -268,6 +269,204 @@ const LOTS: readonly (readonly [number, number])[] = [
 /** The trader lot (east, on the plaza path): a vehicle workshop. */
 export const GARAGE_LOT = 4;
 
+// ---------------------------------------------------------------- civic
+
+/** Lots taken by civic buildings (see LOTS). */
+export const MANOR_LOT = 6;
+export const GUILD_LOT = 1;
+const MANOR_W = 11;
+const MANOR_D = 8;
+
+/** The chief's manor: two storeys, crenellated parapet, banners, a
+ *  ladder down to the cachot (dry land). Door faces the plaza (north). */
+function manor(b: Build, ox: number, oz: number, t: Theme, water: boolean) {
+  const W = MANOR_W;
+  const D = MANOR_D;
+  if (water) for (const [px, pz] of [[0, 0], [W - 1, 0], [0, D - 1], [W - 1, D - 1], [5, 0], [5, D - 1]] as const) b.put(ox + px, -1, oz + pz, t.post, 2);
+  b.box(ox, 0, oz, ox + W - 1, 0, oz + D - 1, t.floor === ID.Sand ? t.stone : t.floor);
+  for (let y = 1; y <= 8; y++) for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
+    const edge = x === 0 || z === 0 || x === W - 1 || z === D - 1;
+    if (!edge) {
+      b.put(ox + x, y, oz + z, y === 4 && !(x === W - 2 && z === 1) ? t.floor === ID.Sand ? t.stone : t.floor : ID.Air);
+      continue;
+    }
+    const corner = (x === 0 || x === W - 1) && (z === 0 || z === D - 1);
+    let id = corner ? t.pillar : t.walls[0];
+    if (z === 0 && x === 5 && y <= 2) id = ID.Air; // the great door
+    else if (!corner && (y === 2 || y === 6) && x % 3 === 1) id = t.glass === ID.Air ? ID.Glass : t.glass;
+    b.put(ox + x, y, oz + z, id);
+  }
+  b.box(ox, 9, oz, ox + W - 1, 9, oz + D - 1, t.roof);
+  for (let x = 0; x < W; x += 2) {
+    b.put(ox + x, 10, oz, t.trim);
+    b.put(ox + x, 10, oz + D - 1, t.trim);
+  }
+  for (let z = 0; z < D; z += 2) {
+    b.put(ox, 10, oz + z, t.trim);
+    b.put(ox + W - 1, 10, oz + z, t.trim);
+  }
+  // banners either side of the door, lanterns, the chief's hall
+  for (const x of [3, 7]) for (let y = 3; y <= 5; y++) b.put(ox + x, y, oz - 1, t.accent);
+  b.put(ox + 2, 3, oz + 1, ID.Lantern);
+  b.put(ox + 8, 3, oz + 1, ID.Lantern);
+  b.put(ox + 5, 1, oz + 5, ID.Bench); // the chief's table
+  b.put(ox + 4, 1, oz + 6, ID.Chest);
+  b.put(ox + 2, 5, oz + 6, ID.Bed);
+  b.put(ox + 8, 5, oz + 6, ID.Chest);
+  for (let y = 1; y <= 4; y++) b.put(ox + W - 2, y, oz + 1, ID.Ladder);
+  if (!water) for (let y = -6; y <= 0; y++) b.put(ox + 1, y, oz + 1, ID.Ladder); // down to the cachot
+}
+
+/** The cachot: a stone vault under the manor/castle with three barred
+ *  cells and an evidence chest. Origin = manor origin; floor at `y0`. */
+function jail(b: Build, ox: number, oz: number, t: Theme, y0: number) {
+  const W = MANOR_W;
+  const D = MANOR_D;
+  const stone = t.stone === ID.Moss ? ID.Cobble : t.stone;
+  for (let y = y0; y <= y0 + 5; y++) for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
+    const shell = y === y0 || y === y0 + 5 || x === 0 || z === 0 || x === W - 1 || z === D - 1;
+    b.put(ox + x, y, oz + z, shell ? stone : ID.Air);
+  }
+  for (const [cx] of JAIL_CELLS) {
+    for (let y = y0 + 1; y <= y0 + 4; y++) {
+      // dividers and a barred front with a door gap
+      b.put(ox + cx + 2, y, oz + 5, ID.IronBlock);
+      b.put(ox + cx + 2, y, oz + 6, ID.IronBlock);
+      for (const dx of [-1, 0, 1]) if (!(dx === 0 && y <= y0 + 2)) b.put(ox + cx + dx, y, oz + 4, ID.Fence);
+    }
+    b.put(ox + cx, y0 + 1, oz + 4, ID.Door);
+    b.put(ox + cx - 1, y0 + 1, oz + 6, ID.Bed);
+  }
+  b.put(ox + 9, y0 + 1, oz + 1, ID.Chest); // evidence chest (confiscated goods)
+  b.put(ox + 9, y0 + 1, oz + 2, ID.Bench);
+  b.put(ox + 5, y0 + 4, oz + 2, ID.Lantern);
+  for (let y = y0 + 1; y <= y0 + 5; y++) b.put(ox + 1, y, oz + 1, ID.Ladder);
+}
+/** Cell centres relative to the manor origin (x offsets; z = 5). */
+const JAIL_CELLS: readonly [number][] = [[2], [5], [8]];
+
+/** A guild hall in the guild's own colours: 9x7, banner tower, counter. */
+function guildHall(b: Build, ox: number, oz: number, t: Theme, g: Guild, face: 0 | 1, water: boolean) {
+  const W = 9;
+  const D = 7;
+  if (water) for (const [px, pz] of [[0, 0], [W - 1, 0], [0, D - 1], [W - 1, D - 1]] as const) b.put(ox + px, -1, oz + pz, t.post, 2);
+  b.box(ox, 0, oz, ox + W - 1, 0, oz + D - 1, t.floor === ID.Sand ? t.stone : t.floor);
+  const dz = face ? D - 1 : 0;
+  for (let y = 1; y <= 5; y++) for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
+    const edge = x === 0 || z === 0 || x === W - 1 || z === D - 1;
+    if (!edge) {
+      b.put(ox + x, y, oz + z, ID.Air);
+      continue;
+    }
+    const corner = (x === 0 || x === W - 1) && (z === 0 || z === D - 1);
+    let id = corner ? g.hall.accent : g.hall.wall;
+    if (z === dz && x === 4 && y <= 2) id = ID.Air;
+    else if (!corner && y === 3 && x % 2 === 0 && z !== dz) id = t.glass === ID.Air ? ID.Glass : t.glass;
+    b.put(ox + x, y, oz + z, id);
+  }
+  b.box(ox - 1, 6, oz - 1, ox + W, 6, oz + D, g.hall.accent);
+  // banner tower
+  for (let y = 7; y <= 9; y++) b.put(ox + 4, y, oz + 3, g.hall.wall);
+  for (let y = 8; y <= 9; y++) b.put(ox + 5, y, oz + 3, g.hall.banner);
+  b.put(ox + 4, 10, oz + 3, ID.Lantern);
+  // counter and the guild chest
+  for (let x = 2; x <= 6; x++) b.put(ox + x, 1, oz + (face ? 2 : 4), x === 4 ? g.hall.accent : ID.Planks);
+  b.put(ox + 1, 1, oz + (face ? 1 : 5), ID.Chest);
+  b.put(ox + 7, 1, oz + (face ? 1 : 5), ID.Bench);
+  b.put(ox + 4, 4, oz + 3, ID.Lantern);
+}
+
+export const BANDIT_W = 23;
+/** Bandit camp: log palisade with a gate, tents, campfire, lookout,
+ *  a fence's stall (stolen goods) and a loot chest. */
+function banditCamp(t: Theme, zone: ZoneId, r: Rnd): SBrick[] {
+  const b = new Build();
+  const W = BANDIT_W;
+  const post = zone === "arctic" ? ID.Log : t.post === ID.Obsidian ? ID.Basalt : t.post;
+  for (let i = 0; i < W; i++) for (const [x, z] of [[i, 0], [i, W - 1], [0, i], [W - 1, i]] as const) {
+    if (z === W - 1 && x >= 10 && x <= 12) continue; // gate
+    for (let y = 1; y <= 3; y++) b.put(x, y, z, post);
+    if ((x + z) % 2 === 0) b.put(x, 4, z, post); // sharpened tops
+  }
+  b.put(9, 4, W - 1, ID.Torch);
+  b.put(13, 4, W - 1, ID.Torch);
+  // campfire ring
+  b.shell(10, 0, 10, 12, 0, 12, ID.Cobble);
+  b.put(11, 1, 11, ID.Campfire);
+  // tents (accent cloth over a log ridge)
+  const cloth = [ID.Red, ID.Black, t.accent];
+  [[3, 3], [15, 3], [3, 14]].forEach(([tx, tz], i) => {
+    const c = cloth[i % cloth.length];
+    for (let z = 0; z < 4; z++) {
+      b.put(tx + 2, 3, tz + z, ID.Log);
+      for (const [dx, y] of [[0, 1], [1, 2], [3, 2], [4, 1]] as const) b.put(tx + dx, y, tz + z, c);
+    }
+    b.put(tx + 2, 1, tz + 1, ID.Bed);
+  });
+  // lookout tower
+  for (let y = 1; y <= 6; y++) {
+    b.put(18, y, 16, post);
+    b.put(20, y, 16, post);
+    b.put(18, y, 18, post);
+    b.put(20, y, 18, post);
+    b.put(19, y, 15, ID.Ladder);
+  }
+  b.box(18, 7, 16, 20, 7, 18, ID.Planks);
+  b.put(19, 8, 17, ID.Lantern);
+  // the fence's stall by the gate: stolen goods change hands here
+  for (let x = 14; x <= 17; x++) b.put(x, 1, 19, ID.Planks);
+  b.put(15, 2, 19, ID.Chest);
+  b.put(16, 2, 19, ID.Barrel);
+  b.put(14, 2, 19, post);
+  b.put(17, 2, 19, post);
+  b.box(14, 3, 18, 17, 3, 20, ID.Black);
+  // the loot pile
+  b.put(5, 1, 19, ID.Chest);
+  b.put(6, 1, 19, ID.Barrel);
+  b.put(4, 1, 19, r(77) < 0.5 ? ID.TNT : ID.Barrel);
+  return b.out;
+}
+
+export type Civic = {
+  chief: { x: number; z: number } | null;
+  jail: { cells: [number, number, number][]; evidence: [number, number, number] } | null;
+  halls: { guild: Guild; at: { x: number; z: number } }[];
+};
+/** Where the chief stands, the cachot cells (feet cells) and the guild
+ *  halls of a village or city — the anchors game.ts uses. */
+export function civicOf(s: Structure, seed: number): Civic {
+  if (s.kind !== "village") return { chief: null, jail: null, halls: [] };
+  if (s.zone === "desertCity") {
+    const [jx, jz, jy] = [17 + 1, 17 + 2, -8];
+    const gs = guildsIn(s.gx, s.gz, "desertCity", seed);
+    return {
+      chief: { x: s.x + 23.5, z: s.z + 23.5 },
+      jail: { cells: JAIL_CELLS.map(([cx]) => [s.x + jx + cx, s.y + jy + 1, s.z + jz + 5]), evidence: [s.x + jx + 9, s.y + jy + 1, s.z + jz + 1] },
+      halls: [
+        { guild: gs[0], at: { x: s.x + 17 + 1 + 4.5, z: s.z + 1 + 3 + 3.5 } },
+        { guild: gs[1], at: { x: s.x + 17 + 1 + 4.5, z: s.z + 33 + 3 + 3.5 } },
+      ],
+    };
+  }
+  const [mx, mz] = LOTS[MANOR_LOT];
+  const [hx, hz] = LOTS[GUILD_LOT];
+  const water = s.zone === "islands";
+  return {
+    chief: { x: s.x + mx + 5.5, z: s.z + mz + 3.5 },
+    jail: water ? null : { cells: JAIL_CELLS.map(([cx]) => [s.x + mx + cx, s.y - 6, s.z + mz + 5]), evidence: [s.x + mx + 9, s.y - 6, s.z + mz + 1] },
+    halls: [{ guild: guildsIn(s.gx, s.gz, s.zone, seed)[0], at: { x: s.x + hx + 4.5, z: s.z + hz + 3.5 } }],
+  };
+}
+
+/** Hostile bandits and the fence of a bandit camp. */
+export function banditFolk(s: Structure): { bandits: { x: number; z: number }[]; fence: { x: number; z: number } } | null {
+  if (s.kind !== "bandit") return null;
+  return {
+    bandits: [[6, 8], [16, 8], [8, 16], [19.5, 17.5]].map(([dx, dz]) => ({ x: s.x + dx + 0.5, z: s.z + dz + 0.5 })),
+    fence: { x: s.x + 15.5, z: s.z + 18.5 },
+  };
+}
+
 /** Themed TEKS dealership (extends the hamlet mechanic-hangar rule):
  *  10x10 hall open toward the plaza (vehicles roll in on the path), 6
  *  high so a Teks vehicle stands on the lift; work corner (furnace,
@@ -391,7 +590,7 @@ export function garageOf(s: Structure, seed: number): Garage | null {
   };
 }
 
-function village(t: Theme, zone: ZoneId, r: Rnd): SBrick[] {
+function village(t: Theme, zone: ZoneId, r: Rnd, s: Structure, seed: number): SBrick[] {
   const b = new Build();
   const W = VILLAGE_W;
   const mid = 17;
@@ -424,7 +623,15 @@ function village(t: Theme, zone: ZoneId, r: Rnd): SBrick[] {
       workshop(b, lx, lz - 1, t, zone, water, r);
       return;
     }
-    if (lots + (LOTS.length - i) > 5 && r(20 + i) < 0.3) return;
+    if (i === MANOR_LOT) {
+      manor(b, lx, lz, t, water);
+      if (!water) jail(b, lx, lz, t, -7);
+      return;
+    }
+    if (i === GUILD_LOT) {
+      guildHall(b, lx, lz, t, guildsIn(s.gx, s.gz, zone, seed)[0], 1, water);
+      return;
+    }
     lots++;
     const face: 0 | 1 = lz < mid ? 1 : 0;
     const wall = t.walls[i % t.walls.length];
@@ -459,7 +666,7 @@ function village(t: Theme, zone: ZoneId, r: Rnd): SBrick[] {
 
 /** The desert city: a 3x3 street grid of real multi-storey buildings,
  *  a domed palace in the middle and a market block. */
-function desertCity(t: Theme, r: Rnd): SBrick[] {
+function desertCity(t: Theme, r: Rnd, s: Structure, seed: number): SBrick[] {
   const b = new Build();
   const W = CITY_W;
   const B = 13;
@@ -478,7 +685,11 @@ function desertCity(t: Theme, r: Rnd): SBrick[] {
   let k = 0;
   for (const oz of origins) for (const ox of origins) {
     k++;
-    if (ox === 17 && oz === 17) palace(b, ox, oz, t);
+    if (ox === 17 && oz === 17) {
+      palace(b, ox, oz, t); // the city's castle: the chief holds court here
+      jail(b, ox + 1, oz + 2, t, -8);
+      for (let y = -7; y <= 0; y++) b.put(ox + 2, y, oz + 3, ID.Ladder);
+    } else if (k === 2 || k === 8) guildHall(b, ox + 1, oz + 3, t, guildsIn(s.gx, s.gz, "desertCity", seed)[k === 2 ? 0 : 1], k === 2 ? 1 : 0, false);
     else if (k === 3 + Math.floor(r(40) * 2) * 4) market(b, ox, oz, r);
     else if (k === 6) workshop(b, ox + 3, oz + 1, t, "desertCity", false, r); // origin 36,18: see garageOrigin
     else building(b, ox, oz, t, (s) => r(500 + k * 13 + s));
@@ -891,6 +1102,7 @@ export function structSize(kind: StructKind, zone: ZoneId): number {
   if (kind === "shrine") return SHRINE_W;
   if (kind === "mecha") return MECHA_W;
   if (kind === "hidden") return HIDDEN_W;
+  if (kind === "bandit") return BANDIT_W;
   return POI_W;
 }
 
@@ -901,6 +1113,7 @@ export function cellKind(seed: number, gx: number, gz: number): StructKind | nul
   if (r < 0.28) return "shrine";
   if (r < 0.42) return "mecha";
   if (r < 0.47) return "hidden";
+  if (r < 0.505) return "bandit";
   if (r < 0.75) return "poi";
   return null;
 }
@@ -1019,7 +1232,8 @@ export function structureBricks(s: Structure, seed: number): SBrick[] {
   const r: Rnd = (salt) => hash2(s.x + salt * 31, s.z - salt * 17, seed + 3200);
   const t = THEMES[s.zone];
   let out: SBrick[];
-  if (s.kind === "village") out = s.zone === "desertCity" ? desertCity(t, r) : village(t, s.zone, r);
+  if (s.kind === "village") out = s.zone === "desertCity" ? desertCity(t, r, s, seed) : village(t, s.zone, r, s, seed);
+  else if (s.kind === "bandit") out = banditCamp(t, s.zone, r);
   else if (s.kind === "shrine") out = shrine(t, s.zone);
   else if (s.kind === "mecha") out = mecha(s.zone, r);
   else if (s.kind === "hidden") out = hidden(t);
@@ -1122,6 +1336,7 @@ export function structureLabel(s: Structure): string {
   if (s.kind === "shrine") return "Sanctuaire — " + z;
   if (s.kind === "mecha") return "Mécha abandonné";
   if (s.kind === "hidden") return "Caveau caché";
+  if (s.kind === "bandit") return "Camp de bandits — " + z;
   return POI_LABEL[s.zone];
 }
 
@@ -1147,7 +1362,7 @@ export function structureLootKind(s: Structure): LootKind {
   if (s.kind === "village") return "hamlet";
   if (s.kind === "shrine") return "sanctum";
   if (s.kind === "mecha") return "mecha";
-  if (s.kind === "hidden") return "vault";
+  if (s.kind === "hidden" || s.kind === "bandit") return "vault";
   return POI_LOOT[s.zone];
 }
 
