@@ -17,7 +17,7 @@ import { STUD_H, STUD_OFFSETS, STUD_R, buildChunk, type Surface } from "./mesher
 import * as FS from "./fireState";
 import * as TS from "./tuftState";
 import * as CH from "./chipState";
-import { NEIGHBORS, RECIPES, SMELT, SMELT_N, fuelTime, matchGrid, teksCastCost } from "./recipes";
+import { NEIGHBORS, PLASTIC, RECIPES, SMELT, SMELT_N, fuelTime, matchGrid, teksCastCost } from "./recipes";
 import { Director, generateQuest, newStory, storyFrom, type WorldView } from "./llm/story";
 import { NpcModel } from "./llm/runtime";
 import { GenPool, poolSize, type WorkerLike } from "./genPool";
@@ -255,6 +255,8 @@ export type GameApi = {
   chestTap: (i: number) => void;
   chestStore: (id: number) => void;
   furnaceQuick: (id: number) => void;
+  furnaceMode: () => boolean;
+  setFurnaceMode: (plastic: boolean) => void;
   enchant: (tier?: number) => void;
   enchantOffer: (tier?: number) => void;
   enchantPick: (i: number) => void;
@@ -788,6 +790,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     // paid out as whole Fuel items. Rides the {...f} save spread.
     fuelAcc?: number;
     ratioAcc?: number;
+    // v6 final: kiln mode — true = plastic (parallel mechanic), else normal smelting.
+    plastic?: boolean;
     // P8: Foundry level (1..3) — cook time / fuel economy from
     // FOUNDRY_LVL. Rides the {...f} save spread; absent = level 1.
     lvl?: number;
@@ -14788,12 +14792,16 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // so the QA rig can advance it deterministically (stepFurnace hook —
   // the stepBricks precedent: rig frames run far slower than game time,
   // so a 5 s cook would otherwise take minutes of wall time to observe).
+  /** v6 final: normal mode = SMELT (unchanged crafting); plastic mode = PLASTIC. */
+  function smeltFor(f: { plastic?: boolean }, id: number): number {
+    return (f.plastic ? PLASTIC[id] : SMELT[id]) ?? 0;
+  }
   function tickFurnaces(dt: number) {
     for (const f of furnaces.values()) {
       if (Math.hypot(f.x - player.x, f.z - player.z) > 20) continue;
       if (f.burn > 0) f.burn -= dt;
       f.heat = stepHeat(f.heat ?? 0, f.burn > 0, f.lvl ?? 1, dt);
-      const product = SMELT[f.in];
+      const product = smeltFor(f, f.in);
       // Foundry pass: an affix may pour tempered ingots, so the output
       // slot accepts either ingot kind when melting pellets.
       const poursId = product === ID.PlasticIngot && f.in === ID.Pellets && f.affix === "tempered" && (f.charges ?? 0) > 0 ? ID.TemperedIngot : product;
@@ -14816,7 +14824,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           const yieldN = SMELT_N[inId] ?? 1;
           let distilMul = 1;
           // v6: plain materials melt at their table ratio (many commons → 1 pellet)
-          const ratioRow = !RARE_MELT[inId] && MATERIALS[inId]?.kind === "plastic";
+          const ratioRow = !!f.plastic && !RARE_MELT[inId] && MATERIALS[inId]?.kind === "plastic";
           const ratioN = ratioRow ? meltRatioStep(f, inId) : 0;
           if (!ratioRow && (product === ID.Pellets || product === ID.PlasticIngot)) meltInto(f, inId, f.lvl ?? 1, { regrind: (TEKS as readonly number[]).includes(inId) });
           if (RARE_MELT[inId]) {
@@ -16249,7 +16257,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const slotN = part === 0 ? f.inN : f.fuelN;
       if (cursor && (creative || (inv[cursor] ?? 0) > 0)) {
         if (part === 1 && fuelTime(cursor) <= 0) return say("That isn't fuel");
-        if (part === 0 && !SMELT[cursor]) return say(rejectReason(cursor) ?? "The kiln won't take that");
+        if (part === 0 && !smeltFor(f, cursor)) return say((f.plastic ? rejectReason(cursor) : null) ?? "The kiln won't take that");
         if (slotId && slotId !== cursor) return;
         if (!creative) inv[cursor] -= 1;
         if (part === 0) {
@@ -16323,14 +16331,27 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     },
     // v4.17 fix: tapping a bag item at the kiln routes its whole stack
     // (smeltable -> input, else fuel -> fuel slot), like a shift-click.
+    furnaceMode() {
+      const f = furnaces.get(focus.x + "," + focus.y + "," + focus.z);
+      return !!f?.plastic;
+    },
+    setFurnaceMode(plastic) {
+      const f = ensureFurnace(focus.x + "," + focus.y + "," + focus.z, focus.x, focus.y, focus.z);
+      if (f.inN > 0 && !!f.plastic !== plastic) return say("Empty the input slot first");
+      f.plastic = plastic;
+      f.cook = 0;
+      saveDirty = true;
+      say(plastic ? "Kiln: PLASTIC mode — melts to pellets / ingots" : "Kiln: NORMAL mode — regular smelting", 1800);
+      emit();
+    },
     furnaceQuick(id) {
       if (!id) return;
       const f = ensureFurnace(focus.x + "," + focus.y + "," + focus.z, focus.x, focus.y, focus.z);
       const have = creative ? 64 : (inv[id] ?? 0);
       if (have <= 0) return say("You don't have that");
-      const toIn = !!SMELT[id] && (!f.in || f.in === id);
+      const toIn = !!smeltFor(f, id) && (!f.in || f.in === id);
       const toFuel = !toIn && fuelTime(id) > 0 && (!f.fuel || f.fuel === id);
-      if (!toIn && !toFuel) return say(SMELT[id] || fuelTime(id) > 0 ? "That slot is busy" : rejectReason(id) ?? "The kiln won't take that");
+      if (!toIn && !toFuel) return say(smeltFor(f, id) || fuelTime(id) > 0 ? "That slot is busy" : (f.plastic ? rejectReason(id) : null) ?? "The kiln won't take that");
       const cur = toIn ? f.inN : f.fuelN;
       const k = Math.min(have, 64 - cur);
       if (k <= 0) return say("That slot is full");

@@ -1612,7 +1612,7 @@ export const SMELT: Record<number, number> = {
   [ID.Sand]: ID.Glass,
   [ID.VoidGlass]: ID.Prism, // v5 (overridden below: foundry RARE_MELT rows smelt to pellets)
   [ID.Cobble]: ID.Stone,
-  // v6: wood is FUEL only (foundry.ts MATERIALS) — no Log→Coal melt.
+  [ID.Log]: ID.Coal,
   [ID.Clay]: ID.Hard,
   [ID.Netherrack]: ID.Ash,
   [ID.RawMeat]: ID.Cooked,
@@ -1653,25 +1653,13 @@ for (const [k, v] of Object.entries(RARE_MELT)) {
   SMELT_N[+k] = v.pellets;
 }
 
-// v6 material table: plain materials melt to pellets at their ratio.
-for (const k of Object.keys(MATERIALS)) if (isMeltable(+k) && !RARE_MELT[+k]) SMELT[+k] = QUALITY_ITEM[qualityOf(+k)!];
-
-// v6: the refined materials recipes need are CAST from plastic now that
-// their ores melt to plastic (Philippe: nothing may become unobtainable).
-const CASTS: [string, string, number, number, number, number][] = [
-  // id, name, plastic item, plastic n, out, out n
-  ["cast-glass", "Cast glass", ID.Pellets, 2, ID.Glass, 4],
-  ["cast-hard", "Cast hard brick", ID.Pellets, 2, ID.Hard, 4],
-  ["cast-ash", "Cast ash brick", ID.Pellets, 2, ID.Ash, 4],
-  ["cast-tin", "Cast tin", ID.Pellets, 3, ID.Tin, 1],
-  ["cast-resin", "Cast resin", ID.Pellets, 4, ID.Resin, 1],
-  ["cast-amber", "Cast amber", ID.PlasticIngot, 2, ID.Amber, 1],
-  ["cast-copper", "Cast copper", ID.PlasticIngot, 1, ID.Copper, 1],
-  ["cast-chrome", "Cast chrome", ID.PlasticIngot, 2, ID.Chrome, 1],
-  ["cast-iron", "Cast iron ingot", ID.TemperedIngot, 1, ID.Ingot, 1],
-];
-for (const [id, name, pin, pn, out, on] of CASTS) RECIPES.push(r(id, name, `${pn} ${def(pin).name.toLowerCase()} → ${on}`, [[pin, pn]], out, on, { cat: "build" }));
-
+// v6 FINAL (Philippe): plastic is a SECOND, parallel mechanic. SMELT (normal
+// kiln mode) is untouched; PLASTIC is used only when the kiln is switched to
+// plastic mode. Excluded: wood, leaves, sand, clay, gold, gems, water.
+export const PLASTIC: Record<number, number> = {};
+for (const k of Object.keys(MATERIALS)) if (isMeltable(+k) && !RARE_MELT[+k]) PLASTIC[+k] = QUALITY_ITEM[qualityOf(+k)!];
+for (const k of Object.keys(RARE_MELT)) PLASTIC[+k] = ID.Pellets;
+// Used/crafted tools & gear: salvaged at the anvil (salvageOf, scaled by durability).
 /** Gem/precious inputs: an item crafted from them is not salvageable. */
 export const RARE_INPUTS = new Set<number>([ID.Gold, ID.Diamond, ID.Emerald, ID.Crystal, ID.Sapphire, ID.Prism, ID.GoldOre, ID.DiamondOre]);
 const WOOD = new Set<number>([ID.Log, ID.Planks, ID.SlabPlanks, ID.Stick, ID.Leaves]);
@@ -1702,7 +1690,6 @@ export function salvageOf(id: number, dur: number, maxDur: number): { ok: boolea
   if (c === 0) return { ok: false, pellets: 0, why: "Nothing plastic in it (wood burns as fuel)" };
   return { ok: true, pellets: salvageYield(c, dur, maxDur) };
 }
-for (const k of Object.keys(MATERIALS)) if (rejectReason(+k)) delete SMELT[+k];
 
 export function fuelTime(id: number): number {
   const v = fuelValue(id);

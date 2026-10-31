@@ -2463,6 +2463,10 @@ function StationScreen({ game }: { game: GameApi }) {
                     <figcaption>Output</figcaption>
                   </figure>
                 </div>
+                <div className="sc-kiln-mode" style={{ display: "flex", gap: 6, margin: "4px 0" }}>
+                  <button type="button" className={game.furnaceMode() ? "" : "on"} aria-pressed={!game.furnaceMode()} onClick={() => game.setFurnaceMode(false)}>Normal</button>
+                  <button type="button" className={game.furnaceMode() ? "on" : ""} aria-pressed={game.furnaceMode()} onClick={() => game.setFurnaceMode(true)}>Plastic</button>
+                </div>
                 <p className="sc-kiln-state">
                   {hud.furnace.burn > 0 ? (
                     <>🔥 Burning — {Math.ceil(hud.furnace.burn)}s of fuel left · cooking {Math.round(hud.furnace.cook * 100)}%</>
@@ -2473,7 +2477,11 @@ function StationScreen({ game }: { game: GameApi }) {
                       <>Not lit — add fuel: wood (log 3s, planks 1.5s), coal 8s, or burn quality plastic (ingot 6s, tempered 10s).</>
                     )
                   ) : (
-                    <>Everything melts to plastic except water, rare ores and wood. Iron → good (tempered), copper → medium (plastic ingot), the rest → low (pellets); commons need 8–16 per unit. Wood goes in Fuel.</>
+                    game.furnaceMode() ? (
+                      <>Plastic mode: everything melts except wood, leaves, sand, clay, gold, gems and water. Iron → good (tempered), copper → medium (plastic ingot), the rest → low (pellets); commons need 8–16 per unit.</>
+                    ) : (
+                      <>Normal mode: regular smelting (sand → glass, ore → ingot, clay → hard brick…). Switch to Plastic mode for the parallel plastic route.</>
+                    )
                   )}
                 </p>
                 <div className="sc-molten" style={{ border: `1px solid ${hud.furnace.tierColor ?? "#888"}`, borderRadius: 8, padding: "6px 8px", margin: "6px 0" }}>

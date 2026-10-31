@@ -167,6 +167,8 @@ const RARE_ORE = "Rare ore — keep it for trade and upgrades; the kiln won't me
 export const MATERIALS: Record<number, MatRow> = {
   // refused
   [ID.Water]: { kind: "reject", why: "Water just boils off" },
+  [ID.Sand]: { kind: "reject", why: "Sand stays sand — use normal mode for glass" },
+  [ID.Clay]: { kind: "reject", why: "Clay stays clay — use normal mode for hard brick" },
   [ID.Gold]: { kind: "reject", why: "Gold is currency — the kiln won't melt it" },
   [ID.GoldOre]: { kind: "reject", why: RARE_ORE },
   [ID.Diamond]: { kind: "reject", why: "Diamonds are for upgrades — the kiln won't melt them" },
@@ -187,10 +189,10 @@ export const MATERIALS: Record<number, MatRow> = {
   [ID.TemperedIngot]: { kind: "fuel", fuel: 10 },
   // LOW — abundant commons need large quantities (8–16 : 1)
   [ID.Dirt]: L(16, 0.5), [ID.Grass]: L(16, 0.5), [ID.Snow]: L(16, 0.5),
-  [ID.Sand]: L(14, 0.75), [ID.Gravel]: L(14, 0.75),
+  [ID.Gravel]: L(14, 0.75),
   [ID.Cobble]: L(12, 1), [ID.Stone]: L(12, 1), [ID.Netherrack]: L(12, 1),
   [ID.Basalt]: L(10, 1.5), [ID.Sandstone]: L(10, 1.5), [ID.Ice]: L(10, 1),
-  [ID.Clay]: L(8, 2), [ID.Glass]: L(8, 2), [ID.Hard]: L(8, 2), [ID.Ash]: L(8, 2),
+  [ID.Glass]: L(8, 2), [ID.Hard]: L(8, 2), [ID.Ash]: L(8, 2),
   // LOW — less common: coal, dye ores, tin, chrome, amber/resin ores, bricks
   [ID.CoalOre]: L(6, 2), [ID.Coal]: L(6, 2),
   [ID.LapisOre]: L(4, 3), [ID.RedOre]: L(4, 3),
