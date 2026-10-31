@@ -30,6 +30,8 @@ import { BTN, PadEdges, activePad, padBusy, padLabel, rumble, stick } from "./ga
 import { dsApply, dsRelease, dsRequest, dsState, dsTryReconnect, type TriggerFx } from "./dualsense";
 import { parseSeed, hash3 } from "./noise";
 import { MobBatchRenderer } from "./mobBatch";
+import { mobLabel } from "./mobNames";
+import { mobBaseDrops, rollBonusDrops } from "./mobDrops";
 import { batteryAt, remoteChAt, setRemoteChannel, springsJustSpent, stepMech, toggleValve, windSpring } from "./mechLink";
 
 export type Phase = "title" | "play" | "pause" | "inventory" | "dead";
@@ -2365,6 +2367,19 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return { group, isTool: false, flames };
     }
 
+    if (id === ID.EnderPearl) {
+      // Sorter marble (mob-redesign): the Vide-Bac's glossy sorting ball —
+      // three stacked discs approximating a sphere, with a swirl band.
+      const mm = skin(baseHex);
+      mm.emissive = new THREE.Color(baseHex);
+      mm.emissiveIntensity = 0.22;
+      addCylPart(group, 0.05, 0.05, 0.06, 0, 0, 0, mm, 14);
+      addCylPart(group, 0.035, 0.05, 0.025, 0, 0.042, 0, mm, 14);
+      addCylPart(group, 0.05, 0.035, 0.025, 0, -0.042, 0, mm, 14);
+      addCylPart(group, 0.052, 0.052, 0.012, 0, 0.01, 0, skin(0xf4f1ea), 14);
+      return { group, isTool: false, flames };
+    }
+
     if (
       id === ID.Diamond ||
       id === ID.Emerald ||
@@ -2372,7 +2387,6 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       id === ID.Amber ||
       id === ID.Prism ||
       id === ID.Crystal ||
-      id === ID.EnderPearl ||
       id === ID.GuardianSpike ||
       id === ID.VoidCore
     ) {
@@ -2475,8 +2489,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         addBoxPart(group, 0.03, 0.04, 0.03, 0, 0.2, 0, skin(0xb0b6be));
         addBoxPart(group, 0.034, 0.05, 0.008, 0, -0.1, 0, skin(0xd82e22));
       } else if (id === ID.Bone) {
-        addCylPart(group, 0.03, 0.03, 0.04, 0, 0.19, 0, mat, 10);
-        addCylPart(group, 0.03, 0.03, 0.04, 0, -0.11, 0, mat, 10);
+        // Teks rod (mob-redesign): a liftarm with its axle holes, not a bone.
+        addBoxPart(group, 0.05, 0.32, 0.05, 0, 0.04, 0, mat);
+        for (const hy of [-0.08, 0.0, 0.08, 0.16]) addCylPart(group, 0.014, 0.014, 0.055, 0, hy, 0, skin(0x3a3e44), 8).rotation.x = Math.PI / 2;
       }
       return { group, isTool: true, flames };
     }
@@ -2665,14 +2680,22 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
 
     if (id === ID.Feather) {
-      const plume = addBoxPart(group, 0.05, 0.16, 0.012, 0, 0.02, 0, skin(0xf4f2ec));
-      plume.rotation.z = 0.3;
-      addCylPart(group, 0.006, 0.006, 0.2, 0, 0.01, 0, skin(0xd8d2c4), 6).rotation.z = 0.3;
+      // Fin tile (mob-redesign): a thin 1×3 tile with a stepped tail,
+      // the wing/fin piece of Cocotte-Clic, Chauvi-Clip and the kites.
+      const fin = skin(0xf4f2ec);
+      addBoxPart(group, 0.06, 0.18, 0.016, 0, 0.02, 0, fin).rotation.z = 0.3;
+      addBoxPart(group, 0.04, 0.05, 0.016, 0.036, -0.08, 0, skin(0xd8d2c4)).rotation.z = 0.3;
+      addCylPart(group, 0.012, 0.012, 0.02, -0.02, 0.07, 0.012, fin, 10).rotation.x = Math.PI / 2; // clip pin
       return { group, isTool: false, flames };
     }
 
     if (id === ID.Fang) {
-      addCylPart(group, 0.001, 0.04, 0.2, 0, 0, 0, skin(0xf4ecd8), 10).rotation.z = 0.15;
+      // Burr (mob-redesign): the flash sliver snapped off a Démoulé —
+      // a thin ragged plastic wedge, not a tooth.
+      const fl = skin(0xb4bea8);
+      addBoxPart(group, 0.14, 0.012, 0.06, 0, 0, 0, fl).rotation.y = 0.3;
+      addBoxPart(group, 0.06, 0.012, 0.04, 0.06, 0.004, 0.03, skin(0x9aa58c)).rotation.y = -0.4;
+      addCylPart(group, 0.001, 0.02, 0.05, -0.08, 0, 0, fl, 6).rotation.z = Math.PI / 2;
       return { group, isTool: false, flames };
     }
 
@@ -4253,7 +4276,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     hud.realm = realm === 1 ? "Nether" : realm === 2 ? "End" : "Overworld";
     const wyrm = mobs.find((m) => m.kind === "dragon" && !m.dead);
     const witherBoss = mobs.find((m) => m.kind === "wither" && !m.dead);
-    hud.boss = wyrm ? "End Wyrm" : witherBoss ? "The Wither" : raid ? "Raid — wave " + raid.wave + " of 3" : "";
+    hud.boss = wyrm ? mobLabel("dragon") : witherBoss ? mobLabel("wither") : raid ? "Raid — wave " + raid.wave + " of 3" : "";
     hud.bossHp = wyrm
       ? Math.max(0, Math.min(1, wyrm.hp / (wyrm.maxHp ?? wyrm.hp)))
       : witherBoss
@@ -8673,7 +8696,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     if (hit.id === ID.Soul && held === ID.WitherSkull && (creative || (inv[ID.WitherSkull] ?? 0) >= 3)) {
       if (!creative) spend(ID.WitherSkull, 3);
       spawnKind("wither", hit.x + 0.5, hit.z + 0.5);
-      say("Wither summoned");
+      say(mobLabel("wither") + " summoned");
       return;
     }
     if (held === ID.Clock) return say(timeWord());
@@ -9513,7 +9536,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     if (wyrm) {
       wyrm.hp -= 8;
       if (wyrm.hp <= 0) killMob(wyrm);
-      else say(left + " crystals left. The wyrm weakens.");
+      else say(left + " crystals left. " + mobLabel("dragon") + " weakens.");
     } else say(left ? left + " crystals still on the pillars" : "The pillars are dark");
     if (Math.hypot(player.x - (x + 0.5), player.z - (z + 0.5)) < 3.5) hurt(3);
     burst(x + 0.5, y + 1.2, z + 0.5, "#e85ad4", 16);
@@ -11343,86 +11366,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       world.set(-504, 51, -504, ID.DragonEgg);
       markDirtyAt(-504, -504);
     }
-    const drops =
-      mob.kind === "sheep"
-        ? mob.sheared
-          ? [ID.RawMeat]
-          : [ID.White, ID.RawMeat]
-        : mob.kind === "cow"
-          ? [ID.RawMeat, ID.RawMeat]
-          : mob.kind === "pig" || mob.kind === "goat"
-            ? [ID.RawMeat]
-            : mob.kind === "chicken"
-              ? [ID.Feather, ID.RawMeat]
-              : mob.kind === "spider"
-                ? [ID.String]
-                : mob.kind === "skelly" || mob.kind === "stray"
-                  ? [ID.Bone, ID.Arrow]
-                  : mob.kind === "walker"
-                    ? [ID.RawMeat, ID.Bone]
-                    : mob.kind === "husk"
-                      ? [ID.PharaohGold, ID.Bone]
-                      : mob.kind === "creeper"
-                        ? [ID.Powder]
-                        : mob.kind === "enderman"
-                          ? [ID.EnderPearl, ID.VoidCore]
-                          : mob.kind === "blaze"
-                            ? [ID.Blaze]
-                            : mob.kind === "witch"
-                              ? [ID.WitchVenom, ID.PotionHeal]
-                              : mob.kind === "drowned"
-                                ? [ID.RawMeat, ID.Copper]
-                                : mob.kind === "bee"
-                                  ? [ID.Wax]
-                                  : mob.kind === "cat"
-                                    ? [ID.String]
-                                    : mob.kind === "squid"
-                                      ? [ID.InkSac]
-                                      : mob.kind === "bat" || mob.kind === "axolotl"
-                                        ? []
-                                        : mob.kind === "ghast"
-                          ? [ID.Blaze, ID.Powder]
-                          : mob.kind === "piglin"
-                            ? [ID.Scrap, ID.Gold]
-                            : mob.kind === "phantom" || mob.kind === "parrot"
-                              ? [ID.Feather]
-                              : mob.kind === "dragon"
-                                ? [ID.Elytra, ID.Totem, ID.Scrap, ID.VoidCore]
-                                : mob.kind === "wither"
-                                  ? [ID.NetherStar]
-                                  : mob.kind === "frog"
-                                  ? [ID.Slime]
-                                  : mob.kind === "fox"
-                                    ? [ID.Fur, ID.RawMeat]
-                                    : mob.kind === "crab"
-                                      ? [ID.Scale]
-                                      : mob.kind === "wisp"
-                                        ? [ID.Wisp]
-                                        : mob.kind === "slime"
-                                          ? (mob.size ?? 1) <= 0.5
-                                            ? [ID.Slime]
-                                            : []
-                                          : mob.kind === "wolf"
-                                            ? [ID.Bone]
-                                            : mob.kind === "golem"
-                                              ? [ID.Ingot]
-                                              : mob.kind === "guardian"
-                                                ? [ID.GuardianSpike, ID.Crystal]
-                                                : mob.kind === "shulker"
-                                                  ? [ID.ShulkerShell, ID.VoidCore]
-                                                  : mob.kind === "pillager"
-                                                    ? [ID.IllagerBadge, ID.Arrow]
-                                                    : mob.kind === "vindicator"
-                                                      ? [ID.IllagerBadge, ID.Emerald]
-                                                      : mob.kind === "evoker"
-                                                        ? [ID.Totem, ID.IllagerBadge, ID.Emerald]
-                                                        : mob.kind === "vex"
-                                                          ? [ID.Wisp]
-                                                          : mob.kind === "ravager"
-                                                            ? [ID.IllagerBadge, ID.Fur, ID.RawMeat]
-                                                            : mob.kind === "villager"
-                                                              ? [ID.Emerald]
-                                                              : [ID.Green];
+    const drops = mobBaseDrops(mob.kind, { sheared: !!mob.sheared, size: mob.size });
     if (!creative) {
       for (const drop of drops) dropItem(drop, 1, mob.x, mob.y + 0.4, mob.z);
       // P6: every mob is a plastic toy — foundry pellets on every kill,
@@ -11433,27 +11377,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       for (const drop of drops) for (let f = 0; f < lootLvl; f++) if (Math.random() < 0.35) dropItem(drop, 1, mob.x, mob.y + 0.4, mob.z);
       const trophy = skills.has("trophy");
       const luck = trophy || settings.mods.generous ? 0.62 : 0.38;
-      const extra: number[] = [];
-      if (mob.kind === "walker" && Math.random() < luck) extra.push(ID.Fang);
-      if (mob.kind === "husk" && Math.random() < luck) extra.push(ID.PharaohGold);
-      if ((mob.kind === "skelly" || mob.kind === "stray" || mob.kind === "phantom") && Math.random() < luck) extra.push(ID.Wisp);
-      if (mob.kind === "creeper" && Math.random() < luck) extra.push(ID.Slime);
-      if (mob.kind === "fox" && Math.random() < luck) extra.push(ID.Pelt);
-      if (mob.kind === "crab" && Math.random() < luck) extra.push(ID.Shell);
-      if (mob.kind === "frog" && Math.random() < luck * 0.6) extra.push(ID.Wax);
-      if (mob.kind === "wisp" && Math.random() < luck) extra.push(ID.Frost);
-      if (mob.kind === "enderman" && Math.random() < luck) extra.push(ID.VoidCore);
-      if (mob.kind === "drowned" && Math.random() < luck) extra.push(ID.GuardianSpike);
-      if (mob.kind === "drowned" && Math.random() < 0.25) extra.push(ID.Trident);
-      if (mob.kind === "guardian" && Math.random() < luck) extra.push(ID.GuardianSpike);
-      if (mob.kind === "pillager" && Math.random() < 0.18) extra.push(ID.Crossbow);
-      if ((mob.kind === "pillager" || mob.kind === "vindicator" || mob.kind === "evoker") && Math.random() < luck) extra.push(ID.IllagerBadge);
-      if (mob.kind === "vindicator" && Math.random() < 0.16) extra.push(ID.TPlasticAxe); // P8: iron tier dissolved — the moulded tempered axe drops instead
-      if (mob.kind === "ravager" && Math.random() < luck) extra.push(ID.Emerald);
-      if (mob.kind === "squid" && Math.random() < luck) extra.push(ID.InkSac);
-      if (mob.kind === "witch" && Math.random() < luck) extra.push(ID.WitchVenom);
-      if ((mob.kind === "creeper" || mob.kind === "ghast") && Math.random() < luck * 0.7) extra.push(ID.Cinder);
-      if ((mob.kind === "skelly" || mob.kind === "walker") && Math.random() < luck * 0.45) extra.push(ID.Antler);
+      const extra: number[] = rollBonusDrops(mob.kind, luck);
       if ((skills.has("butcher") || settings.mods.generous) && (mob.kind === "sheep" || mob.kind === "cow" || mob.kind === "pig" || mob.kind === "fox" || mob.kind === "frog" || mob.kind === "wolf")) {
         extra.push(ID.RawMeat);
       }
@@ -11467,7 +11391,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     if (mob.kind === "dragon") {
       won = true;
       dragonUp = true;
-      say("The wyrm falls. Step on the portal to go home.", 6400);
+      say(mobLabel("dragon") + " falls. Step on the portal to go home.", 6400);
       saveDirty = true;
     }
     burst(mob.x, mob.y + 0.5, mob.z, drops.length ? def(drops[0]).color : "#3aaa4c", 12);
@@ -11763,7 +11687,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       m.y += dt * 0.55;
       if ((m.spawnT ?? 0) <= 0) {
         explode(Math.floor(m.x), Math.floor(m.y), Math.floor(m.z), 3);
-        say("The Wither rages!");
+        say(mobLabel("wither") + " rages!");
       }
       return;
     }
@@ -11772,7 +11696,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       m.shield = true;
       m.phaseN = 1;
       burst(m.x, m.y + 1, m.z, "#8f8fa8", 18);
-      say("The Wither's shell turns arrows aside — get in close!");
+      say(mobLabel("wither") + "'s shell turns arrows aside — get in close!");
     }
     m.bossT = (m.bossT ?? 0) - dt;
     m.biteT = Math.max(0, (m.biteT ?? 0) - dt);
@@ -12626,6 +12550,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       mobs[w++] = m;
     }
     mobs.length = w;
+    bossFxT.value = elapsed;
     mobBatchRenderer.update(mobs, camera, elapsed, settings.studs, STUD_H);
   }
 
@@ -13122,90 +13047,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
 
     if (!blockFirst && mob) {
-      hud.targetName =
-        mob.kind === "sheep"
-          ? "Stud sheep"
-          : mob.kind === "cow"
-            ? "Grazer"
-            : mob.kind === "walker"
-              ? "Night stud"
-              : mob.kind === "creeper"
-                ? "Fuse brick"
-                : mob.kind === "pig"
-                  ? "Oink brick"
-                  : mob.kind === "chicken"
-                    ? "Cluck"
-                    : mob.kind === "spider"
-                      ? "Crawler"
-                      : mob.kind === "skelly"
-                        ? "Bone stud"
-                        : mob.kind === "frog"
-                          ? "Hop stud"
-                          : mob.kind === "fox"
-                            ? "Brush stud"
-                            : mob.kind === "crab"
-                              ? "Pinch stud"
-                              : mob.kind === "wisp"
-                                ? "Wisp"
-                                : mob.kind === "slime"
-                                  ? "Slime brick"
-                                  : mob.kind === "wolf"
-                                    ? mob.tame
-                                      ? "Hound"
-                                      : "Wild hound"
-                                    : mob.kind === "golem"
-                                      ? "Hamlet golem"
-                                      : mob.kind === "villager"
-                          ? traderOf(mob.role).name
-                          : mob.kind === "horse"
-                            ? "Steed"
-                            : mob.kind === "ghast"
-                              ? "Floater"
-                              : mob.kind === "dragon"
-                                ? "End wyrm"
-                                : mob.kind === "piglin"
-                                  ? "Barter stud"
-                                  : mob.kind === "enderman"
-                                    ? "Tall dark"
-                                    : mob.kind === "blaze"
-                                      ? "Ember swirl"
-                                      : mob.kind === "witch"
-                                        ? "Hag"
-                                        : mob.kind === "drowned"
-                                          ? "Drowned"
-                                          : mob.kind === "bee"
-                                            ? "Bee"
-                                            : mob.kind === "cat"
-                                              ? "Cat"
-                                              : mob.kind === "squid"
-                                                ? "Squid"
-                                                : mob.kind === "bat"
-                                                  ? "Bat"
-                                                  : mob.kind === "phantom"
-                                      ? "Sleepless"
-                                      : mob.kind === "husk"
-                                        ? "Pharaoh mummy"
-                                        : mob.kind === "stray"
-                                          ? "Frost archer"
-                                          : mob.kind === "guardian"
-                                            ? (mob.maxHp ?? 0) >= 30
-                                              ? "Elder guardian"
-                                              : "Sea guardian"
-                                            : mob.kind === "pillager"
-                                              ? "Crossbow illager"
-                                              : mob.kind === "vindicator"
-                                                ? "Royal vindicator"
-                                                : mob.kind === "evoker"
-                                                  ? "Arch-evoker"
-                                                  : mob.kind === "ravager"
-                                                    ? "Siege ravager"
-                                                    : mob.kind === "vex"
-                                                      ? "Vex imp"
-                                                      : mob.kind === "shulker"
-                                                        ? "Shulker"
-                                                        : mob.kind === "boat"
-                                                          ? "Boat"
-                                                          : "Cart";
+      hud.targetName = mob.kind === "villager" ? traderOf(mob.role).name : mobLabel(mob.kind, { tame: mob.tame, elder: mob.kind === "guardian" && (mob.maxHp ?? 0) >= 30 });
       if (sample.first && sample.place && !prevPlace) interactMob(mob);
       // Player hits are gated by the mob's own hurt cooldown (hitCd), not by its
       // attack cooldown: sharing one timer meant a mob biting you every second
@@ -17036,6 +16878,44 @@ function skin(
   return new THREE.MeshLambertMaterial({ color, ...extra });
 }
 
+// Boss-only SNR rules (mob-redesign §3.4 — the ONLY new shading rules of the
+// mob redesign; every regular mob is plain skin()). Each one is a single
+// sine/smoothstep term layered on top of sirenize(), in object space like the
+// creature field, light-gated like its SSS (never self-lit at night), with its
+// own program cache key so the shared creature shader is untouched.
+//   "molten" — La Grande Presse: molten-plastic bands rising up the hull,
+//              smoothstep(0.6, 1, sin(4·y − 6·t)) tinted warm orange.
+//   "weld"   — Le Triple Rebut: glossy weld-bead lines every 1/3 unit on X,
+//              smoothstep(0.47, 0.5, |fract(3x) − 0.5|), orange and smoother.
+const bossFxT = { value: 0 };
+function bossSkin(color: number, rule: "molten" | "weld") {
+  const mat = skin(color);
+  if (!plasticOn || !(mat as THREE.MeshStandardMaterial).isMeshStandardMaterial) return mat;
+  const base = mat.onBeforeCompile;
+  mat.onBeforeCompile = (shader, renderer) => {
+    base.call(mat, shader, renderer);
+    shader.uniforms.uBossT = bossFxT;
+    const term =
+      rule === "molten"
+        ? `float bossK = smoothstep(0.6, 1.0, sin(vSirenPos.y * 4.0 - uBossT * 6.0));
+  outgoingLight = mix(outgoingLight, vec3(1.0, 0.42, 0.08) * (0.35 + 0.65 * bossGate), bossK * 0.45 * uSirenAmt);`
+        : `float bossK = smoothstep(0.47, 0.5, abs(fract(vSirenPos.x * 3.0) - 0.5));
+  outgoingLight = mix(outgoingLight, vec3(0.95, 0.55, 0.2) * (0.3 + 0.7 * bossGate), bossK * 0.6 * uSirenAmt);`;
+    shader.fragmentShader = shader.fragmentShader
+      .replace("uniform float uSirenAmt;", "uniform float uSirenAmt;\nuniform float uBossT;")
+      .replace(
+        "#include <opaque_fragment>",
+        `{
+  float bossGate = clamp(dot(outgoingLight, vec3(0.299, 0.587, 0.114)) * 2.4, 0.0, 1.0);
+  ${term}
+}
+#include <opaque_fragment>`,
+      );
+  };
+  mat.customProgramCacheKey = () => "siren-creature-v5-boss-" + rule;
+  return mat;
+}
+
 function makeFigure() {
   const fig = makeFig(0xe23b2f, 0x1f5fbf, 0x241c16, "smile");
   return { group: fig.group, legL: fig.legs[0], legR: fig.legs[1], armL: fig.legs[3], armR: fig.legs[2] };
@@ -17397,8 +17277,10 @@ function beast(kind: string): StudsBody {
     return { group: g, legs, bodyMat: wool };
   }
   if (kind === "cow") {
-    const hide = skin(0x784828);
-    const spot = skin(0xf4f1ea);
+    // Meuhbloc (mob-redesign §3.1): white milk-tanker chassis with black tile
+    // patches, a milk tank + tap on the back, headlight eyes.
+    const hide = skin(0xf4f1ea);
+    const spot = skin(0x1a120c);
     const udder = skin(0xf2a8c0);
     const body = block(g, hide, 0.9, 0.34, 0.48, 0, 0.58, 0, 0, 0);
     body.userData.skin = "body";
@@ -17431,6 +17313,12 @@ function beast(kind: string): StudsBody {
     put(tail, geoBox(0.08, 0.09, 0.08), spot, 0, -0.26, 0.08, 0, true);
     g.add(tail);
     g.userData.tail = tail;
+    put(g, geoCyl(0.15, 0.5, 14), skin(0xdcdcd4), 0, 0.98, 0, 0, true); // milk tank (stands; alignQuadruped turns the torso)
+    put(g, geoCyl(0.16, 0.04, 14), skin(0x9aa0a6), 0, 1.24, 0, 0, true); // tank lid
+    put(g, geoBox(0.1, 0.04, 0.04), skin(0x9aa0a6), 0.18, 0.92, 0, 0, true); // tap
+    const lamp = transTile(0xfff2a8, 0xb89a30);
+    put(head, geoCyl(0.05, 0.03, 12), lamp, -0.09, 0.05, -0.19, Math.PI / 2, true); // headlight eyes
+    put(head, geoCyl(0.05, 0.03, 12), lamp, 0.09, 0.05, -0.19, Math.PI / 2, true);
     const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, dark, 0.12, 0.41, 0.12, sx * 0.28, 0.41, sz * 0.12)));
     return { group: g, legs, bodyMat: hide };
   }
@@ -17462,6 +17350,9 @@ function beast(kind: string): StudsBody {
     put(tail, geoBox(0.06, 0.08, 0.08), snoutM, 0, 0.02, 0.04, 0.4, true);
     g.add(tail);
     g.userData.tail = tail;
+    // Cochonnet-Tirelire (mob-redesign §3.1): piggy-bank coin slot + gold coin on the back
+    put(g, geoBox(0.22, 0.02, 0.05), black, 0, 0.675, 0, 0, true);
+    put(g, geoCyl(0.06, 0.02, 14), skin(0xf5c518), 0, 0.71, 0, Math.PI / 2, true);
     const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, pink, 0.1, 0.31, 0.1, sx * 0.2, 0.31, sz * 0.12)));
     return { group: g, legs, bodyMat: pink };
   }
@@ -17483,6 +17374,9 @@ function beast(kind: string): StudsBody {
     put(head, geoBox(0.06, 0.07, 0.06), red, 0, -0.02, -0.11, 0, true); // Wattle
     put(head, geoBox(0.035, 0.035, 0.02), black, -0.06, 0.09, -0.092, 0, true);
     put(head, geoBox(0.035, 0.035, 0.02), black, 0.06, 0.09, -0.092, 0, true);
+    // Cocotte-Clic (mob-redesign §3.1): clicker spring coils under the body + wind-up knob
+    for (const sy of [0.19, 0.16, 0.13]) put(g, geoCyl(0.07, 0.018, 12), skin(0x9aa0a6), 0, sy, 0.06, 0, true);
+    put(g, geoCyl(0.03, 0.06, 10), red, 0.19, 0.4, 0.06, 0, true);
     const legs = [legBox(g, beak, 0.06, 0.21, 0.06, -0.06, 0.21, 0), legBox(g, beak, 0.06, 0.21, 0.06, 0.06, 0.21, 0)];
     return { group: g, legs, bodyMat: white };
   }
@@ -17645,35 +17539,37 @@ function beast(kind: string): StudsBody {
     return { group: g, legs, bodyMat: dark };
   }
   if (kind === "creeper") {
-    // Brick-Built STUDS Creeper: continuous zero-gap stacked ABS courses, articulated turntable head, sloped feet & Trans-Neon Green 1×1 tile eyes!
-    const green = skin(0x3aaa4c);
-    green.emissive = new THREE.Color(0x000000);
-    const greenCourse = skin(0x329842);
-    // Continuous zero-gap 3-course stack + hip baseplate
-    block(g, green, 0.44, 0.06, 0.26, 0, 0.22, 0, 0, 0); // Hip baseplate (y: 0.19 .. 0.25)
-    const body = block(g, green, 0.44, 0.22, 0.26, 0, 0.36, 0, 0, 0); // Course 1 (y: 0.25 .. 0.47)
+    // Pétabrique (mob-redesign §3.3): wind-up toy popper — a round orange barrel
+    // with black bands, a hose fuse ending in a trans flame, a back wind-up key
+    // (the fuse timer) and stubby black hinged feet.
+    const orange = skin(0xf07820);
+    const band = skin(0x1a120c);
+    const body = put(g, geoCyl(0.22, 0.42, 16), orange, 0, 0.52, 0);
     body.userData.skin = "body";
-    block(g, greenCourse, 0.44, 0.22, 0.26, 0, 0.58, 0, 0, 0); // Course 2 (y: 0.47 .. 0.69)
-    block(g, green, 0.44, 0.20, 0.26, 0, 0.79, 0, 2, 1); // Course 3 (y: 0.69 .. 0.89)
-    // Turntable neck joint + Articulated 2×2 STUDS Head block with 4 top studs (y: 0.89 .. 0.925)
-    put(g, geoCyl(0.14, 0.035, 12), skin(0x1f5c28), 0, 0.9075, 0, 0, true);
+    put(g, geoCyl(0.228, 0.05, 16), band, 0, 0.36, 0, 0, true);
+    put(g, geoCyl(0.228, 0.05, 16), band, 0, 0.68, 0, 0, true);
+    put(g, geoCyl(0.2, 0.06, 16, 0.22), band, 0, 0.28, 0, 0, true); // hip ring
+    // Wind-up key on the back: barrel + two rings
+    put(g, geoCyl(0.035, 0.14, 10), band, 0, 0.56, 0.27, Math.PI / 2, true);
+    put(g, geoCyl(0.075, 0.03, 12), band, -0.07, 0.56, 0.34, Math.PI / 2, true);
+    put(g, geoCyl(0.075, 0.03, 12), band, 0.07, 0.56, 0.34, Math.PI / 2, true);
+    // Head = studded lid on a turntable, round stud eyes, hose fuse + trans flame
     const head = new THREE.Group();
-    head.position.set(0, 0.905, 0);
+    head.position.set(0, 0.73, 0);
     g.add(head);
     g.userData.head = head;
-    block(head, green, 0.44, 0.40, 0.40, 0, 0.20, 0, 2, 2);
-    const face = skin(0x101a12);
-    const neonEye = transTile(0x6aff7a, 0x1e8a2c);
-    put(head, geoBox(0.105, 0.105, 0.025), face, -0.10, 0.28, -0.202, 0, true);
-    put(head, geoBox(0.105, 0.105, 0.025), face, 0.10, 0.28, -0.202, 0, true);
-    put(head, geoBox(0.072, 0.072, 0.032), neonEye, -0.10, 0.28, -0.208, 0, true);
-    put(head, geoBox(0.072, 0.072, 0.032), neonEye, 0.10, 0.28, -0.208, 0, true);
-    put(head, geoBox(0.10, 0.14, 0.028), face, 0, 0.13, -0.202, 0, true);
-    put(head, geoBox(0.08, 0.11, 0.028), face, -0.09, 0.06, -0.202, 0, true);
-    put(head, geoBox(0.08, 0.11, 0.028), face, 0.09, 0.06, -0.202, 0, true);
-    // 4 Legs tucking directly into the hip baseplate with zero gap
-    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, green, 0.16, 0.22, 0.18, sx * 0.15, 0.22, sz * 0.12)));
-    return { group: g, legs, bodyMat: green };
+    put(head, geoCyl(0.225, 0.12, 16), orange, 0, 0.06, 0);
+    studs(head, orange, 0, 0.12, 0, 0.3, 0.3, 2, 2);
+    const eye = transTile(0xffd84a, 0xc98a00);
+    put(head, geoCyl(0.06, 0.03, 12), band, -0.08, -0.08, -0.215, Math.PI / 2, true);
+    put(head, geoCyl(0.06, 0.03, 12), band, 0.08, -0.08, -0.215, Math.PI / 2, true);
+    put(head, geoCyl(0.04, 0.035, 12), eye, -0.08, -0.08, -0.225, Math.PI / 2, true);
+    put(head, geoCyl(0.04, 0.035, 12), eye, 0.08, -0.08, -0.225, Math.PI / 2, true);
+    put(head, geoCyl(0.03, 0.1, 8), band, 0, 0.2, 0, 0, true);
+    put(head, geoCyl(0.03, 0.1, 8), band, 0.04, 0.29, 0, -0.5, true);
+    put(head, geoCyl(0.045, 0.1, 8, 0.01), transTile(0xffd84a, 0xf07820), 0.07, 0.38, 0, -0.3, true);
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, band, 0.11, 0.22, 0.13, sx * 0.12, 0.25, sz * 0.1)));
+    return { group: g, legs, bodyMat: orange };
   }
   if (kind === "ghast") {
     const tearM = transTile(0x7ae8ff, 0x226888);
@@ -17713,40 +17609,55 @@ function beast(kind: string): StudsBody {
     return { group: g, legs: [left, right], bodyMat: wing };
   }
   if (kind === "dragon") {
-    const hide = skin(0x231636);
-    const spine = skin(0x7a4ad4);
-    const body = block(g, hide, 0.44, 0.44, 1.5, 0, 0.7, 0, 2, 5); // v4.13: torso runs head-to-tail
+    // La Grande Presse (mob-redesign §3.4, boss): the first injection press turned
+    // dragon. Black studded hull, gear shoulders, Teks-frame wings with trans
+    // panels, a two-plate mould jaw. Boss rule #1 "Moule chaud" (bossSkin
+    // "molten"): molten bands travel up the hull.
+    const hide = bossSkin(0x1a1622, "molten");
+    const frame = skin(0x2a2a34);
+    const panel = transTile(0xb04cff, 0x5a1a8a);
+    const body = block(g, hide, 0.44, 0.44, 1.5, 0, 0.7, 0, 2, 5);
     body.userData.skin = "body";
-    for (const sz of [-0.45, -0.15, 0.15, 0.45]) {
-      put(g, geoSlope(0.10, 0.16, 0.16), spine, 0, 0.98, sz, Math.PI, true);
+    for (const sz of [-0.45, -0.15, 0.15, 0.45]) put(g, geoSlope(0.10, 0.16, 0.16), panel, 0, 0.98, sz, Math.PI, true);
+    // Gear shoulders: hub + 12 teeth
+    for (const sx of [-1, 1]) {
+      put(g, geoCyl(0.2, 0.06, 16), frame, sx * 0.25, 0.86, -0.1, 0, true);
+      for (let t = 0; t < 12; t++) {
+        const a = (t / 12) * Math.PI * 2;
+        put(g, geoBox(0.05, 0.06, 0.05), frame, sx * 0.25 + Math.cos(a) * 0.22, 0.86, -0.1 + Math.sin(a) * 0.22, 0, true);
+      }
     }
     const head = new THREE.Group();
     head.position.set(0, 0.90, -0.75);
     g.add(head);
     g.userData.head = head;
-    block(head, hide, 0.42, 0.34, 0.48, 0, 0.04, -0.14, 2, 2);
-    put(head, geoSlope(0.34, 0.16, 0.28), hide, 0, -0.02, -0.46, 0, true);
-    put(head, geoBox(0.32, 0.08, 0.26), spine, 0, -0.12, -0.44, 0.18, true); // Lower hinged dragon jaw
-    put(head, geoCyl(0.05, 0.28, 8), spine, -0.12, 0.32, -0.12, -0.35, true);
-    put(head, geoCyl(0.05, 0.28, 8), spine, 0.12, 0.32, -0.12, -0.35, true);
-    const wyrmEye = transTile(0xe07aff, 0x8a24b4);
-    put(head, geoBox(0.085, 0.085, 0.032), wyrmEye, -0.10, 0.09, -0.385, 0, true);
-    put(head, geoBox(0.085, 0.085, 0.032), wyrmEye, 0.10, 0.09, -0.385, 0, true);
+    block(head, hide, 0.42, 0.22, 0.5, 0, 0.1, -0.14, 2, 2); // upper mould plate
+    put(head, geoBox(0.4, 0.1, 0.46), frame, 0, -0.1, -0.2, 0.22, true); // lower mould plate (open press)
+    for (const sx of [-0.12, 0, 0.12]) put(head, geoBox(0.04, 0.08, 0.04), panel, sx, -0.02, -0.4, 0, true); // ejector pins
+    put(head, geoCyl(0.05, 0.28, 8), frame, -0.12, 0.32, -0.12, -0.35, true);
+    put(head, geoCyl(0.05, 0.28, 8), frame, 0.12, 0.32, -0.12, -0.35, true);
+    const eyeM = transTile(0xe07aff, 0x8a24b4);
+    put(head, geoBox(0.1, 0.06, 0.032), eyeM, -0.1, 0.12, -0.395, 0, true);
+    put(head, geoBox(0.1, 0.06, 0.032), eyeM, 0.1, 0.12, -0.395, 0, true);
     const tail = new THREE.Group();
     tail.position.set(0, 0.62, 0.72);
     block(tail, hide, 0.28, 0.2, 0.58, 0, 0, 0.28, 1, 2);
-    put(tail, geoSlope(0.09, 0.14, 0.16), spine, 0, 0.16, 0.28, Math.PI, true);
+    put(tail, geoSlope(0.09, 0.14, 0.16), panel, 0, 0.16, 0.28, Math.PI, true);
     g.add(tail);
     g.userData.tail = tail;
-    const left = new THREE.Group();
-    left.position.set(-0.21, 0.85, 0);
-    put(left, geoBox(1.15, 0.06, 0.58), spine, -0.56, 0, 0);
-    g.add(left);
-    const right = new THREE.Group();
-    right.position.set(0.21, 0.85, 0);
-    put(right, geoBox(1.15, 0.06, 0.58), spine, 0.56, 0, 0);
-    g.add(right);
-    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, hide, 0.12, 0.4, 0.12, sx * 0.14, 0.52, sz * 0.48)));
+    const wing = (sx: number) => {
+      const w = new THREE.Group();
+      w.position.set(sx * 0.21, 0.85, 0);
+      put(w, geoBox(1.15, 0.05, 0.05), frame, sx * 0.56, 0, -0.27); // leading beam
+      put(w, geoBox(0.05, 0.05, 0.58), frame, sx * 1.12, 0, 0); // tip beam
+      put(w, geoBox(1.1, 0.03, 0.52), panel, sx * 0.56, 0, 0.02, 0, true); // trans panel
+      for (let k = 1; k < 5; k++) put(w, geoCyl(0.03, 0.06, 8), frame, sx * k * 0.22, 0, -0.27, 0, true); // beam holes
+      g.add(w);
+      return w;
+    };
+    const left = wing(-1);
+    const right = wing(1);
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, frame, 0.12, 0.4, 0.12, sx * 0.14, 0.52, sz * 0.48)));
     legs.push(left, right);
     g.scale.setScalar(1.35);
     return { group: g, legs, bodyMat: hide };
@@ -17771,10 +17682,12 @@ function beast(kind: string): StudsBody {
     return { group: g, legs: [], bodyMat: gel };
   }
   if (kind === "golem") {
-    const iron = skin(0xc5ccd3);
-    const darkIron = skin(0x6e767e);
-    const vineM = skin(0x3a8c3e);
-    const headC = skin(0xd6cfc2);
+    // Grue-Garde (mob-redesign §3.2): toy-crane village guard — site-yellow
+    // body, black/yellow hazard plate, glazed cab head.
+    const iron = skin(0xf5c518);
+    const darkIron = skin(0x42464e);
+    const vineM = skin(0x1a120c);
+    const headC = skin(0xf5c518);
     const body = block(g, iron, 0.72, 0.72, 0.42, 0, 1.1, 0, 3, 2);
     body.userData.skin = "body";
     block(g, darkIron, 0.5, 0.16, 0.32, 0, 0.66, 0, 2, 1);
@@ -17787,9 +17700,10 @@ function beast(kind: string): StudsBody {
     g.userData.head = head;
     block(head, headC, 0.4, 0.36, 0.36, 0, 0.18, 0, 2, 2);
     put(head, geoCyl(0.045, 0.14, 8), darkIron, 0, 0.14, -0.21, Math.PI / 2, true); // Iron nose
-    const rubyEye = transTile(0xff3b2f, 0x88140c);
-    put(head, geoBox(0.085, 0.085, 0.032), rubyEye, -0.09, 0.22, -0.19, 0, true);
-    put(head, geoBox(0.085, 0.085, 0.032), rubyEye, 0.09, 0.22, -0.19, 0, true);
+    const rubyEye = transTile(0x5ce0d2, 0x1f746a); // cab glazing
+    put(head, geoBox(0.3, 0.12, 0.032), rubyEye, 0, 0.22, -0.19, 0, true);
+    put(head, geoBox(0.42, 0.04, 0.38), darkIron, 0, 0.38, 0, 0, true); // cab roof
+    for (const hy2 of [0.95, 1.15, 1.35]) put(g, geoBox(0.2, 0.06, 0.45), skin(0xf5c518), -0.22, hy2, 0, 0, true); // hazard stripes
     put(head, geoBox(0.16, 0.04, 0.03), black, 0, 0.08, -0.19, 0, true);
     const legs = [
       legBox(g, darkIron, 0.18, 0.52, 0.18, -0.16, 0.52, 0),
@@ -17820,24 +17734,35 @@ function beast(kind: string): StudsBody {
     return { group: g, legs: [], bodyMat: iron };
   }
   if (kind === "enderman") {
-    // Tall brick-built Enderman: hinged Teks limbs, C-clamp hands, articulated 2×2 studded head, and glowing Trans-Purple 1×1 tile eyes!
+    // Vide-Bac (mob-redesign §3.3): a tall sorter — long Teks-axle limbs with
+    // rotula barrels, a slim black/purple stacked torso and an EMPTY sorting
+    // tray for a head, one trans-magenta lens at the bottom of the tray.
     const blackM = skin(0x16121c);
-    const legL = hinge(g, blackM, 0.085, 0.95, -0.11, 0.98, 0);
-    const legR = hinge(g, blackM, 0.085, 0.95, 0.11, 0.98, 0);
-    const torso = block(g, blackM, 0.42, 0.72, 0.24, 0, 1.34, 0, 2, 1);
+    const purpleM = skin(0x4b1d8c);
+    const legL = hinge(g, blackM, 0.05, 0.95, -0.11, 0.98, 0);
+    const legR = hinge(g, blackM, 0.05, 0.95, 0.11, 0.98, 0);
+    const torso = block(g, blackM, 0.34, 0.26, 0.22, 0, 1.12, 0, 0, 0);
     torso.userData.skin = "body";
-    const armL = hinge(g, blackM, 0.068, 0.95, -0.28, 1.66, 0);
-    const armR = hinge(g, blackM, 0.068, 0.95, 0.28, 1.66, 0);
-    put(armL, geoClaw(0.055, 0.065), blackM, 0, -0.96, 0, Math.PI / 2, true);
-    put(armR, geoClaw(0.055, 0.065), blackM, 0, -0.96, 0, Math.PI / 2, true);
+    block(g, purpleM, 0.34, 0.24, 0.22, 0, 1.37, 0, 0, 0);
+    block(g, blackM, 0.38, 0.22, 0.22, 0, 1.6, 0, 0, 0);
+    for (const sx of [-1, 1]) put(g, geoCyl(0.07, 0.08, 12), purpleM, sx * 0.11, 0.99, 0, Math.PI / 2, true); // hip rotulas
+    const armL = hinge(g, blackM, 0.04, 0.95, -0.24, 1.66, 0);
+    const armR = hinge(g, blackM, 0.04, 0.95, 0.24, 1.66, 0);
+    put(armL, geoClaw(0.05, 0.06), blackM, 0, -0.96, 0, Math.PI / 2, true);
+    put(armR, geoClaw(0.05, 0.06), blackM, 0, -0.96, 0, Math.PI / 2, true);
     const head = new THREE.Group();
-    head.position.set(0, 1.72, 0);
+    head.position.set(0, 1.74, 0);
     g.add(head);
     g.userData.head = head;
-    block(head, blackM, 0.38, 0.36, 0.36, 0, 0.18, 0, 2, 2);
-    const eye = transTile(0xd98aff, 0x8a2be2);
-    put(head, geoBox(0.105, 0.052, 0.028), eye, -0.095, 0.20, -0.185, 0, true);
-    put(head, geoBox(0.105, 0.052, 0.028), eye, 0.095, 0.20, -0.185, 0, true);
+    put(head, geoCyl(0.06, 0.08, 10), purpleM, 0, 0, 0, 0, true); // neck post
+    put(head, geoBox(0.5, 0.04, 0.4), blackM, 0, 0.06, 0); // tray floor
+    put(head, geoBox(0.5, 0.16, 0.04), blackM, 0, 0.14, -0.18); // 4 tray walls
+    put(head, geoBox(0.5, 0.16, 0.04), blackM, 0, 0.14, 0.18);
+    put(head, geoBox(0.04, 0.16, 0.4), blackM, -0.23, 0.14, 0);
+    put(head, geoBox(0.04, 0.16, 0.4), blackM, 0.23, 0.14, 0);
+    const lens = transTile(0xd04cff, 0x8a2be2);
+    put(head, geoCyl(0.07, 0.04, 14), lens, 0, 0.1, -0.03, 0, true);
+    put(head, geoCyl(0.06, 0.03, 14), lens, 0, 0.12, -0.215, Math.PI / 2, true); // lens seen from the front
     return { group: g, legs: [legL, legR, armR, armL], bodyMat: blackM };
   }
   if (kind === "blaze") {
@@ -18129,14 +18054,22 @@ function beast(kind: string): StudsBody {
     return { group: g, legs, bodyMat: hide };
   }
   if (kind === "wither") {
-    const bone = skin(0x1c1c24);
-    const rib = skin(0x363644);
+    // Le Triple Rebut (mob-redesign §3.4, boss): three reject mould-heads welded
+    // onto a Teks spine. Boss rule #2 "Cordon de soudure" (bossSkin "weld"):
+    // glossy orange weld beads at regular joints, echoing weld.ts.
+    const bone = bossSkin(0x22222c, "weld");
+    const rib = skin(0x3a3a48);
+    const holeM = skin(0x111118);
+    const beadM = skin(0xf07820);
     const body = block(g, bone, 0.26, 0.9, 0.26, 0, 0.95, 0, 1, 1);
     body.userData.skin = "body";
-    for (const ry of [0.72, 0.98, 1.24]) put(g, geoBox(0.64, 0.09, 0.32), rib, 0, ry, 0);
-    put(g, geoBox(0.76, 0.10, 0.22), rib, 0, 1.44, 0); // Shoulder crossbar
+    for (const ry of [0.72, 0.98, 1.24]) {
+      put(g, geoBox(0.64, 0.09, 0.32), rib, 0, ry, 0);
+      for (const sx of [-0.24, 0.24]) put(g, geoCyl(0.03, 0.34, 8), holeM, sx, ry, 0, Math.PI / 2, true); // beam holes
+    }
+    put(g, geoBox(0.9, 0.10, 0.22), rib, 0, 1.44, 0); // shoulder crossbar
     put(g, geoBox(0.16, 0.55, 0.16), bone, 0, 0.32, 0.1, 0.25);
-    const eyeW = transTile(0x88f0ff, 0x2488a8);
+    const eyeW = transTile(0xff9a3a, 0xa83a08);
     const head = new THREE.Group();
     head.position.set(0, 1.48, 0);
     g.add(head);
@@ -18144,11 +18077,12 @@ function beast(kind: string): StudsBody {
     block(head, bone, 0.40, 0.36, 0.36, 0, 0.18, 0, 2, 2);
     put(head, geoBox(0.09, 0.05, 0.025), eyeW, -0.09, 0.22, -0.185, 0, true);
     put(head, geoBox(0.09, 0.05, 0.025), eyeW, 0.09, 0.22, -0.185, 0, true);
-    put(head, geoBox(0.18, 0.05, 0.025), black, 0, 0.08, -0.185, 0, true);
-    block(g, bone, 0.28, 0.26, 0.26, -0.44, 1.54, 0, 1, 1);
-    block(g, bone, 0.28, 0.26, 0.26, 0.44, 1.54, 0, 1, 1);
-    put(g, geoBox(0.07, 0.04, 0.025), eyeW, -0.44, 1.58, -0.135, 0, true);
-    put(g, geoBox(0.07, 0.04, 0.025), eyeW, 0.44, 1.58, -0.135, 0, true);
+    put(head, geoBox(0.2, 0.04, 0.025), beadM, 0, 0.08, -0.185, 0, true); // welded mouth seam
+    for (const sx of [-1, 1]) {
+      block(g, bone, 0.28, 0.26, 0.26, sx * 0.5, 1.54, 0, 1, 1);
+      put(g, geoBox(0.07, 0.04, 0.025), eyeW, sx * 0.5, 1.58, -0.135, 0, true);
+      put(g, geoBox(0.3, 0.05, 0.05), beadM, sx * 0.34, 1.5, -0.1, 0, true); // weld bead to the side head
+    }
     return { group: g, legs: [], bodyMat: bone };
   }
   const fallback = skin(0xf4f1ea);
@@ -18229,19 +18163,19 @@ export function buildStuds(kind: string, scale: number): StudsBody {
     kind === "villager"
       ? makeFig(0x8d5a34, 0x6b3e22, 0x4a3424, "nose")
       : kind === "walker"
-        ? makeFig(0x286e78, 0x283268, 0x1e3c20, "mad", 0x5ea252)
+        ? makeFig(0x7d8a72, 0x5c6658, 0x4a5444, "mad", 0x9aa58c)
         : kind === "skelly"
-          ? makeFig(0xe8e0d0, 0xd4cbb8, 0xf7f4ee, "skull", 0xf4f1ea)
+          ? makeFig(0xa8adb3, 0x8a9096, 0x6e747a, "skull", 0xc4c9ce)
           : kind === "piglin"
             ? makeFig(0x7a4222, 0x4a2a18, 0xf2a2c0, "snout", 0xf2a2c0)
             : kind === "witch"
               ? makeFig(0x4a2a6a, 0x223824, 0x14101c, "nose", 0xd8b088)
               : kind === "drowned"
-                ? makeFig(0x2a6a6a, 0x1a3a4a, 0x164a3a, "mad", 0x6ac0a8)
+                ? makeFig(0x3a8a86, 0x2a5e5c, 0x1f4a48, "mad", 0x7cc2b8)
                 : kind === "husk"
-                  ? makeFig(0xc8ad78, 0x9e8252, 0x1d4ed8, "mad", 0x8a6438)
+                  ? makeFig(0xc9b98f, 0xa8986e, 0x8a7a52, "mad", 0xd8cba4)
                   : kind === "stray"
-                    ? makeFig(0x627c8c, 0x3e505c, 0xc8e4f0, "skull", 0xdff0f7)
+                    ? makeFig(0x8fb4c8, 0x6a8ea2, 0xc8e4f0, "skull", 0xdff0f7)
                     : kind === "pillager"
                       ? makeFig(0x483224, 0x2c3038, 0x23232a, "nose", 0x90969e)
                       : kind === "vindicator"
@@ -18258,50 +18192,46 @@ export function buildStuds(kind: string, scale: number): StudsBody {
   const darkIron = skin(0x424750);
   const woodM = skin(0x7c522b);
 
-  if (kind === "walker") {
-    // Zombie: tattered chest armor plate, asymmetric torn pauldron & glowing green eyes
-    const zEye = transTile(0x52ff68, 0x146e20);
-    put(head, geoBox(0.05, 0.045, 0.024), zEye, -0.056, 1.155 + hy, -0.155, 0, true);
-    put(head, geoBox(0.05, 0.045, 0.024), zEye, 0.056, 1.155 + hy, -0.155, 0, true);
-    put(g, geoBox(0.16, 0.10, 0.24), skin(0x425238), -0.16, 0.89, 0, 0, true);
-    put(g, geoBox(0.32, 0.08, 0.245), skin(0x3a2818), 0, 0.56, 0, 0, true);
+  if (kind === "walker" || kind === "husk" || kind === "drowned") {
+    // Démoulé family (mob-redesign §3.3): figures pulled out of the mould too
+    // early — faded plastic, flash burrs on the edges, one arm swapped for a Teks
+    // beam (dark discs = the beam holes), trans eyes.
+    const eyeHex = kind === "drowned" ? [0x4ef2f7, 0x128898] : kind === "husk" ? [0xffb03a, 0x8a4a08] : [0x7cff4a, 0x146e20];
+    const zEye = transTile(eyeHex[0], eyeHex[1]);
+    put(head, geoCyl(0.03, 0.024, 10), zEye, -0.056, 1.155 + hy, -0.155, Math.PI / 2, true);
+    put(head, geoCyl(0.03, 0.024, 10), zEye, 0.056, 1.155 + hy, -0.155, Math.PI / 2, true);
+    const burr = skin(kind === "husk" ? 0xe0d4b0 : kind === "drowned" ? 0x9ad8d0 : 0xb4bea8);
+    put(g, geoBox(0.05, 0.04, 0.03), burr, -0.2, 0.92, -0.12, 0, true);
+    put(g, geoBox(0.04, 0.05, 0.03), burr, 0.19, 0.66, -0.12, 0, true);
+    put(g, geoBox(0.06, 0.03, 0.03), burr, 0.02, 0.5, -0.13, 0, true);
+    put(head, geoBox(0.05, 0.04, 0.03), burr, 0.13, 1.25 + hy, -0.1, 0, true);
+    const beamM = skin(kind === "husk" ? 0x8a7a52 : 0x5c6658);
+    const holeM = skin(0x1a120c);
+    put(g, geoBox(0.07, 0.42, 0.07), beamM, 0.29, 0.6, -0.06, 0, true);
+    for (const by of [0.46, 0.56, 0.66, 0.76]) put(g, geoCyl(0.022, 0.075, 8), holeM, 0.29, by, -0.06, Math.PI / 2, true);
+    if (kind === "husk") {
+      put(g, geoBox(0.38, 0.05, 0.245), skin(0xe8dec2), 0, 0.78, 0, 0, true); // sand-worn wrap plates
+      put(g, geoBox(0.38, 0.05, 0.245), skin(0xd8cca8), 0, 0.64, 0, 0, true);
+    } else if (kind === "drowned") {
+      for (const sx of [-0.12, 0.02, 0.14]) put(g, geoCyl(0.015, 0.3, 6), skin(0x2f8a4a), sx, 0.72, -0.13, 0.08, true); // weed hoses
+      put(g, geoCyl(0.02, 0.52, 8), skin(0x2a8478), -0.28, 0.54, -0.16, 0.35, true); // kept trident shaft (drop parity)
+    }
   } else if (kind === "skelly" || kind === "stray") {
-    // Skeleton / Frost Stray: 3D STUDS Bow gripped in right hand + back arrow quiver (+ Ice Crown on Stray)
-    const bowCol = kind === "stray" ? skin(0x7ae2ff) : woodM;
-    put(g, geoBox(0.032, 0.34, 0.14), bowCol, 0.28, 0.52, -0.18, 0.25, true);
-    put(g, geoCyl(0.008, 0.34, 6), skin(0xf4f1ea), 0.28, 0.52, -0.11, 0.25, true);
-    put(g, geoCyl(0.05, 0.26, 8), skin(0x6b3e22), -0.09, 0.78, 0.15, -0.2, true);
-    if (kind === "stray") {
-      const iceM = transTile(0x7cf0ff, 0x1e88a8);
-      put(head, geoBox(0.36, 0.10, 0.30), skin(0x4a6a7c), 0, 1.28 + hy, 0, 0, true);
-      put(head, geoBox(0.05, 0.12, 0.05), iceM, -0.11, 1.36 + hy, -0.08, 0, true);
-      put(head, geoBox(0.05, 0.14, 0.05), iceM, 0, 1.38 + hy, -0.10, 0, true);
-      put(head, geoBox(0.05, 0.12, 0.05), iceM, 0.11, 1.36 + hy, -0.08, 0, true);
-    }
-  } else if (kind === "husk") {
-    // Pharaoh Mummy: Egyptian Royal Blue & Gold Nemes Headdress + Uraeus Cobra + Linen Bandages + Golden Scepter
-    put(head, geoBox(0.40, 0.12, 0.32), skin(0x1d4ed8), 0, 1.28 + hy, 0.02, 0, true);
-    put(head, geoBox(0.42, 0.045, 0.33), goldM, 0, 1.25 + hy, 0.02, 0, true);
-    put(head, geoBox(0.10, 0.22, 0.10), skin(0x1d4ed8), -0.17, 1.08 + hy, -0.04, 0, true);
-    put(head, geoBox(0.10, 0.22, 0.10), skin(0x1d4ed8), 0.17, 1.08 + hy, -0.04, 0, true);
-    put(head, geoBox(0.11, 0.04, 0.11), goldM, -0.17, 1.06 + hy, -0.04, 0, true);
-    put(head, geoBox(0.11, 0.04, 0.11), goldM, 0.17, 1.06 + hy, -0.04, 0, true);
-    put(head, geoBox(0.055, 0.10, 0.05), goldM, 0, 1.34 + hy, -0.15, 0, true); // Golden cobra uraeus
-    put(g, geoBox(0.38, 0.05, 0.245), skin(0xe8dec2), 0, 0.78, 0, 0, true);
-    put(g, geoBox(0.38, 0.05, 0.245), skin(0xd8cca8), 0, 0.64, 0, 0, true);
-    put(g, geoCyl(0.02, 0.44, 8), goldM, 0.28, 0.54, -0.16, 0.35, true);
-    put(g, geoBox(0.08, 0.08, 0.08), transTile(0xffd84a, 0xd88800), 0.28, 0.74, -0.24, 0, true);
-  } else if (kind === "drowned") {
-    // Drowned: Glowing Cyan Eyes + Seaweed Shoulder Wraps + Held 3-Pronged 3D STUDS Trident!
-    const seaEye = transTile(0x4ef2f7, 0x128898);
-    put(head, geoBox(0.05, 0.048, 0.024), seaEye, -0.056, 1.155 + hy, -0.155, 0, true);
-    put(head, geoBox(0.05, 0.048, 0.024), seaEye, 0.056, 1.155 + hy, -0.155, 0, true);
-    put(g, geoBox(0.16, 0.12, 0.25), skin(0x1f5c38), -0.15, 0.88, 0, 0, true);
-    put(g, geoCyl(0.02, 0.52, 8), skin(0x2a8478), 0.28, 0.54, -0.16, 0.35, true);
-    put(g, geoBox(0.14, 0.04, 0.04), skin(0x66e8dc), 0.28, 0.76, -0.25, 0, true);
-    for (const px of [-0.05, 0, 0.05]) {
-      put(g, geoCyl(0.008, 0.11, 6), skin(0xe8ffff), 0.28 + px, 0.83, -0.28, 0.35, true);
-    }
+    // Squelek (mob-redesign §3.3): a beam-and-axle archer — Teks hub ring around
+    // the head, rib liftarms on the torso, red trans eyes, a beam crossbow with a
+    // rubber band. Stray = frosted trans variant.
+    const frame = kind === "stray" ? transTile(0xc8e8ff, 0x6fb6ff) : skin(0xa8adb3);
+    const holeM = skin(0x3a3e44);
+    const eyeM = transTile(0xff3b2f, 0x99140a);
+    put(head, geoCyl(0.18, 0.05, 16), frame, 0, 1.17 + hy, 0, 0, true); // hub ring
+    put(head, geoCyl(0.032, 0.03, 10), eyeM, -0.056, 1.155 + hy, -0.17, Math.PI / 2, true);
+    put(head, geoCyl(0.032, 0.03, 10), eyeM, 0.056, 1.155 + hy, -0.17, Math.PI / 2, true);
+    for (const ry of [0.62, 0.72, 0.82]) put(g, geoBox(0.4, 0.035, 0.26), frame, 0, ry, 0, 0, true); // rib liftarms
+    put(g, geoBox(0.06, 0.06, 0.4), frame, 0.28, 0.52, -0.2, 0, true); // crossbow stock beam
+    for (const bz of [-0.34, -0.22, -0.1]) put(g, geoCyl(0.02, 0.065, 8), holeM, 0.28, 0.52, bz, 0, true);
+    put(g, geoBox(0.34, 0.04, 0.05), frame, 0.28, 0.54, -0.38, 0, true); // limbs
+    put(g, geoBox(0.32, 0.012, 0.012), skin(0x6b3e22), 0.28, 0.56, -0.34, 0, true); // rubber band
+    put(g, geoCyl(0.05, 0.26, 8), holeM, -0.09, 0.78, 0.15, -0.2, true); // bolt quiver
   } else if (kind === "piglin") {
     // Piglin: Golden Horned Helmet + Flopped Ears + Ivory Tusks + Gold Belt + Held Golden STUDS Sword!
     put(head, geoCyl(0.175, 0.12, 12), goldM, 0, 1.28 + hy, 0, 0, true);
