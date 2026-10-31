@@ -354,6 +354,8 @@ declare global {
       getBricks?: () => [number, number, number, number][];
       placeTechAt?: (id: number, o: number, qx: number, qy: number, qz: number) => boolean;
       getTeks?: () => [number, number, number, number, number, number][];
+      openTradeQa?: (role: string) => boolean;
+      getFolkRoles?: () => string[];
       getPrefabs?: () => { name: string; parts: number; ingots: number; copper: number; afford: boolean }[];
       buyPrefabQa?: (name: string) => void;
       getVillageAt?: () => { x: number; z: number } | null;
@@ -13688,6 +13690,15 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     },
     getTeks: () => [...tech.parts.values()].map((p) => [p.id, p.o, p.q[0], p.q[1], p.q[2], p.on === false ? 0 : 1] as [number, number, number, number, number, number]),
     // Section 22 P-A QA hooks (inert in play).
+    openTradeQa: (role: string) => {
+      const mob = mobs.find((m) => !m.dead && m.kind === "villager" && m.role === role && Math.hypot(m.x - player.x, m.z - player.z) < 32);
+      if (!mob) return false;
+      traderRole = (mob.role as TraderRole) || "grocer";
+      traderKeySet = repKeyFor(mob.homeX ?? mob.x, mob.homeZ ?? mob.z);
+      openPanel("trade");
+      return true;
+    },
+    getFolkRoles: () => folkSpots.map((f) => f.role),
     getPrefabs: () => hud.prefabs,
     buyPrefabQa: (name: string) => api.buyPrefab(name),
     getVillageAt: () => villageAt,
