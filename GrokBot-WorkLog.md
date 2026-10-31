@@ -58,3 +58,10 @@ Journal de travail de studs game tester (Grok Bot) sur StudCraft. Heures en heur
 - Marchands : la sacoche passe sur la hanche arrière. Empiècements, cape et ceinture sont rétrécis pour ne plus couvrir les bras. Les outils (houlette, bâton, marteau, clé, truelle, arc, registre, cagette) sont tenus dans la pince et suivent donc le balancement.
 - Nouveau test : 2 pivots de bras par villageois et marchand, pilotés par l'animateur (legs[2]/[3]), avec un écart à l'épaule. 131/131 tests, tsc et build OK.
 - Montage : `shots-v3/montage-pnj-bras.png` (avant, après au repos, après bras balancés).
+
+## v3.2 — Démoulé : retour au look v2 (31 oct. 2026, 12h14 PDT)
+- Philippe préfère le Démoulé v2 : plus fin, tête séparée sur un cou, visière décalée, sans motif de trous sombres. Le `makeDemoule` v2 est restauré tel quel pour le marcheur, le husk et le noyé.
+- La fusion v3 est conservée : les tronçons statiques sont fusionnés par matériau, mais la tête et les 4 membres restent des pivots séparés. Les primitives sont allégées.
+- Marcheur : 135 → 25 draw calls, 38,3k → 20,6k triangles. Husk : 137 → 27 draw calls. Noyé : 139 → 29 draw calls.
+- Le champ NFR `demoule` refit (20,7 dB) est conservé : les trous venaient de la géométrie v3, pas du champ.
+- Comparaison réf. | v2 | v3 (rejeté) | v3.2 : `shots-v3/ref-vs-demoule-v32.png`. Tests 131/131, tsc et build OK.

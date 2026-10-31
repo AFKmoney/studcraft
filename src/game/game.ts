@@ -17288,98 +17288,95 @@ export function buildSpecies(spec: SpeciesSpec): StudsBody {
   return { group: g, legs, bodyMat: main };
 }
 
-/** Démoulé v3 (refs/demoule.jpg): a hunched robot built from hundreds of small
- *  grid-snapped greeble bricks (half studded) over a darker olive core, merged per
- *  material (PartBatch) so the dense skin stays a few draw calls. Plastic carries
- *  the refitted NFR "demoule" field (tight chest crop, 2-48-48-1, 20.7 dB) plus the
- *  SNR Voronoi crack rule; one wide helmet visor glows through a cracked web.
- *  Legs order stays [legL, legR, armR, armL] for the zombie walk/arm pose. */
+/** Démoulé (v2 look restored on Philippe's request; v3 keeps only the merge pass + refit NFR field) (refs/demoule.jpg): no minifig parts at all — a chunky robot
+ *  pulled from the mould too early. Cube head with a wide cracked visor (one
+ *  dark pane, one glowing pane with SNR crack lines), a torso and limbs built
+ *  of offset greeble blocks, faded plastic carrying the NFR "demoule" field
+ *  (fitted on the photo's crazed torso) plus the SNR Voronoi crack rule, and a
+ *  long Teks liftarm dragged in one hand. Legs order matches makeFig
+ *  ([legL, legR, armR, armL]) so the zombie walk/arm pose is unchanged. */
 function makeDemoule(kind: string): StudsBody {
   const pal =
-    kind === "husk" ? { c: 0xb09a70, eye: 0xffb03a } : kind === "drowned" ? { c: 0x3f7a72, eye: 0x4ef2f7 } : { c: 0x56634c, eye: 0x46e070 };
+    kind === "husk" ? { c: 0xc2b088, eye: 0xffb03a } : kind === "drowned" ? { c: 0x4f8f86, eye: 0x4ef2f7 } : { c: 0x6b7660, eye: 0x46e070 };
   const g = new THREE.Group();
-  const fx = (c: number, plane: "xy" | "zy", amt: number, crack: number, sc = 2.6) => nfrSkin(c, { field: "demoule", plane, scale: [sc, sc], amt, crack });
-  const plastic = fx(pal.c, "xy", 0.22, 0.55);
-  const plasticZ = fx(pal.c, "zy", 0.22, 0.55);
-  const lightC = new THREE.Color(pal.c).multiplyScalar(1.12).getHex();
-  const shadeC = new THREE.Color(pal.c).multiplyScalar(0.78).getHex();
-  const light = fx(lightC, "xy", 0.2, 0.45, 3.4);
-  const shade = fx(shadeC, "zy", 0.2, 0.4, 3.4);
-  const recess = skin(new THREE.Color(pal.c).multiplyScalar(0.32).getHex());
-  const dark = skin(0x161a17);
-  const rnd = seeded(kind.length * 7919 + 17);
-  const gm = [plastic, plastic, plasticZ, light, shade];
-  // core volumes in the recess colour: the gaps between greebles read as depth, like the photo
-  const torso = put(g, geoRBox(0.46, 0.44, 0.28, 0.04), plastic, 0, 0.88, 0);
+  const plastic = nfrSkin(pal.c, { field: "demoule", plane: "xy", scale: [3.2, 2.4], amt: 0.3, crack: 0.65 });
+  const plasticZ = nfrSkin(pal.c, { field: "demoule", plane: "zy", scale: [3.2, 2.4], amt: 0.3, crack: 0.65 });
+  const shade = nfrSkin(new THREE.Color(pal.c).multiplyScalar(0.88).getHex(), { field: "demoule", plane: "xy", scale: [5, 4], amt: 0.25, crack: 0.4 });
+  const dark = skin(0x1c211d);
+  let seed = kind.length * 7919 + 17;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  /** scatter offset greeble blocks over a box face set (front/back/sides) */
+  const greeble = (parent: THREE.Object3D, w: number, h: number, d: number, cx: number, cy: number, cz: number, n: number) => {
+    for (let i = 0; i < n; i++) {
+      const face = Math.floor(rnd() * 4);
+      const gw = 0.03 + rnd() * 0.07, gh = 0.03 + rnd() * 0.07, gd = 0.015 + rnd() * 0.03;
+      const u = (rnd() - 0.5) * 0.9, v = (rnd() - 0.5) * 0.9;
+      const m = rnd() < 0.3 ? shade : face < 2 ? plastic : plasticZ;
+      if (face < 2) put(parent, geoRBox(gw, gh, gd, 0.006), m, cx + u * w, cy + v * h, cz + (face ? 1 : -1) * (d / 2 + gd * 0.3), 0, true);
+      else put(parent, geoRBox(gd, gh, gw, 0.006), m, cx + (face === 2 ? 1 : -1) * (w / 2 + gd * 0.3), cy + v * h, cz + u * d, 0, true);
+    }
+  };
+  // torso + hips
+  const torso = put(g, geoRBox(0.44, 0.42, 0.26, 0.04), plastic, 0, 0.88, 0);
   torso.userData.skin = "body";
-  const tb = new PartBatch(`demoule-${kind}-torso`);
-  tb.add(geoRBox(0.36, 0.13, 0.22, 0.03), shade, 0, 0.6, 0); // hips
-  tb.add(geoRBox(0.5, 0.12, 0.3, 0.03), plastic, 0, 1.08, 0.01); // hunched shoulder yoke
-  for (const sx of [-1, 1]) tb.add(geoRBox(0.17, 0.15, 0.24, 0.03), light, sx * 0.26, 1.06, 0.02); // shoulder blocks
-  for (let k = 0; k < 6; k++) tb.add(geoRBox(0.07, 0.05, 0.05, 0.01), k % 2 ? shade : plastic, 0, 0.66 + k * 0.075, 0.16); // spine column
-  brickSkin(tb, gm, plastic, rnd, 0.46, 0.44, 0.28, 0, 0.88, 0, 80);
-  brickSkin(tb, gm, plastic, rnd, 0.5, 0.12, 0.3, 0, 1.08, 0.01, 18);
-  brickSkin(tb, [shade, plastic], plastic, rnd, 0.36, 0.13, 0.22, 0, 0.6, 0, 12, 0.03, false);
-  for (let i = 0; i < 26; i++) tb.add(geoRBox(0.03, 0.03, 0.02, 0.005), recess, (rnd() - 0.5) * 0.42, 0.68 + rnd() * 0.4, -0.15 - rnd() * 0.01); // dark pits
-  tb.flush(g);
-  // head: bigger helmet, one wide visor glowing behind a cracked web
+  put(g, geoRBox(0.36, 0.12, 0.22, 0.03), shade, 0, 0.62, 0);
+  put(g, geoRBox(0.2, 0.14, 0.05, 0.02), shade, -0.06, 0.95, -0.14, 0, true); // chest plates
+  put(g, geoRBox(0.14, 0.1, 0.05, 0.02), plastic, 0.1, 0.82, -0.145, 0, true);
+  greeble(g, 0.44, 0.42, 0.26, 0, 0.88, 0, 34);
+  // head: chunky cube with a wide cracked visor
   const head = new THREE.Group();
-  head.position.set(0, 1.13, -0.02);
+  head.position.set(0, 1.12, 0);
   g.add(head);
   g.userData.head = head;
-  put(head, geoRBox(0.36, 0.31, 0.32, 0.045), plastic, 0, 0.18, 0);
-  const hb = new PartBatch(`demoule-${kind}-head`);
-  hb.add(geoRBox(0.1, 0.07, 0.1, 0.015), shade, 0, 0.0, 0.02); // neck block
-  hb.add(geoRBox(0.38, 0.07, 0.34, 0.025), light, 0, 0.345, 0.0); // helmet crown
-  hb.add(geoRBox(0.4, 0.05, 0.06, 0.015), shade, 0, 0.27, -0.16); // brow ridge
-  for (const sx of [-1, 1]) hb.add(geoRBox(0.06, 0.2, 0.26, 0.02), shade, sx * 0.19, 0.16, 0.01); // cheek guards
-  brickSkin(hb, gm, plastic, rnd, 0.36, 0.31, 0.32, 0, 0.18, 0, 36);
-  hb.add(geoRBox(0.34, 0.13, 0.03, 0.012), dark, 0, 0.165, -0.165); // visor frame
-  hb.flush(head);
-  const pane = nfrSkin(new THREE.Color(pal.eye).multiplyScalar(0.7).getHex(), { field: "demoule", plane: "xy", scale: [7, 7], amt: 0.12, crack: 1.0 }, { transparent: true, opacity: 0.92 });
-  pane.emissive = new THREE.Color(pal.eye);
-  (pane as THREE.MeshStandardMaterial).emissiveIntensity = 0.85;
-  put(head, geoRBox(0.3, 0.095, 0.02, 0.01), pane, 0, 0.165, -0.182, 0, true);
-  const halo = new THREE.MeshBasicMaterial({ color: pal.eye, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false });
-  put(head, geoBall(0.12, 12), halo, 0, 0.165, -0.2, 0, true).scale.set(1.6, 0.6, 0.25);
-  // limbs: each segment greebled in its own merged batch on the swinging pivot
-  const limb = (id: string, x: number, y: number, w: number, upLen: number, lowLen: number, arm: boolean) => {
+  put(head, geoRBox(0.06, 0.06, 0.06, 0.01), shade, 0, 0.0, 0, 0, true); // neck block
+  put(head, geoRBox(0.32, 0.27, 0.28, 0.035), plastic, 0, 0.17, 0);
+  greeble(head, 0.32, 0.27, 0.28, 0, 0.17, 0, 18);
+  put(head, geoRBox(0.3, 0.06, 0.24, 0.02), shade, 0, 0.32, 0.01, 0, true); // brow / top plate
+  put(head, geoRBox(0.3, 0.11, 0.04, 0.015), dark, 0, 0.15, -0.145, 0, true); // visor frame
+  const paneDark = nfrSkin(0x1e3326, { field: "demoule", plane: "xy", scale: [9, 9], amt: 0.1, crack: 1.0 }, { transparent: true, opacity: 0.85 });
+  paneDark.emissive = new THREE.Color(0x0c2a14);
+  put(head, geoRBox(0.125, 0.085, 0.02, 0.008), paneDark, -0.068, 0.15, -0.165, 0, true);
+  const paneGlow = nfrSkin(pal.eye, { field: "demoule", plane: "xy", scale: [9, 9], amt: 0.1, crack: 1.0 }, { transparent: true, opacity: 0.9 });
+  paneGlow.emissive = new THREE.Color(pal.eye);
+  (paneGlow as THREE.MeshStandardMaterial).emissiveIntensity = 0.9;
+  put(head, geoRBox(0.125, 0.085, 0.02, 0.008), paneGlow, 0.068, 0.15, -0.165, 0, true);
+  const halo = new THREE.MeshBasicMaterial({ color: pal.eye, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false });
+  put(head, geoBall(0.1, 12), halo, 0.068, 0.15, -0.18, 0, true).scale.set(1, 0.7, 0.25);
+  put(head, geoRBox(0.012, 0.1, 0.03, 0.004), dark, 0, 0.15, -0.165, 0, true); // visor mullion
+  // limbs
+  const limb = (x: number, y: number, w: number, upLen: number, lowLen: number, arm: boolean) => {
     const p = new THREE.Group();
     p.position.set(x, y, 0);
     g.add(p);
-    put(p, geoRBox(w, upLen + lowLen + w * 0.4, w, 0.02), plastic, 0, -(upLen + lowLen) / 2 - w * 0.3, 0);
-    const lb = new PartBatch(`demoule-${kind}-${id}`);
-    lb.add(geoRBox(w * 1.2, w * 0.95, w * 1.2, 0.02), shade, 0, -w * 0.3, 0);
-    lb.add(geoRBox(w * 1.12, w * 0.45, w * 1.12, 0.015), light, 0, -upLen - w * 0.2, 0); // knee/elbow block
-    lb.add(geoCyl(w * 0.18, w * 1.4, 8), dark, 0, -upLen - w * 0.2, 0, 0, 0, Math.PI / 2); // axle
-    brickSkin(lb, gm, plastic, rnd, w, upLen + lowLen, w, 0, -(upLen + lowLen) / 2 - w * 0.3, 0, arm ? 16 : 18, 0.03, false);
-    if (arm) lb.add(geoRBox(w * 1.15, w * 0.8, w * 1.2, 0.02), shade, 0, -upLen - lowLen - w * 0.6, -0.01); // blocky fist
-    else lb.add(geoRBox(w * 1.3, w * 0.6, w * 1.6, 0.02), shade, 0, -upLen - lowLen - w * 0.55, -w * 0.18); // boot
-    lb.flush(p);
+    put(p, geoRBox(w * 1.15, w * 1.0, w * 1.15, 0.02), shade, 0, -w * 0.3, 0, 0, true); // shoulder / hip block
+    put(p, geoRBox(w, upLen, w, 0.02), plastic, 0, -upLen / 2 - w * 0.2, 0);
+    put(p, geoRBox(w * 1.08, w * 0.5, w * 1.08, 0.015), shade, 0, -upLen - w * 0.2, 0, 0, true); // knee/elbow block
+    put(p, geoRBox(w * 0.95, lowLen, w * 0.95, 0.02), plastic, 0, -upLen - lowLen / 2 - w * 0.4, 0);
+    greeble(p, w, upLen + lowLen, w, 0, -(upLen + lowLen) / 2 - w * 0.3, 0, 8);
+    if (arm) put(p, geoRBox(w * 1.05, w * 0.7, w * 1.1, 0.015), shade, 0, -upLen - lowLen - w * 0.6, -0.01, 0, true); // blocky fist
+    else put(p, geoRBox(w * 1.2, w * 0.55, w * 1.5, 0.02), shade, 0, -upLen - lowLen - w * 0.55, -w * 0.15); // boot
     return p;
   };
-  const legL = limb("legL", -0.11, 0.6, 0.16, 0.24, 0.22, false);
-  const legR = limb("legR", 0.11, 0.6, 0.16, 0.24, 0.22, false);
-  const armR = limb("armR", 0.32, 1.05, 0.13, 0.27, 0.27, true);
-  const armL = limb("armL", -0.32, 1.05, 0.13, 0.27, 0.27, true);
+  const legL = limb(-0.11, 0.6, 0.15, 0.24, 0.22, false);
+  const legR = limb(0.11, 0.6, 0.15, 0.24, 0.22, false);
+  const armR = limb(0.3, 1.04, 0.12, 0.26, 0.26, true);
+  const armL = limb(-0.3, 1.04, 0.12, 0.26, 0.26, true);
   // dragged Teks liftarm in the right hand (hangs from the fist, ring holes)
-  const beamM = skin(new THREE.Color(pal.c).multiplyScalar(1.05).getHex());
+  const beamM = skin(new THREE.Color(pal.c).multiplyScalar(1.12).getHex());
   const beam = new THREE.Group();
-  beam.position.set(0, -0.64, -0.02);
+  beam.position.set(0, -0.62, -0.02);
   beam.rotation.x = 0.35;
   armR.add(beam);
   put(beam, geoRBox(0.07, 0.7, 0.035, 0.03), beamM, 0, -0.3, 0);
-  const bb = new PartBatch(`demoule-beam`);
   for (let k = 0; k < 9; k++) {
-    bb.add(geoTorus(0.022, 0.006, 16), dark, 0, -0.01 - k * 0.075, -0.018);
-    bb.add(geoCyl(0.02, 0.04, 12), dark, 0, -0.01 - k * 0.075, 0, Math.PI / 2);
+    put(beam, geoTorus(0.022, 0.006, 16), dark, 0, -0.01 - k * 0.075, -0.018, 0, true);
+    put(beam, geoCyl(0.02, 0.04, 12), dark, 0, -0.01 - k * 0.075, 0, Math.PI / 2, true);
   }
-  bb.flush(beam);
   if (kind === "husk") {
-    put(g, geoRBox(0.48, 0.05, 0.3, 0.015), skin(0xe8dec2), 0, 0.78, 0, 0, true); // sand-worn wrap plates
-    put(g, geoRBox(0.48, 0.05, 0.3, 0.015), skin(0xd8cca8), 0, 0.98, 0, 0, true);
+    put(g, geoRBox(0.46, 0.05, 0.28, 0.015), skin(0xe8dec2), 0, 0.78, 0, 0, true); // sand-worn wrap plates
+    put(g, geoRBox(0.46, 0.05, 0.28, 0.015), skin(0xd8cca8), 0, 0.98, 0, 0, true);
   } else if (kind === "drowned") {
-    for (const sx of [-0.12, 0.02, 0.14]) put(g, geoCyl(0.015, 0.3, 6), skin(0x2f8a4a), sx, 0.8, -0.16, 0.08, true); // weed hoses
+    for (const sx of [-0.12, 0.02, 0.14]) put(g, geoCyl(0.015, 0.3, 6), skin(0x2f8a4a), sx, 0.8, -0.15, 0.08, true); // weed hoses
     put(armL, geoCyl(0.02, 0.6, 8), skin(0x2a8478), 0, -0.6, -0.05, 0.35, true); // kept trident shaft (drop parity)
   }
   return { group: g, legs: [legL, legR, armR, armL], bodyMat: plastic };
