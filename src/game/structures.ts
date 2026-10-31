@@ -440,7 +440,7 @@ export function civicOf(s: Structure, seed: number): Civic {
     const [jx, jz, jy] = [17 + 1, 17 + 2, -8];
     const gs = guildsIn(s.gx, s.gz, "desertCity", seed);
     return {
-      chief: { x: s.x + 23.5, z: s.z + 23.5 },
+      chief: { x: s.x + 23.5, z: s.z + 20.5 }, // before the treasury
       jail: { cells: JAIL_CELLS.map(([cx]) => [s.x + jx + cx, s.y + jy + 1, s.z + jz + 5]), evidence: [s.x + jx + 9, s.y + jy + 1, s.z + jz + 1] },
       halls: [
         { guild: gs[0], at: { x: s.x + 17 + 1 + 4.5, z: s.z + 1 + 3 + 3.5 } },

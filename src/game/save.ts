@@ -51,6 +51,8 @@ export type SaveV1 = {
   tradeXp?: Record<string, number>;
   tradeStock?: Record<string, number[]>;
   reputation?: Record<string, number>;
+  /** PR 6: societyState.ts SocietySave (validated on load). */
+  society?: unknown;
   runes?: [number, string[]][];
   folk?: { x: number; z: number; role: string }[];
   village?: { x: number; z: number } | null;
