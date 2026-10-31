@@ -1918,21 +1918,36 @@ function InvHotbar({ game }: { game: GameApi }) {
   );
 }
 
-type BinCategory = "all" | "bricks" | "teks" | "tools" | "food" | "materials";
+type BinCategory = "all" | "bricks" | "teks" | "matter" | "gear" | "food" | "nature";
 
 const TEKS_IDS = new Set<number>(TEKS);
+
+// P8: inventory categories follow the PLASTIC SYSTEM, not the old
+// Minecraft inheritance. Matter = the feedstock economy (what the
+// Foundry eats and casts: pellets, ingots, ores, charges, colour
+// bricks and their tempered forms). Gear = what you wear and wield.
+// Nature = the living world's yield (drops, seeds, organics) and
+// anything else unclassified. Order matters: first match wins.
+const MATTER_IDS = new Set<number>([
+  ID.Pellets, ID.PlasticIngot, ID.TemperedIngot, ID.Fuel,
+  ID.Coal, ID.Gold, ID.Diamond, ID.Emerald,
+  ID.IronOre, ID.TinOre, ID.CopperOre, ID.AmberOre, ID.ChromeOre,
+  ID.RawIron, ID.Ingot, ID.Tin, ID.Copper, ID.Bronze, ID.Chrome, ID.Amber, ID.Sapphire, ID.Prism, ID.Resin,
+  ...COLORS,
+]);
 
 function itemBinCategory(id: number): BinCategory {
   if (TEKS_IDS.has(id)) return "teks";
   const d = def(id);
   if (d.tool || d.armor > 0 || d.armorSlot || d.maxUse > 0 || id === ID.Shield || id === ID.Elytra || id === ID.Bow || id === ID.Crossbow || id === ID.Trident || id === ID.Arrow || id === ID.Totem) {
-    return "tools";
+    return "gear";
   }
   if (d.food > 0 || id === ID.Bottle || id === ID.PotionHeal || id === ID.PotionSpeed || id === ID.PotionStr || id === ID.PotionRegen || id === ID.PotionFire || id === ID.PotionLeap || id === ID.PotionGill || id === ID.PotionVeil || id === ID.PotionVenom || id === ID.PotionTar || id === ID.SplashVenom || id === ID.SplashTar || id === ID.Focus || id === ID.Milk || id === ID.BaseBrew) {
     return "food";
   }
+  if (MATTER_IDS.has(id) || (id >= 410 && id <= 418)) return "matter"; // tempered colour bricks
   if (d.placeable) return "bricks";
-  return "materials";
+  return "nature";
 }
 
 function BinGrid({ game, filter = "", cat = "all", onPick }: { game: GameApi; filter?: string; cat?: BinCategory; onPick?: (id: number) => void }) {
@@ -2055,9 +2070,10 @@ function BinPage({ game }: { game: GameApi }) {
               ["all", "All"],
               ["bricks", "Bricks"],
               ["teks", "Teks"],
-              ["tools", "Tools & Gear"],
+              ["matter", "Matter"],
+              ["gear", "Gear"],
               ["food", "Food & Brews"],
-              ["materials", "Materials"],
+              ["nature", "Nature"],
             ] as const
           ).map(([id, label]) => (
             <button key={id} className={cat === id ? "sc-chip-btn on" : "sc-chip-btn"} onClick={() => setCat(id)}>
@@ -2453,6 +2469,25 @@ function StationScreen({ game }: { game: GameApi }) {
                     <>Put plastic pellets or ore in Input, and fuel in Fuel.</>
                   )}
                 </p>
+                <div className={`sc-upg-card lvl${hud.furnace.lvl}`}>
+                  <p className="sc-upg-head">Foundry · Level {hud.furnace.lvl} — {hud.furnace.lvlName}</p>
+                  <p className="sc-upg-stats">
+                    Cook {hud.furnace.cookSecs}s{hud.furnace.fuelMul > 1 ? ` · fuel lasts ×${hud.furnace.fuelMul}` : ""}
+                    {hud.furnace.upg && (
+                      <>
+                        {" → Level "}
+                        {hud.furnace.lvl + 1}: cook {hud.furnace.upg.cookSecs}s{hud.furnace.upg.fuelMul > hud.furnace.fuelMul ? ` · fuel lasts ×${hud.furnace.upg.fuelMul}` : ""}
+                      </>
+                    )}
+                  </p>
+                  {hud.furnace.upg ? (
+                    <MenuButton variant="primary" disabled={!hud.furnace.upg.ok} onClick={() => game.upgradeFurnace()} hint={hud.furnace.upg.ok ? "Pay the matter and upgrade this Foundry for good" : "You don't have all the matter yet"}>
+                      Upgrade — {hud.furnace.upg.cost.map(([cid, n]) => `${n}× ${def(cid).name}`).join(" + ")}
+                    </MenuButton>
+                  ) : (
+                    <p className="sc-muted">Max level — this Foundry runs at full song.</p>
+                  )}
+                </div>
                 <p className="sc-hint">Plastic pellets smelt into ingots here — and every pellet smelted also distils Fuel, dropped beside the kiln. Ingots cast bricks and Teks parts from the Crafting book. Tap an item below: ores and food go to Input, fuel to Fuel. Tap a kiln slot to take its stack back.</p>
                 <BinGrid game={game} onPick={(id) => game.furnaceQuick(id)} />
               </>

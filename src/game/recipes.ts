@@ -57,18 +57,6 @@ export const RECIPES: Recipe[] = [
     h: 3,
     cat: "tools",
   }),
-  r("pick-s", "Stone pick", "3 cobble + 2 sticks", [[C, 3], [S, 2]], ID.PickS, 1, {
-    shape: [C, C, C, 0, S, 0, 0, S, 0],
-    w: 3,
-    h: 3,
-    cat: "tools",
-  }),
-  r("pick-i", "Iron pick", "3 ingots + 2 sticks", [[I, 3], [S, 2]], ID.PickI, 1, {
-    shape: [I, I, I, 0, S, 0, 0, S, 0],
-    w: 3,
-    h: 3,
-    cat: "tools",
-  }),
   r("pick-g", "Gem pick", "3 gems + 2 sticks", [[ID.Diamond, 3], [S, 2]], ID.PickG, 1, {
     shape: [ID.Diamond, ID.Diamond, ID.Diamond, 0, S, 0, 0, S, 0],
     w: 3,
@@ -77,18 +65,6 @@ export const RECIPES: Recipe[] = [
   }),
   r("sword-w", "Wood blade", "2 planks + 1 stick", [[P, 2], [S, 1]], ID.SwordW, 1, {
     shape: [P, P, S],
-    w: 1,
-    h: 3,
-    cat: "tools",
-  }),
-  r("sword-s", "Stone blade", "2 cobble + 1 stick", [[C, 2], [S, 1]], ID.SwordS, 1, {
-    shape: [C, C, S],
-    w: 1,
-    h: 3,
-    cat: "tools",
-  }),
-  r("sword-i", "Iron blade", "2 ingots + 1 stick", [[I, 2], [S, 1]], ID.SwordI, 1, {
-    shape: [I, I, S],
     w: 1,
     h: 3,
     cat: "tools",
@@ -105,20 +81,8 @@ export const RECIPES: Recipe[] = [
     h: 3,
     cat: "tools",
   }),
-  r("axe-i", "Iron axe", "3 ingots + 2 sticks", [[I, 3], [S, 2]], ID.AxeI, 1, {
-    shape: [I, I, 0, I, S, 0, 0, S, 0],
-    w: 3,
-    h: 3,
-    cat: "tools",
-  }),
   r("shovel-w", "Wood spade", "1 plank + 2 sticks", [[P, 1], [S, 2]], ID.ShovelW, 1, {
     shape: [P, S, S],
-    w: 1,
-    h: 3,
-    cat: "tools",
-  }),
-  r("shovel-i", "Iron spade", "1 ingot + 2 sticks", [[I, 1], [S, 2]], ID.ShovelI, 1, {
-    shape: [I, S, S],
     w: 1,
     h: 3,
     cat: "tools",

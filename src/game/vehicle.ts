@@ -505,6 +505,10 @@ export type DriveCmd = {
   steer: number;
   /** The channel being commanded this step (the hub's active channel). */
   channel: Channel;
+  /** P8 hub levels: battery drain multiplier (L2 0.67, L3 0.5). */
+  battMul?: number;
+  /** P8 hub levels: generator charge multiplier (L3 1.5). */
+  genMul?: number;
 };
 
 /**
@@ -533,10 +537,10 @@ export function stepVehicle(v: Vehicle, dt: number, cmd: DriveCmd, heightAt: (x:
     if (v.battery <= 0.001) v.battery = 0.02; // generator crank
     const burn = Math.min(v.fuel, FUEL.consumptionPerLoad * Math.max(load, 0.35) * dt);
     v.fuel -= burn;
-    v.battery = Math.min(1, v.battery + burn * GEN_CHARGE_PER_FUEL);
+    v.battery = Math.min(1, v.battery + burn * GEN_CHARGE_PER_FUEL * (cmd.genMul ?? 1));
   }
   if (demand && v.battery > 0) {
-    v.battery = Math.max(0, v.battery - BATT_DRAIN * load * dt);
+    v.battery = Math.max(0, v.battery - BATT_DRAIN * load * dt * (cmd.battMul ?? 1));
   }
   const hasPower = demand && v.battery > 0;
 

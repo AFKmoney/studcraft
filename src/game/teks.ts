@@ -795,6 +795,11 @@ export class TechWorld {
   occ = new Map<string, Occ[]>();
   next = 1;
   rev = 0; // bumps on every change (mechanics rebuild)
+  /** P8 machine levels: per-part motor speed multiplier, injected by
+   *  game.ts from its level table (default 1 = no levels). Two
+   *  motors of DIFFERENT levels driving one group jam in step() —
+   *  mismatched speeds, physically honest. */
+  rpmMul: (p: Part) => number = () => 1;
 
   add(id: number, o: number, q: V3, uid = 0): Part {
     const p: Part = { uid: uid || this.next++, id, o, q: [...q] as V3, on: true };
@@ -1169,7 +1174,7 @@ export class TechWorld {
       if (!s.drive || s.drive === "power" || !s.rpm) continue;
       if (s.drive === "motor" && !powered(p)) continue;
       if (s.drive === "crank" && !p.on) continue;
-      const w = (s.rpm / 60) * Math.PI * 2;
+      const w = ((s.rpm / 60) * Math.PI * 2) * (s.drive === "motor" ? this.rpmMul(p) : 1);
       // a motor drives whatever axle sits in its output cross hole
       const gsDriven = new Set<number>();
       if (s.drive === "motor") {

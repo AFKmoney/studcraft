@@ -83,6 +83,8 @@ export type SaveV1 = {
   vehHubCh?: [string, string][];
   vehFuel?: [string, number][];
   vehBatt?: [string, number][];
+  /** P8 machine levels for Teks parts (motors, hubs), keyed by lattice qKey. */
+  teksLvl?: [string, number][];
   worldDays?: number;
 };
 

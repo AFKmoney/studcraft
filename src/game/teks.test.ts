@@ -181,3 +181,21 @@ describe("teks P5d sensors", () => {
     assert.equal(colorFamilyOf(0x8a4fd0), "Other"); // purple has no target family
   });
 });
+
+describe("P8 machine levels (motor speed multiplier)", () => {
+  it("rpmMul scales the driven group's angle exactly", () => {
+    const zPlus = find((o) => axOf(o, 0)[0] === 2 && axOf(o, 0)[1] === 1);
+    const build = (mul: number) => {
+      const w = new TechWorld();
+      w.rpmMul = () => mul;
+      const ax = w.add(ID.Axle, zPlus, [-4, 0, 2]);
+      w.add(ID.MotorM, zPlus, [-4, 0, -1]);
+      w.step(0.05, () => true); // short step: gAngle wraps at 2π
+      return w.gAngle.get(w.groups.get(ax.uid)!) ?? 0;
+    };
+    const base = build(1);
+    const up = build(1.5);
+    assert.ok(base > 0, "the axle group spins: " + base);
+    assert.ok(Math.abs(up / base - 1.5) < 0.02, "L3 motor = x1.5 speed: " + base + " -> " + up);
+  });
+});

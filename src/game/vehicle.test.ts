@@ -312,3 +312,23 @@ describe("p5c-3 vehicle joints", () => {
     assert.ok(v.parts.every((p) => p.group === 0));
   });
 });
+
+describe("P8 hub levels (battery multipliers)", () => {
+  it("battMul 0.5 halves the drain; genMul 1.5 charges half again as fast", () => {
+    const mk = () => vehicleFromAssembly(fixture(), { battery: 1, fuel: 0 }).vehicle;
+    const a = mk();
+    const b = mk();
+    drive(a, 10, { throttle: 1, steer: 0, channel: "A" });
+    for (let i = 0; i < Math.round(10 / DT); i++) stepVehicle(b, DT, { throttle: 1, steer: 0, channel: "A", battMul: 0.5 }, flat);
+    const drainA = 1 - a.battery;
+    const drainB = 1 - b.battery;
+    assert.ok(drainA > 0.02, "the base vehicle drains: " + drainA);
+    assert.ok(Math.abs(drainB / drainA - 0.5) < 0.05, "L3 hub halves the drain: " + drainA + " -> " + drainB);
+    // Generator: same fuel aboard, charge gain scales with genMul.
+    const g1 = vehicleFromAssembly(fixture(), { battery: 0.2, fuel: 1 }).vehicle;
+    const g2 = vehicleFromAssembly(fixture(), { battery: 0.2, fuel: 1 }).vehicle;
+    drive(g1, 4, { throttle: 1, steer: 0, channel: "A" });
+    for (let i = 0; i < Math.round(4 / DT); i++) stepVehicle(g2, DT, { throttle: 1, steer: 0, channel: "A", battMul: 0.5, genMul: 1.5 }, flat);
+    assert.ok(g2.battery > g1.battery, "genMul charges faster despite drain: " + g1.battery + " -> " + g2.battery);
+  });
+});

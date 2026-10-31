@@ -37,11 +37,11 @@ export const TRADERS: Record<TraderRole, { name: string; blurb: string; offers: 
     offers: [
       { pay: ID.Coal, pn: 8, out: ID.Emerald, on: 1 },
       { pay: ID.RawIron, pn: 4, out: ID.Emerald, on: 1 },
-      { pay: ID.Emerald, pn: 3, out: ID.PickS, on: 1 },
+      { pay: ID.Emerald, pn: 3, out: ID.PlasticPick, on: 1 },
       { pay: ID.Emerald, pn: 5, out: ID.Ingot, on: 4 },
       { pay: ID.Coal, pn: 16, out: ID.Emerald, on: 2, tier: 2 },
       { pay: ID.Emerald, pn: 9, out: ID.Ingot, on: 8, tier: 2 },
-      { pay: ID.Emerald, pn: 12, out: ID.SwordI, on: 1, tier: 3 },
+      { pay: ID.Emerald, pn: 12, out: ID.TPlasticSword, on: 1, tier: 3 },
       { pay: ID.Emerald, pn: 22, out: ID.SwordSapph, on: 1, tier: 3 },
     ],
   },
@@ -212,7 +212,7 @@ export const QUESTS: QuestDef[] = [
     what: 0,
     need: 4,
     reward: [
-      [ID.SwordS, 1],
+      [ID.PlasticSword, 1],
       [ID.Emerald, 3],
     ],
     xp: 10,

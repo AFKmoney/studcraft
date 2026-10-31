@@ -3,6 +3,7 @@ import { ATLAS_COLS, ATLAS_ROWS, BLOCKS, CREATIVE_BAR, ID, TEKS, def, faceTile, 
 import { TechWorld, ORIENTS, composeO, worldCells, rot, SENSOR_RANGES, SENSOR_TARGETS, nextSensorCfg, sensorCfgLabel, colorFamilyOf, bbox as techBbox, spec as techSpec, type Part as TechPart, type Plan as TechPlan, type Target as TechTarget } from "./teks";
 import { buildTeksGeometry, buildTeksRodGeometries } from "./teksGeo";
 import { analyzeComponent } from "./gravity";
+import { dissolvedYield } from "./dissolve";
 import { fuelFromMelt, jointAffine, jointChain, jointForce, parkPoses, partWorldPoint, refuel as vehRefuel, stepVehicle as stepVeh, vehicleFromAssembly, type Vehicle, type VPart } from "./vehicle";
 import { FUEL, type Channel } from "./p5bProto";
 import { builtinModels, decodeModel, encodeModel, loadCatalogue, modelFromParts, removeModel, storeCatalogue, upsertModel, type VehicleModel } from "./catalogue";
@@ -55,7 +56,7 @@ export type Hud = {
   cursor: number;
   panel: "bag" | "bench" | "furnace" | "chest" | "enchant" | "anvil" | "brew" | "trade" | "beacon";
   craftOut: { id: number; n: number } | null;
-  furnace: { in: number; inN: number; fuel: number; fuelN: number; out: number; outN: number; cook: number; burn: number };
+  furnace: { in: number; inN: number; fuel: number; fuelN: number; out: number; outN: number; cook: number; burn: number; lvl: number; lvlName: string; cookSecs: number; fuelMul: number; upg: { cost: [number, number][]; ok: boolean; cookSecs: number; fuelMul: number } | null };
   chest: { id: number; n: number }[];
   compass: number;
   realm: string;
@@ -222,6 +223,7 @@ export type GameApi = {
   clearGrid: () => void;
   armorTap: (i: number) => void;
   furnaceTap: (part: number) => void;
+  upgradeFurnace: () => void;
   chestTap: (i: number) => void;
   chestStore: (id: number) => void;
   furnaceQuick: (id: number) => void;
@@ -469,7 +471,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     cursor: 0,
     panel: "bag",
     craftOut: null,
-    furnace: { in: 0, inN: 0, fuel: 0, fuelN: 0, out: 0, outN: 0, cook: 0, burn: 0 },
+    furnace: { in: 0, inN: 0, fuel: 0, fuelN: 0, out: 0, outN: 0, cook: 0, burn: 0, lvl: 1, lvlName: "Foundry", cookSecs: 5, fuelMul: 1, upg: null },
     chest: [],
     compass: 0,
     realm: "Overworld",
@@ -734,6 +736,9 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     // P5b: fractional Fuel distilled from smelted pellets (0.25 each),
     // paid out as whole Fuel items. Rides the {...f} save spread.
     fuelAcc?: number;
+    // P8: Foundry level (1..3) — cook time / fuel economy from
+    // FOUNDRY_LVL. Rides the {...f} save spread; absent = level 1.
+    lvl?: number;
   };
   const furnaces = new Map<string, Furn>();
   const chests = new Map<string, { ids: number[]; ns: number[] }>();
@@ -3827,9 +3832,18 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     hud.craftOut = gridCacheOut;
     const furn = furnaces.get(focus.x + "," + focus.y + "," + focus.z);
-    hud.furnace = furn
-      ? { in: furn.in, inN: furn.inN, fuel: furn.fuel, fuelN: furn.fuelN, out: furn.out, outN: furn.outN, cook: furn.cook / 5, burn: furn.burn }
-      : { in: 0, inN: 0, fuel: 0, fuelN: 0, out: 0, outN: 0, cook: 0, burn: 0 };
+    if (furn) {
+      const fl = FOUNDRY_LVL[(furn.lvl ?? 1) - 1];
+      const nxt = (furn.lvl ?? 1) < 3 ? FOUNDRY_LVL[furn.lvl ?? 1] : null;
+      hud.furnace = {
+        in: furn.in, inN: furn.inN, fuel: furn.fuel, fuelN: furn.fuelN, out: furn.out, outN: furn.outN,
+        cook: furn.cook / fl.cook, burn: furn.burn,
+        lvl: furn.lvl ?? 1, lvlName: fl.name, cookSecs: fl.cook, fuelMul: fl.fuelMul,
+        upg: nxt ? { cost: nxt.cost!, ok: lvlAfford(nxt.cost!), cookSecs: nxt.cook, fuelMul: nxt.fuelMul } : null,
+      };
+    } else {
+      hud.furnace = { in: 0, inN: 0, fuel: 0, fuelN: 0, out: 0, outN: 0, cook: 0, burn: 0, lvl: 1, lvlName: "Foundry", cookSecs: 5, fuelMul: 1, upg: null };
+    }
     // v4.18 perf diet: the 27-slot chest map is only read by the chest panel.
     if (panel === "chest") {
       const bin = chests.get(focus.x + "," + focus.y + "," + focus.z);
@@ -4207,6 +4221,49 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   }
 
   function bootSave(data: SaveV1, id: string) {
+    // P8 dissolution migration (dissolve.ts): equipment tiers
+    // superseded by moulded equivalents convert to plastic pellets
+    // at their melt yield — in EVERY container the save carries (an
+    // inventory row is ONE tool: its count is remaining durability).
+    // Runs on the raw save before anything consumes it; the write-
+    // back below makes it happen exactly once.
+    {
+      let pellets = 0;
+      if (data.inv) {
+        data.inv = data.inv.filter(([iid]) => {
+          const y = dissolvedYield(iid);
+          if (y > 0) pellets += y;
+          return y === 0;
+        });
+      }
+      for (const arr of [data.hotbar, data.armor]) {
+        if (!arr) continue;
+        for (let i = 0; i < arr.length; i++) {
+          const y = dissolvedYield(arr[i]);
+          if (y > 0) {
+            pellets += y;
+            arr[i] = 0;
+          }
+        }
+      }
+      for (const c of data.chests ?? []) {
+        for (let i = 0; i < c.ids.length; i++) {
+          const y = dissolvedYield(c.ids[i]);
+          if (y > 0) {
+            pellets += y;
+            c.ids[i] = 0;
+            c.ns[i] = 0;
+          }
+        }
+      }
+      if (pellets > 0) {
+        const pairs = data.inv ?? (data.inv = []);
+        const row = pairs.find(([iid]) => iid === ID.Pellets);
+        if (row) row[1] += pellets;
+        else pairs.push([ID.Pellets, pellets]);
+        saveDirty = true;
+      }
+    }
     for (const key of [...meshes.keys()]) dropChunk(key);
     dirty.clear();
     seed = data.seed;
@@ -4320,6 +4377,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     for (const [k, n] of data.vehFuel ?? []) vehFuelByQ.set(k, n);
     vehBattByQ.clear();
     for (const [k, n] of data.vehBatt ?? []) vehBattByQ.set(k, n);
+    teksLvl.clear();
+    for (const [k, n] of data.teksLvl ?? []) teksLvl.set(k, n);
     // Section 22 P-A restore: holograms of unfinished models.
     blueprints.length = 0;
     for (const [id, o, qx, qy, qz] of data.blueprints ?? []) {
@@ -5734,6 +5793,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // the télécommande à l'écran of the all-devices line (2026-10-30).
   function techUseAction(p: TechPart, sneak: boolean) {
     const tspec = techSpec(p.id);
+    // P8: holding plastic ingots turns Use on a motor or hub into
+    // the upgrade gesture (offer + confirming second use). With
+    // anything else in hand, Use keeps its normal meaning.
+    if (!sneak && hotbar[slot] === ID.PlasticIngot && tryUpgradePart(p)) return;
     if (p.id === ID.TechHub) {
       if (!tryEnterVehicle(p)) toggleTechPart(p);
     } else if (p.id === ID.Remote) {
@@ -5885,11 +5948,93 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   const hubChannelByQ = new Map<string, Channel>();
   const vehFuelByQ = new Map<string, number>();
   const vehBattByQ = new Map<string, number>();
+
+  // ================= P8: MACHINE LEVELS =================
+  // Philippe's law (plan §10): a machine level is a REAL, numbered,
+  // visible effect, paid in the system's own matter — never in
+  // invented currency. Trees (written 2026-10-30):
+  // - Motors (Teks drive parts incl. servos): L2 speed ×1.25,
+  //   L3 speed ×1.5 — felt immediately in any mechanism or vehicle.
+  // - Hub: L2 battery lasts ×1.5 (drain ×0.67), L3 battery ×2
+  //   (drain ×0.5) + generator charges ×1.5.
+  // - Foundry (the Furnace block): L2 cook 5.0 s → 3.5 s, L3 cook
+  //   2.2 s + fuel lasts ×1.5 (its level lives on the Furn object).
+  // Levels of Teks parts live here, keyed by lattice position like
+  // the channel bindings, and persist as save.teksLvl.
+  const teksLvl = new Map<string, number>();
+  type LvlCost = [number, number][];
+  // Index 0/1/2 = levels 1/2/3. `cost` on an entry = price to REACH it.
+  const MOTOR_LVL: { mul: number; cost: LvlCost | null }[] = [
+    { mul: 1, cost: null },
+    { mul: 1.25, cost: [[ID.PlasticIngot, 6], [ID.Copper, 2]] },
+    { mul: 1.5, cost: [[ID.PlasticIngot, 12], [ID.Copper, 6], [ID.TemperedIngot, 1]] },
+  ];
+  const HUB_LVL: { battMul: number; genMul: number; cost: LvlCost | null }[] = [
+    { battMul: 1, genMul: 1, cost: null },
+    { battMul: 0.67, genMul: 1, cost: [[ID.PlasticIngot, 10], [ID.Copper, 6]] },
+    { battMul: 0.5, genMul: 1.5, cost: [[ID.PlasticIngot, 20], [ID.Copper, 12], [ID.TemperedIngot, 4]] },
+  ];
+  const FOUNDRY_LVL: { name: string; cook: number; fuelMul: number; cost: LvlCost | null }[] = [
+    { name: "Foundry", cook: 5, fuelMul: 1, cost: null },
+    { name: "Refractory lining", cook: 3.5, fuelMul: 1, cost: [[ID.PlasticIngot, 8], [ID.Copper, 4]] },
+    { name: "Twin bellows", cook: 2.2, fuelMul: 1.5, cost: [[ID.PlasticIngot, 16], [ID.Copper, 8], [ID.TemperedIngot, 2]] },
+  ];
+  function lvlCostText(cost: LvlCost): string {
+    return cost.map(([cid, n]) => n + "× " + def(cid).name).join(" + ");
+  }
+  function lvlAfford(cost: LvlCost): boolean {
+    return cost.every(([cid, n]) => (inv[cid] ?? 0) >= n);
+  }
+  function lvlPay(cost: LvlCost) {
+    for (const [cid, n] of cost) spend(cid, n);
+  }
+  tech.rpmMul = (p) => MOTOR_LVL[(teksLvl.get(qKey(p.q)) ?? 1) - 1].mul;
+  // Upgrade gesture state: first Use (holding ingots) makes the
+  // offer, a second Use within 3 s confirms and pays.
+  const upgPending = new Map<string, number>();
+  function tryUpgradePart(p: TechPart): boolean {
+    const isHub = p.id === ID.TechHub;
+    const isMotor = techSpec(p.id)?.drive === "motor";
+    if (!isHub && !isMotor) return false;
+    const k = qKey(p.q);
+    const lvl = teksLvl.get(k) ?? 1;
+    const name = def(p.id).name;
+    if (lvl >= 3) {
+      say(name + " — Level 3, maxed out");
+      return true;
+    }
+    const target = isHub ? HUB_LVL[lvl] : MOTOR_LVL[lvl];
+    const effect = isHub
+      ? lvl === 1
+        ? "battery lasts ×1.5"
+        : "battery lasts ×2, generator ×1.5"
+      : "speed ×" + MOTOR_LVL[lvl].mul;
+    if ((upgPending.get(k) ?? 0) > elapsed) {
+      if (!lvlAfford(target.cost!)) {
+        say("Upgrade needs " + lvlCostText(target.cost!) + " — you don't have it all");
+        upgPending.delete(k);
+        return true;
+      }
+      lvlPay(target.cost!);
+      teksLvl.set(k, lvl + 1);
+      upgPending.delete(k);
+      say(name + " upgraded to Level " + (lvl + 1) + " — " + effect);
+      audio.place();
+      saveDirty = true;
+      return true;
+    }
+    upgPending.set(k, elapsed + 3);
+    say(name + " L" + lvl + " → L" + (lvl + 1) + ": " + effect + " · " + lvlCostText(target.cost!) + " — use again to confirm");
+    return true;
+  }
   type VehEnt = {
     v: Vehicle;
     group: THREE.Group;
     baseQuat: THREE.Quaternion;
     meshes: { vp: VPart; mesh: THREE.Mesh; base: THREE.Matrix4; rodMesh: THREE.Mesh | null }[];
+    /** P8: the hub's lattice key — its level drives the vehicle's
+     *  battery/generator multipliers while driving. */
+    hubKey: string;
     // P5c-3: the digging bucket aboard (if any) and its load.
     bucket: { vp: VPart; load: Map<number, number>; cap: number } | null;
     lastBucketPos: { x: number; y: number; z: number } | null;
@@ -6031,6 +6176,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       group,
       baseQuat: new THREE.Quaternion().setFromRotationMatrix(baseM),
       meshes,
+      hubKey: hk,
       bucket: bucketVp ? { vp: bucketVp, load: new Map<number, number>(), cap: 4 } : null,
       lastBucketPos: null,
       digSayCd: 0,
@@ -10648,7 +10794,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (mob.kind === "guardian" && Math.random() < luck) extra.push(ID.GuardianSpike);
       if (mob.kind === "pillager" && Math.random() < 0.18) extra.push(ID.Crossbow);
       if ((mob.kind === "pillager" || mob.kind === "vindicator" || mob.kind === "evoker") && Math.random() < luck) extra.push(ID.IllagerBadge);
-      if (mob.kind === "vindicator" && Math.random() < 0.16) extra.push(ID.AxeI);
+      if (mob.kind === "vindicator" && Math.random() < 0.16) extra.push(ID.TPlasticAxe); // P8: iron tier dissolved — the moulded tempered axe drops instead
       if (mob.kind === "ravager" && Math.random() < luck) extra.push(ID.Emerald);
       if (mob.kind === "squid" && Math.random() < luck) extra.push(ID.InkSac);
       if (mob.kind === "witch" && Math.random() < luck) extra.push(ID.WitchVenom);
@@ -11916,6 +12062,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       vehHubCh: [...hubChannelByQ.entries()],
       vehFuel: [...vehFuelByQ.entries()],
       vehBatt: [...vehBattByQ.entries()],
+      teksLvl: [...teksLvl.entries()],
       welds: [...welds].map((w) => {
         const [a, b] = w.split("|");
         const [ax, ay, az] = a.split(",").map(Number);
@@ -12847,7 +12994,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           say("Hub tilt protection — motors cut");
           tiltWarnCd = 6;
         }
-        stepVeh(v, dt, { throttle: tilted ? 0 : sample.fwd, steer: sample.str, channel: v.hubChannel }, (x, z) => groundY(x, z));
+        const hubLvl = HUB_LVL[(teksLvl.get(vehEnt.hubKey) ?? 1) - 1];
+        stepVeh(v, dt, { throttle: tilted ? 0 : sample.fwd, steer: sample.str, channel: v.hubChannel, battMul: hubLvl.battMul, genMul: hubLvl.genMul }, (x, z) => groundY(x, z));
         placeVehGroup();
         // P5c-3: channel cycling while driving (KeyC / the CH button),
         // bucket digging (the bucket digs where it MOVES through
@@ -13591,15 +13739,16 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (f.burn > 0) f.burn -= dt;
       const product = SMELT[f.in];
       const can = !!product && f.inN > 0 && (f.out === 0 || f.out === product) && f.outN < 64 && product !== f.in;
+      const flvl = FOUNDRY_LVL[(f.lvl ?? 1) - 1];
       if (f.burn <= 0 && can && f.fuelN > 0 && fuelTime(f.fuel) > 0) {
-        f.burn = fuelTime(f.fuel) * (skills.has("kiln") ? 1.6 : 1);
+        f.burn = fuelTime(f.fuel) * (skills.has("kiln") ? 1.6 : 1) * flvl.fuelMul;
         f.fuelN -= 1;
         if (f.fuelN <= 0) f.fuel = 0;
         saveDirty = true;
       }
       if (f.burn > 0 && can) {
         f.cook += dt;
-        if (f.cook >= 5) {
+        if (f.cook >= flvl.cook) {
           f.cook = 0;
           f.inN -= 1;
           if (f.inN <= 0) f.in = 0;
@@ -14943,6 +15092,19 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       armor[i] = 0;
       addInv(id, 1);
       emit();
+    },
+    upgradeFurnace() {
+      const f = furnaces.get(focus.x + "," + focus.y + "," + focus.z);
+      if (!f) return;
+      const lvl = f.lvl ?? 1;
+      if (lvl >= 3) return say("Foundry is Level 3 — maxed out");
+      const nxt = FOUNDRY_LVL[lvl];
+      if (!lvlAfford(nxt.cost!)) return say("Upgrade needs " + lvlCostText(nxt.cost!));
+      lvlPay(nxt.cost!);
+      f.lvl = lvl + 1;
+      say("Foundry upgraded to Level " + (lvl + 1) + " — " + nxt.name + " · cook " + nxt.cook + "s" + (nxt.fuelMul > 1 ? " · fuel lasts ×" + nxt.fuelMul : ""));
+      audio.place();
+      saveDirty = true;
     },
     furnaceTap(part) {
       const f = ensureFurnace(focus.x + "," + focus.y + "," + focus.z, focus.x, focus.y, focus.z);

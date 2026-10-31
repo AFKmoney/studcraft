@@ -3468,6 +3468,32 @@ kbd {
   color: #ffd36a;
 }
 
+/* P8: the machine-level card — its band colour IS the level's look:
+   plain steel at L1, copper at L2, tempered cyan at L3. */
+.sc-upg-card {
+  margin: 4px 0 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border-left: 6px solid #5a636e;
+  background: rgba(255, 255, 255, 0.05);
+}
+.sc-upg-card.lvl2 {
+  border-left-color: #b87333;
+}
+.sc-upg-card.lvl3 {
+  border-left-color: #a8d8e8;
+}
+.sc-upg-head {
+  margin: 0 0 2px;
+  font-size: 14px;
+  font-weight: 800;
+}
+.sc-upg-stats {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  color: #cfe3ee;
+}
+
 .sc-kiln figure {
   margin: 0;
   display: flex;
