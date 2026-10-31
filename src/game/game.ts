@@ -4,6 +4,7 @@ import { TechWorld, ORIENTS, composeO, worldCells, bbox as techBbox, spec as tec
 import { buildTeksGeometry } from "./teksGeo";
 import { fuelFromMelt, parkPoses, refuel as vehRefuel, stepVehicle as stepVeh, vehicleFromAssembly, type Vehicle, type VPart } from "./vehicle";
 import { FUEL, type Channel } from "./p5bProto";
+import { decodeModel, encodeModel, loadCatalogue, modelFromParts, removeModel, storeCatalogue, upsertModel } from "./catalogue";
 import { createAudio } from "./audio";
 import { STUD_H, STUD_OFFSETS, STUD_R, buildChunk, type Surface } from "./mesher";
 import * as FS from "./fireState";
@@ -187,6 +188,13 @@ export type GameApi = {
   techUse: () => void;
   /** Enter the aimed hub's vehicle, or park + exit the driven one (touch Enter/Park button, §22.2 2026-10-30). */
   enterExitVehicle: () => void;
+  /** Vehicle catalogue (section 22 P-A): persistent, outside worlds. */
+  catalogueList: () => { name: string; author: string; parts: number }[];
+  catalogueSave: (name: string) => void;
+  catalogueLoad: (name: string) => void;
+  catalogueDelete: (name: string) => void;
+  catalogueExport: (name: string) => string;
+  catalogueImport: (code: string) => boolean;
   setQuality: (q: Quality) => void;
   quit: () => void;
   respawn: () => void;
@@ -344,6 +352,11 @@ declare global {
       getBricks?: () => [number, number, number, number][];
       placeTechAt?: (id: number, o: number, qx: number, qy: number, qz: number) => boolean;
       getTeks?: () => [number, number, number, number, number, number][];
+      getCatalogue?: () => { name: string; parts: number }[];
+      catalogueSaveQa?: (name: string) => boolean;
+      catalogueLoadQa?: (name: string) => { placed: number; holo: number };
+      getBlueprints?: () => [number, number, number, number, number][];
+      completeBlueprintQa?: (i: number) => void;
       stepTeks?: (dt: number) => { parts: number; jammed: boolean; omegas: Record<string, number>; angles: Record<string, number> };
       getVehicle?: () => { pos: { x: number; y: number; z: number }; vel: number; yaw: number; fuel: number; battery: number; load: number; parts: number } | null;
       getBuildMode?: () => { on: boolean; fly: boolean; techHeld: boolean; wantO: number | null };
@@ -4259,6 +4272,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     for (const [k, n] of data.vehFuel ?? []) vehFuelByQ.set(k, n);
     vehBattByQ.clear();
     for (const [k, n] of data.vehBatt ?? []) vehBattByQ.set(k, n);
+    // Section 22 P-A restore: holograms of unfinished models.
+    blueprints.length = 0;
+    for (const [id, o, qx, qy, qz] of data.blueprints ?? []) {
+      if (!TEKS_SET.has(id)) continue;
+      blueprints.push({ id, o, q: [qx, qy, qz] });
+    }
+    syncHoloMeshes();
     techRevSeen = tech.rev;
     syncTechMeshes();
     for (const [x, y, z] of data.tufts ?? []) TS.tuftGone.add(TS.tkey(x, y, z));
@@ -5198,6 +5218,33 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   const techGhostMesh = new THREE.Mesh(new THREE.BufferGeometry(), techGhostMat);
   techGhostMesh.visible = false;
   techGhostMesh.frustumCulled = false;
+  // Section 22 P-A holograms (blueprints): the not-yet-owned parts of
+  // a loaded catalogue model. They are NOT in tech.parts — invisible
+  // to techComponent, the mechanics and vehicleFromAssembly, so a
+  // hologram is never solid and never drivable. Translucent blue
+  // ghosts of the real geometry; the use gesture on one completes it
+  // (completeBlueprint). Persisted in the world save (blueprints).
+  type Blueprint = { id: number; o: number; q: [number, number, number] };
+  const blueprints: Blueprint[] = [];
+  const holoMat = new THREE.MeshLambertMaterial({ vertexColors: true, color: 0x86c9ff, transparent: true, opacity: 0.35, depthWrite: false });
+  const holoGroup = new THREE.Group();
+  holoGroup.frustumCulled = false;
+  scene.add(holoGroup);
+  const _holoRay = new THREE.Raycaster();
+  function syncHoloMeshes() {
+    while (holoGroup.children.length) {
+      const m = holoGroup.children.pop() as THREE.Mesh;
+      holoGroup.remove(m);
+    }
+    blueprints.forEach((bp, i) => {
+      const mesh = new THREE.Mesh(techGeoOf(bp.id), holoMat);
+      mesh.matrixAutoUpdate = false;
+      techBaseMatrix(bp.o, bp.q, mesh.matrix);
+      mesh.matrixWorldNeedsUpdate = true;
+      mesh.userData.bp = i;
+      holoGroup.add(mesh);
+    });
+  }
   techGhostMesh.userData.keepShadow = false;
   scene.add(techGhostMesh);
   let techGhostId = 0;
@@ -5546,6 +5593,87 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     } else if (tspec?.drive) {
       toggleTechPart(p);
     }
+  }
+
+  // ================= Section 22 P-A: CATALOGUE + BLUEPRINTS =========
+  // Save the build you are driving (parkPoses) or aiming at (its
+  // connected component) into the persistent catalogue; load a model
+  // in front of you — Creative places everything, Survival places
+  // what you own and leaves the rest as holograms (the matter law).
+  function catalogueSaveCurrent(name: string): boolean {
+    let src: { id: number; o: number; q: readonly number[] }[] | null = null;
+    if (vehEnt) {
+      const poses = parkPoses(vehEnt.v);
+      if (poses) src = poses.map((ps) => ({ id: ps.id, o: ps.o, q: ps.q as readonly number[] }));
+    }
+    if (!src && aimTechUid >= 0 && tech.parts.has(aimTechUid)) src = techComponent(aimTechUid);
+    if (!src || !src.length) {
+      say("Aim at a Teks build (or drive it) to save it");
+      return false;
+    }
+    const model = modelFromParts(src, name, "Local", ID.TechHub, Date.now());
+    storeCatalogue(upsertModel(loadCatalogue(), model));
+    say("Saved to catalogue: " + name + " (" + model.parts.length + " parts)");
+    audio.place();
+    return true;
+  }
+
+  function catalogueLoadModel(name: string): { placed: number; holo: number } {
+    const model = loadCatalogue().find((m) => m.name === name);
+    if (!model) {
+      say("No such model in the catalogue");
+      return { placed: 0, holo: 0 };
+    }
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    const anchorQ: [number, number, number] = [
+      Math.floor(camera.position.x + dir.x * 3.5) * 4,
+      Math.floor(player.y) * 4,
+      Math.floor(camera.position.z + dir.z * 3.5) * 4,
+    ];
+    let placed = 0;
+    let holo = 0;
+    for (const mp of model.parts) {
+      const q: [number, number, number] = [anchorQ[0] + mp.dq[0], anchorQ[1] + mp.dq[1], anchorQ[2] + mp.dq[2]];
+      const fits = tech.test(mp.id, mp.o, q, techSolidAt) >= 0 && !techHitsPlayer(mp.id, mp.o, q);
+      const owned = creative || (inv[mp.id] ?? 0) > 0;
+      if (fits && owned) {
+        tech.add(mp.id, mp.o, q);
+        if (!creative) spend(mp.id, 1);
+        placed++;
+      } else {
+        blueprints.push({ id: mp.id, o: mp.o, q });
+        holo++;
+      }
+    }
+    syncHoloMeshes();
+    saveDirty = true;
+    if (holo === 0) say("Model loaded: " + name + " — " + placed + " parts placed");
+    else say("Model loaded: " + name + " — " + placed + " placed, " + holo + " holograms (missing parts — aim at one and use it when you have it)");
+    audio.place();
+    return { placed, holo };
+  }
+
+  /** Use gesture on a hologram: turn it into the real part, paying
+   *  the matter in Survival. */
+  function completeBlueprint(i: number) {
+    const bp = blueprints[i];
+    if (!bp) return;
+    if (!creative && (inv[bp.id] ?? 0) <= 0) {
+      say("You need: " + def(bp.id).name);
+      return;
+    }
+    if (tech.test(bp.id, bp.o, bp.q, techSolidAt) < 0) {
+      say("That spot is blocked now");
+      return;
+    }
+    blueprints.splice(i, 1);
+    tech.add(bp.id, bp.o, bp.q);
+    if (!creative) spend(bp.id, 1);
+    syncHoloMeshes();
+    audio.place();
+    saveDirty = true;
+    say(blueprints.length ? "Part placed — " + blueprints.length + " hologram(s) left" : "Model complete!");
   }
 
   // ================= P5b VEHICLES (Muse wiring, 2026-10-30) =========
@@ -11334,6 +11462,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }),
       bricks: [...bricks.values()].map((b) => [b.id, b.sx, b.sy, b.sz] as [number, number, number, number]),
       teks: [...tech.parts.values()].map((p) => [p.id, p.o, p.q[0], p.q[1], p.q[2], p.on === false ? 0 : 1] as [number, number, number, number, number, number]),
+      blueprints: blueprints.map((b) => [b.id, b.o, b.q[0], b.q[1], b.q[2]] as [number, number, number, number, number]),
       vehBind: [...motorChannelByQ.entries()],
       vehHubCh: [...hubChannelByQ.entries()],
       vehFuel: [...vehFuelByQ.entries()],
@@ -11598,6 +11727,21 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const tHit = tech.parts.size > 0 ? tech.raycast([rox * 4, roy * 4, roz * 4], [rdx, rdy, rdz], (reach + (tp ? thirdAim.back : 0)) * 4) : null;
     const tDist = tHit ? tHit.t / 4 : Infinity;
     const useTech = !!tHit && tDist <= (hit ? hit.dist : Infinity) && tDist <= (bHit ? bHit.t : Infinity);
+    // Section 22 P-A: hologram aim — raycast the hologram meshes; a
+    // hologram counts only when nothing real is closer (it floats in
+    // open air where a part WILL be).
+    let holoHitIdx = -1;
+    let holoDist = Infinity;
+    if (blueprints.length && !useTech) {
+      _holoRay.set(new THREE.Vector3(rox, roy, roz), new THREE.Vector3(rdx, rdy, rdz));
+      _holoRay.far = reach + (tp ? thirdAim.back : 0);
+      const hh = _holoRay.intersectObjects(holoGroup.children, false);
+      if (hh.length) {
+        holoDist = hh[0].distance;
+        holoHitIdx = hh[0].object.userData.bp as number;
+      }
+    }
+    const useHolo = holoHitIdx >= 0 && holoDist <= (hit ? hit.dist + 0.75 : Infinity) && holoDist <= (bHit ? bHit.t + 0.75 : Infinity);
     if (useBrick && bHit) {
       aimPt.x = rox + rdx * bHit.t;
       aimPt.y = roy + rdy * bHit.t;
@@ -11871,6 +12015,16 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         swing = 1;
         if (mob.hp <= 0) killMob(mob);
       }
+    } else if (useHolo) {
+      // Section 22 P-A: the crosshair is on a hologram — use completes it.
+      const bp = blueprints[holoHitIdx];
+      const aabb = techPartAabb(bp.id, bp.o, bp.q);
+      hud.targetName = def(bp.id).name + " · blueprint";
+      highlight.visible = !hud.hidden;
+      highlight.position.set(aabb.c[0], aabb.c[1], aabb.c[2]);
+      highlight.scale.set(Math.max(aabb.s[0], 0.05), Math.max(aabb.s[1], 0.05), Math.max(aabb.s[2], 0.05));
+      studOutline.visible = false;
+      if (sample.first && sample.place && !prevPlace) completeBlueprint(holoHitIdx);
     } else if (useTech && tHit) {
       // Teks: the crosshair is on a placed part.
       const tpart = tech.parts.get(tHit.uid)!;
@@ -13489,6 +13643,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return true;
     },
     getTeks: () => [...tech.parts.values()].map((p) => [p.id, p.o, p.q[0], p.q[1], p.q[2], p.on === false ? 0 : 1] as [number, number, number, number, number, number]),
+    // Section 22 P-A QA hooks (inert in play).
+    getCatalogue: () => loadCatalogue().map((m) => ({ name: m.name, parts: m.parts.length })),
+    catalogueSaveQa: (name: string) => catalogueSaveCurrent(name),
+    catalogueLoadQa: (name: string) => catalogueLoadModel(name),
+    getBlueprints: () => blueprints.map((b) => [b.id, b.o, b.q[0], b.q[1], b.q[2]] as [number, number, number, number, number]),
+    completeBlueprintQa: (i: number) => completeBlueprint(i),
     stepTeks: (dt: number) => {
       tickTeks(dt);
       const omegas: Record<string, number> = {};
@@ -14016,6 +14176,29 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (phase !== "play" || aimTechUid < 0) return;
       const p = tech.parts.get(aimTechUid);
       if (p) techUseAction(p, isSneaking());
+    },
+    catalogueList() {
+      return loadCatalogue().map((m) => ({ name: m.name, author: m.author, parts: m.parts.length }));
+    },
+    catalogueSave(name: string) {
+      // Also from the pause menu: aim/driving state is the last frame's.
+      if (name.trim()) catalogueSaveCurrent(name.trim());
+    },
+    catalogueLoad(name: string) {
+      catalogueLoadModel(name);
+    },
+    catalogueDelete(name: string) {
+      storeCatalogue(removeModel(loadCatalogue(), name));
+    },
+    catalogueExport(name: string) {
+      const m = loadCatalogue().find((x) => x.name === name);
+      return m ? encodeModel(m) : "";
+    },
+    catalogueImport(code: string) {
+      const m = decodeModel(code);
+      if (!m) return false;
+      storeCatalogue(upsertModel(loadCatalogue(), m));
+      return true;
     },
     enterExitVehicle() {
       if (phase !== "play") return;

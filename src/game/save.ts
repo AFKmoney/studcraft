@@ -73,6 +73,7 @@ export type SaveV1 = {
   bricks?: [number, number, number, number][]; // P0 stud grid: [id, sx, sy, sz] — stud coords (sx = 2 × block x), y stays cell-aligned
   welds?: [number, number, number, number, number, number][]; // P2: welded brick pairs [sx1, sy1, sz1, sx2, sy2, sz2] (stud coords of both bricks)
   teks?: [number, number, number, number, number, number][]; // Teks 1:1 layer: [id, o, qx, qy, qz, on] — o = orientation index (0..23), q = half-module lattice coords (world blocks = q / 4), on = 0/1
+  blueprints?: [number, number, number, number, number][]; // Section 22 P-A: holograms of unfinished catalogue models: [id, o, qx, qy, qz]
   /** @deprecated Pre-rename field name (before the 2026-10-30 Teks rename): old saves carry their parts layer here. Read-only fallback in game.ts; never written. */
   technic?: [number, number, number, number, number, number][];
   // P5b (Muse, 2026-10-30): vehicle bindings/state, keyed by the part's

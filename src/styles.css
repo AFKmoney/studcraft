@@ -644,6 +644,30 @@
   border-color: var(--sc-gold);
 }
 
+/* Vehicle catalogue (section 22 P-A) */
+.sc-cat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sc-cat-name {
+  flex: 1 1 140px;
+}
+.sc-cat-save {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  margin-top: 12px;
+}
+.sc-cat-save .sc-input {
+  flex: 1;
+}
+.sc-cat-save textarea.sc-input {
+  min-height: 64px;
+  padding: 10px 14px;
+}
+
 .sc-field {
   display: flex;
   flex-direction: column;

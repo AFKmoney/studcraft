@@ -970,8 +970,61 @@ function SettingsPanel({ game, onBack }: { game: GameApi; onBack: () => void }) 
 // Pause / death / dialogs
 // ─────────────────────────────────────────────────────────────────────────────
 
+function CataloguePanel({ game }: { game: GameApi }) {
+  const [list, setList] = useState(() => game.catalogueList());
+  const [name, setName] = useState("");
+  const [code, setCode] = useState("");
+  const [msg, setMsg] = useState("");
+  const refresh = () => setList(game.catalogueList());
+  return (
+    <div>
+      <p className="sc-muted">
+        Your saved Teks builds. The catalogue lives outside your worlds — deleting a world never deletes a model. Loading places the parts you own
+        in front of you; the rest appear as holograms to complete when you have them.
+      </p>
+      <nav className="sc-menu-col">
+        {list.map((m) => (
+          <div key={m.name} className="sc-cat-row">
+            <span className="sc-cat-name">
+              <strong>{m.name}</strong> <small>{m.parts} parts</small>
+            </span>
+            <button className="sc-chip-btn" onClick={() => { game.catalogueLoad(m.name); setMsg("Loaded “" + m.name + "” — resume and look in front of you"); }}>
+              Load
+            </button>
+            <button className="sc-chip-btn" onClick={() => setCode(game.catalogueExport(m.name))}>
+              Share code
+            </button>
+            <button className="sc-chip-btn" onClick={() => { game.catalogueDelete(m.name); refresh(); }}>
+              Delete
+            </button>
+          </div>
+        ))}
+        {list.length === 0 && <p className="sc-empty">No models yet — build something from Teks parts, aim at it, then save it below.</p>}
+      </nav>
+      <div className="sc-cat-save">
+        <input className="sc-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Model name" />
+        <button className="sc-chip-btn" disabled={!name.trim()} onClick={() => { game.catalogueSave(name.trim()); refresh(); setMsg("Saved “" + name.trim() + "”"); }}>
+          Save aimed / driven build
+        </button>
+      </div>
+      <div className="sc-cat-save">
+        <textarea className="sc-input" value={code} onChange={(e) => setCode(e.target.value)} placeholder="A model's share code appears here — paste one to import it" rows={3} />
+        <button
+          className="sc-chip-btn"
+          onClick={() => {
+            if (game.catalogueImport(code)) { refresh(); setMsg("Model imported"); } else setMsg("That code is not a Studs model");
+          }}
+        >
+          Import code
+        </button>
+      </div>
+      {msg && <p className="sc-status">{msg}</p>}
+    </div>
+  );
+}
+
 function PauseMenu({ game }: { game: GameApi }) {
-  const [view, setView] = useState<"main" | "settings" | "online">("main");
+  const [view, setView] = useState<"main" | "settings" | "online" | "catalogue">("main");
   const hud = game.hud;
   const [copied, setCopied] = useState(false);
   return (
@@ -987,6 +1040,9 @@ function PauseMenu({ game }: { game: GameApi }) {
               </MenuButton>
               <MenuButton icon={<BagIcon size={22} />} onClick={() => game.toggleInventory()}>
                 Inventory
+              </MenuButton>
+              <MenuButton icon={<BookIcon size={22} />} onClick={() => setView("catalogue")}>
+                Vehicle catalogue
               </MenuButton>
               <MenuButton icon={<GearIcon size={22} />} onClick={() => setView("settings")}>
                 Settings
@@ -1051,6 +1107,14 @@ function PauseMenu({ game }: { game: GameApi }) {
       {view === "settings" && (
         <Screen className="sc-wide">
           <SettingsPanel game={game} onBack={() => setView("main")} />
+        </Screen>
+      )}
+      {view === "catalogue" && (
+        <Screen>
+          <section className="sc-panel">
+            <PanelHead eyebrow="Teks" title="Vehicle catalogue" onBack={() => setView("main")} />
+            <CataloguePanel game={game} />
+          </section>
         </Screen>
       )}
       {view === "online" && (
