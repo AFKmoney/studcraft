@@ -19,7 +19,12 @@ export const MODELS = [
 export const MIN_DEVICE_GB = 4;
 
 export type LlmState = "off" | "idle" | "loading" | "ready" | "failed" | "unsupported";
-export type Env = { deviceMemory?: number; hasWasm: boolean; hasWorker: boolean };
+export type Env = { deviceMemory?: number; hasWasm: boolean; hasWorker: boolean; software?: boolean; renderer?: string };
+const SOFTWARE_RE = /swiftshader|llvmpipe|softpipe|software|microsoft basic render/i;
+/** Software GPU adapters (SwiftShader, llvmpipe…) never get GPU layers. */
+export function gpuLayers(env: Pick<Env, "software" | "renderer">): number {
+  return env.software || SOFTWARE_RE.test(env.renderer ?? "") ? 0 : 99999;
+}
 
 /** Pure gate (tested): can this device try the model at all? */
 export function canRun(env: Env): { ok: boolean; why: string } {
@@ -63,6 +68,7 @@ export class NpcModel {
           await w.loadModelFromUrl(m.url, {
             n_ctx: 1024,
             n_threads: threads,
+            n_gpu_layers: gpuLayers(env),
             progressCallback: ({ loaded, total }: { loaded: number; total: number }) => {
               this.progress = total ? loaded / total : 0;
               this.onChange();

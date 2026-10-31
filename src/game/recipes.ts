@@ -1694,7 +1694,7 @@ export function salvageOf(id: number, dur: number, maxDur: number): { ok: boolea
 export function fuelTime(id: number): number {
   const v = fuelValue(id);
   if (v > 0) return v;
-  if (id === ID.LavaBucket) return 60;
+  if (id === ID.LavaBucket) return LAVA_BURN;
   if (id === ID.Amber) return 14;
   if (id === ID.Blaze) return 12;
   if (id === ID.Cinder) return 10;
@@ -1753,3 +1753,17 @@ export function matchGrid(cells: number[], bench: boolean): { out: number; n: nu
 }
 
 export { NEIGHBORS };
+
+/** Lava bucket: long-burning kiln fuel (seconds); the bucket comes back. */
+export const LAVA_BURN = 20;
+export function fuelReturn(fuel: number): number {
+  return fuel === ID.LavaBucket ? ID.Bucket : 0;
+}
+/** Empty bucket scooping a fluid source block → the filled bucket (0 = can't). */
+export function bucketFill(block: number): number {
+  return block === ID.Lava ? ID.LavaBucket : block === ID.Water ? ID.WaterBucket : 0;
+}
+/** Filled bucket → the source block it places. */
+export function bucketPour(bucket: number): number {
+  return bucket === ID.LavaBucket ? ID.Lava : bucket === ID.WaterBucket ? ID.Water : 0;
+}

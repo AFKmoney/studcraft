@@ -103,3 +103,22 @@ test("player-placed cells are remembered, saved and forgotten once broken", () =
   for (let i = 0; i < 4100; i++) s.markPlaced(i, 0, 0);
   assert.ok(s.placed.size <= 4000);
 });
+
+test("':llm' quest ids: next() skips the taken base quest and claim() works", async () => {
+  const { baseQuestId } = await import("./societyState.ts");
+  const s = new Society();
+  const list = chiefQuests(3, 4, "jungle", SEED, 0);
+  const q = list[0];
+  const dressed = { ...q, id: q.id + ":llm" };
+  assert.equal(baseQuestId(dressed.id), q.id);
+  assert.match(s.accept(dressed), /New contract/);
+  assert.match(s.accept(q), /Already/, "procedural twin counts as taken");
+  assert.notEqual(s.next(list)?.id, q.id, "next() must not re-offer the dressed quest");
+  const inv: Record<number, number> = {};
+  if (dressed.track.kind === "have") inv[dressed.track.what] = dressed.track.need;
+  else for (let i = 0; i < dressed.track.need; i++) s.bump(dressed.track.kind, dressed.track.tag);
+  const r = s.claim("soc:" + dressed.id, (id) => inv[id] ?? 0);
+  assert.ok(r.ok, r.msg);
+  assert.ok(s.done.has(q.id));
+  assert.notEqual(s.next(list)?.id, q.id);
+});

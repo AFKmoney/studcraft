@@ -154,3 +154,10 @@ Journal de travail de studs game tester (Grok Bot) sur StudCraft. Heures en heur
 - Le plastique est un mécanisme PARALLÈLE : le four a deux modes, **Normal / Plastique** (boutons dans le panneau, sauvegardés avec le four via `plastic`). En mode Plastique, la table est `PLASTIC` : cuivre → moyen, fer → bon, le reste → bas avec ratios d'abondance ; les rare-melt gardent leurs bonus.
 - Exclus de la fonte plastique : bois, feuilles, sable, argile, or, minerais précieux et gemmes, eau. Le bois et les feuilles restent du combustible. Les objets usés se récupèrent à l'enclume (50 % × durabilité).
 - Nouveau test « le craft normal n'est pas touché ». Résultat : tsc OK, 198/198 tests, build OK.
+
+## 2026-10-31 — Lave comme combustible et correctifs LLM
+- **Lave** : le seau de lave est un combustible longue durée pour le four (`LAVA_BURN` = 20 s). Le seau vide revient à côté du four quand il brûle (`fuelReturn`). Le seau vide ramasse les blocs source de lave ou d'eau et les repose (`bucketFill`/`bucketPour`, désormais utilisés par game.ts). Tests dans `lava.test.ts`.
+- **Clone propre** : suppression de `src/game/llm/{client,protocol,llm.worker}.ts`. Aucun import ne les utilisait et ils dépendaient de `@wllama/wllama`, absent de package.json (le runtime charge wllama depuis jsDelivr).
+- **Ids `:llm`** : `baseQuestId()` retire le suffixe. `next()`, `accept()`, `claim()`, `done` et le pré-chargement du directeur comparent maintenant les ids de base. Nouveau test dans societyState.test.ts.
+- **GPU logiciel** : `gpuLayers()` force `n_gpu_layers = 0` sur SwiftShader, llvmpipe ou un adaptateur logiciel détecté.
+- **Délai de pré-génération** : `PREFETCH_TIMEOUT_MS` = 75 s pour la génération en arrière-plan sur CPU. Le délai interactif reste à 12 s.

@@ -16,6 +16,11 @@ export const MAX_ACTIVE = 8;
 /** Bandit standing lives on one shared axis. */
 export const OUTLAWS = "*";
 
+/** Strip the ":llm" dressing suffix so LLM and procedural ids match. */
+export function baseQuestId(id: string): string {
+  return id.replace(/:llm$/, "");
+}
+
 export class Society {
   active: Active[] = [];
   done = new Set<string>();
@@ -69,13 +74,14 @@ export class Society {
     return guildRank(this.guilds[g.id] ?? 0);
   }
 
-  /** The next quest of a list the player hasn't taken or finished. */
+  /** The next quest of a list the player hasn't taken or finished.
+   *  LLM-dressed quests carry a ":llm" suffix — compare base ids. */
   next(list: readonly Quest[]): Quest | null {
-    return list.find((q) => !this.done.has(q.id) && !this.active.some((a) => a.q.id === q.id)) ?? null;
+    return list.find((q) => !this.done.has(baseQuestId(q.id)) && !this.active.some((a) => baseQuestId(a.q.id) === baseQuestId(q.id))) ?? null;
   }
   accept(q: Quest): string {
     if (validateQuest(q).length) return "That contract makes no sense.";
-    if (this.done.has(q.id) || this.active.some((a) => a.q.id === q.id)) return "Already taken: " + q.text.title;
+    if (this.done.has(baseQuestId(q.id)) || this.active.some((a) => baseQuestId(a.q.id) === baseQuestId(q.id))) return "Already taken: " + q.text.title;
     if (this.active.length >= MAX_ACTIVE) return "Your contract book is full (" + MAX_ACTIVE + ").";
     this.active.push({ q, n: 0, done: false });
     return "New contract — " + q.text.title + ": " + q.text.detail;
@@ -104,15 +110,15 @@ export class Society {
    *  `villageKey` receives the rep (chiefs/guilds); bandit jobs raise
    *  the outlaw axis instead. */
   claim(rowId: string, have: (id: number) => number): { ok: boolean; msg: string; take: [number, number][]; give: [number, number][]; rep: number; joined?: Guild; rankUp?: Guild } {
-    const id = rowId.replace(/^soc:/, "");
-    const i = this.active.findIndex((a) => a.q.id === id);
+    const id = baseQuestId(rowId.replace(/^soc:/, ""));
+    const i = this.active.findIndex((a) => baseQuestId(a.q.id) === id);
     const none = { ok: false, take: [] as [number, number][], give: [] as [number, number][], rep: 0 };
     if (i < 0) return { ...none, msg: "No such contract" };
     const a = this.active[i];
     if (!this.ready(a, have)) return { ...none, msg: a.q.text.detail };
     const q = a.q;
     this.active.splice(i, 1);
-    this.done.add(q.id);
+    this.done.add(baseQuestId(q.id));
     const take: [number, number][] = q.track.kind === "have" ? [[q.track.what, q.track.need]] : [];
     const loot = 1 + this.perk("loot");
     const give: [number, number][] = [[COIN, Math.round(q.reward.coins * loot)], ...q.reward.items.map(([id, n]) => [id, Math.round(n * loot)] as [number, number])];

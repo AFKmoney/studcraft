@@ -17,8 +17,9 @@ import { STUD_H, STUD_OFFSETS, STUD_R, buildChunk, type Surface } from "./mesher
 import * as FS from "./fireState";
 import * as TS from "./tuftState";
 import * as CH from "./chipState";
-import { NEIGHBORS, PLASTIC, RECIPES, SMELT, SMELT_N, fuelTime, matchGrid, teksCastCost } from "./recipes";
+import { NEIGHBORS, PLASTIC, RECIPES, SMELT, SMELT_N, bucketFill, bucketPour, fuelReturn, fuelTime, matchGrid, teksCastCost } from "./recipes";
 import { Director, generateQuest, newStory, storyFrom, type WorldView } from "./llm/story";
+import { PREFETCH_TIMEOUT_MS } from "./llm/prompt";
 import { NpcModel } from "./llm/runtime";
 import { GenPool, poolSize, type WorkerLike } from "./genPool";
 import { repairCost } from "./foundry";
@@ -35,7 +36,7 @@ import { DEBRIS_ADVANCED, debrisAt } from "./debris";
 import { stockChest } from "./loot";
 import { banditFolk, civicOf, patrolOf, findStructure, garageOf, structureFolk, structuresNear, structureLabel, structureOwning, stockStructureChest, type StructKind, type Structure } from "./structures";
 import { BOUNTY_ARREST, banditQuests, chiefOf, chiefQuests, COIN, CRIME, guildEntryQuest, guildQuests, GUILDS, guildsIn, makeQuest, type Quest, mobTag, seenBy, type CrimeKind, type Observer } from "./society";
-import { Society } from "./societyState";
+import { Society, baseQuestId } from "./societyState";
 import { classifyRenderer, presetFor, readGl, SOFTWARE_HINT } from "./gpu";
 import { mayYield, spillSlots } from "./yields";
 import { Upscaler, upscaleScale } from "./upscale";
@@ -899,7 +900,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     npcModelTimer = setTimeout(() => {
       npcModelTimer = null;
       const nav = navigator as Navigator & { deviceMemory?: number };
-      void npcModel.start({ deviceMemory: nav.deviceMemory, hasWasm: typeof WebAssembly !== "undefined", hasWorker: typeof Worker !== "undefined" });
+      void npcModel.start({ deviceMemory: nav.deviceMemory, hasWasm: typeof WebAssembly !== "undefined", hasWorker: typeof Worker !== "undefined", software: gpu.software, renderer: gpu.renderer });
     }, delayMs);
   }
   startNpcModel(20000);
@@ -8944,7 +8945,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         ? hit
         : raycast(player.x, player.y + EYE, player.z, -Math.sin(player.yaw) * Math.cos(player.pitch), Math.sin(player.pitch), -Math.cos(player.yaw) * Math.cos(player.pitch), 6, false);
       if (fh && (fh.id === ID.Water || fh.id === ID.Lava)) {
-        const fill = fh.id === ID.Lava ? ID.LavaBucket : ID.WaterBucket;
+        const fill = bucketFill(fh.id);
         if (world.set(fh.x, fh.y, fh.z, ID.Air)) {
           markDirtyAt(fh.x, fh.z);
           spend(ID.Bucket, 1);
@@ -8959,7 +8960,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const px = hit.x + hit.nx;
       const py = hit.y + hit.ny;
       const pz = hit.z + hit.nz;
-      const pour = held === ID.LavaBucket ? ID.Lava : ID.Water;
+      const pour = bucketPour(held);
       if (pour === ID.Water && world.get(px, py, pz) === ID.Fire && spend(held, 1)) {
         // Bucket straight onto flames: no water cell left, the fire drowns.
         douseArea(px, py, pz);
@@ -11070,7 +11071,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   /** A pre-generated LLM quest for this giver if one is ready and new. */
   function storyQuest(gk: string, proc: () => Quest | null): Quest | null {
     const g = director.take(gk);
-    if (g && g.source === "llm" && !society.done.has(g.quest.id) && !society.active.some((a) => a.q.id === g.quest.id)) return g.quest;
+    if (g && g.source === "llm" && !society.done.has(baseQuestId(g.quest.id)) && !society.active.some((a) => baseQuestId(a.q.id) === baseQuestId(g.quest.id))) return g.quest;
     return proc();
   }
   function prefetchStory(gk: string, v: Structure, mob: Mob, kind: "chief" | "guild", giver: Quest["giver"], proc: () => Quest | null) {
@@ -11092,7 +11093,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       guildsHere: guildsIn(v.gx, v.gz, v.zone, seed).map((g) => g.id),
     };
     const fallback = () => proc() ?? makeQuest(giver, v.zone, seed, 9, society.done.size, ["fetch"]);
-    director.prefetch(gk, () => generateQuest(director.llm, view, director.story, giver, kind, fallback, { seed, slot: 7, epoch: society.done.size }));
+    director.prefetch(gk, () => generateQuest(director.llm, view, director.story, giver, kind, fallback, { seed, slot: 7, epoch: society.done.size }, PREFETCH_TIMEOUT_MS));
   }
   function societyTalk(mob: Mob): boolean {
     const v = villageAround(mob.homeX ?? mob.x, mob.homeZ ?? mob.z);
@@ -14809,6 +14810,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const flvl = FOUNDRY_LVL[(f.lvl ?? 1) - 1];
       if (f.burn <= 0 && can && f.fuelN > 0 && fuelTime(f.fuel) > 0) {
         f.burn = fuelTime(f.fuel) * (skills.has("kiln") ? 1.6 : 1) * flvl.fuelMul;
+        const back = fuelReturn(f.fuel); // lava bucket → empty bucket
+        if (back) dropItem(back, 1, f.x + 0.5, f.y + 1.25, f.z + 0.5);
         f.fuelN -= 1;
         if (f.fuelN <= 0) f.fuel = 0;
         saveDirty = true;
