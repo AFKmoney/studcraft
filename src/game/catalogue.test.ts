@@ -2,6 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  builtinModels,
   decodeModel,
   encodeModel,
   loadCatalogue,
@@ -11,6 +12,8 @@ import {
   storeCatalogue,
   upsertModel,
 } from "./catalogue.ts";
+import { TechWorld } from "./teks.ts";
+import { vehicleFromAssembly } from "./vehicle.ts";
 
 const HUB = 446;
 const fakeStorage = () => {
@@ -83,6 +86,21 @@ test("catalogue storage round-trip + upsert/remove", () => {
   assert.equal(list.find((m) => m.name === "One")?.savedAt, 99);
   storeCatalogue(removeModel(list, "One"), s);
   assert.deepEqual(loadCatalogue(s).map((m) => m.name), ["Two"]);
+});
+
+test("built-in models convert to complete vehicles (P-B validation)", () => {
+  for (const model of builtinModels()) {
+    const tech = new TechWorld();
+    const A: [number, number, number] = [200, 40, 200];
+    for (const mp of model.parts) {
+      tech.add(mp.id, mp.o, [A[0] + mp.dq[0], A[1] + mp.dq[1], A[2] + mp.dq[2]]);
+    }
+    const parts = [...tech.parts.values()];
+    assert.equal(parts.length, model.parts.length);
+    const { vehicle, missing } = vehicleFromAssembly(parts, { hubChannel: "A", battery: 1, fuel: 0 });
+    assert.deepEqual(missing, [], model.name + " must be a complete vehicle");
+    assert.equal(vehicle.parts.length, model.parts.length);
+  }
 });
 
 test("share code round-trips and rejects junk", () => {

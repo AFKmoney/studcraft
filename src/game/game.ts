@@ -4,7 +4,7 @@ import { TechWorld, ORIENTS, composeO, worldCells, bbox as techBbox, spec as tec
 import { buildTeksGeometry } from "./teksGeo";
 import { fuelFromMelt, parkPoses, refuel as vehRefuel, stepVehicle as stepVeh, vehicleFromAssembly, type Vehicle, type VPart } from "./vehicle";
 import { FUEL, type Channel } from "./p5bProto";
-import { decodeModel, encodeModel, loadCatalogue, modelFromParts, removeModel, storeCatalogue, upsertModel } from "./catalogue";
+import { builtinModels, decodeModel, encodeModel, loadCatalogue, modelFromParts, removeModel, storeCatalogue, upsertModel } from "./catalogue";
 import { createAudio } from "./audio";
 import { STUD_H, STUD_OFFSETS, STUD_R, buildChunk, type Surface } from "./mesher";
 import * as FS from "./fireState";
@@ -189,7 +189,7 @@ export type GameApi = {
   /** Enter the aimed hub's vehicle, or park + exit the driven one (touch Enter/Park button, §22.2 2026-10-30). */
   enterExitVehicle: () => void;
   /** Vehicle catalogue (section 22 P-A): persistent, outside worlds. */
-  catalogueList: () => { name: string; author: string; parts: number }[];
+  catalogueList: () => { name: string; author: string; parts: number; builtin?: boolean }[];
   catalogueSave: (name: string) => void;
   catalogueLoad: (name: string) => void;
   catalogueDelete: (name: string) => void;
@@ -5619,7 +5619,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   }
 
   function catalogueLoadModel(name: string): { placed: number; holo: number } {
-    const model = loadCatalogue().find((m) => m.name === name);
+    const model = loadCatalogue().find((m) => m.name === name) ?? builtinModels().find((m) => m.name === name);
     if (!model) {
       say("No such model in the catalogue");
       return { placed: 0, holo: 0 };
@@ -14178,7 +14178,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (p) techUseAction(p, isSneaking());
     },
     catalogueList() {
-      return loadCatalogue().map((m) => ({ name: m.name, author: m.author, parts: m.parts.length }));
+      return [
+        ...builtinModels().map((m) => ({ name: m.name, author: m.author, parts: m.parts.length, builtin: true })),
+        ...loadCatalogue().map((m) => ({ name: m.name, author: m.author, parts: m.parts.length })),
+      ];
     },
     catalogueSave(name: string) {
       // Also from the pause menu: aim/driving state is the last frame's.

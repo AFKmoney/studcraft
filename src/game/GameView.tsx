@@ -986,7 +986,7 @@ function CataloguePanel({ game }: { game: GameApi }) {
         {list.map((m) => (
           <div key={m.name} className="sc-cat-row">
             <span className="sc-cat-name">
-              <strong>{m.name}</strong> <small>{m.parts} parts</small>
+              <strong>{m.name}</strong> <small>{m.parts} parts{m.builtin ? " · built-in" : ""}</small>
             </span>
             <button className="sc-chip-btn" onClick={() => { game.catalogueLoad(m.name); setMsg("Loaded “" + m.name + "” — resume and look in front of you"); }}>
               Load
@@ -994,9 +994,11 @@ function CataloguePanel({ game }: { game: GameApi }) {
             <button className="sc-chip-btn" onClick={() => setCode(game.catalogueExport(m.name))}>
               Share code
             </button>
-            <button className="sc-chip-btn" onClick={() => { game.catalogueDelete(m.name); refresh(); }}>
-              Delete
-            </button>
+            {!m.builtin && (
+              <button className="sc-chip-btn" onClick={() => { game.catalogueDelete(m.name); refresh(); }}>
+                Delete
+              </button>
+            )}
           </div>
         ))}
         {list.length === 0 && <p className="sc-empty">No models yet — build something from Teks parts, aim at it, then save it below.</p>}

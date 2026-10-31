@@ -90,6 +90,29 @@ export function removeModel(list: VehicleModel[], name: string): VehicleModel[] 
   return list.filter((m) => m.name !== name);
 }
 
+/** Built-in models (section 22 P-B): shipped with the game, always
+ *  in the catalogue, not deletable. The Starter Buggy's layout is the
+ *  exact assembly the P5b rigs assemble and drive — proven geometry;
+ *  catalogue.test.ts re-validates it headless through
+ *  vehicleFromAssembly. Positions are hub-anchored lattice offsets. */
+export function builtinModels(): VehicleModel[] {
+  const P = (id: number, dq: [number, number, number]): ModelPart => ({ id, o: 0, dq });
+  return [
+    {
+      name: "Starter Buggy",
+      author: "Studs Garage",
+      savedAt: 0,
+      parts: [
+        P(378, [0, -5, -4]), P(378, [0, -5, 4]), P(378, [10, -5, -4]), P(378, [10, -5, 4]),
+        P(356, [6, -7, -4]), P(356, [-6, -7, -4]), P(356, [6, -7, 4]), P(356, [-6, -7, 4]),
+        P(446, [0, 0, 0]),
+        P(447, [0, 7, -4]),
+        P(452, [12, -1, 0]),
+      ],
+    },
+  ];
+}
+
 /** Share code (phase 1): base64 of the model JSON, prefixed so a
  *  pasted code is recognisable. Decoding validates the shape. */
 export function encodeModel(model: VehicleModel): string {
