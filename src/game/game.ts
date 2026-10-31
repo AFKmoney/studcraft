@@ -24,6 +24,7 @@ import { buildAtlas } from "./textures";
 import { CS, HEIGHT, SEA, World, decorate, folkLayout, inNether, penSheep, paintEndCrystals, END_PILLARS, type Decor, type FolkSpot } from "./world";
 import { DEBRIS_ADVANCED, debrisAt } from "./debris";
 import { stockChest } from "./loot";
+import { findStructure, structureLabel, structureOwning, stockStructureChest, type StructKind } from "./structures";
 import { mayYield, spillSlots } from "./yields";
 import { Upscaler, upscaleScale } from "./upscale";
 import { BTN, PadEdges, activePad, padBusy, padLabel, rumble, stick } from "./gamepad";
@@ -383,6 +384,7 @@ declare global {
       getPrefabs?: () => { name: string; parts: number; ingots: number; copper: number; afford: boolean }[];
       buyPrefabQa?: (name: string) => void;
       getVillageAt?: () => { x: number; z: number } | null;
+      findStructureQa?: (kind: string, zone?: string) => { x: number; z: number; y: number; w: number; d: number; kind: string; zone: string; label: string } | null;
       getCatalogue?: () => { name: string; parts: number }[];
       catalogueSaveQa?: (name: string) => boolean;
       catalogueLoadQa?: (name: string) => { placed: number; holo: number };
@@ -7949,7 +7951,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
               ? "hamlet"
               : "wild";
       const freshBin = !bin.ids.some((bid) => bid > 0);
-      stockChest(bin, x, y, z, world.seed, lootPool);
+      // biome-structures: crates inside a village/shrine/mecha/vault/POI use its pool
+      const owner = structureOwning(world, x, y, z);
+      if (owner) stockStructureChest(bin, x, y, z, world.seed, owner);
+      else stockChest(bin, x, y, z, world.seed, lootPool);
       // R4: on the FIRST opening of a monument chest, its vault can
       // yield a named relic; the Scavenger path doubles that chance
       // and guarantees the §11 Teks jackpot part.
@@ -14876,6 +14881,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     getPrefabs: () => hud.prefabs,
     buyPrefabQa: (name: string) => api.buyPrefab(name),
     getVillageAt: () => villageAt,
+    // biome-structures QA hooks (inert in play): locate a structure of a kind/zone.
+    findStructureQa: (kind: string, zone?: string) => {
+      const st = findStructure(world, kind as StructKind, (zone || undefined) as Parameters<typeof findStructure>[2]);
+      return st ? { ...st, label: structureLabel(st) } : null;
+    },
     getCatalogue: () => loadCatalogue().map((m) => ({ name: m.name, parts: m.parts.length })),
     catalogueSaveQa: (name: string) => catalogueSaveCurrent(name),
     catalogueLoadQa: (name: string) => catalogueLoadModel(name),

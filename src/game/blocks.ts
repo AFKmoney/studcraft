@@ -486,6 +486,9 @@ export const ID = {
   // P5d: sensors — Teks parts (specs in teks.ts), cast at the Foundry.
   SensorDist: 472,
   SensorColor: 473,
+  // biome-structures: rare shrine / mecha pieces (480+ to stay clear of parallel branches)
+  SanctumStud: 480,
+  MechaCore: 481,
   // P6 step 4 / P7 tool moulds (Muse): plastic tools cast at the
   // Foundry — the mould is the shape, the ingot is the stock. Tier 2
   // (stone class), 120 uses: moulded plastic, honestly mid-table.
@@ -1298,6 +1301,8 @@ put(b(ID.PharaohGold, "Scarab relic", "#f5c518", "#ffd84a", "#c99812", "#9a700a"
 put(b(ID.WitchVenom, "Mixer essence", "#9b45e4", "#ba6eff", "#732ab5", "#4e1882", { placeable: false }));
 put(b(ID.IllagerBadge, "Raider badge", "#8e959c", "#cfd6dc", "#585e66", "#383d42", { placeable: false }));
 put(b(ID.VoidCore, "Bin core", "#2e9888", "#5cf2dc", "#1b5e54", "#103832", { placeable: false }));
+put(b(ID.SanctumStud, "Sanctum stud", "#ffe14a", "#fff3a8", "#e2b12e", "#9a700a", { placeable: false }));
+put(b(ID.MechaCore, "Mecha core", "#e23b2f", "#ff8a5c", "#8e959c", "#23272c", { placeable: false }));
 put(b(ID.TidalBlade, "Tidal trident blade", "#32b8cb", "#64e5f5", "#1f8da0", "#146070", { placeable: false, tool: "sword", tier: 4, maxUse: 480 }));
 put(b(ID.PharaohStaff, "Sun pharaoh scepter", "#ffd84a", "#fff088", "#d69b1a", "#9e6d0c", { placeable: false, tool: "sword", tier: 4, maxUse: 460 }));
 put(b(ID.WitchStaff, "Covensoul blade", "#a33de2", "#c875ff", "#7220a8", "#4a1072", { placeable: false, tool: "sword", tier: 4, maxUse: 440 }));

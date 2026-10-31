@@ -2,6 +2,7 @@ import { BLOCKS, ID, def } from "./blocks";
 import { hash2, hash3, makeNoise, type Noise } from "./noise";
 import { zoneFor, type ZoneId } from "./biomes";
 import { SITE_STEP, siteBricks, type Site, type SiteKind } from "./sites";
+import { paintStructures } from "./structures";
 
 export { SITE_STEP };
 
@@ -417,6 +418,7 @@ export class World {
     this.paintCellar(data, baseX, baseZ);
     this.paintHamlet(data, baseX, baseZ);
     this.paintSites(data, baseX, baseZ);
+    paintStructures(this, data, baseX, baseZ);
     this.paintLandmarkLayer(data, baseX, baseZ, false);
     this.paintGate(data, baseX, baseZ);
     this.scatterCaps(data, baseX, baseZ);

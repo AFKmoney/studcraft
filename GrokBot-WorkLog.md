@@ -31,3 +31,11 @@ Journal de travail de studs game tester (Grok Bot) sur StudCraft. Heures en heur
 - ~10:46 Tests biomes.test.ts + extensions mobMeshes/mobDrops : 127/127 ; tsc 0 erreur ; build OK.
 - ~10:48 Captures headless (biome-shots.html) : 11 biomes, 11 boss, 22 espèces, montages + comparaisons côte à côte avec les refs dans shots-biomes/.
 - ~10:50 Commits, push unique, ouverture de la PR (base main, dépend de PR #4).
+
+## PR 3 — structures de biomes (branche grokbot/biome-structures, empilée sur grokbot/biomes-bosses / PR #5) — 31 oct. 2026 (PDT)
+- ~11:13 Clone neuf dans /workspace/studcraft-structures, branche grokbot/biome-structures créée depuis grokbot/biomes-bosses. npm ci ; base : 127/127 tests.
+- ~11:16 Audit : hamletOrigin/hamletAt (grille REGION 192, hash2 + salt), siteAt/siteBricks (grille 96, bricks purs relatifs à l'origine), landmarkAt (grille 256), paintHamlet/paintSites (force() par chunk), zoneAt/zoneFor (biomes.ts), stockChest (loot.ts), ouverture de coffre game.ts (pool par proximité).
+- ~11:25 Nouveau fichier src/game/structures.ts (mêmes règles : 1 candidat par cellule de 128, tout tiré de hash2(cellule, seed+sel), motifs de briques purs ; seules les variables changent via THEMES par zone). Types : village thématique par zone (cottage/adobe/tour/igloo/pilotis/bunker), Cité du désert (grille 3×3 de rues, immeubles 2–4 étages, palais à dôme, marché), sanctuaires, méchas abandonnés en pièces (mode « posé au sol »), points d'intérêt par zone, caveaux cachés enterrés.
+- ~11:27 Exclusions : rayon de 112 autour du hameau de départ et de l'origine, hameaux, sites, landmarks ; chaque structure reste dans sa cellule (aucun chevauchement) ; pente max, pas d'eau (sauf village sur pilotis des îles).
+- ~11:28 Intégrations minimales : world.ts (1 import + 1 appel paintStructures après paintSites), loot.ts (pools sanctum/mecha/vault), blocks.ts (2 pièces rares non posables : Sanctum stud 480, Mecha core 481), game.ts (pool du coffre si dans une structure + hook QA findStructureQa) — aucun code de mob touché.
+- ~11:33 Tests src/game/structures.test.ts (déterminisme, densité, spawn dégagé, plans par zone avec coffre, régénération de chunk identique, loot) : 134/134 ; tsc 0 erreur.
