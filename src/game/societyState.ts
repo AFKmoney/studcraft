@@ -6,7 +6,11 @@
 import { COIN, GUILDS, guildRank, commitCrime, goodDeed, resolveArrest, validateQuest, type CrimeKind, type Guild, type Quest, type Standing, type Verdict } from "./society.ts";
 
 export type Active = { q: Quest; n: number; done: boolean };
-export type SocietySave = { v: 1; active: Active[]; done: string[]; standing: Record<string, Standing>; guilds: Record<string, number>; epochs: Record<string, number> };
+export type SocietySave = { v: 1; active: Active[]; done: string[]; standing: Record<string, Standing>; guilds: Record<string, number>; epochs: Record<string, number>; placed?: string[] };
+export type PerkKind = Guild["perk"]["kind"];
+/** Player-placed cells remembered in villages (not crimes to break). */
+export const PLACED_CAP = 4000;
+export const PERK_CAP = 0.4;
 export type BoardRow = { id: string; name: string; detail: string; n: number; need: number; done: boolean; ready: boolean; reward: string; chainName: string; from: string; locked: boolean };
 export const MAX_ACTIVE = 8;
 /** Bandit standing lives on one shared axis. */
@@ -18,6 +22,23 @@ export class Society {
   standing: Record<string, Standing> = {};
   guilds: Record<string, number> = {};
   epochs: Record<string, number> = {};
+  placed = new Set<string>();
+
+  /** Guild perk strength: each joined guild of that perk kind adds its
+   *  value, +25% per rank; capped. 0 when not a member anywhere. */
+  perk(kind: PerkKind): number {
+    let v = 0;
+    for (const g of GUILDS) if (g.perk.kind === kind && this.member(g)) v += g.perk.value * (1 + 0.25 * this.rank(g));
+    return Math.min(PERK_CAP, v);
+  }
+  markPlaced(x: number, y: number, z: number) {
+    this.placed.add(x + "," + y + "," + z);
+    if (this.placed.size > PLACED_CAP) this.placed.delete(this.placed.values().next().value as string);
+  }
+  /** True (and forgotten) if the player placed this cell themselves. */
+  takePlaced(x: number, y: number, z: number): boolean {
+    return this.placed.delete(x + "," + y + "," + z);
+  }
 
   static from(d: unknown): Society {
     const s = new Society();
@@ -28,10 +49,11 @@ export class Society {
     for (const [k, v] of Object.entries(o.standing ?? {})) if (v && Number.isFinite(v.rep) && Number.isFinite(v.bounty)) s.standing[k] = { rep: v.rep, bounty: Math.max(0, v.bounty), banditRep: v.banditRep ?? 0 };
     for (const [k, v] of Object.entries(o.guilds ?? {})) if (GUILDS.some((g) => g.id === k) && Number.isFinite(v)) s.guilds[k] = v;
     for (const [k, v] of Object.entries(o.epochs ?? {})) if (Number.isInteger(v)) s.epochs[k] = v;
+    for (const k of (o.placed ?? []).slice(-PLACED_CAP)) if (typeof k === "string" && /^-?\d+,-?\d+,-?\d+$/.test(k)) s.placed.add(k);
     return s;
   }
   toJSON(): SocietySave {
-    return { v: 1, active: this.active.map((a) => ({ ...a })), done: [...this.done].slice(-400), standing: { ...this.standing }, guilds: { ...this.guilds }, epochs: { ...this.epochs } };
+    return { v: 1, active: this.active.map((a) => ({ ...a })), done: [...this.done].slice(-400), standing: { ...this.standing }, guilds: { ...this.guilds }, epochs: { ...this.epochs }, placed: [...this.placed] };
   }
 
   st(key: string): Standing {
@@ -92,7 +114,8 @@ export class Society {
     this.active.splice(i, 1);
     this.done.add(q.id);
     const take: [number, number][] = q.track.kind === "have" ? [[q.track.what, q.track.need]] : [];
-    const give: [number, number][] = [[COIN, q.reward.coins], ...q.reward.items];
+    const loot = 1 + this.perk("loot");
+    const give: [number, number][] = [[COIN, Math.round(q.reward.coins * loot)], ...q.reward.items.map(([id, n]) => [id, Math.round(n * loot)] as [number, number])];
     const key = q.giver.key;
     let joined: Guild | undefined;
     let rankUp: Guild | undefined;
@@ -133,7 +156,9 @@ export class Society {
     return { standing: next, failed, counted: [] };
   }
   arrest(key: string, choice: "pay" | "jail" | "resist", wallet: number): Verdict {
-    const v = resolveArrest(this.st(key), choice, wallet);
+    const st = this.st(key);
+    const fine = Math.max(0, Math.round(st.bounty * (1 - this.perk("fine"))));
+    const v = resolveArrest({ ...st, bounty: choice === "pay" ? fine : st.bounty }, choice, wallet);
     this.standing[key] = v.standing;
     return v;
   }

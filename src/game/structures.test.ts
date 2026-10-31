@@ -228,3 +228,36 @@ test("bandit camps: rare, placed, palisade + fence stall + hostile spots", () =>
   assert.equal(cellMap(s)(f.fence.x, s.y + 1, f.fence.z), undefined, "fence stands in the open");
   assert.equal(S.structureLootKind(s), "vault");
 });
+
+test("desert city long bay: the Rig Digger's cells are all open air under the canopy", async () => {
+  const { builtinModels } = await import("./catalogue.ts");
+  const s = { x: 0, z: 0, y: 30, w: S.CITY_W, d: S.CITY_W, kind: "village" as const, zone: "desertCity" as const, gx: 3, gz: 3 };
+  const g = S.garageOf(s, SEED)!;
+  assert.ok(g.bay2);
+  const at = cellMap(s);
+  const dig = builtinModels()[g.bay2.model];
+  assert.ok(dig.parts.length > 15);
+  const A = [g.bay2.display[0] * 4, g.bay2.display[1] * 4 + 5, g.bay2.display[2] * 4 + 2];
+  for (const p of dig.parts) {
+    const [x, y, z] = [0, 1, 2].map((i) => Math.floor((A[i] + p.dq[i]) / 4));
+    if (y < g.bay2.display[1]) continue; // part origin sits in the floor cell's top quarter (same as the buggy)
+    assert.ok([undefined, ID.Air].includes(at(x, y, z) as number | undefined), `part ${p.id} at ${x},${y},${z} hits ${at(x, y, z)}`);
+  }
+  const village = S.garageOf({ ...s, w: S.VILLAGE_W, d: S.VILLAGE_W, zone: "plains" }, SEED)!;
+  assert.equal(village.bay2, null);
+});
+
+test("guard patrol loops stay on the village paths with short legs", () => {
+  for (const zone of ZONE_IDS) {
+    const size = S.structSize("village", zone);
+    const s = { x: 640, z: 128, y: 40, w: size, d: size, kind: "village" as const, zone, gx: 5, gz: 1 };
+    const r = S.patrolOf(s, SEED);
+    assert.ok(r.length >= 8);
+    for (let i = 0; i < r.length; i++) {
+      const [ax, az] = r[i];
+      const [bx, bz] = r[(i + 1) % r.length];
+      assert.ok(Math.hypot(bx - ax, bz - az) < 24, zone);
+      assert.ok(ax > s.x && ax < s.x + s.w && az > s.z && az < s.z + s.d);
+    }
+  }
+});

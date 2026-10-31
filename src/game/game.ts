@@ -28,7 +28,7 @@ import { buildAtlas } from "./textures";
 import { CS, HEIGHT, SEA, World, decorate, folkLayout, inNether, penSheep, paintEndCrystals, END_PILLARS, type Decor, type FolkSpot } from "./world";
 import { DEBRIS_ADVANCED, debrisAt } from "./debris";
 import { stockChest } from "./loot";
-import { banditFolk, civicOf, findStructure, garageOf, structureFolk, structuresNear, structureLabel, structureOwning, stockStructureChest, type StructKind, type Structure } from "./structures";
+import { banditFolk, civicOf, patrolOf, findStructure, garageOf, structureFolk, structuresNear, structureLabel, structureOwning, stockStructureChest, type StructKind, type Structure } from "./structures";
 import { BOUNTY_ARREST, banditQuests, chiefOf, chiefQuests, COIN, CRIME, guildEntryQuest, guildQuests, GUILDS, mobTag, seenBy, type CrimeKind, type Observer } from "./society";
 import { Society } from "./societyState";
 import { mayYield, spillSlots } from "./yields";
@@ -886,6 +886,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     if (rep <= -10) pn += 1;
     if (rep <= -30) pn += 1;
     if (heroT > 0) pn -= 1;
+    pn = Math.round(pn * (1 - society.perk("discount"))); // PR 6: guild perk
     return Math.max(1, pn);
   }
   function stockMaxFor(offer: { tier?: number; stock?: number }): number {
@@ -3578,6 +3579,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     tame?: boolean;
     lead?: boolean;
     role?: string;
+    socAt?: string; // spawn anchor (patrols move home, the anchor stays)
+    patrol?: number; // next waypoint index
     soc?: string; // PR 6 society role: chief | guard | guild:<id> | fence | upgrades | bandit
     socName?: string;
     homeX?: number;
@@ -8919,6 +8922,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     const placeId = held === ID.RedTorch ? ID.RedTorchOn : heldDef.stairs ? stairsVariant(held, facingDir()) : held;
     if (!world.set(px, py, pz, placeId)) return;
+    if (villageAround(px, pz)) society.markPlaced(px, py, pz); // PR 6: not a crime to break later
     CH.setRemoved(px, py, pz, placeId, 0); // v4.17: a freshly placed block is whole
     markDirtyAt(px, pz);
     netSendEdit(px, py, pz, placeId);
@@ -10812,10 +10816,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const key = s.gx + "," + s.gz;
       if (!dressedGarages.has(key) && world.get(g.display[0], g.display[1] - 1, g.display[2]) !== ID.Air) {
         dressedGarages.add(key);
-        const show = builtinModels()[g.model];
-        const A: [number, number, number] = [g.display[0] * 4, g.display[1] * 4 + 5, g.display[2] * 4 + 2];
-        const free = show.parts.every((mp) => tech.test(mp.id, mp.o, [A[0] + mp.dq[0], A[1] + mp.dq[1], A[2] + mp.dq[2]], techSolidAt) >= 0);
-        if (free) for (const mp of show.parts) if (mp.id !== ID.Battery) tech.add(mp.id, mp.o, [A[0] + mp.dq[0], A[1] + mp.dq[1], A[2] + mp.dq[2]]);
+        for (const bay of [{ display: g.display, model: g.model }, ...(g.bay2 ? [g.bay2] : [])]) {
+          const show = builtinModels()[bay.model];
+          if (!show) continue;
+          const A: [number, number, number] = [bay.display[0] * 4, bay.display[1] * 4 + 5, bay.display[2] * 4 + 2];
+          const free = show.parts.every((mp) => tech.test(mp.id, mp.o, [A[0] + mp.dq[0], A[1] + mp.dq[1], A[2] + mp.dq[2]], techSolidAt) >= 0);
+          if (free) for (const mp of show.parts) if (mp.id !== ID.Battery) tech.add(mp.id, mp.o, [A[0] + mp.dq[0], A[1] + mp.dq[1], A[2] + mp.dq[2]]);
+        }
         g.racks.forEach(([x, y, z], i) => {
           const q: [number, number, number] = [x * 4 + 2, y * 4, z * 4 + 2];
           if (tech.test(g.rackParts[i], 0, q, techSolidAt) >= 0) tech.add(g.rackParts[i], 0, q);
@@ -10851,8 +10858,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     return null;
   }
   function spawnSoc(x: number, z: number, soc: string, name: string, role: TraderRole, tint: number) {
-    if (mobs.some((m) => !m.dead && m.soc === soc && m.homeX !== undefined && Math.hypot(m.homeX - x, (m.homeZ ?? 0) - z) < 2)) return;
+    const at = soc + "@" + Math.round(x) + "," + Math.round(z);
+    if (mobs.some((m) => !m.dead && m.socAt === at)) return;
     const mob = spawnKind("villager", x, z);
+    mob.socAt = at;
     mob.role = role;
     mob.soc = soc;
     mob.socName = name;
@@ -10880,7 +10889,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     return seenBy(obs as Observer[], { x: player.x, z: player.z, sneaking: isSneaking(), light }, (o) => {
       const m = (o as (typeof obs)[number]).m;
       return !losClear(m.x, m.y + 1.5, m.z, player.x, eye, player.z);
-    });
+    }, 0.5 - society.perk("stealth")); // guild perk: harder to spot
   }
   function reportCrime(key: string, kind: CrimeKind, seen: boolean) {
     const r = society.crime(key, kind, seen);
@@ -10894,6 +10903,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   function societyCrimeAt(x: number, y: number, z: number, kind: CrimeKind) {
     if (creative || flat || realm !== 0) return;
     if (kind === "break" && NATURAL.has(world.get(x, y, z))) return;
+    // your own bricks (and chests you placed) are yours to take back
+    if (kind === "break" ? society.takePlaced(x, y, z) : society.placed.has(x + "," + y + "," + z)) return;
     const s = structureOwning(world, x, y, z);
     if (!s) return;
     if (s.kind === "hidden") {
@@ -10918,7 +10929,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     if (!creative) for (const [k, n] of r.take) spend(k, n);
     for (const [k, n] of r.give) give(k, n);
     if (r.rep > 0) addRep(repKeyFor(player.x, player.z), Math.ceil(r.rep / 2));
-    gainXp(10);
+    gainXp(Math.round(10 * (1 + society.perk("xp")))); // guild perk
     say(r.msg + (r.joined ? " — you joined the " + r.joined.name + "!" : r.rankUp ? " — new rank in the " + r.rankUp.name + "!" : ""));
     saveDirty = true;
     emit();
@@ -11018,6 +11029,25 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     return false; // fence (trade), upgrades vendor: the normal trade panel
   }
+  /** Guard patrols: each guard walks the village's seeded waypoint loop
+   *  (structures.ts patrolOf) by moving its roam home to the next post. */
+  function patrolGuards() {
+    for (const m of mobs) {
+      if (m.dead || m.soc !== "guard" || m.homeX === undefined || m.homeZ === undefined) continue;
+      const v = villageAround(m.homeX, m.homeZ);
+      if (!v) continue;
+      const route = patrolOf(v, seed);
+      // the two guards start half a loop apart (anchor west of the plaza = second half)
+      const i = m.patrol ?? (m.socAt && m.socAt.includes("@" + Math.round(v.x + v.w / 2 - 3.5) + ",") ? Math.floor(route.length / 2) : 0);
+      const [wx, wz] = route[i % route.length];
+      if (m.patrol === undefined || Math.hypot(m.x - wx, m.z - wz) < 5) {
+        m.patrol = (i + 1) % route.length;
+        const [nx, nz] = route[m.patrol];
+        m.homeX = nx;
+        m.homeZ = nz;
+      }
+    }
+  }
   function societyTick() {
     if (flat || realm !== 0) return;
     for (const s of structuresNear(world, player.x, player.z, 1)) {
@@ -11046,6 +11076,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const g = garageOf(s, seed);
       if (g) spawnSoc(g.counter.x - 1.5, g.counter.z - 3.5, "upgrades", "Upgrades vendor", "outfitter", 0x2f6fb0);
     }
+    patrolGuards();
     const v = villageAround(player.x, player.z);
     if (!v) return;
     const key = socKey(v);
@@ -13682,7 +13713,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         const cls = AXE_OK(hit.id) ? "axe" : SHOVEL_OK(hit.id) ? "shovel" : block.tough || block.need > 0 ? "pick" : "";
         const rightTool = cls !== "" && held.tool === cls;
         const TIER_SPEED = [1, 2, 4, 6, 8, 9];
-        let speed = rightTool ? (TIER_SPEED[held.tier] ?? 1) : 1;
+        let speed = (rightTool ? (TIER_SPEED[held.tier] ?? 1) : 1) * (1 + society.perk("speed")); // PR 6: guild perk
         if (hotbar[slot] === ID.Shears && (hit.id === ID.Leaves || hit.id === ID.TallGrass || hit.id === ID.Web)) speed = 8;
         const pickTier = held.tool === "pick" ? held.tier : 0;
         const canHarvest = !block.need || pickTier >= block.need;

@@ -458,6 +458,23 @@ export function civicOf(s: Structure, seed: number): Civic {
   };
 }
 
+/** A guard's patrol loop (world x,z): out and back along the village
+ *  cross of paths through the plaza, legs < 24 blocks so the villager
+ *  homing never snaps. The seed picks the direction of the loop. */
+export function patrolOf(s: Structure, seed: number): [number, number][] {
+  const W = s.w;
+  const mid = Math.floor(W / 2) + 0.5;
+  const arm = W / 2 - 4;
+  const legs: [number, number][] = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+  if (hash2(s.gx, s.gz, seed + 0x9a7d) < 0.5) legs.reverse();
+  const out: [number, number][] = [];
+  for (const [dx, dz] of legs) {
+    out.push([s.x + mid, s.z + mid]);
+    out.push([s.x + mid + dx * arm, s.z + mid + dz * arm]);
+  }
+  return out;
+}
+
 /** Hostile bandits and the fence of a bandit camp. */
 export function banditFolk(s: Structure): { bandits: { x: number; z: number }[]; fence: { x: number; z: number } } | null {
   if (s.kind !== "bandit") return null;
@@ -551,7 +568,19 @@ function garageOrigin(s: Structure): [number, number] | null {
   return [lx, lz - 1];
 }
 
+/** Open long bay for the big catalogue vehicle: a 13x4 pad, corner
+ *  posts and a canopy 7 up (the Rig Digger is ~13 x 2.5 x 6 blocks). */
+function longBay(b: Build, ox: number, oz: number, t: Theme) {
+  b.box(ox, 0, oz, ox + 12, 0, oz + 3, ID.IronBlock);
+  for (let y = 1; y <= 7; y++) for (let z = 0; z < 4; z++) for (let x = 0; x < 13; x++) b.put(ox + x, y, oz + z, ID.Air);
+  for (const [x, z] of [[0, 0], [12, 0], [0, 3], [12, 3]] as const) for (let y = 1; y <= 7; y++) b.put(ox + x, y, oz + z, t.pillar);
+  b.box(ox, 8, oz, ox + 12, 8, oz + 3, t.accent);
+  b.put(ox + 6, 7, oz + 1, ID.Lantern);
+}
+
 export type Garage = {
+  /** Optional second bay: where (block cell) and which catalogue model. */
+  bay2: { display: [number, number, number]; model: number } | null;
   /** Block cell the display vehicle stands on (first air layer). */
   display: [number, number, number];
   /** Where the mechanic trader stands, behind the counter. */
@@ -585,8 +614,10 @@ export function garageOf(s: Structure, seed: number): Garage | null {
     counter: { x: X + 8.5, z: Z + 5.5 },
     racks,
     rackParts,
-    // the Rig Digger is 13 blocks long: only the Starter Buggy fits the bay
+    // the Starter Buggy stands in the dealership; the 13-block Rig Digger
+    // gets the city's long bay (villages have no room for it)
     model: h < 2 ? 0 : 0,
+    bay2: s.zone === "desertCity" ? { display: [s.x + 34, s.y + 1, s.z + 30], model: 1 } : null,
   };
 }
 
@@ -691,7 +722,10 @@ function desertCity(t: Theme, r: Rnd, s: Structure, seed: number): SBrick[] {
       for (let y = -7; y <= 0; y++) b.put(ox + 2, y, oz + 3, ID.Ladder);
     } else if (k === 2 || k === 8) guildHall(b, ox + 1, oz + 3, t, guildsIn(s.gx, s.gz, "desertCity", seed)[k === 2 ? 0 : 1], k === 2 ? 1 : 0, false);
     else if (k === 3 + Math.floor(r(40) * 2) * 4) market(b, ox, oz, r);
-    else if (k === 6) workshop(b, ox + 3, oz + 1, t, "desertCity", false, r); // origin 36,18: see garageOrigin
+    else if (k === 6) {
+      workshop(b, ox + 3, oz + 1, t, "desertCity", false, r); // origin 36,18: see garageOrigin
+      longBay(b, ox, oz + 12, t); // second bay: the 13-block Rig Digger (x 33..45, z 29..32)
+    }
     else building(b, ox, oz, t, (s) => r(500 + k * 13 + s));
   }
   return b.out;

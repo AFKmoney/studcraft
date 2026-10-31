@@ -75,3 +75,31 @@ test("crime: seen raises bounty and fails crime contracts; unseen counts; arrest
   s.crime("1,1", "steal", true);
   assert.ok(s.arrest("1,1", "resist", 0).hostile);
 });
+
+test("guild perks apply for real: loot scales rewards, fine lowers the fine, caps hold", async () => {
+  const s = new Society();
+  assert.equal(s.perk("loot"), 0);
+  const warriors = guildsIn(0, 0, "plains", SEED) && (await import("./society.ts")).GUILDS.find((g) => g.id === "warriors")!;
+  const envoys = (await import("./society.ts")).GUILDS.find((g) => g.perk.kind === "fine")!;
+  s.guilds[warriors.id] = 0;
+  s.guilds[envoys.id] = 500;
+  assert.ok(s.perk("loot") > 0 && s.perk("fine") <= 0.4);
+  const q = chiefQuests(1, 1, "plains", SEED, 0).find((x) => x.track.kind === "kill")!;
+  s.accept(q);
+  for (let i = 0; i < q.track.need; i++) s.bump("kill", q.track.tag);
+  const r = s.claim("soc:" + q.id, () => 0);
+  assert.ok(r.give[0][1] >= q.reward.coins);
+  s.crime("2,2", "burgle", true);
+  const paid = s.arrest("2,2", "pay", 999);
+  assert.ok(paid.coinsPaid < 40, "fine perk: " + paid.coinsPaid);
+});
+
+test("player-placed cells are remembered, saved and forgotten once broken", () => {
+  const s = new Society();
+  s.markPlaced(1, 40, -3);
+  const back = Society.from(JSON.parse(JSON.stringify(s.toJSON())));
+  assert.ok(back.takePlaced(1, 40, -3));
+  assert.ok(!back.takePlaced(1, 40, -3));
+  for (let i = 0; i < 4100; i++) s.markPlaced(i, 0, 0);
+  assert.ok(s.placed.size <= 4000);
+});
