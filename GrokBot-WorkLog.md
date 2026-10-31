@@ -65,3 +65,10 @@ Journal de travail de studs game tester (Grok Bot) sur StudCraft. Heures en heur
 - Marcheur : 135 → 25 draw calls, 38,3k → 20,6k triangles. Husk : 137 → 27 draw calls. Noyé : 139 → 29 draw calls.
 - Le champ NFR `demoule` refit (20,7 dB) est conservé : les trous venaient de la géométrie v3, pas du champ.
 - Comparaison réf. | v2 | v3 (rejeté) | v3.2 : `shots-v3/ref-vs-demoule-v32.png`. Tests 131/131, tsc et build OK.
+
+## v4 — refonte complète des mobs restants (2026-10-31)
+- 21 builders neufs (cheval, chèvre, loup, renard, chat, enderman, slime, abeille, calmar, chauve-souris, axolotl, perroquet, grenouille, feu follet, ghast, phantom, shulker, vex, wither, crabe, araignée) : peau NFR « fourrure », membres articulés (v3Limb) en pivots séparés, ailes battantes (flapWing), géométrie fusionnée par v3Optimize sauf membres.
+- Humanoïdes refaits (`humanoidV4`) : squelette/stray (crâne, cage thoracique, arc, carquois), piglin (tête de cochon, casque et épée d'or), sorcière (chapeau tourné, robe, potion), pillard (arbalète), vindicateur (gilet, hache), évocateur (robe, mantelet d'or, totem). Objets tenus dans les pivots de bras → ils s'animent.
+- Boss : Chef Pilleplot, Pharaon-Presse, Reine-Gélatine héritent des nouveaux corps. Sphinx-Moulé reste sur le Démoulé v2 (demande de Philippe).
+- Hauteurs de vol conservées (bbox vérifiées vs v3), nb de pattes / userData inchangés.
+- Coût : 391 → 613 draw calls, 64k → 150k triangles sur ces 28 mobs (membres articulés + détails). Ordre de grandeur des mobs v3 (cochon 34, vache 41). Détail dans shots-v4/stats.md.

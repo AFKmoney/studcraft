@@ -19548,10 +19548,591 @@ function makeBlaze(): StudsBody {
   return { group: g, legs, bodyMat: core };
 }
 
+// ─── v4: full redesigns of the mobs that only got the v3 finishing pass ───────────────────
+// Same recipe as v3: rounded plastic masses + SNR sheen + cheap NFR grain for realism,
+// static parts merged later by v3Optimize; limbs/head/tail/wings stay separate pivots.
+const FUR: NfrMap = { field: "bombe", plane: "xy", scale: [5, 5], amt: 0.13 };
+const fur = (c: number) => nfrSkin(c, FUR);
+/** A wing pivot whose rotation.x (the animator's leg swing) reads as a flap: outward is local +Z·side. */
+function flapWing(parent: THREE.Object3D, x: number, y: number, z: number, side: number) {
+  const mount = new THREE.Group();
+  mount.position.set(x, y, z);
+  mount.rotation.y = Math.PI / 2;
+  parent.add(mount);
+  const p = new THREE.Group();
+  mount.add(p);
+  return p;
+}
+/** Membrane/feather wing: a jointed spar plus a thin plate, built along local +Z·side. */
+function wingSail(p: THREE.Object3D, side: number, span: number, chord: number, spar: THREE.Material, sail: THREE.Material, key: string, fingers = 3) {
+  put(p, geoRBox(0.035, 0.035, span, 0.012), spar, 0, 0, side * span / 2, 0, true);
+  for (let k = 1; k <= fingers; k++) {
+    const f = put(p, geoRBox(0.02, 0.02, chord * 0.9, 0.006), spar, 0, 0, side * span * (k / fingers), 0, true);
+    f.rotation.y = Math.PI / 2;
+    f.position.x = -chord * 0.42;
+  }
+  const pts: [number, number][] = [[0, 0], [-chord * 0.35, 0], [-chord, side * span * 0.3], [-chord * 0.85, side * span * 0.7], [-chord * 0.3, side * span], [0, side * span]];
+  const sl = put(p, geoPlate(key, pts.map(([a, b]) => [b, a]), 0.012), sail, 0, -0.01, 0, 0, true);
+  sl.rotation.y = Math.PI / 2;
+  sl.scale.x = -side;
+}
+
+/** Shared mammal frame: body along Z, head group forward (-Z), 4 v3 limbs, tail group. */
+function mammal(o: { body: [number, number, number]; y: number; coat: THREE.Material; belly?: THREE.Material; legW: number; up: number; low: number; legX: number; legZ: number; hoof: THREE.Material; joint: THREE.Material; headY: number; headZ: number; tailY?: number; tailZ?: number }) {
+  const g = new THREE.Group();
+  const [w, h, d] = o.body;
+  const body = put(g, geoRBox(w, h, d, Math.min(w, h) * 0.32), o.coat, 0, o.y, 0);
+  body.userData.skin = "body";
+  put(g, geoRBox(w * 0.96, h * 0.9, d * 0.34, Math.min(w, h) * 0.3), o.coat, 0, o.y + h * 0.06, -d * 0.36, 0, true); // chest/shoulder mass
+  put(g, geoRBox(w * 0.92, h * 0.86, d * 0.3, Math.min(w, h) * 0.3), o.coat, 0, o.y + h * 0.02, d * 0.38, 0, true); // haunch
+  if (o.belly) put(g, geoRBox(w * 0.7, h * 0.2, d * 0.7, h * 0.08), o.belly, 0, o.y - h * 0.42, 0, 0, true);
+  const head = new THREE.Group();
+  head.position.set(0, o.headY, o.headZ);
+  g.add(head);
+  g.userData.head = head;
+  const legs4 = [-1, 1].flatMap((sx) => [-o.legZ, o.legZ].map((z) => v3Limb(g, sx * o.legX, o.y - h * 0.32, z, { w: o.legW, up: o.up, low: o.low, upM: o.coat, lowM: o.coat, joint: o.joint, foot: o.hoof, footLen: o.legW * 1.25, knee: z > 0 ? 0.12 : -0.05 })));
+  // v3Limb order [Lf, Lb, Rf, Rb] → [Lf, Lb, Rb, Rf] so the animator's alternating swing pairs the diagonals
+  const legs = [legs4[0], legs4[1], legs4[3], legs4[2]];
+  let tail: THREE.Group | undefined;
+  if (o.tailY !== undefined) {
+    tail = new THREE.Group();
+    tail.position.set(0, o.tailY, o.tailZ ?? d / 2);
+    g.add(tail);
+    g.userData.tail = tail;
+  }
+  return { g, head, legs, tail, body };
+}
+
+function makeHorse(): StudsBody {
+  const coat = fur(0x7a4a26), mane = fur(0x2a1a10), hoof = skin(0x26201c), joint = sheen(0x5a3a20), white = sheen(0xf4f1ea);
+  const m = mammal({ body: [0.42, 0.44, 1.0], y: 0.98, coat, legW: 0.12, up: 0.34, low: 0.36, legX: 0.14, legZ: 0.36, hoof, joint, headY: 1.3, headZ: -0.46, tailY: 1.06, tailZ: 0.5 });
+  const { g, head, tail } = m;
+  put(g, geoRBox(0.22, 0.42, 0.24, 0.08), coat, 0, 1.24, -0.46, -0.5, true); // neck
+  put(g, geoRBox(0.06, 0.4, 0.2, 0.02), mane, 0, 1.36, -0.38, -0.5, true); // mane ridge
+  put(g, geoRBox(0.46, 0.06, 0.4, 0.02), sheen(0x5a2c14), 0, 1.22, 0.02, 0, true); // saddle blanket
+  put(g, geoRBox(0.3, 0.08, 0.3, 0.04), sheen(0x3a2414), 0, 1.25, 0.02, 0, true); // saddle
+  put(head, geoRBox(0.22, 0.24, 0.26, 0.07), coat, 0, 0.02, -0.06);
+  put(head, geoRBox(0.18, 0.18, 0.26, 0.06), coat, 0, -0.04, -0.28); // long muzzle
+  put(head, geoRBox(0.06, 0.12, 0.012, 0.004), white, 0, 0.06, -0.19, 0, true); // blaze
+  for (const sx of [-1, 1]) {
+    toyEye(head, sx * 0.112, 0.06, -0.06, 0.024);
+    const e = put(head, geoCone(0.035, 0.1, 6), coat, sx * 0.07, 0.18, 0.04, 0, true);
+    e.rotation.z = -sx * 0.2;
+    put(head, geoCyl(0.012, 0.02, 6), skin(0x1a1410), sx * 0.04, -0.06, -0.415, Math.PI / 2, true);
+  }
+  put(head, geoRBox(0.24, 0.03, 0.03, 0.01), sheen(0x3a2414), 0, -0.02, -0.2, 0, true); // bridle
+  put(tail!, geoRBox(0.07, 0.07, 0.16, 0.03), mane, 0, 0, 0.06, -0.6);
+  put(tail!, geoCone(0.07, 0.4, 7), mane, 0, -0.2, 0.16, 2.8, true);
+  return { group: g, legs: m.legs, bodyMat: coat };
+}
+
+function makeGoat(): StudsBody {
+  const coat = fur(0xe8e2d4), dark = fur(0x9a9286), hoof = skin(0x2e2a26), joint = sheen(0xb8b0a2), horn = sheen(0x5a5048);
+  const m = mammal({ body: [0.4, 0.4, 0.74], y: 0.74, coat, belly: dark, legW: 0.1, up: 0.24, low: 0.26, legX: 0.13, legZ: 0.26, hoof, joint, headY: 0.98, headZ: -0.4 });
+  const { g, head } = m;
+  put(g, geoRBox(0.42, 0.22, 0.5, 0.1), coat, 0, 0.66, 0.02, 0, true); // shaggy skirt
+  put(g, geoRBox(0.16, 0.26, 0.18, 0.06), coat, 0, 0.9, -0.33, -0.35, true);
+  put(head, geoRBox(0.2, 0.22, 0.24, 0.07), coat, 0, 0.0, -0.06);
+  put(head, geoRBox(0.15, 0.15, 0.14, 0.05), coat, 0, -0.05, -0.2);
+  put(head, geoRBox(0.06, 0.12, 0.06, 0.02), dark, 0, -0.16, -0.2, 0, true); // beard
+  for (const sx of [-1, 1]) {
+    toyEye(head, sx * 0.1, 0.04, -0.12, 0.022);
+    put(head, geoTube(`goat-horn${sx}`, [[sx * 0.05, 0.1, 0], [sx * 0.08, 0.24, 0.06], [sx * 0.1, 0.26, 0.2], [sx * 0.1, 0.16, 0.26]], 0.028), horn, 0, 0, 0, 0, true);
+    const e = put(head, geoRBox(0.12, 0.04, 0.06, 0.015), coat, sx * 0.15, 0.04, -0.02, 0, true);
+    e.rotation.z = sx * 0.3;
+  }
+  return { group: g, legs: m.legs, bodyMat: coat };
+}
+
+function canid(c: { coat: number; light: number; dark: number; body: [number, number, number]; y: number; ear: number; snout: number; tailFluff: number }) {
+  const coat = fur(c.coat), light = fur(c.light), dark = sheen(c.dark), joint = sheen(c.dark), nose = skin(0x161214);
+  const [w, h, d] = c.body;
+  const m = mammal({ body: c.body, y: c.y, coat, belly: light, legW: w * 0.36, up: c.y * 0.42, low: c.y * 0.42, legX: w * 0.32, legZ: d * 0.34, hoof: dark, joint, headY: c.y + h * 0.42, headZ: -d * 0.56, tailY: c.y + h * 0.22, tailZ: d * 0.5 });
+  const { g, head, tail } = m;
+  put(head, geoRBox(w * 1.02, h * 0.95, h * 0.95, h * 0.28), coat, 0, 0, -h * 0.25);
+  put(head, geoRBox(w * 0.46, h * 0.42, c.snout, h * 0.14), light, 0, -h * 0.16, -h * 0.7 - c.snout * 0.4);
+  put(head, geoRBox(w * 0.2, h * 0.14, h * 0.1, h * 0.05), nose, 0, -h * 0.02, -h * 0.72 - c.snout * 0.88, 0, true);
+  for (const sx of [-1, 1]) {
+    toyEye(head, sx * w * 0.24, h * 0.14, -h * 0.73, h * 0.08);
+    put(head, geoCone(c.ear * 0.45, c.ear, 4), coat, sx * w * 0.32, h * 0.5 + c.ear * 0.4, -h * 0.25, 0, true).rotation.y = Math.PI / 4;
+    put(head, geoCone(c.ear * 0.3, c.ear * 0.7, 4), dark, sx * w * 0.32, h * 0.5 + c.ear * 0.32, -h * 0.29, 0, true).rotation.y = Math.PI / 4;
+  }
+  put(tail!, geoRBox(h * 0.36, h * 0.36, h * 0.9, h * 0.15), coat, 0, h * 0.16, h * 0.4, -0.55);
+  put(tail!, geoRBox(h * c.tailFluff, h * c.tailFluff, h * 0.6, h * 0.2), light, 0, h * 0.42, h * 0.86, -0.75, true);
+  return { g, legs: m.legs, coat };
+}
+function addCollar(g: THREE.Group, head: THREE.Object3D, r: number, color: number) {
+  const collar = put(head, geoTorus(r, r * 0.12, 16), sheen(color), 0, -r * 0.2, r * 0.6, Math.PI / 2, true);
+  put(collar, geoCyl(r * 0.18, r * 0.06, 10), skin(0xf5c518), 0, r, 0, Math.PI / 2, true); // tag
+  collar.visible = false;
+  g.userData.collar = collar;
+}
+function makeWolf(): StudsBody {
+  const c = canid({ coat: 0x9aa0a6, light: 0xe2e4e6, dark: 0x3c4046, body: [0.3, 0.3, 0.76], y: 0.52, ear: 0.1, snout: 0.16, tailFluff: 0.4 });
+  put(c.g, geoRBox(0.34, 0.34, 0.26, 0.1), fur(0xb8bcc0), 0, 0.6, -0.24, 0, true); // ruff
+  addCollar(c.g, c.g.userData.head, 0.17, 0xc8322a);
+  return { group: c.g, legs: c.legs, bodyMat: c.coat };
+}
+function makeFox(): StudsBody {
+  const c = canid({ coat: 0xe2711d, light: 0xf6efe4, dark: 0x2a1c16, body: [0.26, 0.24, 0.6], y: 0.4, ear: 0.12, snout: 0.15, tailFluff: 0.7 });
+  return { group: c.g, legs: c.legs, bodyMat: c.coat };
+}
+function makeCat(): StudsBody {
+  const c = canid({ coat: 0xe0a040, light: 0xf6e8cc, dark: 0x5a3a1a, body: [0.24, 0.24, 0.56], y: 0.38, ear: 0.08, snout: 0.05, tailFluff: 0.36 });
+  const head = c.g.userData.head as THREE.Object3D;
+  for (const sx of [-1, 1]) for (const k of [0, 1]) put(head, geoRBox(0.12, 0.006, 0.006, 0.002), skin(0xf4f1ea), sx * 0.1, -0.03 - k * 0.025, -0.25, 0, true).rotation.z = sx * (0.15 - k * 0.3); // whiskers
+  for (const z of [-0.12, 0, 0.12]) put(c.g, geoRBox(0.25, 0.03, 0.05, 0.01), sheen(0xb06a20), 0, 0.5, z, 0, true); // tabby stripes
+  addCollar(c.g, head, 0.15, 0x2a6ad0);
+  return { group: c.g, legs: c.legs, bodyMat: c.coat };
+}
+
+// ─── secondaries ────────────────────────────────────────────────────────────────
+function makeEnderman(): StudsBody {
+  const g = new THREE.Group();
+  const black = nfrSkin(0x141018, { field: "dragon", plane: "xy", scale: [3, 3], amt: 0.1 }), plate = sheen(0x26202e), eye = transTile(0xd060ff, 0x8a2ad0);
+  const torso = put(g, geoRBox(0.42, 0.62, 0.22, 0.06), black, 0, 1.9, 0);
+  torso.userData.skin = "body";
+  put(g, geoRBox(0.36, 0.1, 0.24, 0.03), plate, 0, 2.18, 0, 0, true);
+  put(g, geoRBox(0.32, 0.12, 0.2, 0.03), plate, 0, 1.56, 0, 0, true);
+  const head = new THREE.Group();
+  head.position.set(0, 2.24, 0);
+  g.add(head);
+  g.userData.head = head;
+  put(head, geoRBox(0.4, 0.36, 0.38, 0.06), black, 0, 0.2, 0);
+  put(head, geoRBox(0.32, 0.06, 0.02, 0.01), eye, 0, 0.2, -0.195, 0, true);
+  put(head, geoBall(0.2, 8), transTile(0xb040ff, 0x6a1aa0), 0, 0.2, -0.2, 0, true).scale.set(1.2, 0.25, 0.1);
+  const limb = (x: number, y: number, len: number) => {
+    const p = new THREE.Group();
+    p.position.set(x, y, 0);
+    g.add(p);
+    put(p, geoBall(0.06, 8), plate, 0, 0, 0, 0, true);
+    put(p, geoRBox(0.09, len * 0.5, 0.09, 0.03), black, 0, -len * 0.25, 0);
+    put(p, geoBall(0.05, 8), plate, 0, -len * 0.5, 0, 0, true);
+    put(p, geoRBox(0.08, len * 0.5, 0.08, 0.03), black, 0, -len * 0.75, 0);
+    return p;
+  };
+  const legs = [limb(-0.1, 1.56, 1.56), limb(0.1, 1.56, 1.56), limb(0.28, 2.16, 1.3), limb(-0.28, 2.16, 1.3)];
+  return { group: g, legs, bodyMat: black };
+}
+
+function makeSlime(): StudsBody {
+  const g = new THREE.Group();
+  const gel = nfrSkin(0x6ad850, { field: "crab", plane: "xz", scale: [2, 2], amt: 0.25 }, { transparent: true, opacity: 0.72 });
+  const body = put(g, geoRBox(1.5, 1.4, 1.5, 0.32), gel, 0, 0.7, 0);
+  body.userData.skin = "body";
+  body.userData.keep = true;
+  put(g, geoRBox(0.7, 0.66, 0.7, 0.14), sheen(0x3a9a2a), 0, 0.62, 0, 0, true); // core
+  for (const sx of [-1, 1]) put(g, geoRBox(0.18, 0.18, 0.04, 0.05), skin(0x14301a), sx * 0.24, 0.92, -0.76, 0, true);
+  put(g, geoRBox(0.16, 0.06, 0.04, 0.02), skin(0x14301a), 0.1, 0.62, -0.76, 0, true);
+  for (const [x, z] of [[-0.3, -0.2], [0.35, 0.25], [0, 0.4]]) put(g, geoBall(0.08, 8), sheen(0xb8ff9a), x, 1.1, z, 0, true);
+  return { group: g, legs: [], bodyMat: gel };
+}
+
+function makeBee(): StudsBody {
+  const g = new THREE.Group();
+  const yel = fur(0xf5c518), blk = sheen(0x1e1a14), wingM = transTile(0xe8f4ff, 0x9ac4e8);
+  const body = put(g, geoRBox(0.36, 0.32, 0.5, 0.14), yel, 0, 0.45, 0);
+  body.userData.skin = "body";
+  for (const z of [-0.05, 0.1]) put(g, geoRBox(0.37, 0.33, 0.06, 0.12), blk, 0, 0.45, z, 0, true);
+  put(g, geoCone(0.03, 0.08, 6), blk, 0, 0.42, 0.29, Math.PI / 2, true);
+  for (const sx of [-1, 1]) {
+    toyEye(g, sx * 0.1, 0.5, -0.255, 0.04);
+    put(g, geoTube(`bee-ant${sx}`, [[sx * 0.05, 0.6, -0.2], [sx * 0.08, 0.72, -0.3], [sx * 0.12, 0.74, -0.36]], 0.008), blk, 0, 0, 0, 0, true);
+    for (const z of [-0.08, 0.06]) put(g, geoRBox(0.02, 0.12, 0.02, 0.006), blk, sx * 0.1, 0.25, z, 0, true);
+  }
+  const legs = [-1, 1].map((sx) => {
+    const p = flapWing(g, sx * 0.12, 0.62, -0.02, sx);
+    const w = put(p, geoBall(0.2, 8), wingM, 0, 0, sx * 0.2, 0, true);
+    w.scale.set(0.55, 0.06, 1);
+    return p;
+  });
+  for (const c of g.children) c.position.y += 0.08; // keep the v3 hover height
+  return { group: g, legs, bodyMat: yel };
+}
+
+function makeSquid(): StudsBody {
+  const g = new THREE.Group();
+  const ink = nfrSkin(0x2a3a6a, { field: "crab", plane: "xy", scale: [3, 3], amt: 0.18 }), pale = sheen(0x5a6aa0);
+  const mantle = put(g, geoLathe("squid-mantle", [[0, 0.8], [0.12, 0.76], [0.2, 0.6], [0.21, 0.42], [0.18, 0.32], [0, 0.3]], 12), ink, 0, 0, 0);
+  mantle.userData.skin = "body";
+  for (const sx of [-1, 1]) toyEye(g, sx * 0.13, 0.42, -0.14, 0.04);
+  const legs: THREE.Object3D[] = [];
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * Math.PI * 2;
+    const p = new THREE.Group();
+    p.position.set(Math.cos(a) * 0.1, 0.32, Math.sin(a) * 0.1);
+    p.rotation.y = -a;
+    g.add(p);
+    put(p, geoCone(0.04, 0.3, 6), k % 2 ? pale : ink, 0.02, -0.15, 0, Math.PI, true);
+    legs.push(p);
+  }
+  return { group: g, legs, bodyMat: ink };
+}
+
+function makeBat(): StudsBody {
+  const g = new THREE.Group();
+  const furM = fur(0x3a2a20), mem = nfrSkin(0x2a1a14, { field: "dragon", plane: "xz", scale: [2, 2], amt: 0.2 }, { side: THREE.DoubleSide }), bone = sheen(0x1a120e);
+  const body = put(g, geoRBox(0.18, 0.24, 0.16, 0.07), furM, 0, 0.6, 0);
+  body.userData.skin = "body";
+  put(g, geoRBox(0.16, 0.14, 0.14, 0.05), furM, 0, 0.78, -0.02, 0, true);
+  for (const sx of [-1, 1]) {
+    put(g, geoCone(0.035, 0.08, 4), furM, sx * 0.05, 0.88, -0.02, 0, true);
+    put(g, geoBall(0.018, 6), transTile(0xff4030, 0xa01a10), sx * 0.04, 0.8, -0.09, 0, true);
+  }
+  const legs = [-1, 1].map((sx) => {
+    const p = flapWing(g, sx * 0.08, 0.66, 0, sx);
+    wingSail(p, sx, 0.7, 0.32, bone, mem, `bat-w${sx}`);
+    return p;
+  });
+  for (const c of g.children) c.position.y += -0.224; // keep the v3 hover height
+  return { group: g, legs, bodyMat: furM };
+}
+
+function makeAxolotl(): StudsBody {
+  const g = new THREE.Group();
+  const pink = nfrSkin(0xf4a6c8, { field: "crab", plane: "xz", scale: [4, 4], amt: 0.12 }), gill = sheen(0xe0507a);
+  const body = put(g, geoRBox(0.26, 0.18, 0.62, 0.08), pink, 0, 0.16, 0.04);
+  body.userData.skin = "body";
+  const head = new THREE.Group();
+  head.position.set(0, 0.18, -0.3);
+  g.add(head);
+  g.userData.head = head;
+  put(head, geoRBox(0.32, 0.18, 0.22, 0.08), pink, 0, 0, -0.08);
+  for (const sx of [-1, 1]) {
+    toyEye(head, sx * 0.11, 0.04, -0.19, 0.022);
+    for (const k of [0, 1, 2]) {
+      const gl = put(head, geoRBox(0.03, 0.16, 0.03, 0.01), gill, sx * 0.17, 0.02 + k * 0.05, -0.02, 0, true);
+      gl.rotation.z = sx * (0.6 + k * 0.35);
+    }
+  }
+  put(head, geoRBox(0.12, 0.012, 0.01, 0.004), skin(0x7a3048), 0, -0.04, -0.195, 0, true); // smile
+  const legs = [-1, 1].flatMap((sx) => [-0.16, 0.2].map((z) => v3Limb(g, sx * 0.14, 0.12, z, { w: 0.06, up: 0.05, low: 0.05, upM: pink, joint: gill, foot: pink, footLen: 0.08, hip: false })));
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.17, 0.34);
+  g.add(tail);
+  g.userData.tail = tail;
+  put(tail, geoRBox(0.04, 0.16, 0.34, 0.03), pink, 0, 0, 0.16);
+  return { group: g, legs, bodyMat: pink };
+}
+
+function makeParrot(): StudsBody {
+  const g = new THREE.Group();
+  const red = fur(0xd8322a), blue = sheen(0x2a6ad0), yel = sheen(0xf5c518), beak = sheen(0x2a2420);
+  const body = put(g, geoRBox(0.22, 0.36, 0.22, 0.09), red, 0, 0.42, 0);
+  body.userData.skin = "body";
+  const head = new THREE.Group();
+  head.position.set(0, 0.62, -0.02);
+  g.add(head);
+  g.userData.head = head;
+  put(head, geoRBox(0.18, 0.18, 0.2, 0.07), red, 0, 0.07, -0.02);
+  put(head, geoCone(0.04, 0.1, 6), beak, 0, 0.06, -0.15, -1.9, true);
+  for (const sx of [-1, 1]) toyEye(head, sx * 0.08, 0.1, -0.06, 0.02);
+  put(g, geoPlate("parrot-tail", [[-0.06, 0], [0.06, 0], [0.03, 0.34], [-0.03, 0.34]], 0.02), blue, 0, 0.3, 0.1, -1.1, true);
+  const legs = [-1, 1].map((sx) => {
+    const p = flapWing(g, sx * 0.11, 0.56, 0, sx);
+    const w = put(p, geoRBox(0.04, 0.3, 0.14, 0.03), blue, 0, -0.14, sx * 0.04, 0, true);
+    w.rotation.x = 0;
+    put(p, geoRBox(0.045, 0.1, 0.13, 0.02), yel, 0, -0.04, sx * 0.04, 0, true);
+    return p;
+  });
+  for (const sx of [-1, 1]) put(g, geoRBox(0.03, 0.18, 0.03, 0.01), beak, sx * 0.05, 0.16, 0, 0, true);
+  for (const c of g.children) c.position.y += -0.1; // keep the v3 hover height
+  return { group: g, legs, bodyMat: red };
+}
+
+function makeFrog(): StudsBody {
+  const g = new THREE.Group();
+  const green = nfrSkin(0x5a9a3a, { field: "crab", plane: "xz", scale: [3, 3], amt: 0.2 }), belly = sheen(0xd8e0a0), dark = sheen(0x2e5a20);
+  const body = put(g, geoRBox(0.42, 0.24, 0.4, 0.1), green, 0, 0.22, 0);
+  body.userData.skin = "body";
+  put(g, geoRBox(0.44, 0.12, 0.26, 0.05), green, 0, 0.36, -0.08, 0, true); // head mass
+  for (const sx of [-1, 1]) {
+    put(g, geoDome(0.07, 10), green, sx * 0.13, 0.42, -0.1, 0, true);
+    toyEye(g, sx * 0.13, 0.46, -0.15, 0.035);
+    for (const [x, z] of [[0.1, 0.06], [-0.06, 0.12]]) put(g, geoCyl(0.03, 0.01, 8), dark, x * sx, 0.345, z, 0, true);
+  }
+  put(g, geoRBox(0.3, 0.015, 0.01, 0.005), skin(0x1e3a14), 0, 0.31, -0.205, 0, true); // mouth line
+  const throat = put(g, geoBall(0.1, 10), belly, 0, 0.2, -0.17, 0, true);
+  throat.scale.set(1.2, 0.7, 0.6);
+  g.userData.throat = throat;
+  const legs = [-1, 1].flatMap((sx) => [-0.12, 0.14].map((z) => v3Limb(g, sx * 0.2, 0.16, z, { w: z > 0 ? 0.1 : 0.07, up: 0.06, low: 0.07, upM: green, joint: dark, foot: dark, footLen: 0.12, footW: 0.12, knee: z > 0 ? -0.5 : 0, hip: false })));
+  return { group: g, legs, bodyMat: green };
+}
+
+function makeWisp(): StudsBody {
+  const g = new THREE.Group();
+  const core = transTile(0xbff4ff, 0x6ad8ff);
+  const body = put(g, geoOcta(0.18, 1.3), core, 0, 0.74, 0);
+  body.userData.skin = "body";
+  for (const [r, rx] of [[0.26, 0.4], [0.3, -0.7]] as const) put(g, geoTorus(r, 0.012, 20), sheen(0xf5c518), 0, 0.74, 0, rx, true);
+  fireQuad(g, 0, 0.6, 0, 0.36, 0.5, 7);
+  for (const c of g.children) c.position.y += -0.16; // keep the v3 hover height
+  return { group: g, legs: [], bodyMat: core };
+}
+
+function makeGhast(): StudsBody {
+  const g = new THREE.Group();
+  const shell = nfrSkin(0xf0eeea, { field: "demoule", plane: "xy", scale: [1.5, 1.5], amt: 0.1 }), grey = sheen(0xc8c4c0), red = transTile(0xff4030, 0xa01a10);
+  const body = put(g, geoRBox(2.4, 2.2, 2.4, 0.3), shell, 0, 1.6, 0);
+  body.userData.skin = "body";
+  for (const sx of [-1, 1]) {
+    put(g, geoRBox(0.34, 0.12, 0.04, 0.03), skin(0x2a2626), sx * 0.5, 1.95, -1.21, 0, true);
+    put(g, geoRBox(0.12, 0.22, 0.04, 0.02), red, sx * 0.5, 1.75, -1.21, 0, true); // tear streaks
+  }
+  put(g, geoRBox(0.6, 0.3, 0.04, 0.08), skin(0x2a2626), 0, 1.3, -1.21, 0, true);
+  for (const [x, z] of [[-0.7, -0.6], [0.6, 0.5], [0.1, -0.2]]) put(g, geoCyl(0.18, 0.04, 12), grey, x, 2.72, z, 0, true);
+  const legs: THREE.Object3D[] = [];
+  for (let k = 0; k < 6; k++) {
+    const p = new THREE.Group();
+    p.position.set((k % 3 - 1) * 0.7, 0.5, (k < 3 ? -0.5 : 0.5));
+    g.add(p);
+    for (let s = 0; s < 3; s++) put(p, geoRBox(0.16 - s * 0.03, 0.4, 0.16 - s * 0.03, 0.05), s % 2 ? grey : shell, 0, -0.2 - s * 0.4, 0, 0, true);
+    legs.push(p);
+  }
+  return { group: g, legs, bodyMat: shell };
+}
+
+function makePhantom(): StudsBody {
+  const g = new THREE.Group();
+  const hide = nfrSkin(0x3a4a7a, { field: "dragon", plane: "xz", scale: [2, 2], amt: 0.22 }), bone = sheen(0x1c2440), mem = nfrSkin(0x5a6aa0, { field: "dragon", plane: "xz", scale: [3, 3], amt: 0.4, glow: 0.15 }, { side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
+  const body = put(g, geoRBox(0.3, 0.14, 0.8, 0.06), hide, 0, 0.32, 0);
+  body.userData.skin = "body";
+  put(g, geoRBox(0.26, 0.12, 0.2, 0.05), hide, 0, 0.32, -0.46, 0, true);
+  for (const sx of [-1, 1]) put(g, geoRBox(0.06, 0.03, 0.02, 0.01), transTile(0x9aff6a, 0x4ac02a), sx * 0.08, 0.36, -0.565, 0, true);
+  put(g, geoRBox(0.1, 0.06, 0.4, 0.03), hide, 0, 0.33, 0.56, 0, true);
+  const legs = [-1, 1].map((sx) => {
+    const p = flapWing(g, sx * 0.14, 0.36, 0, sx);
+    wingSail(p, sx, 0.9, 0.42, bone, mem, `phantom-w${sx}`, 4);
+    return p;
+  });
+  return { group: g, legs, bodyMat: hide };
+}
+
+function makeShulker(): StudsBody {
+  const g = new THREE.Group();
+  const shellM = nfrSkin(0x8a5aa8, { field: "dragon", plane: "xz", scale: [2, 2], amt: 0.18 }), inner = sheen(0x5a3a72), face = sheen(0xf2e070);
+  const base = put(g, geoRBox(0.96, 0.46, 0.96, 0.08), shellM, 0, 0.23, 0);
+  base.userData.skin = "body";
+  const head = new THREE.Group();
+  head.position.set(0, 0.5, 0);
+  g.add(head);
+  g.userData.head = head;
+  put(head, geoRBox(0.5, 0.4, 0.5, 0.12), face, 0, 0.05, 0);
+  for (const sx of [-1, 1]) put(head, geoRBox(0.07, 0.07, 0.02, 0.01), skin(0x1a1a1a), sx * 0.1, 0.1, -0.255, 0, true);
+  const topShell = new THREE.Group();
+  topShell.position.set(0, 0.73, 0);
+  g.add(topShell);
+  put(topShell, geoRBox(0.96, 0.27, 0.96, 0.08), shellM, 0, 0.135, 0);
+  put(topShell, geoRBox(0.86, 0.03, 0.86, 0.01), inner, 0, -0.005, 0, 0, true);
+  for (const [x, z] of [[-0.24, -0.24], [0.24, -0.24], [-0.24, 0.24], [0.24, 0.24]]) put(topShell, geoCyl(0.09, 0.04, 12), shellM, x, 0.29, z, 0, true);
+  g.userData.topShell = topShell;
+  return { group: g, legs: [], bodyMat: shellM };
+}
+
+function makeVex(): StudsBody {
+  const g = new THREE.Group();
+  const ghostM = nfrSkin(0xb8c4d8, { field: "dragon", plane: "xy", scale: [2, 2], amt: 0.2, glow: 0.2 }, { transparent: true, opacity: 0.85 }), wingM = transTile(0xd8f0ff, 0x8ac0ff), steel = sheen(0xc8d0dc);
+  const body = put(g, geoLathe("vex-body", [[0, 0.95], [0.1, 0.9], [0.13, 0.75], [0.09, 0.55], [0.03, 0.4], [0, 0.38]], 10), ghostM, 0, 0, 0);
+  body.userData.skin = "body";
+  const head = new THREE.Group();
+  head.position.set(0, 0.95, 0);
+  g.add(head);
+  g.userData.head = head;
+  put(head, geoRBox(0.2, 0.2, 0.2, 0.07), ghostM, 0, 0.08, 0);
+  for (const sx of [-1, 1]) put(head, geoRBox(0.04, 0.03, 0.01, 0.005), transTile(0xff4030, 0xa01a10), sx * 0.05, 0.09, -0.102, 0, true);
+  put(g, geoRBox(0.02, 0.36, 0.05, 0.008), steel, 0.17, 0.66, -0.08, 0, true); // sword
+  put(g, geoRBox(0.1, 0.02, 0.03, 0.006), sheen(0xf5c518), 0.17, 0.5, -0.08, 0, true);
+  const legs = [-1, 1].map((sx) => {
+    const p = flapWing(g, sx * 0.06, 0.88, 0.08, sx);
+    const w = put(p, geoBall(0.22, 8), wingM, 0, 0.04, sx * 0.24, 0, true);
+    w.scale.set(0.8, 0.05, 1);
+    return p;
+  });
+  for (const c of g.children) c.position.y += -0.1; // keep the v3 hover height
+  return { group: g, legs, bodyMat: ghostM };
+}
+
+function makeWither(): StudsBody {
+  const g = new THREE.Group();
+  const bone = nfrSkin(0x2a2a2e, { field: "demoule", plane: "xy", scale: [2, 2], amt: 0.2, crack: 0.5 }), dark = sheen(0x141416), eye = transTile(0xe8f4ff, 0x8ac0ff);
+  const spine = put(g, geoRBox(0.14, 1.1, 0.14, 0.05), bone, 0, 2.2, 0.06);
+  spine.userData.skin = "body";
+  for (let k = 0; k < 4; k++) put(g, geoRBox(0.7 - k * 0.08, 0.06, 0.24, 0.02), bone, 0, 2.62 - k * 0.16, 0.06, 0, true); // ribs
+  put(g, geoRBox(2.0, 0.22, 0.3, 0.08), bone, 0, 2.9, 0, 0, true); // shoulder beam
+  const skull = (p: THREE.Object3D, x: number, y: number, s: number) => {
+    put(p, geoRBox(0.5 * s, 0.5 * s, 0.5 * s, 0.1 * s), bone, x, y, 0);
+    for (const sx of [-1, 1]) put(p, geoRBox(0.1 * s, 0.08 * s, 0.02, 0.02 * s), eye, x + sx * 0.11 * s, y + 0.06 * s, -0.255 * s, 0, true);
+    put(p, geoRBox(0.3 * s, 0.05 * s, 0.02, 0.01), dark, x, y - 0.13 * s, -0.255 * s, 0, true);
+  };
+  const head = new THREE.Group();
+  head.position.set(0, 3.0, 0);
+  g.add(head);
+  g.userData.head = head;
+  skull(head, 0, 0.3, 1);
+  skull(g, -0.85, 3.25, 0.7);
+  skull(g, 0.85, 3.25, 0.7);
+  fireQuad(g, 0, 1.55, 0.06, 0.4, 0.6, 11); // soul-fire where the legs would be
+  for (const c of g.children) c.position.y += -1.5; // keep the v3 hover height
+  return { group: g, legs: [], bodyMat: bone };
+}
+
+function makeCrab(): StudsBody {
+  const g = new THREE.Group();
+  const shell = nfrSkin(0xd8502a, { field: "crab", plane: "xz", scale: [1.6, 1.6], amt: 0.35 }), claw = sheen(0xe8683a), dark = sheen(0x6a2410);
+  const body = put(g, geoRBox(0.62, 0.2, 0.42, 0.09), shell, 0, 0.26, 0);
+  body.userData.skin = "body";
+  put(g, geoDome(0.26, 14), shell, 0, 0.34, 0, 0, true).scale.set(1.15, 0.45, 0.8);
+  for (const sx of [-1, 1]) {
+    put(g, geoCyl(0.012, 0.12, 6), dark, sx * 0.08, 0.42, -0.16, 0, true);
+    toyEye(g, sx * 0.08, 0.49, -0.16, 0.028);
+    const c = new THREE.Group();
+    c.position.set(sx * 0.32, 0.28, -0.2);
+    g.add(c);
+    put(c, geoRBox(0.08, 0.08, 0.16, 0.03), claw, 0, 0, -0.06, 0, true);
+    put(c, geoRBox(0.16, 0.13, 0.16, 0.05), claw, sx * 0.04, 0.02, -0.18, 0, true);
+    put(c, geoRBox(0.04, 0.05, 0.12, 0.015), dark, sx * 0.08, 0.1, -0.28, 0, true);
+  }
+  const legs: THREE.Object3D[] = [];
+  for (const sx of [-1, 1]) for (const z of [-0.06, 0.1]) {
+    const p = new THREE.Group();
+    p.position.set(sx * 0.3, 0.24, z);
+    p.rotation.z = sx * 0.6;
+    g.add(p);
+    put(p, geoRBox(0.04, 0.24, 0.04, 0.012), dark, 0, -0.1, 0, 0, true);
+    legs.push(p);
+  }
+  return { group: g, legs, bodyMat: shell };
+}
+
+function makeSpider(): StudsBody {
+  const g = new THREE.Group();
+  const hairy = fur(0x2a2420), plate = sheen(0x3a302a), red = transTile(0xff3020, 0xa01a10);
+  const abdomen = put(g, geoRBox(0.42, 0.32, 0.46, 0.14), hairy, 0, 0.32, 0.16);
+  abdomen.userData.skin = "body";
+  put(g, geoRBox(0.3, 0.04, 0.3, 0.02), sheen(0x7a2418), 0, 0.49, 0.18, 0, true); // red hourglass plate
+  put(g, geoRBox(0.32, 0.2, 0.26, 0.08), plate, 0, 0.28, -0.14, 0, true);
+  const head = new THREE.Group();
+  head.position.set(0, 0.28, -0.28);
+  g.add(head);
+  g.userData.head = head;
+  put(head, geoRBox(0.24, 0.18, 0.16, 0.06), plate, 0, 0, -0.04);
+  for (const [x, y, r] of [[-0.06, 0.04, 0.03], [0.06, 0.04, 0.03], [-0.1, -0.01, 0.018], [0.1, -0.01, 0.018], [-0.03, 0.08, 0.016], [0.03, 0.08, 0.016]]) put(head, geoBall(r, 6), red, x, y, -0.12, 0, true);
+  for (const sx of [-1, 1]) put(head, geoCone(0.02, 0.08, 5), plate, sx * 0.04, -0.08, -0.12, Math.PI + 0.3, true);
+  const legs: THREE.Object3D[] = [];
+  for (const sx of [-1, 1]) for (let k = 0; k < 4; k++) {
+    const p = new THREE.Group();
+    p.position.set(sx * 0.14, 0.32, -0.24 + k * 0.1);
+    p.rotation.y = sx * (-0.5 + k * 0.33);
+    g.add(p);
+    const up = put(p, geoRBox(0.3, 0.035, 0.035, 0.012), hairy, sx * 0.14, 0.1, 0, 0, true);
+    up.rotation.z = sx * 0.6;
+    const lo = put(p, geoRBox(0.035, 0.36, 0.035, 0.012), plate, sx * 0.3, -0.07, 0, 0, true);
+    lo.rotation.z = -sx * 0.25;
+    legs.push(p);
+  }
+  return { group: g, legs, bodyMat: hairy };
+}
+
+/** v4 humanoids: same separated-arm figure frame (v3.1), with a new head sculpt and a
+ *  costume per kind; held weapons live in the right-arm pivot so they swing with it. */
+function humanoidV4(kind: string, built: StudsBody) {
+  const g = built.group;
+  const head = g.userData.head as THREE.Object3D;
+  const armR = g.children.find((c) => c.userData.arm === 1) ?? g;
+  const armL = g.children.find((c) => c.userData.arm === -1) ?? g;
+  const H = [0.042, -0.4, -0.07] as const;
+  for (const c of [...head.children]) head.remove(c);
+  const blk = skin(0x15141a), gold = sheen(0xf5c518), iron = sheen(0xb0b8c2), wood = sheen(0x7c522b);
+  const illagerHead = (col: number, brow: number) => {
+    const f = sheen(col);
+    put(head, geoRBox(0.25, 0.3, 0.25, 0.05), f, 0, 0.14, 0);
+    put(head, geoRBox(0.07, 0.13, 0.08, 0.025), f, 0, 0.08, -0.155); // long nose
+    put(head, geoRBox(0.22, 0.035, 0.03, 0.01), skin(brow), 0, 0.2, -0.13, 0, true); // heavy brow
+    for (const sx of [-0.065, 0.065]) {
+      put(head, geoRBox(0.05, 0.028, 0.012, 0.005), skin(0xf4f1ea), sx, 0.165, -0.131, 0, true);
+      put(head, geoRBox(0.02, 0.026, 0.012, 0.004), skin(0x1e5a2a), sx, 0.165, -0.137, 0, true);
+    }
+  };
+  if (kind === "skelly" || kind === "stray") {
+    const boneC = kind === "stray" ? 0xdbeef6 : 0xe4e0d4;
+    const bone = nfrSkin(boneC, { field: "demoule", plane: "xy", scale: [3, 3], amt: 0.12, crack: 0.3 });
+    put(head, geoRBox(0.26, 0.24, 0.26, 0.07), bone, 0, 0.16, 0); // cranium
+    put(head, geoRBox(0.2, 0.08, 0.2, 0.03), bone, 0, 0.02, -0.02); // jaw
+    for (const sx of [-0.06, 0.06]) put(head, geoRBox(0.07, 0.07, 0.02, 0.02), blk, sx, 0.15, -0.13, 0, true); // sockets
+    for (const sx of [-0.06, 0.06]) put(head, geoBall(0.016, 6), transTile(0xff3b2f, 0x99140a), sx, 0.15, -0.14, 0, true);
+    put(head, geoRBox(0.03, 0.04, 0.02, 0.008), blk, 0, 0.08, -0.13, 0, true);
+    for (let k = 0; k < 5; k++) put(head, geoRBox(0.022, 0.03, 0.01, 0.004), skin(0xf4f1ea), -0.06 + k * 0.03, 0.045, -0.125, 0, true); // teeth
+    for (const ry of [0.6, 0.68, 0.76, 0.84]) put(g, geoRBox(0.4, 0.028, 0.27, 0.012), bone, 0, ry, 0, 0, true); // ribcage hoops
+    put(g, geoRBox(0.05, 0.36, 0.28, 0.015), bone, 0, 0.72, 0, 0, true); // sternum/spine
+    if (kind === "stray") put(g, geoRBox(0.42, 0.5, 0.03, 0.01), sheen(0x5a7a8a), 0, 0.68, 0.14, 0, true); // tattered cloak
+    put(armR, geoTube("bow-sk", [[0, -0.22, 0], [0.04, 0, -0.07], [0, 0.22, 0]], 0.014), wood, H[0], H[1], H[2], 0, true);
+    put(armR, geoRBox(0.004, 0.44, 0.004, 0.001), skin(0xf4f1ea), H[0], H[1], H[2], 0, true); // bowstring
+    put(g, geoCyl(0.05, 0.3, 8), sheen(0x5a3a22), -0.08, 0.78, 0.16, -0.25, true); // quiver
+  } else if (kind === "piglin") {
+    const pink = nfrSkin(0xf2a2c0, { field: "crab", plane: "xy", scale: [4, 4], amt: 0.12 });
+    put(head, geoRBox(0.3, 0.28, 0.28, 0.07), pink, 0, 0.13, 0);
+    put(head, geoRBox(0.15, 0.1, 0.08, 0.03), sheen(0xe07aa0), 0, 0.08, -0.17); // snout
+    for (const sx of [-1, 1]) {
+      put(head, geoCyl(0.016, 0.02, 8), skin(0x5a2030), sx * 0.035, 0.08, -0.212, Math.PI / 2, true);
+      toyEye(head, sx * 0.08, 0.18, -0.142, 0.022);
+      const ear = put(head, geoRBox(0.04, 0.14, 0.1, 0.02), pink, sx * 0.17, 0.12, 0.0, 0, true);
+      ear.rotation.z = sx * 0.5;
+      put(head, geoCone(0.016, 0.06, 5), skin(0xf7f4ee), sx * 0.06, 0.02, -0.19, 0, true); // tusks
+    }
+    put(head, geoLathe("piglin-helm", [[0, 0.1], [0.12, 0.09], [0.16, 0.02], [0.17, 0]], 14), gold, 0, 0.26, 0, 0, true);
+    put(g, geoRBox(0.4, 0.07, 0.26, 0.02), gold, 0, 0.56, 0, 0, true); // gold belt
+    put(g, geoRBox(0.34, 0.2, 0.26, 0.04), sheen(0x5a3a22), 0, 0.84, 0, 0, true); // leather jerkin yoke
+    put(armR, geoRBox(0.03, 0.42, 0.06, 0.01), gold, H[0], H[1] - 0.12, H[2] - 0.05, 0, true); // golden sword
+    put(armR, geoRBox(0.14, 0.03, 0.04, 0.01), gold, H[0], H[1] + 0.06, H[2], 0, true);
+  } else if (kind === "witch") {
+    const f = sheen(0xc8a07a);
+    put(head, geoRBox(0.25, 0.3, 0.25, 0.05), f, 0, 0.14, 0);
+    put(head, geoRBox(0.06, 0.14, 0.08, 0.025), f, 0, 0.06, -0.155); // hooked nose
+    put(head, geoBall(0.016, 6), sheen(0x52a842), 0.02, 0.02, -0.2, 0, true); // wart
+    for (const sx of [-0.065, 0.065]) put(head, geoRBox(0.04, 0.028, 0.012, 0.004), skin(0x5a2a8a), sx, 0.17, -0.131, 0, true);
+    put(head, geoLathe("witch-hat", [[0, 0.62], [0.03, 0.5], [0.09, 0.32], [0.15, 0.08], [0.32, 0.03], [0.32, 0]], 18), sheen(0x2a1640), 0, 0.26, 0, 0, true);
+    put(head, geoTorus(0.155, 0.018, 16), sheen(0x3aaa4c), 0, 0.36, 0, Math.PI / 2, true);
+    put(head, geoRBox(0.05, 0.05, 0.01, 0.01), gold, 0, 0.36, -0.17, 0, true);
+    put(g, geoRBox(0.44, 0.34, 0.3, 0.06), sheen(0x3a2054), 0, 0.42, 0, 0, true); // robe skirt
+    put(armR, geoLathe("potion", [[0, 0], [0.05, 0.01], [0.06, 0.06], [0.02, 0.11], [0.02, 0.14], [0, 0.14]], 10), transTile(0xba6eff, 0x732ab5), H[0], H[1] - 0.04, H[2] - 0.02, 0, true);
+    put(g, geoRBox(0.1, 0.1, 0.06, 0.02), sheen(0x5a3a22), -0.12, 0.54, -0.15, 0, true); // herb pouch
+  } else if (kind === "pillager") {
+    illagerHead(0x90969e, 0x23232a);
+    put(head, geoRBox(0.27, 0.05, 0.27, 0.02), skin(0x23232a), 0, 0.29, 0, 0, true);
+    put(g, geoRBox(0.34, 0.12, 0.26, 0.04), sheen(0x2c3038), 0, 0.89, 0, 0, true); // iron gorget
+    put(g, geoRBox(0.04, 0.5, 0.26, 0.01), sheen(0x231a12), 0, 0.72, 0, 0.8, true); // bandolier
+    put(g, geoRBox(0.4, 0.065, 0.26, 0.02), skin(0x231a12), 0, 0.56, 0, 0, true);
+    put(armR, geoRBox(0.05, 0.05, 0.34, 0.012), wood, H[0], H[1], H[2] - 0.1, 0, true); // crossbow stock
+    put(armR, geoTube("xbow", [[-0.18, 0, -0.22], [0, 0.02, -0.28], [0.18, 0, -0.22]], 0.014), sheen(0x2c3038), H[0], H[1], H[2], 0, true);
+    put(armR, geoRBox(0.36, 0.006, 0.006, 0.002), skin(0xd8c8a8), H[0], H[1], H[2] - 0.2, 0, true);
+  } else if (kind === "vindicator") {
+    illagerHead(0x90969e, 0x1e2620);
+    put(g, geoRBox(0.36, 0.38, 0.27, 0.04), sheen(0x2e3840), 0, 0.72, 0, 0, true); // dark vest
+    put(g, geoRBox(0.08, 0.38, 0.28, 0.02), iron, 0, 0.72, 0, 0, true); // silver trim
+    put(armR, geoCyl(0.02, 0.5, 8), wood, H[0], H[1] + 0.05, H[2], 0, true);
+    put(armR, geoPlate("axe-head", [[0, 0], [0.16, -0.05], [0.18, 0.1], [0, 0.07]], 0.03), iron, H[0], H[1] + 0.2, H[2] - 0.02, -Math.PI / 2, true);
+  } else if (kind === "evoker") {
+    illagerHead(0x90969e, 0x14101c);
+    put(g, geoRBox(0.44, 0.44, 0.3, 0.06), sheen(0x1e1a2b), 0, 0.42, 0, 0, true); // robe
+    put(g, geoRBox(0.34, 0.12, 0.27, 0.04), gold, 0, 0.89, 0, 0, true); // gold mantle
+    put(g, geoRBox(0.08, 0.6, 0.31, 0.02), gold, 0, 0.5, 0, 0, true); // gold stole
+    const fang = transTile(0x36e868, 0x148834);
+    put(armR, geoOcta(0.06, 1.5), fang, H[0], H[1] - 0.02, H[2] - 0.04, 0, true); // totem gem
+    put(armL, geoRBox(0.1, 0.14, 0.06, 0.02), gold, -H[0], H[1], H[2], 0, true);
+    put(armL, geoRBox(0.05, 0.05, 0.065, 0.01), fang, -H[0], H[1] + 0.02, H[2], 0, true);
+  }
+  v3Finish(built);
+}
+
 const V3_BUILDERS: Record<string, () => StudsBody> = {
   villager: makeVillager, golem: makeGolem, pig: makePig, cow: makeCow, sheep: makeSheep, chicken: makeChicken,
   ravager: makeRavager, guardian: makeGuardian, blaze: makeBlaze,
+  // v4 full redesigns
+  horse: makeHorse, goat: makeGoat, wolf: makeWolf, fox: makeFox, cat: makeCat, enderman: makeEnderman, slime: makeSlime,
+  bee: makeBee, squid: makeSquid, bat: makeBat, axolotl: makeAxolotl, parrot: makeParrot, frog: makeFrog, wisp: makeWisp,
+  ghast: makeGhast, phantom: makePhantom, shulker: makeShulker, vex: makeVex, wither: makeWither, crab: makeCrab, spider: makeSpider,
 };
+const HUMANOID_V4 = new Set(["skelly", "stray", "piglin", "witch", "pillager", "vindicator", "evoker"]);
 export function buildStuds(kind: string, scale: number): StudsBody {
   const v3 = V3_BUILDERS[kind];
   const figKind = v3
@@ -19584,66 +20165,10 @@ export function buildStuds(kind: string, scale: number): StudsBody {
   const darkIron = skin(0x424750);
   const woodM = skin(0x7c522b);
 
-  if (kind === "skelly" || kind === "stray") {
-    // Squelek (mob-redesign §3.3): a beam-and-axle archer — Teks hub ring around
-    // the head, rib liftarms on the torso, red trans eyes, a beam crossbow with a
-    // rubber band. Stray = frosted trans variant.
-    const frame = kind === "stray" ? transTile(0xc8e8ff, 0x6fb6ff) : skin(0xa8adb3);
-    const holeM = skin(0x3a3e44);
-    const eyeM = transTile(0xff3b2f, 0x99140a);
-    put(head, geoCyl(0.18, 0.05, 16), frame, 0, 1.17 + hy, 0, 0, true); // hub ring
-    put(head, geoCyl(0.032, 0.03, 10), eyeM, -0.056, 1.155 + hy, -0.17, Math.PI / 2, true);
-    put(head, geoCyl(0.032, 0.03, 10), eyeM, 0.056, 1.155 + hy, -0.17, Math.PI / 2, true);
-    for (const ry of [0.62, 0.72, 0.82]) put(g, geoBox(0.4, 0.035, 0.26), frame, 0, ry, 0, 0, true); // rib liftarms
-    put(g, geoBox(0.06, 0.06, 0.4), frame, 0.28, 0.52, -0.2, 0, true); // crossbow stock beam
-    for (const bz of [-0.34, -0.22, -0.1]) put(g, geoCyl(0.02, 0.065, 8), holeM, 0.28, 0.52, bz, 0, true);
-    put(g, geoBox(0.34, 0.04, 0.05), frame, 0.28, 0.54, -0.38, 0, true); // limbs
-    put(g, geoBox(0.32, 0.012, 0.012), skin(0x6b3e22), 0.28, 0.56, -0.34, 0, true); // rubber band
-    put(g, geoCyl(0.05, 0.26, 8), holeM, -0.09, 0.78, 0.15, -0.2, true); // bolt quiver
-  } else if (kind === "piglin") {
-    // Piglin: Golden Horned Helmet + Flopped Ears + Ivory Tusks + Gold Belt + Held Golden STUDS Sword!
-    put(head, geoCyl(0.175, 0.12, 12), goldM, 0, 1.28 + hy, 0, 0, true);
-    put(head, geoBox(0.04, 0.10, 0.04), skin(0xf7f4ee), -0.18, 1.32 + hy, -0.02, 0, true);
-    put(head, geoBox(0.04, 0.10, 0.04), skin(0xf7f4ee), 0.18, 1.32 + hy, -0.02, 0, true);
-    put(head, geoBox(0.06, 0.16, 0.10), skin(0xf2a2c0), -0.19, 1.12 + hy, 0, 0.1, true);
-    put(head, geoBox(0.06, 0.16, 0.10), skin(0xf2a2c0), 0.19, 1.12 + hy, 0, -0.1, true);
-    put(head, geoBox(0.026, 0.06, 0.026), skin(0xf7f4ee), -0.055, 1.07 + hy, -0.21, 0, true);
-    put(head, geoBox(0.026, 0.06, 0.026), skin(0xf7f4ee), 0.055, 1.07 + hy, -0.21, 0, true);
-    put(g, geoBox(0.42, 0.07, 0.245), goldM, 0, 0.56, 0, 0, true);
-    put(g, geoBox(0.06, 0.34, 0.025), goldM, 0.28, 0.58, -0.18, 0.45, true);
-    put(g, geoBox(0.13, 0.035, 0.04), skin(0xc99812), 0.28, 0.45, -0.12, 0, true);
-  } else if (kind === "witch") {
-    // Pointed hat: brim + two stacked drums taper to the tip + nose wart + glowing potion bottle in hand
-    put(head, geoBox(0.52, 0.05, 0.52), skin(0x1a1226), 0, 1.28 + hy, 0, 0, true);
-    put(head, geoCyl(0.15, 0.2, 10), skin(0x241536), 0, 1.4 + hy, 0, 0, true);
-    put(head, geoCyl(0.08, 0.18, 8), skin(0x241536), 0, 1.58 + hy, 0, 0, true);
-    put(head, geoBox(0.3, 0.06, 0.3), skin(0x3aaa4c), 0, 1.33 + hy, 0, 0, true);
-    put(head, geoBox(0.08, 0.07, 0.03), goldM, 0, 1.33 + hy, -0.16, 0, true);
-    put(head, geoCyl(0.022, 0.022, 8), skin(0x52a842), 0.02, 1.09 + hy, -0.26, Math.PI / 2, true);
-    const potM = transTile(0xba6eff, 0x732ab5);
-    put(g, geoCyl(0.06, 0.12, 8), potM, 0.28, 0.48, -0.16, 0, true);
-  } else if (kind === "pillager") {
-    // Pillager: Dark Iron Shoulder Pauldrons + Silver Belt Buckle + Held 3D STUDS Crossbow
-    put(g, geoBox(0.48, 0.09, 0.26), darkIron, 0, 0.89, 0, 0, true);
-    put(g, geoBox(0.42, 0.065, 0.245), skin(0x231a12), 0, 0.56, 0, 0, true);
-    put(g, geoBox(0.07, 0.07, 0.03), ironM, 0, 0.56, -0.13, 0, true);
-    put(g, geoBox(0.05, 0.06, 0.28), woodM, 0.28, 0.50, -0.18, 0, true);
-    put(g, geoBox(0.26, 0.035, 0.04), darkIron, 0.28, 0.52, -0.30, 0, true);
-  } else if (kind === "vindicator") {
-    // Vindicator: Silver-Trimmed Vest + Held 3D STUDS Iron Battle-Axe
-    put(g, geoBox(0.10, 0.36, 0.245), ironM, 0, 0.72, 0, 0, true);
-    put(g, geoCyl(0.02, 0.42, 8), woodM, 0.28, 0.55, -0.16, 0.38, true);
-    put(g, geoBox(0.13, 0.14, 0.035), ironM, 0.28, 0.72, -0.25, 0, true);
-  } else if (kind === "evoker") {
-    // Evoker: Gold-Trimmed Robe + Golden Mantle + Held Glowing Totem of Undying
-    put(g, geoBox(0.46, 0.10, 0.26), goldM, 0, 0.89, 0, 0, true);
-    put(g, geoBox(0.12, 0.40, 0.245), goldM, 0, 0.72, 0, 0, true);
-    put(g, geoBox(0.10, 0.16, 0.08), goldM, 0.28, 0.52, -0.16, 0, true);
-    put(g, geoBox(0.18, 0.05, 0.06), transTile(0x36e868, 0x148834), 0.28, 0.54, -0.17, 0, true);
-  }
+  if (HUMANOID_V4.has(kind)) humanoidV4(kind, built);
 
   alignQuadruped(built, kind);
-  if (!v3 && kind !== "creeper" && kind !== "dragon" && !(kind === "walker" || kind === "husk" || kind === "drowned")) v3Finish(built);
+  if (!v3 && !HUMANOID_V4.has(kind) && kind !== "creeper" && kind !== "dragon" && !(kind === "walker" || kind === "husk" || kind === "drowned")) v3Finish(built);
   v3Optimize(built.group, "kind:" + kind);
   // MINECRAFT proportions (Philippe, 2026-10-28: "tous les mobs sont petits
   // comparer a minecraft, corrige ca, compare tout a minecraft"). Every model
