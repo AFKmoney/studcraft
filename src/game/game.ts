@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { ATLAS_COLS, ATLAS_ROWS, BLOCKS, CREATIVE_BAR, ID, TEKS, def, faceTile, stairsVariant, type BlockDef } from "./blocks";
 import { TechWorld, ORIENTS, composeO, worldCells, rot, SENSOR_RANGES, SENSOR_TARGETS, nextSensorCfg, sensorCfgLabel, colorFamilyOf, bbox as techBbox, spec as techSpec, type Part as TechPart, type Plan as TechPlan, type Target as TechTarget } from "./teks";
 import { buildTeksGeometry, buildTeksRodGeometries } from "./teksGeo";
+import { analyzeComponent } from "./gravity";
 import { fuelFromMelt, jointAffine, jointChain, jointForce, parkPoses, partWorldPoint, refuel as vehRefuel, stepVehicle as stepVeh, vehicleFromAssembly, type Vehicle, type VPart } from "./vehicle";
 import { FUEL, type Channel } from "./p5bProto";
 import { builtinModels, decodeModel, encodeModel, loadCatalogue, modelFromParts, removeModel, storeCatalogue, upsertModel, type VehicleModel } from "./catalogue";
@@ -4801,6 +4802,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     world.set(x, y, z, ID.Air);
     markDirtyAt(x, z);
     netSendEdit(x, y, z, ID.Air);
+    scheduleGravity(x, y, z); // §12: whatever this held up may now fall
     if (block.sign) signs.delete(x + "," + y + "," + z);
     if (id === ID.ShulkerBox) {
       // The box keeps its contents: move the bin into the carry queue;
@@ -5118,16 +5120,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     return g;
   }
 
-  function spawnFaller(x: number, y: number, z: number) {
-    const id = world.get(x, y, z);
-    if (!def(id).fall || fallers.length >= FALL_CAP) return;
-    if (def(world.get(x, y - 1, z)).solid) return; // still supported by voxel
-    // BUG-3: also supported if a brick occupies the cell below
-    const near: Brick[] = [];
-    bricksNearCell(x, y - 1, z, near);
-    for (const b of near) {
-      if (b.sy === y - 1) return; // brick under it
-    }
+  function makeFaller(x: number, y: number, z: number, id: number) {
     world.set(x, y, z, ID.Air);
     markDirtyAt(x, z);
     const mesh = new THREE.Mesh(fallerGeo(id), opaqueLam);
@@ -5138,6 +5131,19 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     scene.add(mesh);
     fallers.push({ id, x: x + 0.5, z: z + 0.5, y, vy: 0, mesh });
+  }
+
+  function spawnFaller(x: number, y: number, z: number) {
+    const id = world.get(x, y, z);
+    if (!def(id).fall || fallers.length >= FALL_CAP) return;
+    if (def(world.get(x, y - 1, z)).solid) return; // still supported by voxel
+    // BUG-3: also supported if a brick occupies the cell below
+    const near: Brick[] = [];
+    bricksNearCell(x, y - 1, z, near);
+    for (const b of near) {
+      if (b.sy === y - 1) return; // brick under it
+    }
+    makeFaller(x, y, z, id);
   }
 
   function updateFallers(dt: number) {
@@ -5180,6 +5186,68 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         continue;
       }
       f.mesh.position.set(f.x, f.y + 0.5, f.z);
+    }
+  }
+
+  // ================= §12: UNIVERSAL COMPONENT GRAVITY =================
+  // Philippe's law: gravity for ALL blocks. The pure analysis lives in
+  // gravity.ts (unit-tested); this is the live wiring — edits schedule
+  // a debounced local scan, a falling component converts to ordinary
+  // fallers in bottom-up waves throttled by FALL_CAP (a big build
+  // crumbles over a few frames instead of spawning 500 entities at
+  // once). Trees keep tryTopple: scans run 0.3 s after the edit, on
+  // the post-topple state.
+  const gravOpts = {
+    solid: (id: number) => def(id).solid,
+    anchor: (id: number) => id === ID.Bedrock,
+    fixed: (id: number) => def(id).work !== undefined || id === ID.Chest || id === ID.ShulkerBox || !!def(id).sign,
+    fall: (id: number) => !!def(id).fall,
+  };
+  const gravPending = new Map<string, { x: number; y: number; z: number; at: number }>();
+  const gravQueued = new Set<string>();
+  const gravQueue: { x: number; y: number; z: number; id: number }[] = [];
+  let gravClock = 0;
+  function scheduleGravity(x: number, y: number, z: number) {
+    gravPending.set(x + "," + y + "," + z, { x, y, z, at: gravClock });
+  }
+  function runGravityScan(cx: number, cy: number, cz: number) {
+    const starts: [number, number, number][] = [[cx, cy, cz]];
+    for (const [ox, oy, oz] of NEIGHBORS6) starts.push([cx + ox, cy + oy, cz + oz]);
+    // One shared classified set per scan: the first start that floods
+    // the terrain mass marks it, the other starts skip it — a scan
+    // costs ONE mass flood (<= 2500 cells), not seven.
+    const scanSeen = new Set<string>();
+    let added = false;
+    for (const [sx, sy, sz] of starts) {
+      const sk = sx + "," + sy + "," + sz;
+      if (gravQueued.has(sk) || scanSeen.has(sk)) continue;
+      const v = analyzeComponent((x, y, z) => world.get(x, y, z), sx, sy, sz, { ...gravOpts, maxCells: 2500, seen: scanSeen });
+      if (v.kind !== "falls") continue;
+      if (v.cells.some((c) => gravQueued.has(c.x + "," + c.y + "," + c.z))) continue;
+      for (const c of v.cells) {
+        gravQueued.add(c.x + "," + c.y + "," + c.z);
+        gravQueue.push(c);
+      }
+      added = true;
+    }
+    if (added) gravQueue.sort((a, b) => a.y - b.y);
+  }
+  function tickGravity(dt: number) {
+    gravClock += dt;
+    let scans = 0;
+    for (const [k, s] of [...gravPending.entries()]) {
+      if (scans >= 2) break; // perf law: at most 2 analyses per frame
+      if (gravClock - s.at < 0.3) continue;
+      gravPending.delete(k);
+      scans++;
+      runGravityScan(s.x, s.y, s.z);
+    }
+    let budget = 10;
+    while (budget-- > 0 && gravQueue.length && fallers.length < FALL_CAP) {
+      const c = gravQueue.shift()!;
+      gravQueued.delete(c.x + "," + c.y + "," + c.z);
+      if (world.get(c.x, c.y, c.z) !== c.id) continue; // edited since the scan
+      makeFaller(c.x, c.y, c.z, c.id);
     }
   }
 
@@ -6059,6 +6127,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           world.set(bx, by, bz, ID.Air);
           markDirtyAt(bx, bz);
           netSendEdit(bx, by, bz, ID.Air);
+          scheduleGravity(bx, by, bz); // §12: the bucket can dig out a support
           b.load.set(id, (b.load.get(id) ?? 0) + 1);
           dug++;
         }
@@ -8013,6 +8082,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     CH.setRemoved(px, py, pz, placeId, 0); // v4.17: a freshly placed block is whole
     markDirtyAt(px, pz);
     netSendEdit(px, py, pz, placeId);
+    scheduleGravity(px, py, pz); // §12: a block placed in the air falls too
     if (heldDef.sign) {
       hud.signEdit = { x: px, y: py, z: pz, text: "" };
       emit();
@@ -10750,6 +10820,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
     }
     collapseAround(x, y, z, r + 5, budget);
+    scheduleGravity(x, y, z); // §12: what the blast disconnected falls as blocks, not rubble
     const c0x = Math.floor((x - r) / CS);
     const c1x = Math.floor((x + r) / CS);
     const c0z = Math.floor((z - r) / CS);
@@ -13680,6 +13751,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       tickHoppers(dt);
       tickSwitches(dt);
       tickSensors(dt);
+      tickGravity(dt);
       tickFire(dt);
       tickFurnaces(dt);
       lightAcc += dt;
@@ -14479,6 +14551,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       // pick these up exactly like player-placed blocks).
       world.set(Math.floor(x), Math.floor(y), Math.floor(z), id);
       markDirtyAt(Math.floor(x), Math.floor(z));
+      scheduleGravity(Math.floor(x), Math.floor(y), Math.floor(z)); // §12 rig parity with real edits
       return true;
     },
     getStations: () => {
