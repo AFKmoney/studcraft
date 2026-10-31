@@ -2,10 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { BLOCKS, ID, def } from "./blocks.ts";
+import { SPECIES, ZONES, ZONE_IDS } from "./biomes.ts";
 import { DROP_MOB_KINDS, MOB_BASE_DROPS, MOB_BONUS_DROPS, mobBaseDrops, rollBonusDrops } from "./mobDrops.ts";
 
 const ID_NAME = new Map(Object.entries(ID).map(([k, v]) => [v as number, k]));
-const allDropIds = () => new Set([...Object.values(MOB_BASE_DROPS).flat(), ...MOB_BONUS_DROPS.map((b) => b.id)]);
+const allDropIds = () => new Set([...Object.values(MOB_BASE_DROPS).flat(), ...MOB_BONUS_DROPS.map((b) => b.id), ...SPECIES.flatMap((s) => s.drops), ...ZONE_IDS.flatMap((z) => ZONES[z].boss.drops)]);
 
 test("every mob kind has a non-empty base drop table", () => {
   for (const k of DROP_MOB_KINDS) {

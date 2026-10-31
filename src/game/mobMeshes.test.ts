@@ -29,3 +29,15 @@ test("every mob kind still builds a non-empty mesh", () => {
 test("redesigned kinds bypass the Minecraft-era batch templates", () => {
   for (const k of ["creeper", "skelly", "stray", "walker", "husk", "drowned"]) assert.ok(MOB_REDESIGN_UNBATCHED.has(k));
 });
+
+test("every original species builds a mesh with legs and a head", async () => {
+  const { buildSpecies } = await import("./game.ts");
+  const { SPECIES } = await import("./biomes.ts");
+  for (const spec of SPECIES) {
+    const body = buildSpecies(spec);
+    let meshes = 0;
+    body.group.traverse((o) => { if ((o as { isMesh?: boolean }).isMesh) meshes++; });
+    assert.ok(meshes >= 8, `${spec.id}: ${meshes} meshes`);
+    assert.ok(body.legs.length >= 2 && body.group.userData.head, spec.id);
+  }
+});
