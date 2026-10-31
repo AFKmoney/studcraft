@@ -40,8 +40,8 @@ La bibliothèque de pièces converge vers le catalogue STUDS réel complet (Syst
 
 **Prochaine étape :** ajouter le kind dans sites.ts + siteBricks, puis câbler le placement dans world.ts.
 
-### Gravité universelle — scoping (EN COURS — Grok)
-**Claim :** `EN COURS (Grok)` — design only, pas de code avant validation.
+### Gravité universelle — scoping (design Grok, implémentation Muse)
+**Claim :** design Grok (ci-dessous) ; **implémentation reprise par Muse (2026-10-30 ~21h, ordre de travail confirmé de Philippe : §12 est l'étape 4 de SA file)** — même patron que P5c. Choix d'implémentation consignés : l'analyse de composante est une fonction PURE testée (`gravity.ts` : BFS borné 6 000 cellules, débordement = masse terrain = ancrée) ; un composant DÉTACHÉ tombe si ses points d'appui (cellules dont le dessous est solide hors composant) sont < 2 ; les blocs à état (stations, coffres — `def.work`) sont fixes (jamais tombants, comptent comme sol) ; les blocs `fall` (sable…) gardent leur spawner dédié et sont exclus des composantes ; les arbres gardent `tryTopple` (le scan général, différé de 0,3 s après l'édition, évalue l'état post-topple). Conversion en chute : fallers existants, par vagues (bas → haut, plafond FALL_CAP), les blocs qui ne peuvent pas se poser suivent la sémantique faller existante. Déclencheurs v1 : casse, pose, explosion, setBlock QA.
 
 **Design du scan de support par composantes :**
 - Le terrain naturel (généré) forme **un seul composant ancré au bedrock**. Il ne s'effondre jamais.
