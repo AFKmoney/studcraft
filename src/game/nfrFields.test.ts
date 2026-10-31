@@ -21,7 +21,7 @@ test("NFR fields: shapes, int8 range, compact size, fitted quality", () => {
     assert.equal(f.layers[2].q!.length, H * f.ch);
     for (const l of f.layers.slice(1)) assert.ok(l.q!.every((v) => Number.isInteger(v) && v >= -127 && v <= 127));
     const r = NFR_REPORT[name as keyof typeof NFR_REPORT];
-    assert.ok(r.bytes_int8 < 2500, `${name} ${r.bytes_int8} B`);
+    assert.ok(r.bytes_int8 < r.pixels_bytes, `${name} ${r.bytes_int8} B`);
     assert.ok(r.psnr_int8 > 15, `${name} PSNR ${r.psnr_int8}`);
   }
 });

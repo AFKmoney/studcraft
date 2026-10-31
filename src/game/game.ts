@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { NFR_FIELDS, type NfrLayer } from "./nfrFields";
 import { ATLAS_COLS, ATLAS_ROWS, BLOCKS, CREATIVE_BAR, ID, TEKS, def, faceTile, stairsVariant, type BlockDef } from "./blocks";
 import { TechWorld, ORIENTS, composeO, worldCells, rot, SENSOR_RANGES, SENSOR_TARGETS, nextSensorCfg, sensorCfgLabel, colorFamilyOf, bbox as techBbox, spec as techSpec, type Part as TechPart, type Plan as TechPlan, type Target as TechTarget } from "./teks";
@@ -16985,8 +16986,8 @@ const BOSS_RULE_GLSL = {
   iris: `vec3 bossC = 0.5 + 0.5 * cos(6.2831 * (vSirenPos.x + vSirenPos.y * 0.5 + uBossT * 0.2) + vec3(0.0, 2.0, 4.0));
   outgoingLight = mix(outgoingLight, bossC * (0.4 + 0.6 * bossGate), 0.35 * uSirenAmt);`,
 } as const;
-function bossSkin(color: number, rule: BossRule) {
-  const mat = skin(color);
+function bossSkin(color: number, rule: BossRule, nfr?: NfrMap) {
+  const mat = nfr ? nfrSkin(color, nfr) : skin(color);
   if (!plasticOn || !(mat as THREE.MeshStandardMaterial).isMeshStandardMaterial) return mat;
   const base = mat.onBeforeCompile;
   mat.onBeforeCompile = (shader, renderer) => {
@@ -17011,7 +17012,8 @@ function bossSkin(color: number, rule: BossRule) {
 #include <opaque_fragment>`,
       );
   };
-  mat.customProgramCacheKey = () => "siren-creature-v5-boss-" + rule;
+  const nfrKey = mat.customProgramCacheKey?.call(mat) ?? "";
+  mat.customProgramCacheKey = () => "siren-creature-v5-boss-" + rule + (nfr ? "-" + nfrKey : "");
   return mat;
 }
 
@@ -17025,7 +17027,8 @@ export function applyBiomeLook(group: THREE.Object3D, tint: number, amount: numb
     const mat = mesh.material as THREE.MeshStandardMaterial | undefined;
     if (!mesh.isMesh || !mat || Array.isArray(mat) || !mat.color || mat.transparent || (mat.emissiveIntensity ?? 0) > 0.05) return;
     c.copy(mat.color).lerp(t, amount);
-    mesh.material = rule ? bossSkin(c.getHex(), rule) : skin(c.getHex());
+    const nfr = mat.userData.nfr as { map: NfrMap; extra: Parameters<typeof skin>[1] } | undefined;
+    mesh.material = rule ? bossSkin(c.getHex(), rule, nfr?.map) : nfr ? nfrSkin(c.getHex(), nfr.map, nfr.extra) : skin(c.getHex());
   });
 }
 
@@ -17215,49 +17218,54 @@ export function buildSpecies(spec: SpeciesSpec): StudsBody {
       put(arm, geoCone(0.02, 0.05, 6), plain, 0, -0.1, -0.08, -2.2, true);
     }
   } else if (spec.arch === "drake") {
-    // red/white upright dragon: dark grey chassis, red chest armour, white plates,
-    // spread truss wings with white panels, curled tail, digitigrade legs
-    body = put(g, geoRBox(0.26, 0.34, 0.22, 0.07), main, 0, 0.7, 0);
-    put(g, geoRBox(0.18, 0.26, 0.06, 0.03), acc, 0, 0.67, -0.115, 0, true); // white chest plate
-    put(g, geoRBox(0.22, 0.22, 0.2, 0.05), dark, 0, 0.5, 0.02, 0, true); // grey hip chassis
-    for (const sx of [-1, 1]) put(g, geoBall(0.06), joint, sx * 0.15, 0.84, -0.02, 0, true); // shoulders
-    put(g, geoRBox(0.11, 0.14, 0.1, 0.03), dark, 0, 0.9, -0.06, -0.3);
-    put(g, geoBall(0.05), joint, 0, 0.96, -0.1, 0, true);
-    head.position.set(0, 1.04, -0.12);
-    put(head, geoRBox(0.19, 0.13, 0.22, 0.04), plain, 0, 0.0, -0.06);
-    put(head, geoSlope(0.17, 0.07, 0.14), plain, 0, 0.07, -0.13, 0, true);
-    put(head, geoRBox(0.15, 0.04, 0.2, 0.015), acc, 0, -0.08, -0.09, 0.22, true); // open lower jaw
+    // v3 (Philippe: less minifig, closer to refs/dragon.jpg): a small Grande Presse — low
+    // horizontal studded hull, wedge head thrust forward with an open toothed jaw and glowing
+    // eyes, accent crystal spikes down the spine, a long tapering tail, and spread Teks truss
+    // wings with translucent panels carrying the NFR "dragon" field in the species colour.
+    body = put(g, geoRBox(0.3, 0.26, 0.5, 0.08), main, 0, 0.5, 0);
+    put(g, geoRBox(0.22, 0.12, 0.3, 0.04), acc, 0, 0.38, -0.04, 0, true); // belly plate
+    domeStuds(g, plain, 0, 0.63, 0, 0.12, 0.01, 0.2, [[0, 1], [0.8, 4]], 0.03);
+    for (let k = 0; k < 5; k++) put(g, geoOcta(0.035 - k * 0.003, 2.4), acc, 0, 0.68 - k * 0.015, -0.16 + k * 0.1, 0.5, true);
+    put(g, geoRBox(0.14, 0.12, 0.16, 0.04), dark, 0, 0.6, -0.28, -0.5); // neck
+    head.position.set(0, 0.66, -0.4);
+    put(head, geoRBox(0.24, 0.13, 0.24, 0.04), plain, 0, 0.0, -0.08);
+    put(head, geoSlope(0.22, 0.07, 0.12), plain, 0, 0.09, -0.12, 0, true);
+    put(head, geoRBox(0.2, 0.04, 0.2, 0.015), acc, 0, -0.08, -0.11, 0.3, true); // open jaw
+    for (let k = 0; k < 4; k++) put(head, geoCone(0.012, 0.04, 5), skin(0xf4f1ea), -0.06 + k * 0.04, -0.05, -0.19, Math.PI, true);
     for (const sx of [-1, 1]) {
-      const h = put(head, geoCone(0.025, 0.14, 8), acc, sx * 0.07, 0.1, 0.06, -0.9, true); // horns
-      h.rotation.z = -sx * 0.25;
-      put(head, geoRBox(0.025, 0.03, 0.06, 0.008), acc, sx * 0.06, -0.06, -0.17, 0, true); // fangs plate
+      const h = put(head, geoOcta(0.025, 3), acc, sx * 0.08, 0.13, 0.03, -0.8, true);
+      h.rotation.z = -sx * 0.35;
     }
-    eyes(0.06, 0.02, -0.18, 0.026);
+    eyes(0.065, 0.03, -0.205, 0.024);
     for (const sx of [-1, 1]) {
       const wing = new THREE.Group();
-      wing.position.set(sx * 0.16, 0.86, 0.06);
-      wing.rotation.z = sx * -0.55;
-      wing.rotation.y = sx * 0.25;
+      wing.position.set(sx * 0.15, 0.62, -0.08);
+      wing.rotation.z = sx * 0.35;
       g.add(wing);
-      put(wing, geoBall(0.05), joint, 0, 0, 0, 0, true);
-      const spar = put(wing, geoRBox(0.46, 0.06, 0.06, 0.02), plain, sx * 0.24, 0.0, 0, 0);
-      spar.rotation.z = sx * 0.25;
-      put(wing, geoBall(0.04), joint, sx * 0.46, 0.06, 0, 0, true);
-      const tip = put(wing, geoRBox(0.24, 0.05, 0.05, 0.018), plain, sx * 0.58, 0.14, 0.0, 0);
-      tip.rotation.z = sx * 0.6;
-      const tri = (k: string, pts: [number, number][], m: THREE.Material, y: number) => put(wing, geoPlate(k, pts, 0.03), m, 0, y, 0, 0, true);
-      tri(`dw1${sx}`, [[sx * 0.05, 0.02], [sx * 0.46, 0.0], [sx * 0.2, 0.3]], acc, 0.0); // white membrane panels
-      tri(`dw2${sx}`, [[sx * 0.46, 0.0], [sx * 0.68, 0.0], [sx * 0.4, 0.28]], plain, 0.005);
+      put(wing, geoBall(0.045, 10), joint, 0, 0, 0, 0, true);
+      const bar = (a: [number, number], b: [number, number]) => {
+        const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        const m = put(wing, geoRBox(len, 0.035, 0.035, 0.01), dark, (a[0] + b[0]) / 2, 0, (a[1] + b[1]) / 2, 0, true);
+        m.rotation.y = -Math.atan2(b[1] - a[1], b[0] - a[0]);
+      };
+      const E: [number, number] = [sx * 0.42, -0.06], T: [number, number] = [sx * 0.82, -0.2], B1: [number, number] = [sx * 0.66, 0.16], B2: [number, number] = [sx * 0.32, 0.22];
+      bar([0, 0], E); bar(E, T); bar(T, B1); bar(B1, B2); bar(B2, [0, 0]); bar(E, B1);
+      const pan = nfrSkin(spec.color, { field: "dragon", plane: "xz", scale: [2.4, 2.4], amt: 0.35, glow: 0.25 }, { transparent: true, opacity: 0.78, depthWrite: false, side: THREE.DoubleSide });
+      put(wing, geoPlate(`drake3-a${sx}`, [E, T, B1], 0.016), pan, 0, 0, 0, 0, true);
+      put(wing, geoPlate(`drake3-b${sx}`, [[0, 0], E, B1, B2], 0.016), pan, 0, 0, 0, 0, true);
+      const gr = gear(wing, dark, joint, 0.07, 0.03, 8);
+      gr.position.set(E[0], 0.02, E[1]);
       legs.push(wing);
     }
     const tail = new THREE.Group();
-    tail.position.set(0, 0.5, 0.12);
+    tail.position.set(0, 0.48, 0.25);
     g.add(tail);
-    for (const [k, y, z, rx] of [[0, -0.04, 0.12, 0.5], [1, -0.12, 0.28, 0.2], [2, -0.14, 0.44, -0.3], [3, -0.06, 0.56, -0.9]] as const) {
-      put(tail, geoRBox(0.1 - k * 0.015, 0.09 - k * 0.012, 0.18, 0.03), k % 2 ? acc : plain, 0, y, z, rx);
+    for (let k = 0; k < 5; k++) {
+      put(tail, geoRBox(0.13 - k * 0.018, 0.1 - k * 0.014, 0.13, 0.03), k % 2 ? acc : plain, 0, -0.03 * k, 0.07 + k * 0.12);
     }
+    put(tail, geoOcta(0.03, 2.4), acc, 0, -0.1, 0.68, Math.PI / 2, true);
     g.userData.tail = tail;
-    for (const sx of [-1, 1]) limb(sx * 0.11, 0.46, 0.04, { up: 0.2, low: 0.22, w: 0.09, splay: sx * 0.08, bend: -sx * 0.08, pitch: 0.4, upMat: plain, lowMat: joint, foot: plain, footLen: 0.15 });
+    for (const sx of [-1, 1]) for (const lz of [-0.16, 0.16]) limb(sx * 0.13, 0.42, lz, { up: 0.14, low: 0.15, w: 0.08, splay: sx * 0.1, bend: -sx * 0.1, pitch: lz < 0 ? 0.3 : -0.3, upMat: plain, lowMat: joint, foot: dark, footLen: 0.1 });
   } else {
     // spider: blue studded abdomen dome, dark head with big eyes, eight jointed legs
     body = put(g, geoDome(0.24, 28), main, 0, 0.36, 0.08);
@@ -17275,99 +17283,103 @@ export function buildSpecies(spec: SpeciesSpec): StudsBody {
     }
   }
   body.userData.skin = "body";
+  v3Optimize(g, "species:" + spec.id);
   g.scale.setScalar(spec.size);
   return { group: g, legs, bodyMat: main };
 }
 
-/** Démoulé v2 (refs/demoule.jpg): no minifig parts at all — a chunky robot
- *  pulled from the mould too early. Cube head with a wide cracked visor (one
- *  dark pane, one glowing pane with SNR crack lines), a torso and limbs built
- *  of offset greeble blocks, faded plastic carrying the NFR "demoule" field
- *  (fitted on the photo's crazed torso) plus the SNR Voronoi crack rule, and a
- *  long Teks liftarm dragged in one hand. Legs order matches makeFig
- *  ([legL, legR, armR, armL]) so the zombie walk/arm pose is unchanged. */
+/** Démoulé v3 (refs/demoule.jpg): a hunched robot built from hundreds of small
+ *  grid-snapped greeble bricks (half studded) over a darker olive core, merged per
+ *  material (PartBatch) so the dense skin stays a few draw calls. Plastic carries
+ *  the refitted NFR "demoule" field (tight chest crop, 2-48-48-1, 20.7 dB) plus the
+ *  SNR Voronoi crack rule; one wide helmet visor glows through a cracked web.
+ *  Legs order stays [legL, legR, armR, armL] for the zombie walk/arm pose. */
 function makeDemoule(kind: string): StudsBody {
   const pal =
-    kind === "husk" ? { c: 0xc2b088, eye: 0xffb03a } : kind === "drowned" ? { c: 0x4f8f86, eye: 0x4ef2f7 } : { c: 0x6b7660, eye: 0x46e070 };
+    kind === "husk" ? { c: 0xb09a70, eye: 0xffb03a } : kind === "drowned" ? { c: 0x3f7a72, eye: 0x4ef2f7 } : { c: 0x56634c, eye: 0x46e070 };
   const g = new THREE.Group();
-  const plastic = nfrSkin(pal.c, { field: "demoule", plane: "xy", scale: [3.2, 2.4], amt: 0.3, crack: 0.65 });
-  const plasticZ = nfrSkin(pal.c, { field: "demoule", plane: "zy", scale: [3.2, 2.4], amt: 0.3, crack: 0.65 });
-  const shade = nfrSkin(new THREE.Color(pal.c).multiplyScalar(0.88).getHex(), { field: "demoule", plane: "xy", scale: [5, 4], amt: 0.25, crack: 0.4 });
-  const dark = skin(0x1c211d);
-  let seed = kind.length * 7919 + 17;
-  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  /** scatter offset greeble blocks over a box face set (front/back/sides) */
-  const greeble = (parent: THREE.Object3D, w: number, h: number, d: number, cx: number, cy: number, cz: number, n: number) => {
-    for (let i = 0; i < n; i++) {
-      const face = Math.floor(rnd() * 4);
-      const gw = 0.03 + rnd() * 0.07, gh = 0.03 + rnd() * 0.07, gd = 0.015 + rnd() * 0.03;
-      const u = (rnd() - 0.5) * 0.9, v = (rnd() - 0.5) * 0.9;
-      const m = rnd() < 0.3 ? shade : face < 2 ? plastic : plasticZ;
-      if (face < 2) put(parent, geoRBox(gw, gh, gd, 0.006), m, cx + u * w, cy + v * h, cz + (face ? 1 : -1) * (d / 2 + gd * 0.3), 0, true);
-      else put(parent, geoRBox(gd, gh, gw, 0.006), m, cx + (face === 2 ? 1 : -1) * (w / 2 + gd * 0.3), cy + v * h, cz + u * d, 0, true);
-    }
-  };
-  // torso + hips
-  const torso = put(g, geoRBox(0.44, 0.42, 0.26, 0.04), plastic, 0, 0.88, 0);
+  const fx = (c: number, plane: "xy" | "zy", amt: number, crack: number, sc = 2.6) => nfrSkin(c, { field: "demoule", plane, scale: [sc, sc], amt, crack });
+  const plastic = fx(pal.c, "xy", 0.22, 0.55);
+  const plasticZ = fx(pal.c, "zy", 0.22, 0.55);
+  const lightC = new THREE.Color(pal.c).multiplyScalar(1.12).getHex();
+  const shadeC = new THREE.Color(pal.c).multiplyScalar(0.78).getHex();
+  const light = fx(lightC, "xy", 0.2, 0.45, 3.4);
+  const shade = fx(shadeC, "zy", 0.2, 0.4, 3.4);
+  const recess = skin(new THREE.Color(pal.c).multiplyScalar(0.32).getHex());
+  const dark = skin(0x161a17);
+  const rnd = seeded(kind.length * 7919 + 17);
+  const gm = [plastic, plastic, plasticZ, light, shade];
+  // core volumes in the recess colour: the gaps between greebles read as depth, like the photo
+  const torso = put(g, geoRBox(0.46, 0.44, 0.28, 0.04), plastic, 0, 0.88, 0);
   torso.userData.skin = "body";
-  put(g, geoRBox(0.36, 0.12, 0.22, 0.03), shade, 0, 0.62, 0);
-  put(g, geoRBox(0.2, 0.14, 0.05, 0.02), shade, -0.06, 0.95, -0.14, 0, true); // chest plates
-  put(g, geoRBox(0.14, 0.1, 0.05, 0.02), plastic, 0.1, 0.82, -0.145, 0, true);
-  greeble(g, 0.44, 0.42, 0.26, 0, 0.88, 0, 34);
-  // head: chunky cube with a wide cracked visor
+  const tb = new PartBatch(`demoule-${kind}-torso`);
+  tb.add(geoRBox(0.36, 0.13, 0.22, 0.03), shade, 0, 0.6, 0); // hips
+  tb.add(geoRBox(0.5, 0.12, 0.3, 0.03), plastic, 0, 1.08, 0.01); // hunched shoulder yoke
+  for (const sx of [-1, 1]) tb.add(geoRBox(0.17, 0.15, 0.24, 0.03), light, sx * 0.26, 1.06, 0.02); // shoulder blocks
+  for (let k = 0; k < 6; k++) tb.add(geoRBox(0.07, 0.05, 0.05, 0.01), k % 2 ? shade : plastic, 0, 0.66 + k * 0.075, 0.16); // spine column
+  brickSkin(tb, gm, plastic, rnd, 0.46, 0.44, 0.28, 0, 0.88, 0, 80);
+  brickSkin(tb, gm, plastic, rnd, 0.5, 0.12, 0.3, 0, 1.08, 0.01, 18);
+  brickSkin(tb, [shade, plastic], plastic, rnd, 0.36, 0.13, 0.22, 0, 0.6, 0, 12, 0.03, false);
+  for (let i = 0; i < 26; i++) tb.add(geoRBox(0.03, 0.03, 0.02, 0.005), recess, (rnd() - 0.5) * 0.42, 0.68 + rnd() * 0.4, -0.15 - rnd() * 0.01); // dark pits
+  tb.flush(g);
+  // head: bigger helmet, one wide visor glowing behind a cracked web
   const head = new THREE.Group();
-  head.position.set(0, 1.12, 0);
+  head.position.set(0, 1.13, -0.02);
   g.add(head);
   g.userData.head = head;
-  put(head, geoRBox(0.06, 0.06, 0.06, 0.01), shade, 0, 0.0, 0, 0, true); // neck block
-  put(head, geoRBox(0.32, 0.27, 0.28, 0.035), plastic, 0, 0.17, 0);
-  greeble(head, 0.32, 0.27, 0.28, 0, 0.17, 0, 18);
-  put(head, geoRBox(0.3, 0.06, 0.24, 0.02), shade, 0, 0.32, 0.01, 0, true); // brow / top plate
-  put(head, geoRBox(0.3, 0.11, 0.04, 0.015), dark, 0, 0.15, -0.145, 0, true); // visor frame
-  const paneDark = nfrSkin(0x1e3326, { field: "demoule", plane: "xy", scale: [9, 9], amt: 0.1, crack: 1.0 }, { transparent: true, opacity: 0.85 });
-  paneDark.emissive = new THREE.Color(0x0c2a14);
-  put(head, geoRBox(0.125, 0.085, 0.02, 0.008), paneDark, -0.068, 0.15, -0.165, 0, true);
-  const paneGlow = nfrSkin(pal.eye, { field: "demoule", plane: "xy", scale: [9, 9], amt: 0.1, crack: 1.0 }, { transparent: true, opacity: 0.9 });
-  paneGlow.emissive = new THREE.Color(pal.eye);
-  (paneGlow as THREE.MeshStandardMaterial).emissiveIntensity = 0.9;
-  put(head, geoRBox(0.125, 0.085, 0.02, 0.008), paneGlow, 0.068, 0.15, -0.165, 0, true);
-  const halo = new THREE.MeshBasicMaterial({ color: pal.eye, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false });
-  put(head, geoBall(0.1, 12), halo, 0.068, 0.15, -0.18, 0, true).scale.set(1, 0.7, 0.25);
-  put(head, geoRBox(0.012, 0.1, 0.03, 0.004), dark, 0, 0.15, -0.165, 0, true); // visor mullion
-  // limbs
-  const limb = (x: number, y: number, w: number, upLen: number, lowLen: number, arm: boolean) => {
+  put(head, geoRBox(0.36, 0.31, 0.32, 0.045), plastic, 0, 0.18, 0);
+  const hb = new PartBatch(`demoule-${kind}-head`);
+  hb.add(geoRBox(0.1, 0.07, 0.1, 0.015), shade, 0, 0.0, 0.02); // neck block
+  hb.add(geoRBox(0.38, 0.07, 0.34, 0.025), light, 0, 0.345, 0.0); // helmet crown
+  hb.add(geoRBox(0.4, 0.05, 0.06, 0.015), shade, 0, 0.27, -0.16); // brow ridge
+  for (const sx of [-1, 1]) hb.add(geoRBox(0.06, 0.2, 0.26, 0.02), shade, sx * 0.19, 0.16, 0.01); // cheek guards
+  brickSkin(hb, gm, plastic, rnd, 0.36, 0.31, 0.32, 0, 0.18, 0, 36);
+  hb.add(geoRBox(0.34, 0.13, 0.03, 0.012), dark, 0, 0.165, -0.165); // visor frame
+  hb.flush(head);
+  const pane = nfrSkin(new THREE.Color(pal.eye).multiplyScalar(0.7).getHex(), { field: "demoule", plane: "xy", scale: [7, 7], amt: 0.12, crack: 1.0 }, { transparent: true, opacity: 0.92 });
+  pane.emissive = new THREE.Color(pal.eye);
+  (pane as THREE.MeshStandardMaterial).emissiveIntensity = 0.85;
+  put(head, geoRBox(0.3, 0.095, 0.02, 0.01), pane, 0, 0.165, -0.182, 0, true);
+  const halo = new THREE.MeshBasicMaterial({ color: pal.eye, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false });
+  put(head, geoBall(0.12, 12), halo, 0, 0.165, -0.2, 0, true).scale.set(1.6, 0.6, 0.25);
+  // limbs: each segment greebled in its own merged batch on the swinging pivot
+  const limb = (id: string, x: number, y: number, w: number, upLen: number, lowLen: number, arm: boolean) => {
     const p = new THREE.Group();
     p.position.set(x, y, 0);
     g.add(p);
-    put(p, geoRBox(w * 1.15, w * 1.0, w * 1.15, 0.02), shade, 0, -w * 0.3, 0, 0, true); // shoulder / hip block
-    put(p, geoRBox(w, upLen, w, 0.02), plastic, 0, -upLen / 2 - w * 0.2, 0);
-    put(p, geoRBox(w * 1.08, w * 0.5, w * 1.08, 0.015), shade, 0, -upLen - w * 0.2, 0, 0, true); // knee/elbow block
-    put(p, geoRBox(w * 0.95, lowLen, w * 0.95, 0.02), plastic, 0, -upLen - lowLen / 2 - w * 0.4, 0);
-    greeble(p, w, upLen + lowLen, w, 0, -(upLen + lowLen) / 2 - w * 0.3, 0, 8);
-    if (arm) put(p, geoRBox(w * 1.05, w * 0.7, w * 1.1, 0.015), shade, 0, -upLen - lowLen - w * 0.6, -0.01, 0, true); // blocky fist
-    else put(p, geoRBox(w * 1.2, w * 0.55, w * 1.5, 0.02), shade, 0, -upLen - lowLen - w * 0.55, -w * 0.15); // boot
+    put(p, geoRBox(w, upLen + lowLen + w * 0.4, w, 0.02), plastic, 0, -(upLen + lowLen) / 2 - w * 0.3, 0);
+    const lb = new PartBatch(`demoule-${kind}-${id}`);
+    lb.add(geoRBox(w * 1.2, w * 0.95, w * 1.2, 0.02), shade, 0, -w * 0.3, 0);
+    lb.add(geoRBox(w * 1.12, w * 0.45, w * 1.12, 0.015), light, 0, -upLen - w * 0.2, 0); // knee/elbow block
+    lb.add(geoCyl(w * 0.18, w * 1.4, 8), dark, 0, -upLen - w * 0.2, 0, 0, 0, Math.PI / 2); // axle
+    brickSkin(lb, gm, plastic, rnd, w, upLen + lowLen, w, 0, -(upLen + lowLen) / 2 - w * 0.3, 0, arm ? 16 : 18, 0.03, false);
+    if (arm) lb.add(geoRBox(w * 1.15, w * 0.8, w * 1.2, 0.02), shade, 0, -upLen - lowLen - w * 0.6, -0.01); // blocky fist
+    else lb.add(geoRBox(w * 1.3, w * 0.6, w * 1.6, 0.02), shade, 0, -upLen - lowLen - w * 0.55, -w * 0.18); // boot
+    lb.flush(p);
     return p;
   };
-  const legL = limb(-0.11, 0.6, 0.15, 0.24, 0.22, false);
-  const legR = limb(0.11, 0.6, 0.15, 0.24, 0.22, false);
-  const armR = limb(0.3, 1.04, 0.12, 0.26, 0.26, true);
-  const armL = limb(-0.3, 1.04, 0.12, 0.26, 0.26, true);
+  const legL = limb("legL", -0.11, 0.6, 0.16, 0.24, 0.22, false);
+  const legR = limb("legR", 0.11, 0.6, 0.16, 0.24, 0.22, false);
+  const armR = limb("armR", 0.32, 1.05, 0.13, 0.27, 0.27, true);
+  const armL = limb("armL", -0.32, 1.05, 0.13, 0.27, 0.27, true);
   // dragged Teks liftarm in the right hand (hangs from the fist, ring holes)
-  const beamM = skin(new THREE.Color(pal.c).multiplyScalar(1.12).getHex());
+  const beamM = skin(new THREE.Color(pal.c).multiplyScalar(1.05).getHex());
   const beam = new THREE.Group();
-  beam.position.set(0, -0.62, -0.02);
+  beam.position.set(0, -0.64, -0.02);
   beam.rotation.x = 0.35;
   armR.add(beam);
   put(beam, geoRBox(0.07, 0.7, 0.035, 0.03), beamM, 0, -0.3, 0);
+  const bb = new PartBatch(`demoule-beam`);
   for (let k = 0; k < 9; k++) {
-    put(beam, geoTorus(0.022, 0.006, 16), dark, 0, -0.01 - k * 0.075, -0.018, 0, true);
-    put(beam, geoCyl(0.02, 0.04, 12), dark, 0, -0.01 - k * 0.075, 0, Math.PI / 2, true);
+    bb.add(geoTorus(0.022, 0.006, 16), dark, 0, -0.01 - k * 0.075, -0.018);
+    bb.add(geoCyl(0.02, 0.04, 12), dark, 0, -0.01 - k * 0.075, 0, Math.PI / 2);
   }
+  bb.flush(beam);
   if (kind === "husk") {
-    put(g, geoRBox(0.46, 0.05, 0.28, 0.015), skin(0xe8dec2), 0, 0.78, 0, 0, true); // sand-worn wrap plates
-    put(g, geoRBox(0.46, 0.05, 0.28, 0.015), skin(0xd8cca8), 0, 0.98, 0, 0, true);
+    put(g, geoRBox(0.48, 0.05, 0.3, 0.015), skin(0xe8dec2), 0, 0.78, 0, 0, true); // sand-worn wrap plates
+    put(g, geoRBox(0.48, 0.05, 0.3, 0.015), skin(0xd8cca8), 0, 0.98, 0, 0, true);
   } else if (kind === "drowned") {
-    for (const sx of [-0.12, 0.02, 0.14]) put(g, geoCyl(0.015, 0.3, 6), skin(0x2f8a4a), sx, 0.8, -0.15, 0.08, true); // weed hoses
+    for (const sx of [-0.12, 0.02, 0.14]) put(g, geoCyl(0.015, 0.3, 6), skin(0x2f8a4a), sx, 0.8, -0.16, 0.08, true); // weed hoses
     put(armL, geoCyl(0.02, 0.6, 8), skin(0x2a8478), 0, -0.6, -0.05, 0.35, true); // kept trident shaft (drop parity)
   }
   return { group: g, legs: [legL, legR, armR, armL], bodyMat: plastic };
@@ -17496,17 +17508,19 @@ function cachedGeo(k: string, make: () => THREE.BufferGeometry) {
   return g;
 }
 const q3 = (n: number) => Number(n.toFixed(3));
-function geoRBox(w: number, h: number, d: number, r = Math.min(w, h, d) * 0.2) {
-  return cachedGeo(`rb:${q3(w)}:${q3(h)}:${q3(d)}:${q3(r)}`, () => new RoundedBoxGeometry(w, h, d, 2, Math.min(r, Math.min(w, h, d) * 0.49)));
+function geoRBox(w: number, h: number, d: number, r = Math.min(w, h, d) * 0.2, segs?: number) {
+  // v3: one bevel segment below 12 cm (108 tris instead of 300) — the SNR edge highlight carries the roundness
+  const seg = segs ?? (Math.max(w, h, d) < 0.12 ? 1 : 2);
+  return cachedGeo(`rb:${q3(w)}:${q3(h)}:${q3(d)}:${q3(r)}:${seg}`, () => new RoundedBoxGeometry(w, h, d, seg, Math.min(r, Math.min(w, h, d) * 0.49)));
 }
-function geoBall(r: number, n = 14) {
+function geoBall(r: number, n = 10) {
   return cachedGeo(`ball:${q3(r)}:${n}`, () => new THREE.SphereGeometry(r, n, Math.ceil(n * 0.7)));
 }
 function geoDome(r: number, n = 24) {
   return cachedGeo(`dome:${q3(r)}:${n}`, () => new THREE.SphereGeometry(r, n, Math.ceil(n / 2), 0, Math.PI * 2, 0, Math.PI / 2));
 }
 function geoTorus(R: number, t: number, n = 24) {
-  return cachedGeo(`tor:${q3(R)}:${q3(t)}:${n}`, () => new THREE.TorusGeometry(R, t, 10, n));
+  return cachedGeo(`tor:${q3(R)}:${q3(t)}:${n}`, () => new THREE.TorusGeometry(R, t, 6, Math.min(n, 16)));
 }
 function geoCone(r: number, h: number, n = 10) {
   return cachedGeo(`cone:${q3(r)}:${q3(h)}:${n}`, () => new THREE.ConeGeometry(r, h, n));
@@ -17531,18 +17545,19 @@ function geoPlate(key: string, pts: [number, number][], t: number) {
   });
 }
 function geoTube(key: string, pts: [number, number, number][], r: number) {
-  return cachedGeo("tube:" + key, () => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(([x, y, z]) => new THREE.Vector3(x, y, z))), 32, r, 8));
+  return cachedGeo("tube:" + key, () => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(([x, y, z]) => new THREE.Vector3(x, y, z))), 20, r, 6));
 }
 /** Ribbed flex tube: a smooth core plus torus ribs along a Catmull-Rom curve (refs: fuse hose, dragon cables). */
 function flexTube(parent: THREE.Object3D, mat: THREE.Material, key: string, pts: [number, number, number][], r: number, ribs: number) {
   put(parent, geoTube(key, pts, r * 0.8), mat, 0, 0, 0, 0, true);
   const curve = new THREE.CatmullRomCurve3(pts.map(([x, y, z]) => new THREE.Vector3(x, y, z)));
   const up = new THREE.Vector3(0, 0, 1);
-  for (let k = 0; k <= ribs; k++) {
-    const t = k / ribs;
+  const nr = Math.max(2, Math.round(ribs / 2)); // v3: half the ribs, they merge into one draw
+  for (let k = 0; k <= nr; k++) {
+    const t = k / nr;
     const p = curve.getPointAt(t);
     const tan = curve.getTangentAt(t);
-    const rib = put(parent, geoTorus(r * 0.82, r * 0.3, 14), mat, p.x, p.y, p.z, 0, true);
+    const rib = put(parent, geoTorus(r * 0.82, r * 0.3, 10), mat, p.x, p.y, p.z, 0, true);
     rib.quaternion.setFromUnitVectors(up, tan);
   }
 }
@@ -17689,6 +17704,7 @@ ${rgb && map.glow ? `totalEmissiveRadiance += clamp(nfrF, 0.0, 1.0) * ${map.glow
 ${map.crack ? `totalEmissiveRadiance += vec3(0.12, 0.55, 0.2) * nfrCrack * 0.35;` : ""}`,
       );
   };
+  mat.userData.nfr = { map, extra };
   mat.customProgramCacheKey = () => `siren-creature-v5-nfr-${map.field}-${map.plane}-${sx}-${sy}-${ox}-${oy}-${map.amt}-${map.glow ?? 0}-${map.crack ?? 0}-${extra.transparent ? "t" : "o"}`;
   return mat;
 }
@@ -18259,15 +18275,8 @@ function beast(kind: string): StudsBody {
     put(head, geoCyl(0.075, 0.05, 20), band, 0, 0.085, 0, 0, true); // fuse socket
     put(head, geoTorus(0.07, 0.014, 20), band, 0, 0.11, 0, Math.PI / 2, true);
     flexTube(head, band, "petab-fuse", [[0, 0.1, 0], [0.01, 0.2, 0.0], [0.05, 0.3, 0.02], [0.12, 0.36, 0.03], [0.18, 0.37, 0.02]], 0.03, 11);
-    const flame = skin(0xffe14a, { transparent: true, opacity: 0.82, depthWrite: false });
-    flame.emissive = new THREE.Color(0xff9a10);
-    (flame as THREE.MeshStandardMaterial).emissiveIntensity = 1.3;
-    const tongue = geoLathe("petab-flame", [[0, 0], [0.03, 0.02], [0.034, 0.05], [0.022, 0.1], [0.008, 0.15], [0, 0.17]], 14);
-    for (const [fx, tilt, s] of [[-0.035, 0.45, 0.85], [0.0, 0.0, 1.1], [0.04, -0.5, 0.8]] as const) {
-      const t = put(head, tongue, flame, 0.2 + fx, 0.36, 0.02, 0, true);
-      t.rotation.z = tilt;
-      t.scale.setScalar(s);
-    }
+    // v3: a real little fire on the fuse tip — one billboard quad, noise-eroded, flickering, additive
+    fireQuad(head, 0.2, 0.355, 0.02, 0.16, 0.22, 3);
     const eyeBezel = band;
     for (const sx of [-0.105, 0.105]) {
       const a = sx / R;
@@ -18335,118 +18344,103 @@ function beast(kind: string): StudsBody {
     return { group: g, legs: [left, right], bodyMat: wing };
   }
   if (kind === "dragon") {
-    // La Grande Presse v2 (refs/dragon.jpg), boss rule "molten" on the hull:
-    // segmented black studded hull, angular press head with an open toothed
-    // jaw and a 4×2 glowing eye-pixel grid, trans-purple crystal spikes along
-    // the spine, ribbed flex-tube cables, big vertical root gears and triangular
-    // Teks-truss wings whose trans panels carry the NFR "dragon" field (fitted
-    // on the ref photo's wing panel) as colour + emission.
-    const hide = bossSkin(0x16131c, "molten");
-    const frame = skin(0x23222a);
+    // La Grande Presse v3 (refs/dragon.jpg): a long serpentine black hull carried low, a broad
+    // wedge press-head thrust forward with a 4×2 eye-pixel grid, huge horizontally spread Teks
+    // truss wings (span ≈ 3.4× the body) with trans-purple panels (refit NFR "dragon" RGB field)
+    // and gears at the wing roots and elbows, purple crystal spikes down the spine and tail, and
+    // black ribbed cables. Detail rides on SNR/NFR; static parts are merged per material.
+    const hide = bossSkin(0x16131c, "molten", { field: "dragon", plane: "xz", scale: [1.4, 1.4], amt: 0.12 });
+    const frame = sheen(0x26242c);
     const black = skin(0x0b0a0e);
-    const panel = nfrSkin(0xa44cf0, { field: "dragon", plane: "xz", scale: [2.2, 2.6], amt: 0.55, glow: 0.55 }, { transparent: true, opacity: 0.82, depthWrite: false, side: THREE.DoubleSide });
-    panel.emissive = new THREE.Color(0x5a1a8a);
-    (panel as THREE.MeshStandardMaterial).emissiveIntensity = 0.6;
-    const crystal = skin(0xc77bff, { transparent: true, opacity: 0.8 });
+    const panel = nfrSkin(0xa44cf0, { field: "dragon", plane: "xz", scale: [1.5, 1.8], amt: 0.7, glow: 0.7 }, { transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide });
+    panel.emissive = new THREE.Color(0x4a1478);
+    (panel as THREE.MeshStandardMaterial).emissiveIntensity = 0.55;
+    const crystal = skin(0xc77bff, { transparent: true, opacity: 0.82 });
     crystal.emissive = new THREE.Color(0x8a2ad0);
     (crystal as THREE.MeshStandardMaterial).emissiveIntensity = 0.9;
     if ((crystal as THREE.MeshStandardMaterial).isMeshStandardMaterial) (crystal as THREE.MeshStandardMaterial).roughness = 0.05;
     const eyeM = skin(0xf0a0ff);
     eyeM.emissive = new THREE.Color(0xd040ff);
     (eyeM as THREE.MeshStandardMaterial).emissiveIntensity = 2.2;
-    // hull: 5 tapering bevelled segments with studs, joined by grey axle discs
+    // hull: chest high, tapering back and down into the tail
     let body: THREE.Mesh | null = null;
-    for (const [k, z, w, h] of [[0, -0.45, 0.46, 0.44], [1, -0.12, 0.5, 0.46], [2, 0.2, 0.46, 0.42], [3, 0.48, 0.38, 0.34], [4, 0.7, 0.3, 0.26]] as const) {
-      const seg = put(g, geoRBox(w, h, 0.3, 0.06), hide, 0, 0.72 - k * 0.03, z);
+    for (const [k, z, w, h, y] of [[0, -0.42, 0.5, 0.42, 0.74], [1, -0.1, 0.54, 0.44, 0.72], [2, 0.2, 0.46, 0.38, 0.68], [3, 0.46, 0.36, 0.3, 0.62]] as const) {
+      const seg = put(g, geoRBox(w, h, 0.32, 0.08), hide, 0, y, z);
       if (k === 1) body = seg;
-      studs(g, hide, 0, 0.72 - k * 0.03 + h / 2, z, w * 0.7, 0.22, 2, 1);
-      put(g, geoCyl(w * 0.36, 0.04, 20), frame, 0, 0.72 - k * 0.03, z + 0.16, Math.PI / 2, true);
+      put(g, geoCyl(w * 0.34, 0.04, 16), frame, 0, y, z + 0.17, Math.PI / 2, true);
+      for (const sx of [-1, 1]) put(g, geoRBox(0.04, h * 0.6, 0.22, 0.012), frame, sx * (w / 2 + 0.01), y, z, 0, true); // side Technic plates
     }
     body!.userData.skin = "body";
-    for (let k = 0; k < 7; k++) {
-      const c = put(g, geoOcta(0.06 - k * 0.004, 2.4), crystal, (k % 2 ? 0.05 : -0.05), 0.98 - k * 0.025, -0.55 + k * 0.2, 0, true); // crystal spine spikes
-      c.rotation.z = k % 2 ? -0.3 : 0.3;
-      c.rotation.x = 0.35;
+    for (let k = 0; k < 8; k++) {
+      const c = put(g, geoOcta(0.07 - k * 0.005, 2.6), crystal, 0, 0.98 - k * 0.04, -0.5 + k * 0.14, 0, true);
+      c.rotation.x = 0.5;
     }
-    // head: angular press
     const head = new THREE.Group();
-    head.position.set(0, 0.86, -0.72);
+    head.position.set(0, 0.8, -0.72);
     g.add(head);
     g.userData.head = head;
-    put(head, geoRBox(0.42, 0.22, 0.5, 0.05), hide, 0, 0.1, -0.14);
-    put(head, geoSlope(0.4, 0.12, 0.22), hide, 0, 0.26, -0.26, 0, true);
-    studs(head, hide, 0, 0.21, 0.0, 0.3, 0.16, 2, 1);
-    const jaw = put(head, geoRBox(0.38, 0.08, 0.46, 0.03), frame, 0, -0.1, -0.2, 0.3, true); // open lower mould plate
-    void jaw;
-    for (let k = 0; k < 6; k++) {
-      put(head, geoCone(0.018, 0.06, 6), skin(0xd8d0e8), -0.15 + k * 0.06, -0.015, -0.38, Math.PI, true); // upper teeth
-      put(head, geoCone(0.016, 0.05, 6), skin(0xd8d0e8), -0.13 + k * 0.05, -0.06, -0.3, 0.3, true);
-    }
+    put(head, geoRBox(0.5, 0.24, 0.46, 0.06), hide, 0, 0.08, -0.16);
+    put(head, geoSlope(0.46, 0.14, 0.24), frame, 0, 0.26, -0.2, 0, true);
+    put(head, geoRBox(0.42, 0.08, 0.36, 0.03), frame, 0, -0.1, -0.24, 0.32, true); // open jaw
+    for (let k = 0; k < 7; k++) put(head, geoCone(0.017, 0.06, 5), skin(0xd8d0e8), -0.18 + k * 0.06, -0.03, -0.38, Math.PI, true);
     for (const sx of [-1, 1]) {
-      const horn = put(head, geoCone(0.04, 0.3, 8), black, sx * 0.14, 0.32, 0.02, -0.9, true);
-      horn.rotation.z = -sx * 0.25;
+      const horn = put(head, geoOcta(0.05, 3), crystal, sx * 0.16, 0.36, 0.0, -0.7, true);
+      horn.rotation.z = -sx * 0.35;
+      put(head, geoRBox(0.03, 0.18, 0.3, 0.01), frame, sx * 0.26, 0.08, -0.16, 0, true); // cheek plates
     }
-    for (const sx of [-0.14, -0.05, 0.05, 0.14]) for (const sy of [0.15, 0.09]) put(head, geoRBox(0.05, 0.045, 0.03, 0.01), eyeM, sx, sy, -0.395, 0, true);
+    for (const sx of [-0.16, -0.055, 0.055, 0.16]) for (const sy of [0.16, 0.1]) put(head, geoRBox(0.055, 0.045, 0.03, 0.01), eyeM, sx, sy, -0.395, 0, true);
     const halo = new THREE.MeshBasicMaterial({ color: 0xd060ff, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false });
-    put(head, geoBall(0.2, 14), halo, 0, 0.12, -0.42, 0, true).scale.set(1.2, 0.5, 0.25);
-    // flex-tube cables neck → shoulders, both sides
+    put(head, geoBall(0.2, 10), halo, 0, 0.13, -0.42, 0, true).scale.set(1.3, 0.5, 0.25);
     for (const sx of [-1, 1]) {
-      flexTube(g, black, `presse-cable-a${sx}`, [[sx * 0.12, 0.8, -0.62], [sx * 0.3, 0.62, -0.5], [sx * 0.32, 0.56, -0.25], [sx * 0.26, 0.78, -0.1]], 0.035, 16);
-      flexTube(g, black, `presse-cable-b${sx}`, [[sx * 0.2, 0.62, 0.0], [sx * 0.3, 0.48, 0.22], [sx * 0.22, 0.5, 0.48]], 0.028, 12);
+      flexTube(g, black, `presse3-a${sx}`, [[sx * 0.14, 0.74, -0.7], [sx * 0.34, 0.56, -0.52], [sx * 0.36, 0.52, -0.22], [sx * 0.3, 0.8, -0.08]], 0.034, 6);
+      flexTube(g, black, `presse3-b${sx}`, [[sx * 0.22, 0.56, 0.0], [sx * 0.32, 0.44, 0.24], [sx * 0.2, 0.48, 0.5]], 0.026, 4);
     }
     const tail = new THREE.Group();
-    tail.position.set(0, 0.62, 0.84);
+    tail.position.set(0, 0.6, 0.62);
     g.add(tail);
-    for (const [k, z, y] of [[0, 0.12, 0], [1, 0.32, -0.04], [2, 0.5, -0.06], [3, 0.66, -0.06]] as const) {
-      put(tail, geoRBox(0.24 - k * 0.045, 0.18 - k * 0.03, 0.2, 0.04), hide, 0, y, z);
-      put(tail, geoOcta(0.04 - k * 0.006, 2.2), crystal, 0, y + 0.12 - k * 0.015, z, 0.4, true);
+    for (let k = 0; k < 7; k++) {
+      const z = 0.1 + k * 0.17, y = -0.06 * k + 0.012 * k * k;
+      put(tail, geoRBox(0.26 - k * 0.03, 0.2 - k * 0.022, 0.18, 0.04), hide, 0, y, z);
+      if (k % 2 === 0 || k > 3) put(tail, geoOcta(0.045 - k * 0.004, 2.4), crystal, 0, y + 0.13 - k * 0.012, z, 0.5, true);
     }
-    g.add(tail);
+    put(tail, geoCone(0.05, 0.22, 6), crystal, 0, 0.0, 1.34, Math.PI / 2, true);
     g.userData.tail = tail;
     const wing = (sx: number) => {
       const w = new THREE.Group();
-      w.position.set(sx * 0.3, 0.98, -0.1);
-      w.rotation.z = sx * 0.8; // raised like the ref
+      w.position.set(sx * 0.3, 0.96, -0.12);
+      w.rotation.z = sx * 0.32; // spread wide, tips raised like the ref
+      w.rotation.y = sx * -0.12;
       g.add(w);
-      const beam = (key: string, a: [number, number], b: [number, number]) => {
+      const beam = (a: [number, number], b: [number, number], t = 0.055) => {
         const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-        const m = put(w, geoRBox(len, 0.05, 0.05, 0.012), frame, (a[0] + b[0]) / 2, 0, (a[1] + b[1]) / 2);
+        const m = put(w, geoRBox(len, t, t, 0.012), frame, (a[0] + b[0]) / 2, 0, (a[1] + b[1]) / 2);
         m.rotation.y = -Math.atan2(b[1] - a[1], b[0] - a[0]);
-        const n = Math.max(2, Math.round(len / 0.09));
-        for (let k = 1; k < n; k++) {
-          const t = k / n;
-          put(w, geoCyl(0.014, 0.056, 8), black, a[0] + (b[0] - a[0]) * t, 0, a[1] + (b[1] - a[1]) * t, 0, true); // beam holes
-        }
-        void key;
+        const n = Math.max(2, Math.round(len / 0.14));
+        for (let k = 1; k < n; k++) put(w, geoCyl(0.015, t * 1.1, 6), black, a[0] + (b[0] - a[0]) * (k / n), 0, a[1] + (b[1] - a[1]) * (k / n), 0, true);
       };
-      const P0: [number, number] = [0, 0], P1: [number, number] = [sx * 1.25, -0.42], P2: [number, number] = [sx * 0.95, 0.2], P3: [number, number] = [sx * 0.45, 0.3];
-      beam("a", P0, P1);
-      beam("b", P1, P2);
-      beam("c", P2, P3);
-      beam("d", P3, P0);
-      beam("e", P0, P2);
-      put(w, geoPlate(`presse-p1${sx}`, [P0, P1, P2], 0.022), panel, 0, 0.0, 0, 0, true);
-      put(w, geoPlate(`presse-p2${sx}`, [P0, P2, P3], 0.022), panel, 0, 0.0, 0, 0, true);
-      for (const [px, pz] of [[sx * 0.72, -0.07], [sx * 0.48, 0.17]]) {
-        put(w, geoCyl(0.055, 0.035, 18), panel, px, 0.02, pz, 0, true); // panel studs
-        put(w, geoTorus(0.07, 0.01, 20), frame, px, 0.02, pz, Math.PI / 2, true);
-      }
-      const gr = gear(w, frame, crystal, 0.2, 0.06, 16); // vertical root gear
-      gr.rotation.z = Math.PI / 2;
-      gr.position.set(sx * 0.04, 0, 0);
+      const P0: [number, number] = [0, 0], E: [number, number] = [sx * 0.9, -0.12], T: [number, number] = [sx * 1.75, -0.4], B1: [number, number] = [sx * 1.45, 0.3], B2: [number, number] = [sx * 0.75, 0.42];
+      beam(P0, E, 0.07);
+      beam(E, T, 0.06);
+      beam(T, B1);
+      beam(B1, B2);
+      beam(B2, P0);
+      beam(E, B1, 0.045);
+      beam(E, B2, 0.045);
+      put(w, geoPlate(`presse3-p1${sx}`, [E, T, B1], 0.02), panel, 0, 0, 0, 0, true);
+      put(w, geoPlate(`presse3-p2${sx}`, [E, B1, B2], 0.02), panel, 0, 0, 0, 0, true);
+      put(w, geoPlate(`presse3-p3${sx}`, [P0, E, B2], 0.02), panel, 0, 0, 0, 0, true);
+      for (const [px, pz] of [[sx * 1.32, -0.04], [sx * 0.95, 0.2]]) put(w, geoTorus(0.07, 0.012, 16), frame, px, 0.02, pz, Math.PI / 2, true);
+      const g1 = gear(w, frame, crystal, 0.2, 0.06, 14);
+      g1.position.set(sx * 0.05, 0.03, 0);
+      const g2 = gear(w, frame, black, 0.12, 0.05, 10);
+      g2.position.set(E[0], 0.04, E[1]);
       return w;
     };
     const left = wing(-1);
     const right = wing(1);
     const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => {
-      const p = new THREE.Group();
-      p.position.set(sx * 0.2, 0.52, sz * 0.42);
-      g.add(p);
-      put(p, geoBall(0.09), frame, 0, 0, 0, 0, true);
-      put(p, geoRBox(0.13, 0.24, 0.14, 0.03), hide, 0, -0.12, 0);
-      put(p, geoBall(0.07), frame, 0, -0.26, 0, 0, true);
-      put(p, geoRBox(0.1, 0.18, 0.1, 0.03), frame, 0, -0.36, -0.02);
-      for (const cx of [-0.04, 0, 0.04]) put(p, geoCone(0.022, 0.08, 6), black, cx, -0.46, -0.1, -Math.PI / 2, true); // claws
+      const p = v3Limb(g, sx * 0.22, 0.54, sz * 0.36, { w: 0.13, up: 0.2, low: 0.18, upM: hide, lowM: frame, joint: frame, hip: true, knee: sz < 0 ? 0.3 : -0.3 });
+      for (const cx of [-0.04, 0, 0.04]) put(p, geoCone(0.02, 0.08, 5), black, cx, -0.44, -0.08, -Math.PI / 2, true); // claws
       return p as THREE.Object3D;
     }));
     legs.push(left, right);
@@ -18883,75 +18877,678 @@ function beast(kind: string): StudsBody {
 }
 
 // Attach 3D STUDS Role Hats, Aprons, Packs, Spectacles & Held Tools to Hamlet NPC Villagers ("PNJ")
-function decorateVillagerRole(group: THREE.Group, role?: TraderRole) {
+export function decorateVillagerRole(group: THREE.Group, role?: TraderRole) {
   if (!role || group.userData.roleDecorated) return;
   group.userData.roleDecorated = true;
+  // v3 traders: every merchant wears a leather apron, a cross-body strap and a satchel; the
+  // profession reads from the hat, the tool and one silhouette piece (head-local y: 0 = neck).
   const head = (group.userData.head as THREE.Object3D | undefined) ?? group;
-  const hy = head === group ? 0 : -1.0;
-  const goldM = skin(0xf5c518);
-  const darkM = skin(0x231c16);
-  const woodM = skin(0x7c522b);
-  const ironM = skin(0xa7aeb4);
+  // buildStuds already scaled the figure's direct children to Minecraft height; the kit rides at the same scale
+  const kit = new THREE.Group();
+  kit.scale.setScalar(head !== group ? head.scale.x : 1);
+  group.add(kit);
+  const goldM = sheen(0xf5c518), woodM = sheen(0x7c522b), ironM = sheen(0xa7aeb4), leather = sheen(0x6b4426), darkM = sheen(0x231c16);
+  const apronC: Record<TraderRole, number> = { grocer: 0x2f7d38, smith: 0x3b2618, mason: 0x8a6a4a, herder: 0xe8dcc8, clerk: 0x1f4e9e, mage: 0x3a1468, ranger: 0x1d5526, mechanic: 0x4a4f58 };
+  put(kit, geoRBox(0.3, 0.4, 0.025, 0.01), sheen(apronC[role]), 0, 0.66, -0.128, 0, true); // apron
+  put(kit, geoRBox(0.06, 0.06, 0.03, 0.01), leather, 0, 0.6, -0.145, 0, true); // apron pocket
+  const strap = put(kit, geoRBox(0.04, 0.5, 0.25, 0.01), leather, 0, 0.72, 0, 0, true);
+  strap.rotation.z = 0.7;
+  strap.scale.z = 1.02;
+  put(kit, geoRBox(0.13, 0.12, 0.07, 0.025), leather, -0.22, 0.52, 0.02, 0, true); // satchel
+  put(kit, geoRBox(0.13, 0.04, 0.075, 0.012), darkM, -0.22, 0.575, 0.02, 0, true);
+  put(kit, geoCyl(0.012, 0.01, 8), goldM, -0.22, 0.55, -0.02, Math.PI / 2, true);
+  const hand = (x: number) => [x, 0.5, -0.16] as const;
   if (role === "grocer") {
-    // Farmer Straw Hat + Green Bib Overalls + Held Golden Wheat Sheaf
-    put(head, geoCyl(0.27, 0.032, 14), skin(0xe8c455), 0, 1.27 + hy, 0, 0, true);
-    put(head, geoCyl(0.165, 0.11, 12), skin(0xd9b244), 0, 1.33 + hy, 0, 0, true);
-    put(head, geoCyl(0.17, 0.028, 12), skin(0xc83228), 0, 1.29 + hy, 0, 0, true);
-    put(group, geoBox(0.28, 0.26, 0.245), skin(0x2f7d38), 0, 0.68, 0, 0, true);
-    put(group, geoBox(0.06, 0.24, 0.06), skin(0xf0c43a), 0.28, 0.50, -0.14, 0.45, true);
+    put(head, geoLathe("hat-straw", [[0, 0.1], [0.12, 0.1], [0.15, 0.03], [0.28, 0.01], [0.28, 0]], 18), sheen(0xe8c455), 0, 0.26, 0, 0, true);
+    put(head, geoTorus(0.15, 0.015, 16), sheen(0xc83228), 0, 0.29, 0, Math.PI / 2, true);
+    const [x, y, z] = hand(0.28);
+    put(kit, geoRBox(0.2, 0.1, 0.14, 0.02), woodM, x, y - 0.04, z, 0, true); // produce crate
+    for (const k of [-0.05, 0, 0.05]) put(kit, geoBall(0.035, 8), sheen(k ? 0xd8322a : 0xf09030), x + k, y + 0.03, z, 0, true);
   } else if (role === "smith") {
-    // Blacksmith Iron Forging Helmet + Visor + Leather Apron + Held 3D STUDS Hammer
-    put(head, geoCyl(0.175, 0.14, 12), skin(0x3a3e46), 0, 1.28 + hy, 0, 0, true);
-    put(head, geoBox(0.26, 0.06, 0.06), ironM, 0, 1.25 + hy, -0.15, 0, true);
-    put(group, geoBox(0.32, 0.32, 0.245), skin(0x3b2618), 0, 0.67, 0, 0, true);
-    put(group, geoCyl(0.018, 0.26, 8), woodM, 0.28, 0.50, -0.15, 0.4, true);
-    put(group, geoBox(0.08, 0.055, 0.13), ironM, 0.28, 0.58, -0.22, 0, true);
+    put(head, geoLathe("hat-smith", [[0, 0.12], [0.15, 0.11], [0.16, 0]], 16), sheen(0x3a3e46), 0, 0.24, 0, 0, true);
+    put(head, geoRBox(0.24, 0.05, 0.05, 0.01), ironM, 0, 0.27, -0.14, 0, true);
+    const [x, y, z] = hand(0.28);
+    put(kit, geoCyl(0.018, 0.3, 8), woodM, x, y + 0.04, z, 0.4, true);
+    put(kit, geoRBox(0.1, 0.06, 0.15, 0.015), ironM, x, y + 0.16, z - 0.06, 0, true); // hammer head
+    put(kit, geoRBox(0.5, 0.12, 0.28, 0.03), sheen(0x3b2618), 0, 0.89, 0.01, 0, true); // leather shoulder guard
   } else if (role === "mason") {
-    // Red STUDS Construction Hard-Hat + Stone Belt + Held Bricklayer Chisel
-    put(head, geoCyl(0.18, 0.11, 12), skin(0xe23b2f), 0, 1.29 + hy, 0, 0, true);
-    put(head, geoBox(0.22, 0.03, 0.12), skin(0xe23b2f), 0, 1.25 + hy, -0.14, 0, true);
-    put(group, geoBox(0.42, 0.07, 0.25), skin(0x5c3818), 0, 0.55, 0, 0, true);
-    put(group, geoBox(0.07, 0.07, 0.04), goldM, 0, 0.55, -0.13, 0, true);
-    put(group, geoCyl(0.018, 0.22, 8), ironM, 0.28, 0.50, -0.14, 0.45, true);
+    put(head, geoDome(0.17, 16), sheen(0xe23b2f), 0, 0.25, 0, 0, true);
+    put(head, geoRBox(0.24, 0.025, 0.12, 0.01), sheen(0xe23b2f), 0, 0.255, -0.14, 0, true);
+    const [x, y, z] = hand(0.28);
+    put(kit, geoRBox(0.03, 0.03, 0.12, 0.01), woodM, x, y, z, 0, true);
+    put(kit, geoPlate("trowel", [[-0.05, 0], [0.05, 0], [0, 0.12]], 0.012), ironM, x, y, z - 0.06, -Math.PI / 2, true);
+    put(kit, geoRBox(0.16, 0.08, 0.08, 0.01), sheen(0xb8483a), -0.28, 0.48, -0.12, 0, true); // brick
   } else if (role === "herder") {
-    // Wide-Brimmed Rancher Hat + Wool Mantle + Tall Shepherd Crook Staff
-    put(head, geoCyl(0.25, 0.034, 12), skin(0x5c3818), 0, 1.27 + hy, 0, 0, true);
-    put(head, geoBox(0.26, 0.10, 0.26), skin(0x6b3e22), 0, 1.33 + hy, 0, 0, true);
-    put(group, geoBox(0.46, 0.10, 0.26), skin(0xf4f1ea), 0, 0.89, 0, 0, true);
-    put(group, geoCyl(0.02, 0.85, 8), woodM, 0.29, 0.56, -0.12, 0.12, true);
-    put(group, geoBox(0.08, 0.06, 0.04), goldM, 0.29, 0.98, -0.16, 0, true);
+    put(head, geoLathe("hat-ranch", [[0, 0.13], [0.11, 0.13], [0.13, 0.03], [0.27, 0.02], [0.29, 0.05], [0.29, 0.03]], 18), sheen(0x6b3e22), 0, 0.25, 0, 0, true);
+    put(kit, geoRBox(0.48, 0.12, 0.28, 0.05), sheen(0xf4f1ea), 0, 0.89, 0, 0, true); // wool mantle
+    put(kit, geoCyl(0.02, 0.9, 8), woodM, 0.29, 0.56, -0.12, 0.08, true);
+    put(kit, geoTorus(0.06, 0.016, 12), woodM, 0.29, 1.03, -0.08, 0, true); // crook
   } else if (role === "clerk") {
-    // Scholarly Gold Spectacles + Blue Tunic Medallion + Held Red STUDS Tome
-    put(head, geoBox(0.068, 0.056, 0.024), goldM, -0.058, 1.16 + hy, -0.158, 0, true);
-    put(head, geoBox(0.068, 0.056, 0.024), goldM, 0.058, 1.16 + hy, -0.158, 0, true);
-    put(head, geoBox(0.04, 0.018, 0.026), goldM, 0, 1.16 + hy, -0.16, 0, true);
-    put(head, geoCyl(0.17, 0.08, 12), skin(0x1f4e9e), 0, 1.28 + hy, 0, 0, true);
-    put(group, geoBox(0.07, 0.07, 0.03), goldM, 0, 0.78, -0.125, 0, true);
-    put(group, geoBox(0.09, 0.14, 0.12), skin(0xb82820), -0.28, 0.50, -0.12, 0.3, true);
+    for (const sx of [-0.06, 0.06]) put(head, geoTorus(0.03, 0.007, 14), goldM, sx, 0.155, -0.142, 0, true);
+    put(head, geoRBox(0.04, 0.008, 0.008, 0.002), goldM, 0, 0.155, -0.142, 0, true);
+    put(head, geoLathe("hat-clerk", [[0, 0.1], [0.14, 0.1], [0.15, 0.01], [0.18, 0]], 16), sheen(0x1f4e9e), 0, 0.26, 0, 0, true);
+    put(kit, geoRBox(0.04, 0.16, 0.12, 0.01), sheen(0xb82820), -0.27, 0.6, -0.1, 0, true); // ledger
+    put(kit, geoCyl(0.006, 0.14, 6), skin(0xf4f1ea), 0.27, 0.52, -0.16, 0.5, true); // quill
   } else if (role === "mage") {
-    // Tall Pointed Purple Wizard Hat + Mystic Cape + Glowing Crystal Staff
-    put(head, geoBox(0.48, 0.04, 0.48), skin(0x4b1d8c), 0, 1.27 + hy, 0, 0, true);
-    put(head, geoCyl(0.15, 0.18, 10), skin(0x5e2ca5), 0, 1.37 + hy, 0, 0, true);
-    put(head, geoCyl(0.08, 0.18, 8), skin(0x5e2ca5), 0, 1.54 + hy, 0, 0, true);
-    put(head, geoBox(0.05, 0.05, 0.03), goldM, 0, 1.36 + hy, -0.15, 0, true);
-    put(group, geoBox(0.40, 0.52, 0.04), skin(0x3a1468), 0, 0.66, 0.135, 0, true);
-    put(group, geoCyl(0.02, 0.88, 8), woodM, 0.29, 0.56, -0.13, 0.15, true);
-    const orb = transTile(0x64f5e8, 0x24b8a8);
-    put(group, geoBox(0.09, 0.09, 0.09), orb, 0.29, 1.01, -0.19, 0, true);
+    put(head, geoLathe("hat-mage", [[0, 0.52], [0.04, 0.4], [0.1, 0.2], [0.15, 0.05], [0.26, 0.01], [0.26, 0]], 18), sheen(0x5e2ca5), 0, 0.25, 0, 0, true);
+    put(head, geoTorus(0.15, 0.014, 16), goldM, 0, 0.31, 0, Math.PI / 2, true);
+    put(kit, geoRBox(0.42, 0.56, 0.03, 0.01), sheen(0x3a1468), 0, 0.66, 0.135, 0, true); // cape
+    put(kit, geoCyl(0.02, 0.9, 8), woodM, 0.29, 0.56, -0.13, 0.12, true);
+    put(kit, geoOcta(0.05, 1.6), transTile(0x64f5e8, 0x24b8a8), 0.29, 1.04, -0.18, 0, true);
   } else if (role === "ranger") {
-    // Forest Hood with Red Feather Plume + Back Quiver + Held 3D STUDS Bow
-    put(head, geoBox(0.34, 0.12, 0.28), skin(0x1d5526), 0, 1.28 + hy, 0, 0, true);
-    put(head, geoBox(0.03, 0.14, 0.06), skin(0xe23b2f), 0.14, 1.38 + hy, -0.04, -0.25, true);
-    put(group, geoCyl(0.055, 0.28, 8), skin(0x6b3e22), 0.08, 0.76, 0.15, 0.15, true);
-    put(group, geoBox(0.03, 0.30, 0.12), woodM, 0.28, 0.50, -0.16, 0.3, true);
+    put(head, geoDome(0.16, 14), sheen(0x1d5526), 0, 0.24, 0.02, 0, true).scale.set(1.05, 0.9, 1.1);
+    put(head, geoPlate("feather", [[0, 0], [0.025, 0.16], [-0.01, 0.15]], 0.01), sheen(0xe23b2f), 0.13, 0.3, 0.0, 0, true).rotation.set(0, 0, -0.3);
+    put(kit, geoCyl(0.055, 0.32, 10), leather, 0.09, 0.78, 0.15, 0.2, true); // quiver
+    put(kit, geoTube("bow", [[0.3, 0.34, -0.14], [0.33, 0.52, -0.2], [0.3, 0.7, -0.14]], 0.012), woodM, 0, 0, 0, 0, true);
   } else {
-    put(head, geoBox(0.34, 0.06, 0.26), darkM, 0, 1.27 + hy, 0, 0, true);
+    // mechanic: goggles strapped on a cap, wrench, tool belt — the gearhead trader
+    put(head, geoLathe("cap-mech", [[0, 0.08], [0.14, 0.07], [0.145, 0]], 16), sheen(0x4a4f58), 0, 0.25, 0.01, 0, true);
+    put(head, geoRBox(0.22, 0.025, 0.1, 0.008), sheen(0x4a4f58), 0, 0.255, -0.15, 0, true);
+    for (const sx of [-0.06, 0.06]) {
+      put(head, geoCyl(0.04, 0.03, 14), sheen(0x6b4426), sx, 0.27, -0.12, Math.PI / 2 - 0.4, true);
+      put(head, geoCyl(0.03, 0.035, 14), transTile(0x7ad8ff, 0x1a6a9a), sx, 0.27, -0.135, Math.PI / 2 - 0.4, true);
+    }
+    put(kit, geoRBox(0.44, 0.07, 0.26, 0.02), leather, 0, 0.54, 0, 0, true); // tool belt
+    for (const sx of [-0.12, 0.12]) put(kit, geoRBox(0.05, 0.08, 0.04, 0.01), ironM, sx, 0.5, -0.14, 0, true);
+    const [x, y, z] = hand(0.28);
+    put(kit, geoRBox(0.025, 0.22, 0.02, 0.008), ironM, x, y + 0.04, z, 0.4, true);
+    put(kit, geoTorus(0.03, 0.01, 10), ironM, x, y + 0.16, z - 0.05, 0.4, true);
+    const gr = gear(kit, goldM, ironM, 0.04, 0.02, 8);
+    gr.position.set(-0.22, 0.52, 0.06);
   }
 }
 
+// ───────────────────────── v3 pass: every creature, mob and NPC at v2 quality ─────────────────────────
+// Philippe 2026-10-31 ("tous les creature et les mobs et pnj"): the rest of the bestiary gets the v2
+// toolkit — rounded/bevelled shells, ball-and-axle Technic joints, emissive eyes where the design
+// glows, gears, flex tubes, lathe parts, SNR + NFR plastic sheen. Dense static detail is merged per
+// material by PartBatch so a 300-part greeble skin still costs a handful of draw calls.
+const SHEEN: NfrMap = { field: "crab", plane: "xz", scale: [3, 3], amt: 0.16 };
+function sheen(c: number, extra: Parameters<typeof skin>[1] = {}) {
+  return nfrSkin(c, SHEEN, extra);
+}
+const v3Merged = new Map<string, THREE.BufferGeometry>();
+/** Collects transformed copies of small static parts and merges them into one mesh per material. */
+class PartBatch {
+  private mats: THREE.Material[] = [];
+  private parts = new Map<THREE.Material, THREE.BufferGeometry[]>();
+  private o = new THREE.Object3D();
+  private readonly hit: boolean;
+  private readonly key: string;
+  constructor(key: string) {
+    this.key = key;
+    this.hit = v3Merged.has(key + "#0");
+  }
+  add(geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, rx = 0, ry = 0, rz = 0, s: [number, number, number] = [1, 1, 1]) {
+    if (!this.parts.has(mat)) {
+      this.parts.set(mat, []);
+      this.mats.push(mat);
+    }
+    if (this.hit) return;
+    this.o.position.set(x, y, z);
+    this.o.rotation.set(rx, ry, rz);
+    this.o.scale.set(...s);
+    this.o.updateMatrix();
+    const g = geo.index ? geo.toNonIndexed() : geo.clone();
+    for (const k of Object.keys(g.attributes)) if (k !== "position" && k !== "normal" && k !== "uv") g.deleteAttribute(k);
+    if (!g.attributes.uv) g.setAttribute("uv", new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+    if (!g.attributes.normal) g.computeVertexNormals();
+    g.applyMatrix4(this.o.matrix);
+    this.parts.get(mat)!.push(g);
+  }
+  flush(parent: THREE.Object3D) {
+    this.mats.forEach((mat, i) => {
+      const k = `${this.key}#${i}`;
+      let geo = v3Merged.get(k);
+      if (!geo) {
+        const list = this.parts.get(mat)!;
+        if (!list.length) return;
+        geo = mergeGeometries(list, false)!;
+        for (const g of list) g.dispose();
+        v3Merged.set(k, geo);
+      }
+      put(parent, geo, mat, 0, 0, 0, 0, false);
+    });
+  }
+}
+/** Grid-snapped greeble bricks (1-3 × 1-2 units) over the faces of a box, half of them studded. */
+function brickSkin(b: PartBatch, mats: THREE.Material[], studM: THREE.Material, rnd: () => number, w: number, h: number, d: number, cx: number, cy: number, cz: number, n: number, u = 0.034, top = true) {
+  const snap = (v: number, half: number, size: number) => {
+    const lim = Math.max(0, half - size / 2);
+    return Math.max(-lim, Math.min(lim, Math.round(v / u) * u));
+  };
+  for (let i = 0; i < n; i++) {
+    const face = Math.floor(rnd() * (top ? 5 : 4));
+    const bw = u * (1 + Math.floor(rnd() * 3));
+    const bh = u * (1 + Math.floor(rnd() * 2));
+    const bd = u * (0.45 + rnd() * 0.75);
+    const m = mats[Math.floor(rnd() * mats.length)];
+    let x = cx, y = cy, z = cz, topY: number;
+    if (face < 2) {
+      x += snap((rnd() - 0.5) * w, w / 2, bw);
+      y += snap((rnd() - 0.5) * h, h / 2, bh);
+      z += (face ? 1 : -1) * (d / 2 + bd * 0.3);
+      b.add(geoBox(bw, bh, bd), m, x, y, z);
+      topY = y + bh / 2;
+    } else if (face < 4) {
+      z += snap((rnd() - 0.5) * d, d / 2, bw);
+      y += snap((rnd() - 0.5) * h, h / 2, bh);
+      x += (face === 2 ? 1 : -1) * (w / 2 + bd * 0.3);
+      b.add(geoBox(bd, bh, bw), m, x, y, z);
+      topY = y + bh / 2;
+    } else {
+      x += snap((rnd() - 0.5) * w, w / 2, bw);
+      z += snap((rnd() - 0.5) * d, d / 2, bh);
+      y += h / 2 + bd * 0.3;
+      b.add(geoBox(bw, bd, bh), m, x, y, z);
+      topY = y + bd / 2;
+    }
+    if (rnd() < 0.55) b.add(geoCyl(u * 0.29, u * 0.22, 8), studM, x, topY + u * 0.1, z);
+  }
+}
+const seeded = (s: number) => () => ((s = (s * 16807) % 2147483647) / 2147483647);
+/** Glossy toy eye for friendly animals: black dome + white catch-light, facing -Z. */
+function toyEye(parent: THREE.Object3D, x: number, y: number, z: number, r: number) {
+  const e = put(parent, geoDome(r, 16), skin(0x0e0c10), x, y, z, -Math.PI / 2, true);
+  put(parent, geoBall(r * 0.28, 8), skin(0xffffff), x + r * 0.3, y + r * 0.35, z - r * 0.8, 0, true);
+  return e;
+}
+/** Generic v3 limb on a pivot that swings on X: hip ball, bevelled upper, knee ball + axle, lower, foot. */
+function v3Limb(parent: THREE.Object3D, x: number, y: number, z: number, o: { w: number; up: number; low: number; upM: THREE.Material; lowM?: THREE.Material; joint: THREE.Material; foot?: THREE.Material; footLen?: number; footW?: number; knee?: number; hip?: boolean }) {
+  const p = new THREE.Group();
+  p.position.set(x, y, z);
+  parent.add(p);
+  if (o.hip !== false) put(p, geoBall(o.w * 0.62, 14), o.joint, 0, 0, 0, 0, true);
+  put(p, geoRBox(o.w, o.up, o.w * 1.05, o.w * 0.28), o.upM, 0, -o.up / 2, 0);
+  const k = new THREE.Group();
+  k.position.y = -o.up;
+  k.rotation.x = o.knee ?? 0;
+  p.add(k);
+  put(k, geoBall(o.w * 0.5, 12), o.joint, 0, 0, 0, 0, true);
+  put(k, geoCyl(o.w * 0.16, o.w * 1.25, 8), skin(0x2e3238), 0, 0, 0, 0, true).rotation.z = Math.PI / 2;
+  put(k, geoRBox(o.w * 0.86, o.low, o.w * 0.9, o.w * 0.24), o.lowM ?? o.upM, 0, -o.low / 2, 0);
+  if (o.foot) {
+    const fl = o.footLen ?? o.w * 1.3;
+    const f = put(k, geoRBox(o.footW ?? o.w * 1.08, o.w * 0.36, fl, o.w * 0.14), o.foot, 0, -o.low - o.w * 0.12, -(fl - o.w) * 0.35, 0, true);
+    f.rotation.x = -(o.knee ?? 0);
+  }
+  return p;
+}
+/** Real little fire (Philippe: "pas du plastique"): one camera-facing quad, additive,
+ *  a procedural flame shape eroded by scrolling value-noise fbm, flickering on bossFxT.
+ *  No SNR plastic, no texture — a single cheap draw. */
+let fireMat: THREE.ShaderMaterial | null = null;
+function fireQuad(parent: THREE.Object3D, x: number, y: number, z: number, w: number, h: number, seed = 0) {
+  fireMat ??= new THREE.ShaderMaterial({
+    uniforms: { uT: bossFxT },
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+    side: THREE.DoubleSide,
+    vertexShader: `varying vec2 vUv; varying float vSeed;
+void main() {
+  vUv = uv; vSeed = fract(modelMatrix[3].x * 0.37 + modelMatrix[3].z * 0.71);
+  vec3 sx = vec3(modelMatrix[0].xyz), sy = vec3(modelMatrix[1].xyz);
+  vec4 mv = modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+  mv.xy += position.xy * vec2(length(sx), length(sy));
+  gl_Position = projectionMatrix * mv;
+}`,
+    fragmentShader: `uniform float uT; varying vec2 vUv; varying float vSeed;
+float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float n(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
+void main() {
+  float t = uT * 1.0 + vSeed * 17.0;
+  vec2 p = vec2(vUv.x - 0.5, vUv.y);
+  float fb = 0.5 * n(vec2(p.x * 6.0, p.y * 5.0 - t * 6.0)) + 0.25 * n(vec2(p.x * 12.0, p.y * 10.0 - t * 11.0)) + 0.125 * n(vec2(p.x * 24.0, p.y * 20.0 - t * 17.0));
+  float sway = sin(t * 7.0 + p.y * 5.0) * 0.06 * p.y;
+  float width = 0.42 * (1.0 - p.y) * smoothstep(0.0, 0.18, p.y) + 0.04;
+  float shape = 1.0 - smoothstep(width * 0.55, width, abs(p.x + sway) + (fb - 0.45) * 0.28 * p.y);
+  float core = shape * (1.0 - smoothstep(0.0, 0.75, p.y + fb * 0.35));
+  float flick = 0.85 + 0.15 * sin(t * 23.0) * sin(t * 13.7);
+  vec3 col = mix(vec3(0.95, 0.18, 0.02), vec3(1.0, 0.55, 0.08), core);
+  col = mix(col, vec3(1.0, 0.88, 0.45), core * core * core);
+  float a = shape * (0.55 + 0.45 * core) * flick;
+  if (a < 0.01) discard;
+  // premultiplied "glow-over": reads as orange fire on a bright sky and still blooms on a dark night
+  gl_FragColor = vec4(col * a * 1.25, a * 0.8);
+}`,
+  });
+  const m = new THREE.Mesh(cachedGeo("fireq", () => new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0)), fireMat);
+  m.position.set(x, y, z);
+  m.scale.set(w, h, 1);
+  m.renderOrder = 5;
+  m.frustumCulled = false;
+  m.userData.keep = true;
+  m.userData.fire = seed;
+  parent.add(m);
+  return m;
+}
+/** Merge every static mesh per (parent, material) into one mesh — keeps every pivot
+ *  group (legs, head, tail, wings) and every mesh something references (userData, body skin). */
+const v3OptCache = new Map<string, THREE.BufferGeometry>();
+function v3Optimize(root: THREE.Object3D, key: string) {
+  const keep = new Set<THREE.Object3D>();
+  root.traverse((o) => {
+    for (const v of Object.values(o.userData)) if (v instanceof THREE.Object3D) keep.add(v);
+    if ((o as THREE.Mesh).isMesh && (o.userData.skin || o.userData.keep)) keep.add(o);
+  });
+  let gi = 0;
+  const visit = (parent: THREE.Object3D) => {
+    const groups = new Map<THREE.Material, THREE.Mesh[]>();
+    for (const c of parent.children) {
+      const m = c as THREE.Mesh;
+      if (!m.isMesh || keep.has(m) || m.children.length || Array.isArray(m.material) || (m as unknown as THREE.InstancedMesh).isInstancedMesh) continue;
+      if (!groups.has(m.material)) groups.set(m.material, []);
+      groups.get(m.material)!.push(m);
+    }
+    let mi = 0;
+    for (const [mat, list] of groups) {
+      const id = `${key}|${gi}|${mi++}`;
+      if (list.length < 2) continue;
+      const verts = list.reduce((s, m) => s + (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count), 0);
+      let geo = v3OptCache.get(id);
+      if (!geo || geo.attributes.position.count !== verts) {
+        const parts = list.map((m) => {
+          m.updateMatrix();
+          const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
+          for (const k of Object.keys(g.attributes)) if (k !== "position" && k !== "normal" && k !== "uv") g.deleteAttribute(k);
+          if (!g.attributes.uv) g.setAttribute("uv", new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+          if (!g.attributes.normal) g.computeVertexNormals();
+          g.applyMatrix4(m.matrix);
+          return g;
+        });
+        geo = mergeGeometries(parts, false)!;
+        for (const g of parts) g.dispose();
+        v3OptCache.set(id, geo);
+      }
+      const shadow = list.some((m) => m.castShadow);
+      const wool = list.some((m) => m.userData.wool);
+      for (const m of list) parent.remove(m);
+      const merged = new THREE.Mesh(geo, mat);
+      merged.castShadow = shadow;
+      merged.receiveShadow = plasticOn;
+      if (wool) merged.userData.wool = true;
+      if (!shadow) merged.userData.noShadow = true;
+      parent.add(merged);
+    }
+    gi++;
+    for (const c of [...parent.children]) if (!(c as THREE.Mesh).isMesh || c.children.length) visit(c);
+  };
+  visit(root);
+}
+
+/** v3 finish for kinds without a dedicated v3 builder: plain cached boxes become bevelled
+ *  rounded boxes (edges catch the SNR highlight) and opaque plastic gets the NFR sheen. One new
+ *  material per old material (never shared across instances: collars recolour per mob). */
+function v3Finish(built: StudsBody) {
+  const remap = new Map<THREE.Material, THREE.Material>();
+  built.group.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh || Array.isArray(mesh.material)) return;
+    const geo = mesh.geometry as THREE.BoxGeometry;
+    if (geo.type === "BoxGeometry") {
+      const { width: w, height: h, depth: d } = geo.parameters;
+      if (figGeo.get("b" + w + ":" + h + ":" + d) === geo && Math.min(w, h, d) > 0.025) mesh.geometry = geoRBox(w, h, d, Math.min(w, h, d) * 0.18, 1);
+    }
+    const mat = mesh.material as THREE.MeshStandardMaterial;
+    if (!mat.isMeshStandardMaterial || mat.transparent || mat.userData.nfr || (mat.emissive && mat.emissive.getHex() !== 0)) return;
+    let n = remap.get(mat);
+    if (!n) {
+      n = sheen(mat.color.getHex());
+      remap.set(mat, n);
+    }
+    mesh.material = n;
+  });
+  const bm = remap.get(built.bodyMat);
+  if (bm) built.bodyMat = bm as THREE.MeshStandardMaterial;
+}
+
+/** Villager v3 base: rounded head with the big villager nose and unibrow, tunic with a
+ *  collar, rolled-up sleeves, belt + pouch, work overalls and boots — a working villager,
+ *  same pivots as makeFig so the role kits and the walk cycle are unchanged. */
+function makeVillager(): StudsBody {
+  const built = makeFig(0x7a5232, 0x3f5a7a, 0x4a3424, "nose", 0xd8a67a);
+  const g = built.group;
+  const head = g.userData.head as THREE.Object3D;
+  for (const c of [...head.children]) head.remove(c);
+  const skinM = sheen(0xd8a67a);
+  const dark = skin(0x2a1c12);
+  put(head, geoRBox(0.27, 0.28, 0.26, 0.05), skinM, 0, 0.13, 0);
+  put(head, geoRBox(0.075, 0.12, 0.08, 0.03), skinM, 0, 0.08, -0.16); // big villager nose
+  put(head, geoRBox(0.2, 0.03, 0.03, 0.01), dark, 0, 0.19, -0.13, 0, true); // unibrow
+  for (const sx of [-0.065, 0.065]) {
+    put(head, geoRBox(0.05, 0.03, 0.012, 0.005), skin(0xf4f1ea), sx, 0.155, -0.131, 0, true);
+    put(head, geoRBox(0.022, 0.026, 0.012, 0.004), skin(0x2f7a3a), sx, 0.155, -0.137, 0, true);
+  }
+  put(head, geoRBox(0.24, 0.05, 0.24, 0.02), skin(0x5a3a22), 0, 0.27, 0.01, 0, true); // cropped hair
+  const work = sheen(0x3f5a7a);
+  put(g, geoRBox(0.34, 0.3, 0.03, 0.01), work, 0, 0.69, -0.12, 0, true); // overall bib
+  for (const sx of [-0.1, 0.1]) put(g, geoRBox(0.04, 0.24, 0.02, 0.008), work, sx, 0.85, -0.12, 0, true); // straps
+  for (const sx of [-0.1, 0.1]) put(g, geoCyl(0.014, 0.01, 10), skin(0xc8a040), sx, 0.82, -0.137, Math.PI / 2, true); // buttons
+  put(g, geoRBox(0.42, 0.05, 0.25, 0.015), skin(0x3a2616), 0, 0.53, 0, 0, true); // belt
+  put(g, geoRBox(0.09, 0.09, 0.06, 0.02), skin(0x6b4426), 0.16, 0.5, -0.13, 0, true); // pouch
+  put(g, geoTorus(0.12, 0.025, 18), sheen(0x6b4426), 0, 0.945, 0, Math.PI / 2, true); // collar
+  v3Finish(built);
+  return built;
+}
+
+/** Grue-Garde v3: crane-robot village guard — bevelled site-yellow chassis, hazard chevrons,
+ *  glazed cab head with cyan eyes and an orange beacon, shoulder gears, hydraulic hoses,
+ *  piston forearms with claw hands, tread feet, a crane jib with its hook on the back. */
+function makeGolem(): StudsBody {
+  const g = new THREE.Group();
+  const yel = sheen(0xf5c518), dark = sheen(0x3a3e46), black = skin(0x15161a), steel = sheen(0x9aa2ac);
+  const body = put(g, geoRBox(0.72, 0.62, 0.44, 0.08), yel, 0, 1.12, 0);
+  body.userData.skin = "body";
+  put(g, geoRBox(0.52, 0.18, 0.34, 0.05), dark, 0, 0.72, 0);
+  put(g, geoRBox(0.5, 0.3, 0.03, 0.02), black, 0, 1.1, -0.225, 0, true);
+  for (let k = 0; k < 4; k++) {
+    const c = put(g, geoRBox(0.07, 0.36, 0.02, 0.01), yel, -0.18 + k * 0.12, 1.1, -0.24, 0, true);
+    c.rotation.z = 0.6;
+  }
+  for (const sx of [-1, 1]) {
+    const gr = gear(g, dark, steel, 0.11, 0.05, 10);
+    gr.rotation.z = Math.PI / 2;
+    gr.position.set(sx * 0.37, 1.34, 0);
+    flexTube(g, black, `golem-hose${sx}`, [[sx * 0.2, 0.9, 0.23], [sx * 0.36, 1.0, 0.26], [sx * 0.46, 1.24, 0.12]], 0.025, 4);
+  }
+  // crane jib on the back + hook
+  put(g, geoRBox(0.07, 0.6, 0.07, 0.02), dark, 0, 1.6, 0.25);
+  const jib = put(g, geoRBox(0.06, 0.06, 0.5, 0.02), dark, 0, 1.88, 0.05);
+  void jib;
+  put(g, geoCyl(0.006, 0.22, 4), black, 0, 1.76, -0.18, 0, true);
+  put(g, geoTorus(0.04, 0.012, 12), steel, 0, 1.63, -0.18, 0, true);
+  const head = new THREE.Group();
+  head.position.set(0, 1.44, -0.02);
+  g.add(head);
+  g.userData.head = head;
+  put(head, geoRBox(0.4, 0.32, 0.36, 0.07), yel, 0, 0.17, 0);
+  put(head, geoRBox(0.34, 0.15, 0.03, 0.02), transTile(0x5ce0d2, 0x1f746a), 0, 0.2, -0.18, 0, true);
+  for (const sx of [-0.08, 0.08]) glowEye(head, sx, 0.2, -0.19, 0.03, 0x5ce0ff, black, false);
+  put(head, geoRBox(0.42, 0.05, 0.38, 0.02), dark, 0, 0.35, 0, 0, true);
+  const beacon = skin(0xff8a1a, { transparent: true, opacity: 0.85 });
+  beacon.emissive = new THREE.Color(0xff6a00);
+  (beacon as THREE.MeshStandardMaterial).emissiveIntensity = 0.9;
+  put(head, geoDome(0.05, 12), beacon, 0, 0.375, 0.08, 0, true);
+  const leg = (x: number) => {
+    const p = v3Limb(g, x, 0.62, 0, { w: 0.2, up: 0.26, low: 0.26, upM: dark, lowM: yel, joint: steel, hip: true });
+    const t = put(p, geoRBox(0.24, 0.1, 0.34, 0.04), black, 0, -0.6, -0.04, 0, true);
+    void t;
+    return p;
+  };
+  const arm = (x: number) => {
+    const p = new THREE.Group();
+    p.position.set(x, 1.36, 0);
+    g.add(p);
+    put(p, geoBall(0.1, 12), steel, 0, 0, 0, 0, true);
+    put(p, geoRBox(0.15, 0.34, 0.15, 0.04), yel, 0, -0.2, 0);
+    put(p, geoBall(0.07, 10), steel, 0, -0.38, 0, 0, true);
+    put(p, geoCyl(0.04, 0.3, 10), steel, 0, -0.55, 0, 0, true); // piston
+    put(p, geoCyl(0.06, 0.16, 10), dark, 0, -0.46, 0, 0, true);
+    for (const sx of [-0.04, 0.04]) {
+      const f = put(p, geoRBox(0.035, 0.12, 0.06, 0.01), dark, sx, -0.74, -0.02, 0, true);
+      f.rotation.z = sx * 4;
+    }
+    return p;
+  };
+  const legs = [leg(-0.16), leg(0.16), arm(-0.45), arm(0.45)];
+  return { group: g, legs, bodyMat: yel };
+}
+
+/** Cochonnet v3 (toy piggy bank): rounded pink body with a coin slot, snout disc with nostrils,
+ *  floppy ear plates, glossy eyes, ball-jointed stubby legs with dark hooves, a curly tail. */
+function makePig(): StudsBody {
+  const g = new THREE.Group();
+  const pink = sheen(0xf2a2c0), deep = sheen(0xd97a9e), dark = skin(0x2a1c20), joint = sheen(0xc88aa6);
+  const body = put(g, geoRBox(0.44, 0.38, 0.66, 0.14), pink, 0, 0.42, 0);
+  body.userData.skin = "body";
+  put(g, geoRBox(0.2, 0.02, 0.04, 0.008), dark, 0, 0.615, 0.05, 0, true); // coin slot
+  const head = new THREE.Group();
+  head.position.set(0, 0.48, -0.32);
+  g.add(head);
+  g.userData.head = head;
+  put(head, geoRBox(0.34, 0.3, 0.26, 0.09), pink, 0, 0.0, -0.08);
+  put(head, geoCyl(0.09, 0.06, 18), deep, 0, -0.03, -0.23, Math.PI / 2);
+  for (const sx of [-0.035, 0.035]) put(head, geoCyl(0.018, 0.02, 8), dark, sx, -0.03, -0.262, Math.PI / 2, true);
+  for (const sx of [-1, 1]) {
+    toyEye(head, sx * 0.085, 0.06, -0.212, 0.026);
+    const ear = put(head, geoPlate("pig-ear", [[-0.05, 0], [0.05, 0], [0, 0.1]], 0.02), deep, sx * 0.12, 0.15, -0.06, -1.2, true);
+    ear.rotation.z = sx * 0.3;
+  }
+  const legs = [-1, 1].flatMap((sx) => [-0.2, 0.2].map((z) => v3Limb(g, sx * 0.13, 0.26, z, { w: 0.11, up: 0.1, low: 0.1, upM: pink, joint, foot: dark, footLen: 0.12 })));
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.5, 0.33);
+  g.add(tail);
+  put(tail, geoTorus(0.035, 0.012, 14), deep, 0, 0.02, 0.03, 0, true);
+  g.userData.tail = tail;
+  return { group: g, legs, bodyMat: pink };
+}
+
+/** Meuhbloc v3: rounded white body with raised black patch plates, pink udder, muzzle with
+ *  nostrils, curved horns, ear plates, glossy eyes, gold bell, ball-jointed legs, tufted tail. */
+function makeCow(): StudsBody {
+  const g = new THREE.Group();
+  const white = sheen(0xf4f1ea), blk = sheen(0x1e1a1a), pink = sheen(0xe8a0b0), joint = sheen(0x6b7078), horn = sheen(0xe8dcc0);
+  const body = put(g, geoRBox(0.5, 0.46, 0.86, 0.12), white, 0, 0.8, 0);
+  body.userData.skin = "body";
+  for (const [x, y, z, w, d, rz] of [[0.252, 0.85, -0.1, 0.02, 0.3, 0], [-0.252, 0.78, 0.18, 0.02, 0.26, 0], [0.1, 1.032, 0.25, 0.22, 0.2, 0], [-0.12, 1.032, -0.2, 0.18, 0.16, 0], [0.252, 0.72, 0.28, 0.02, 0.14, 0]] as const) {
+    const p = put(g, geoRBox(w > 0.1 ? w : 0.02, w > 0.1 ? 0.02 : 0.2, d, 0.008), blk, x, y, z, 0, true);
+    p.rotation.z = rz;
+  }
+  put(g, geoDome(0.1, 14), pink, 0, 0.57, 0.2, Math.PI, true);
+  for (const [x, z] of [[-0.04, 0.17], [0.04, 0.17], [-0.04, 0.23], [0.04, 0.23]]) put(g, geoCyl(0.015, 0.05, 6), pink, x, 0.48, z, 0, true);
+  const head = new THREE.Group();
+  head.position.set(0, 0.98, -0.46);
+  g.add(head);
+  g.userData.head = head;
+  put(head, geoRBox(0.32, 0.3, 0.3, 0.07), white, 0, 0.02, -0.08);
+  put(head, geoRBox(0.24, 0.13, 0.08, 0.04), pink, 0, -0.07, -0.25);
+  for (const sx of [-0.05, 0.05]) put(head, geoCyl(0.016, 0.02, 8), skin(0x3a2026), sx, -0.06, -0.292, Math.PI / 2, true);
+  put(head, geoRBox(0.16, 0.12, 0.02, 0.01), blk, 0.08, 0.1, -0.235, 0, true); // eye patch
+  for (const sx of [-1, 1]) {
+    toyEye(head, sx * 0.09, 0.06, -0.24, 0.025);
+    put(head, geoTube(`cow-horn${sx}`, [[sx * 0.14, 0.15, -0.04], [sx * 0.22, 0.2, -0.05], [sx * 0.24, 0.29, -0.08]], 0.022), horn, 0, 0, 0, 0, true);
+    const ear = put(head, geoRBox(0.1, 0.03, 0.06, 0.01), white, sx * 0.2, 0.09, 0.0, 0, true);
+    ear.rotation.z = -sx * 0.4;
+  }
+  put(head, geoTorus(0.15, 0.015, 16), skin(0x7a3a22), 0, -0.12, 0.05, Math.PI / 2 + 0.3, true); // collar
+  const bell = skin(0xf5c518);
+  put(head, geoLathe("cow-bell", [[0, 0], [0.04, 0.0], [0.035, 0.03], [0.02, 0.06], [0, 0.065]], 12), bell, 0, -0.27, -0.06, 0, true);
+  const legs = [-1, 1].flatMap((sx) => [-0.3, 0.3].map((z) => v3Limb(g, sx * 0.16, 0.6, z, { w: 0.13, up: 0.26, low: 0.26, upM: white, lowM: white, joint, foot: blk, footLen: 0.15 })));
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.95, 0.43);
+  g.add(tail);
+  put(tail, geoTube("cow-tail", [[0, 0, 0], [0, -0.15, 0.06], [0, -0.38, 0.06]], 0.018), white, 0, 0, 0, 0, true);
+  put(tail, geoBall(0.045, 10), blk, 0, -0.4, 0.06, 0, true);
+  g.userData.tail = tail;
+  return { group: g, legs, bodyMat: white };
+}
+
+/** Floconnet v3: wool as a merged cloud of round bobbles (tagged wool, hidden when sheared)
+ *  over a pale core, dark face with a wool fringe, ear plates, glossy eyes, slim dark legs. */
+function makeSheep(): StudsBody {
+  const g = new THREE.Group();
+  const wool = sheen(0xf4f1ea), core = sheen(0xe8d8c8), face = sheen(0x3a302a), joint = sheen(0x4a4038);
+  const body = put(g, geoRBox(0.42, 0.36, 0.66, 0.12), core, 0, 0.62, 0);
+  body.userData.skin = "body";
+  const rnd = seeded(4241);
+  const wb = new PartBatch("sheep-wool");
+  for (let i = 0; i < 46; i++) {
+    const a = rnd() * Math.PI * 2, t = rnd() * 0.9 + 0.05, z = (rnd() - 0.5) * 0.7;
+    const r = 0.08 + rnd() * 0.05;
+    wb.add(geoBall(1, 8), wool, Math.cos(a) * 0.22 * t + Math.sign(Math.cos(a)) * 0.02, 0.66 + Math.abs(Math.sin(a)) * 0.19 * (0.5 + t * 0.5), z, 0, 0, 0, [r, r * 0.9, r]);
+  }
+  wb.flush(g);
+  const head = new THREE.Group();
+  head.position.set(0, 0.74, -0.36);
+  g.add(head);
+  g.userData.head = head;
+  put(head, geoRBox(0.2, 0.22, 0.24, 0.06), face, 0, 0, -0.06);
+  for (const sx of [-0.06, 0, 0.06]) put(head, geoBall(0.06, 8), wool, sx, 0.12, -0.04, 0, true);
+  for (const sx of [-1, 1]) {
+    toyEye(head, sx * 0.065, 0.03, -0.181, 0.02);
+    const ear = put(head, geoRBox(0.09, 0.025, 0.05, 0.01), face, sx * 0.14, 0.04, 0.0, 0, true);
+    ear.rotation.z = -sx * 0.5;
+  }
+  const legs = [-1, 1].flatMap((sx) => [-0.22, 0.22].map((z) => v3Limb(g, sx * 0.12, 0.46, z, { w: 0.09, up: 0.2, low: 0.2, upM: face, joint, foot: skin(0x1a1410), footLen: 0.1 })));
+  tagWool(g, wool);
+  return { group: g, legs, bodyMat: wool };
+}
+
+/** Poulet v3: egg-shaped white body, layered feather wing plates, tail fan, red comb and
+ *  wattle, cone beak, glossy eyes, thin yellow legs with three toes. */
+function makeChicken(): StudsBody {
+  const g = new THREE.Group();
+  const white = sheen(0xf7f4ee), red = sheen(0xd8322a), yel = sheen(0xf0b030);
+  const body = put(g, geoBall(0.17, 18), white, 0, 0.36, 0.02);
+  body.scale.set(1, 0.92, 1.25);
+  body.userData.skin = "body";
+  for (const sx of [-1, 1]) for (let k = 0; k < 3; k++) {
+    const f = put(g, geoPlate(`chick-f${k}`, [[0, 0], [0.05, 0.2 - k * 0.04], [-0.05, 0.2 - k * 0.04]], 0.02), white, sx * (0.165 + k * 0.006), 0.4 - k * 0.04, -0.06, 0, true);
+    f.rotation.set(Math.PI / 2 - 0.2, 0, sx * (Math.PI / 2 - 0.15));
+  }
+  for (let k = -1; k <= 1; k++) {
+    const t = put(g, geoPlate("chick-tail", [[0, 0], [0.04, 0.16], [-0.04, 0.16]], 0.02), white, k * 0.04, 0.42, 0.18, -0.6, true);
+    t.rotation.z = k * 0.3;
+  }
+  const head = new THREE.Group();
+  head.position.set(0, 0.52, -0.14);
+  g.add(head);
+  g.userData.head = head;
+  put(head, geoBall(0.09, 14), white, 0, 0.04, -0.02);
+  for (const [z, y] of [[-0.04, 0.14], [0.0, 0.15], [0.04, 0.13]]) put(head, geoBall(0.03, 8), red, 0, y, z, 0, true);
+  put(head, geoCone(0.03, 0.08, 8), yel, 0, 0.03, -0.13, -Math.PI / 2, true);
+  put(head, geoBall(0.025, 8), red, 0, -0.03, -0.1, 0, true).scale.set(0.8, 1.4, 0.8);
+  for (const sx of [-1, 1]) toyEye(head, sx * 0.05, 0.06, -0.075, 0.016);
+  const leg = (sx: number) => {
+    const p = new THREE.Group();
+    p.position.set(sx * 0.06, 0.22, 0);
+    g.add(p);
+    put(p, geoCyl(0.016, 0.2, 8), yel, 0, -0.1, 0, 0, true);
+    for (const a of [-0.5, 0, 0.5]) {
+      const toe = put(p, geoRBox(0.016, 0.014, 0.07, 0.005), yel, Math.sin(a) * 0.03, -0.2, -0.03, 0, true);
+      toe.rotation.y = a;
+    }
+    return p;
+  };
+  return { group: g, legs: [leg(-1), leg(1)], bodyMat: white };
+}
+
+/** Ravageur / Mammouth-Glaçon base v3: massive rounded hull with a studded dome hump, shaggy
+ *  fur plates on the flanks, horned head with curved tusks and glowing eyes, thick jointed legs. */
+function makeRavager(): StudsBody {
+  const g = new THREE.Group();
+  const hide = sheen(0x5a5560), fur = sheen(0x3e3a40), horn = sheen(0xe8dcc0), joint = sheen(0x6b7078), black = skin(0x141218);
+  const body = put(g, geoRBox(0.9, 0.78, 1.3, 0.2), hide, 0, 1.25, 0.05);
+  body.userData.skin = "body";
+  put(g, geoDome(0.42, 20), hide, 0, 1.62, 0.12).scale.set(1, 0.5, 1.2);
+  for (let k = 0; k < 5; k++) put(g, geoCyl(0.05, 0.035, 10), hide, 0, 1.83 - Math.abs(k - 2) * 0.02, -0.25 + k * 0.17, 0, true);
+  const rnd = seeded(911);
+  const fb = new PartBatch("ravager-fur");
+  for (const sx of [-1, 1]) for (let i = 0; i < 12; i++) fb.add(geoBox(0.04, 0.26, 0.14), fur, sx * 0.47, 1.0 + rnd() * 0.35, -0.5 + (i / 11) * 1.1, 0, 0, sx * 0.15);
+  fb.flush(g);
+  const head = new THREE.Group();
+  head.position.set(0, 1.3, -0.68);
+  g.add(head);
+  g.userData.head = head;
+  put(head, geoRBox(0.56, 0.5, 0.46, 0.1), hide, 0, 0, -0.16);
+  put(head, geoRBox(0.4, 0.14, 0.2, 0.05), fur, 0, -0.2, -0.36); // jaw
+  for (const sx of [-1, 1]) {
+    glowEye(head, sx * 0.15, 0.08, -0.395, 0.04, 0xffc23a, black);
+    put(head, geoTube(`rav-tusk${sx}`, [[sx * 0.16, -0.18, -0.36], [sx * 0.22, -0.3, -0.52], [sx * 0.2, -0.16, -0.7]], 0.035), horn, 0, 0, 0, 0, true);
+    put(head, geoTube(`rav-horn${sx}`, [[sx * 0.24, 0.2, -0.14], [sx * 0.42, 0.36, -0.1], [sx * 0.46, 0.2, -0.3]], 0.04), horn, 0, 0, 0, 0, true);
+  }
+  const legs = [-1, 1].flatMap((sx) => [-0.4, 0.4].map((z) => v3Limb(g, sx * 0.3, 0.9, z, { w: 0.24, up: 0.42, low: 0.42, upM: hide, lowM: fur, joint, foot: black, footLen: 0.28 })));
+  return { group: g, legs, bodyMat: hide };
+}
+
+/** Gardien / Kraken-Bouée base v3: buoy-round body with a white float band, one huge glowing eye
+ *  in a white sclera ring, retractable orange cone spikes on grey ball sockets, side fins, tail. */
+function makeGuardian(): StudsBody {
+  const g = new THREE.Group();
+  const hide = sheen(0x3e8278), spike = sheen(0xf07820), white = sheen(0xf4f1ea), joint = sheen(0x6b7078), black = skin(0x101214);
+  const body = put(g, geoRBox(0.74, 0.62, 0.84, 0.22), hide, 0, 0.55, 0);
+  body.userData.skin = "body";
+  put(g, geoRBox(0.78, 0.1, 0.88, 0.05), white, 0, 0.55, 0, 0, true); // float band
+  put(g, geoTorus(0.17, 0.04, 20), white, 0, 0.58, -0.43, 0, true);
+  glowEye(g, 0, 0.58, -0.44, 0.13, 0xff8824, black);
+  put(g, geoRBox(0.04, 0.12, 0.02, 0.01), black, 0, 0.58, -0.5, 0, true); // pupil slit
+  const dirs: [number, number, number][] = [[0, 1, 0], [0.7, 0.7, 0], [-0.7, 0.7, 0], [0, 0.7, 0.7], [0, 0.7, -0.6], [1, 0, 0.3], [-1, 0, 0.3], [0.7, -0.6, 0], [-0.7, -0.6, 0], [0, -1, 0.2]];
+  const sb = new PartBatch("guardian-spikes");
+  const up = new THREE.Vector3(0, 1, 0), q = new THREE.Quaternion(), e = new THREE.Euler();
+  for (const [x, y, z] of dirs) {
+    const v = new THREE.Vector3(x, y, z).normalize();
+    q.setFromUnitVectors(up, v);
+    e.setFromQuaternion(q);
+    const p = new THREE.Vector3(v.x * 0.38, 0.55 + v.y * 0.32, v.z * 0.43);
+    sb.add(geoBall(0.045, 8), joint, p.x, p.y, p.z);
+    sb.add(geoCone(0.04, 0.2, 8), spike, p.x + v.x * 0.1, p.y + v.y * 0.1, p.z + v.z * 0.1, e.x, e.y, e.z);
+  }
+  sb.flush(g);
+  for (const sx of [-1, 1]) {
+    const f = put(g, geoPlate("guard-fin", [[0, 0], [0.22, 0.1], [0.18, 0.3], [0, 0.22]], 0.025), spike, sx * 0.37, 0.55, 0.05, 0, true);
+    f.rotation.set(0, 0, sx * 0.3);
+    f.scale.x = sx;
+  }
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.55, 0.42);
+  for (let k = 0; k < 3; k++) put(tail, geoRBox(0.2 - k * 0.04, 0.2 - k * 0.04, 0.16, 0.05), hide, 0, 0, 0.08 + k * 0.15);
+  put(tail, geoPlate("guard-tail", [[-0.02, 0.38], [0.02, 0.38], [0.22, 0.62], [-0.22, 0.62]], 0.03), spike, 0, 0, 0, Math.PI / 2, true).rotation.z = Math.PI / 2;
+  g.add(tail);
+  g.userData.tail = tail;
+  return { group: g, legs: [], bodyMat: hide };
+}
+
+/** Flambloc / Forge-Titan base v3: a glowing lathe core with brass bands, a visor head with an
+ *  eye-pixel grid, shoulder gears and four hinged blaze rods ringed in brass with live fire tips. */
+function makeBlaze(): StudsBody {
+  const g = new THREE.Group();
+  const core = skin(0xf07820);
+  core.emissive = new THREE.Color(0x8a3400);
+  const brass = sheen(0xc99a2e), dark = sheen(0x2a2420), black = skin(0x100c0a);
+  const body = put(g, geoLathe("blaze-core", [[0, 0], [0.16, 0.0], [0.2, 0.12], [0.18, 0.32], [0.22, 0.46], [0, 0.5]], 20), core, 0, 0.58, 0);
+  body.userData.skin = "body";
+  for (const y of [0.66, 0.84, 1.0]) put(g, geoTorus(0.2, 0.025, 20), brass, 0, y, 0, Math.PI / 2, true);
+  for (const sx of [-1, 1]) {
+    const gr = gear(g, brass, dark, 0.09, 0.04, 10);
+    gr.rotation.z = Math.PI / 2;
+    gr.position.set(sx * 0.24, 1.0, 0);
+  }
+  const head = new THREE.Group();
+  head.position.set(0, 1.11, 0);
+  g.add(head);
+  g.userData.head = head;
+  put(head, geoRBox(0.32, 0.3, 0.3, 0.06), sheen(0xf5c518), 0, 0.15, 0);
+  put(head, geoRBox(0.26, 0.1, 0.03, 0.015), black, 0, 0.17, -0.155, 0, true);
+  const eyeM = skin(0xffe08a);
+  eyeM.emissive = new THREE.Color(0xffb020);
+  (eyeM as THREE.MeshStandardMaterial).emissiveIntensity = 1.4;
+  for (const sx of [-0.09, -0.03, 0.03, 0.09]) put(head, geoRBox(0.045, 0.05, 0.015, 0.006), eyeM, sx, 0.17, -0.172, 0, true);
+  fireQuad(head, 0, 0.3, 0, 0.3, 0.32, 1);
+  const rodM = transTile(0xffc93a, 0x995800);
+  const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => {
+    const p = new THREE.Group();
+    p.position.set(sx * 0.28, 0.66, sz * 0.28);
+    g.add(p);
+    put(p, geoBall(0.06, 10), brass, 0, 0, 0, 0, true);
+    put(p, geoCyl(0.05, 0.56, 10), rodM, 0, -0.29, 0, 0, true);
+    for (const y of [-0.12, -0.3, -0.48]) put(p, geoTorus(0.055, 0.012, 12), brass, 0, y, 0, Math.PI / 2, true);
+    fireQuad(p, 0, -0.62, 0, 0.12, 0.16, sx + sz * 2);
+    return p as THREE.Object3D;
+  }));
+  return { group: g, legs, bodyMat: core };
+}
+
+const V3_BUILDERS: Record<string, () => StudsBody> = {
+  villager: makeVillager, golem: makeGolem, pig: makePig, cow: makeCow, sheep: makeSheep, chicken: makeChicken,
+  ravager: makeRavager, guardian: makeGuardian, blaze: makeBlaze,
+};
 export function buildStuds(kind: string, scale: number): StudsBody {
-  const figKind =
-    kind === "villager"
+  const v3 = V3_BUILDERS[kind];
+  const figKind = v3
+    ? v3()
+    : kind === "villager"
       ? makeFig(0x8d5a34, 0x6b3e22, 0x4a3424, "nose")
       : kind === "walker" || kind === "husk" || kind === "drowned"
         ? makeDemoule(kind)
@@ -19038,6 +19635,8 @@ export function buildStuds(kind: string, scale: number): StudsBody {
   }
 
   alignQuadruped(built, kind);
+  if (!v3 && kind !== "creeper" && kind !== "dragon" && !(kind === "walker" || kind === "husk" || kind === "drowned")) v3Finish(built);
+  v3Optimize(built.group, "kind:" + kind);
   // MINECRAFT proportions (Philippe, 2026-10-28: "tous les mobs sont petits
   // comparer a minecraft, corrige ca, compare tout a minecraft"). Every model
   // was built ~1.2-1.55x small (humanoids 1.29 vs MC 1.95, player fig 1.29 vs

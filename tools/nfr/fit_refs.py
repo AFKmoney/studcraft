@@ -12,8 +12,8 @@ from siren_fit import init, forward, backward, psnr, quantize_block_int8
 REFS = "../../refs/"
 FIELDS = {  # name: (file, crop box, channels, size, hidden)
     "bombe": ("bombe.jpg", (560, 250, 700, 640), 1, 64, 24),     # barrel side: two black bands, specular sheen
-    "demoule": ("demoule.jpg", (330, 300, 700, 640), 1, 64, 40),  # crazed greeble surface + cracks
-    "dragon": ("dragon.jpg", (120, 90, 340, 280), 3, 64, 32),     # trans-purple truss panel
+    "demoule": ("demoule.jpg", (380, 360, 620, 600), 1, 64, 48),  # v3: tight chest crop — stacked greeble bricks + hairline cracks
+    "dragon": ("dragon.jpg", (120, 90, 340, 280), 3, 64, 44),     # v3: trans-purple truss panel, wider net
     "crab": ("collection.jpg", (80, 300, 260, 420), 1, 64, 24),   # studded red shell shading
 }
 STEPS = int(sys.argv[1]) if len(sys.argv) > 1 else 2500

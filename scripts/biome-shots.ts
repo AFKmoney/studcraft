@@ -1,6 +1,6 @@
 // Dev-only harness (biomes-bosses): /biome-shots.html?species=id | ?boss=zone | ?zone=zone | ?kind=k
 import * as THREE from "three";
-import { applyBiomeLook, buildSpecies, buildStuds } from "../src/game/game";
+import { applyBiomeLook, buildSpecies, buildStuds, decorateVillagerRole } from "../src/game/game";
 import { SPECIES_BY_ID, ZONES, type ZoneId } from "../src/game/biomes";
 import { displayName } from "../src/game/mobNames";
 
@@ -55,6 +55,18 @@ if (q.get("species")) {
   }
   root.position.x = -x / 2;
   title = `${z.label} — ${z.mobs.map((m) => m.species ? SPECIES_BY_ID.get(m.species)!.label : m.label ?? displayName({ kind: m.kind! })).join(", ")} · boss ${z.boss.label}`;
+} else if (q.get("roles")) {
+  // ?roles=1 : the plain villager followed by every trader profession, side by side
+  let x = 0;
+  for (const role of [undefined, "grocer", "smith", "mason", "herder", "clerk", "mage", "ranger", "mechanic"] as const) {
+    const g = buildStuds("villager", 1).group;
+    decorateVillagerRole(g, role);
+    g.position.x = x;
+    x += 1.0;
+    root.add(g);
+  }
+  root.position.x = -x / 2 + 0.5;
+  title = "Villageois + marchands";
 } else {
   one(buildStuds(q.get("kind") ?? "creeper", 1).group);
   title = displayName({ kind: q.get("kind") ?? "creeper" });
