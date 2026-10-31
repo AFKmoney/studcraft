@@ -213,6 +213,8 @@ function mergeBufferGeometries(geos: THREE.BufferGeometry[]): THREE.BufferGeomet
   return merged;
 }
 
+export const MOB_REDESIGN_UNBATCHED: ReadonlySet<string> = new Set(["creeper", "skelly", "stray", "walker", "husk", "drowned"]);
+
 export class MobBatchRenderer {
   scene: THREE.Scene;
   maxInstances: number;
@@ -328,6 +330,10 @@ export class MobBatchRenderer {
       const isWalker = m.kind === "walker" || m.kind === "husk" || m.kind === "drowned";
 
       if (!isCreeper && !isSkelly && !isWalker) continue;
+      // mob-redesign: Pétabrique / Squelek / Démoulé meshes no longer match these
+      // Minecraft-era instanced templates, so they render through their own scene
+      // graph until the templates are rebuilt from the new geometry.
+      if (MOB_REDESIGN_UNBATCHED.has(m.kind)) continue;
 
       // Mark the original group children as batched so Three.js scene-graph skips rendering them
       if (!m.mesh.userData.batched) {

@@ -26,7 +26,7 @@ ids.forEach((id, i) => {
 const fakeWorld = { get: (x: number, y: number, z: number) => blocks.get(K(x, y, z)) ?? 0 };
 
 const SIZE = 2048;
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+const renderer = new THREE.WebGLRenderer({ powerPreference: "high-performance", antialias: true, alpha: true });
 renderer.setSize(SIZE, SIZE);
 renderer.setPixelRatio(1);
 renderer.setClearColor(0x000000, 0);

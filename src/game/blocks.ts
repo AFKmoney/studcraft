@@ -486,6 +486,23 @@ export const ID = {
   // P5d: sensors — Teks parts (specs in teks.ts), cast at the Foundry.
   SensorDist: 472,
   SensorColor: 473,
+  VoidGlass: 474, // v5: Veilleur-Prisme drop — void-glass shard (rare melt input)
+  // biome-structures: rare shrine / mecha pieces (480+ to stay clear of parallel branches)
+  SanctumStud: 480,
+  MechaCore: 481,
+  Sandstone: 482,
+  Adobe: 483,
+  PackedSnow: 484,
+  IceBrick: 485,
+  BasaltBrick: 486,
+  ObsidianTile: 487,
+  Mangrove: 488,
+  Bamboo: 489,
+  Coral: 490,
+  CrystalBrick: 491,
+  JungleStone: 492,
+  MudBrick: 493,
+  RedRock: 494,
   // P6 step 4 / P7 tool moulds (Muse): plastic tools cast at the
   // Foundry — the mould is the shape, the ingot is the stock. Tier 2
   // (stone class), 120 uses: moulded plastic, honestly mid-table.
@@ -919,7 +936,7 @@ put(
 put(b(ID.EndStone, "Pale brick", "#efe6b8", "#f7f1cc", "#ddd4a4", "#c8be8e", { hard: 3, tough: true, need: 1 }));
 put(b(ID.EndFrame, "End frame", "#2a1848", "#3d2868", "#1a1030", "#100818", { hard: 6, tough: true, need: 4 }));
 put(b(ID.EndFrameEye, "End frame (eye)", "#7a4ad4", "#c084fc", "#2a1848", "#1a1030", { hard: 6, tough: true, need: 4, drop: ID.EndFrame }));
-item(ID.DragonEgg, "Dragon egg", "#1a1030");
+item(ID.DragonEgg, "Mold sprue", "#1a1030");
 put(b(ID.EndCrystal, "End crystal", "#b48cff", "#f4e8ff", "#7a4ad4", "#5b32a8", { hard: 0.6, light: 8 }));
 put(b(ID.EmeraldOre, "Trade ore", "#3aaa4c", "#7dcca0", "#8e959c", "#6e767e", { hard: 1.8, tough: true, need: 3, drop: ID.Emerald }));
 put(b(ID.Enchanter, "Rune table", "#2a1848", "#7a4ad4", "#6b3e22", "#c4924a", { hard: 1.2, work: "enchant" }));
@@ -941,7 +958,7 @@ item(ID.Wheat, "Grain", "#e6c14a");
 item(ID.Bucket, "Bucket", "#c5ccd3");
 item(ID.WaterBucket, "Water bucket", "#3b96e4");
 item(ID.Apple, "Apple", "#e23b2f", { food: 4 });
-item(ID.RawMeat, "Raw chop", "#e08a7a", { food: 2 });
+item(ID.RawMeat, "Toy ham", "#e08a7a", { food: 2 });
 item(ID.Cooked, "Cooked chop", "#c47a2a", { food: 8 });
 item(ID.Bread, "Loaf", "#e0b15a", { food: 6 });
 
@@ -986,7 +1003,7 @@ gear(ID.TPlasticPick, "Tempered plastic pick", "#a8d8e8", "pick", 3, 240);
 gear(ID.TPlasticSword, "Tempered plastic blade", "#a8d8e8", "sword", 3, 240);
 gear(ID.TPlasticAxe, "Tempered plastic axe", "#a8d8e8", "axe", 3, 240);
 gear(ID.TPlasticShovel, "Tempered plastic spade", "#a8d8e8", "shovel", 3, 240);
-item(ID.Bone, "Bone", "#f4f1ea");
+item(ID.Bone, "Teks rod", "#f4f1ea");
 item(ID.Flint, "Striker", "#f07820", { maxUse: 40 });
 item(ID.Bottle, "Bottle", "#d5f3f6");
 item(ID.PotionHeal, "Mend brew", "#e23b2f", { food: 0 });
@@ -996,13 +1013,13 @@ item(ID.Fish, "Fish", "#e08a7a", { food: 4 });
 item(ID.Emerald, "Trade gem", "#3aaa4c");
 item(ID.Boat, "Boat", "#c4924a");
 item(ID.Cart, "Cart", "#8e959c");
-item(ID.Feather, "Feather", "#f4f1ea");
-item(ID.String, "String", "#f4f1ea");
+item(ID.Feather, "Fin tile", "#f4f1ea");
+item(ID.String, "Rubber band", "#f4f1ea");
 item(ID.Eye, "Seeker eye", "#7a4ad4");
 item(ID.Elytra, "Glide shell", "#5eb0e5");
 item(ID.Totem, "Last stud", "#f0c43a");
-item(ID.WitherSkull, "Wither skull", "#2a2a2a");
-item(ID.NetherStar, "Nether star", "#f4e8ff");
+item(ID.WitherSkull, "Reject head", "#2a2a2a");
+item(ID.NetherStar, "Weld star", "#f4e8ff");
 item(ID.Scrap, "Ember scrap", "#6e2424");
 item(ID.Shield, "Shield", "#c4924a", { maxUse: 120 });
 item(ID.Milk, "Milk", "#f4f1ea");
@@ -1010,7 +1027,7 @@ item(ID.Gapple, "Gold apple", "#f0c43a", { food: 8 });
 item(ID.Cookie, "Cookie", "#c4924a", { food: 2 });
 item(ID.Blaze, "Ember rod", "#f07820");
 item(ID.Wart, "Wart", "#a84838");
-item(ID.Powder, "Blast dust", "#2a2a2a");
+item(ID.Powder, "Popper powder", "#2a2a2a");
 item(ID.Saddle, "Saddle", "#8d5a34");
 item(ID.Egg, "Egg", "#f4f1ea", { food: 2 });
 gear(ID.NetherPick, "Ember pick", "#6e2424", "pick", 5, 600);
@@ -1020,9 +1037,9 @@ put(b(ID.TinOre, "Tin ore", "#b7c4b0", "#d5ddd0", "#8e959c", "#6e767e", { hard: 
 put(b(ID.CopperOre, "Copper ore", "#c46a32", "#e07a3d", "#8e959c", "#6e767e", { hard: 1.55, tough: true, need: 1 }));
 put(b(ID.AmberOre, "Amber ore", "#e6a322", "#ffbf3a", "#8e959c", "#6e767e", { hard: 1.7, tough: true, need: 2 }));
 put(b(ID.ChromeOre, "Chrome ore", "#9aa8b2", "#e8eef2", "#7a8188", "#5c646c", { hard: 1.9, tough: true, need: 3 }));
-put(b(ID.SapphireOre, "Sapphire ore", "#1a3a8a", "#2456d6", "#8e959c", "#6e767e", { hard: 2, tough: true, need: 3 }));
+put(b(ID.SapphireOre, "Sapphire ore", "#1a3a8a", "#2456d6", "#8e959c", "#6e767e", { hard: 2, tough: true, need: 3, drop: ID.Sapphire }));
 put(b(ID.ResinOre, "Resin ore", "#5a1848", "#c43a8a", "#3a1028", "#2a0c1c", { hard: 1.8, tough: true, need: 3 }));
-put(b(ID.PrismOre, "Prism ore", "#b48cff", "#f4e8ff", "#6e5a9a", "#3a2858", { hard: 2.4, tough: true, need: 4 }));
+put(b(ID.PrismOre, "Prism ore", "#b48cff", "#f4e8ff", "#6e5a9a", "#3a2858", { hard: 2.4, tough: true, need: 4, drop: ID.Prism }));
 put(b(ID.Basalt, "Basalt", "#3a3a3a", "#4a4a4a", "#2a2a2a", "#1a1a1a", { hard: 1.2, tough: true }));
 put(b(ID.Calcite, "Calcite", "#e8e4dc", "#f4f0e8", "#d0ccc4", "#b8b4ac", { hard: 0.6 }));
 put(b(ID.Tuff, "Tuff", "#6a6a5a", "#7a7a6a", "#5a5a4a", "#4a4a3a", { hard: 1.0, tough: true }));
@@ -1030,8 +1047,9 @@ put(b(ID.Spawner, "Spawner", "#2a2a32", "#3aaa4c", "#3a3a44", "#1a1a22", { hard:
 put(b(ID.MasterBrick, "Master brick", "#f5c518", "#ffe14a", "#e23b2f", "#b02620", { hard: 5, tough: true, need: 4 }));
 put(b(ID.ChromeBrick, "Chrome brick", "#d5dee6", "#f4f7fa", "#b7c4ce", "#8e9aa6", { hard: 2.4, tough: true, need: 3 }));
 item(ID.Tin, "Tin", "#d5ddd0");
-item(ID.EnderPearl, "Ender pearl", "#2a9a86");
-item(ID.InkSac, "Ink sac", "#23232e");
+item(ID.EnderPearl, "Blink lens", "#40f0d0"); // v5: Veilleur-Prisme lens (id 268 unchanged)
+item(ID.VoidGlass, "Void-glass shard", "#6a2ad0");
+item(ID.InkSac, "Stamp ink", "#23232e");
 item(ID.BaseBrew, "Base brew", "#b7c4b0");
 item(ID.PotionRegen, "Regen brew", "#e26a8a");
 item(ID.PotionFire, "Ward brew", "#f07820");
@@ -1049,8 +1067,8 @@ gear(ID.Trident, "Trident", "#2a9a86", "sword", 4, 240);
 gear(ID.Crossbow, "Crossbow", "#8a6428", "bow", 4, 240);
 put(b(ID.Frame, "Item frame", "#a67c3a", "#c4924a", "#8a6428", "#6d4a22", { hard: 0.4, solid: false, flat: true }));
 put(b(ID.Painting, "Painting", "#e8b64a", "#7ab648", "#4a7ac0", "#8a5426", { hard: 0.4, solid: false, flat: true }));
-item(ID.ShulkerShell, "Shulker shell", "#9a7ab8");
-put(b(ID.ShulkerBox, "Shulker box", "#8a6aa8", "#a887c4", "#6e5490", "#543e70", { hard: 1.4, tough: true, need: 1, work: "chest" }));
+item(ID.ShulkerShell, "Clam shell", "#9a7ab8");
+put(b(ID.ShulkerBox, "Clam box", "#8a6aa8", "#a887c4", "#6e5490", "#543e70", { hard: 1.4, tough: true, need: 1, work: "chest" }));
 put(b(ID.Beacon, "Beacon", "#7ee0e0", "#d8f8f4", "#3ec8c8", "#2a8ab8", { hard: 1.6, tough: true, work: "beacon", light: 12 }));
 put(b(ID.Conduit, "Conduit", "#3ec8c8", "#9ae8e0", "#2a9ab8", "#1e6e8a", { hard: 1.6, tough: true, need: 1, light: 10 }));
 put(b(ID.Jukebox, "Jukebox", "#8a6428", "#c4924a", "#5c4020", "#2a2a2a", { hard: 1.0, tough: true }));
@@ -1108,19 +1126,19 @@ put(
     hard: 0.05,
   }),
 );
-item(ID.Slime, "Slime", "#3aaa4c");
-item(ID.Fur, "Fur", "#c47a2a");
+item(ID.Slime, "Gel", "#3aaa4c");
+item(ID.Fur, "Fuzz", "#c47a2a");
 item(ID.Scale, "Scale", "#3b96e4");
-item(ID.Fang, "Fang", "#f4f1ea");
+item(ID.Fang, "Burr", "#f4f1ea");
 item(ID.Wisp, "Wisp dust", "#b48cff");
 item(ID.Tome, "Spell tome", "#7a4ad4");
 item(ID.Crystal, "Crystal", "#f4e8ff");
-item(ID.Pelt, "Pelt", "#8d5a34");
+item(ID.Pelt, "Felt", "#8d5a34");
 item(ID.Shell, "Shell chip", "#f4e0c0");
 item(ID.Wax, "Wax", "#f0c040");
 item(ID.Frost, "Frost shard", "#c8e8ff");
 item(ID.Cinder, "Cinder", "#e23b2f");
-item(ID.Antler, "Antler", "#e8d0a8");
+item(ID.Antler, "Clip antler", "#e8d0a8");
 item(ID.IceSheet, "Packed ice", "#d6e8f4");
 item(ID.GravelBar, "Pebble", "#9a9084");
 gear(ID.FangBlade, "Fang blade", "#f4f1ea", "sword", 4, 280);
@@ -1293,11 +1311,27 @@ for (let d = 0; d < 4; d++) {
   put(b(ID.StairsCobble0 + d, "Cobble stairs", "#8e959c", "#9aa1a8", "#7e868e", "#6e767e", { hard: 1.3, tough: true, need: 1, stairs: true, dir: d, drop: ID.StairsCobble0 }));
 }
 put(b(ID.Sign, "Sign", "#c4924a", "#e0b15a", "#a67c3a", "#8a6428", { hard: 0.4, solid: false, sign: true }));
-put(b(ID.GuardianSpike, "Guardian spike", "#3fc4b6", "#5ce0d2", "#2a988c", "#1f746a", { placeable: false }));
+put(b(ID.GuardianSpike, "Buoy spike", "#3fc4b6", "#5ce0d2", "#2a988c", "#1f746a", { placeable: false }));
 put(b(ID.PharaohGold, "Scarab relic", "#f5c518", "#ffd84a", "#c99812", "#9a700a", { placeable: false }));
-put(b(ID.WitchVenom, "Witch essence", "#9b45e4", "#ba6eff", "#732ab5", "#4e1882", { placeable: false }));
-put(b(ID.IllagerBadge, "Illager emblem", "#8e959c", "#cfd6dc", "#585e66", "#383d42", { placeable: false }));
-put(b(ID.VoidCore, "Ender core", "#2e9888", "#5cf2dc", "#1b5e54", "#103832", { placeable: false }));
+put(b(ID.WitchVenom, "Mixer essence", "#9b45e4", "#ba6eff", "#732ab5", "#4e1882", { placeable: false }));
+put(b(ID.IllagerBadge, "Raider badge", "#8e959c", "#cfd6dc", "#585e66", "#383d42", { placeable: false }));
+put(b(ID.VoidCore, "Prism sentinel core", "#2e9888", "#5cf2dc", "#1b5e54", "#103832", { placeable: false }));
+put(b(ID.SanctumStud, "Sanctum stud", "#ffe14a", "#fff3a8", "#e2b12e", "#9a700a", { placeable: false }));
+put(b(ID.MechaCore, "Mecha core", "#e23b2f", "#ff8a5c", "#8e959c", "#23272c", { placeable: false }));
+// Biome bricks (PR 3, 16-bit chunks): themed building stock, ids > 255.
+put(b(ID.Sandstone, "Sandstone", "#e3c98a", "#efd9a0", "#d4b674", "#b89a5c", { hard: 0.8 }));
+put(b(ID.Adobe, "Adobe brick", "#c98a5a", "#d89c6c", "#b87a4c", "#9a643c", { hard: 0.8 }));
+put(b(ID.PackedSnow, "Packed snow", "#eef4fa", "#ffffff", "#e0e8f0", "#cfd8e2", { hard: 0.8 }));
+put(b(ID.IceBrick, "Ice brick", "#9fd4f2", "#c4e8fa", "#8cc4e6", "#74acd2", { hard: 0.8, slip: true }));
+put(b(ID.BasaltBrick, "Basalt brick tile", "#4a4a50", "#5a5a62", "#3c3c42", "#2a2a30", { hard: 1.4, tough: true }));
+put(b(ID.ObsidianTile, "Obsidian tile", "#2c1e44", "#3e2c5e", "#22163a", "#140c24", { hard: 1.4, tough: true }));
+put(b(ID.Mangrove, "Mangrove planks", "#8a4a3a", "#9c5a48", "#7a3e30", "#5e2e24", { hard: 0.8 }));
+put(b(ID.Bamboo, "Bamboo", "#c8d46a", "#d8e27c", "#b4c25a", "#94a246", { hard: 0.8 }));
+put(b(ID.Coral, "Coral brick", "#ff7a8a", "#ff9aa6", "#f0606e", "#c8485a", { hard: 0.8 }));
+put(b(ID.CrystalBrick, "Crystal brick", "#b8e8ff", "#e0f6ff", "#a0d8f4", "#80bce0", { hard: 1.4, light: 6 }));
+put(b(ID.JungleStone, "Jungle stone", "#6a8a5a", "#7c9c6a", "#5c7a4c", "#4a6a3c", { hard: 1.4, tough: true }));
+put(b(ID.MudBrick, "Mud brick", "#6e5a42", "#7e6a50", "#604e38", "#4c3c2a", { hard: 0.8 }));
+put(b(ID.RedRock, "Red rock", "#c0603c", "#d0704a", "#ac5232", "#8c4026", { hard: 1.4, tough: true }));
 put(b(ID.TidalBlade, "Tidal trident blade", "#32b8cb", "#64e5f5", "#1f8da0", "#146070", { placeable: false, tool: "sword", tier: 4, maxUse: 480 }));
 put(b(ID.PharaohStaff, "Sun pharaoh scepter", "#ffd84a", "#fff088", "#d69b1a", "#9e6d0c", { placeable: false, tool: "sword", tier: 4, maxUse: 460 }));
 put(b(ID.WitchStaff, "Covensoul blade", "#a33de2", "#c875ff", "#7220a8", "#4a1072", { placeable: false, tool: "sword", tier: 4, maxUse: 440 }));
@@ -1361,7 +1395,7 @@ BLOCKS[ID.HelmNetherite].armor = 0.24;
 BLOCKS[ID.ChestNetherite].armor = 0.42;
 BLOCKS[ID.LegsNetherite].armor = 0.31;
 BLOCKS[ID.BootsNetherite].armor = 0.2;
-item(ID.EyeOfEnder, "Eye of ender", "#35b586");
+item(ID.EyeOfEnder, "Lens eye", "#35b586");
 item(ID.Steak, "Steak", "#b45a32", { food: 8 });
 item(ID.Spark, "Spark", "#ffc46b");
 // v4.15 (SRN fire): Fire is a system block (placed by ignition/spread, never by hand);
@@ -1491,34 +1525,28 @@ export function def(id: number): BlockDef {
 }
 
 export const ATLAS_COLS = 16;
-export const ATLAS_ROWS = 48;
+export const ATLAS_ROWS = 52; // 48 → 52 for the biome bricks (2048×6656 px, under the 8192 WebGL limit)
 export const TILE = 128;
 
-const TILE_OF = new Uint16Array(512);
-let tileSlot = 0;
-for (let id = 1; id < BLOCKS.length; id++) {
-  const block = BLOCKS[id];
-  if (!block) continue;
-  const drawn =
-    block.placeable ||
-    block.fluid ||
-    block.solid ||
-    block.plant ||
-    block.glass ||
-    block.torch ||
-    block.dust ||
-    block.lever ||
-    block.door ||
-    block.gate ||
-    block.plate ||
-    block.rail ||
-    block.cactus ||
-    block.ladder;
-  if (!drawn) continue;
-  TILE_OF[id] = ++tileSlot;
+// Atlas slots: world bricks first (id order, so every existing slot keeps
+// its place), Teks parts last — they render through the Teks layer, so a
+// slot past the atlas end only costs them a blank fallback tile.
+const TILE_OF = new Uint16Array(1024);
+let tilesReady = false;
+function drawnBlock(block: BlockDef | undefined): boolean {
+  if (!block) return false;
+  return !!(block.placeable || block.fluid || block.solid || block.plant || block.glass || block.torch || block.dust || block.lever || block.door || block.gate || block.plate || block.rail || block.cactus || block.ladder);
+}
+function assignTiles() {
+  tilesReady = true;
+  const teks = new Set<number>(TEKS);
+  let slot = 0;
+  for (let id = 1; id < BLOCKS.length; id++) if (!teks.has(id) && drawnBlock(BLOCKS[id])) TILE_OF[id] = ++slot;
+  for (let id = 1; id < BLOCKS.length; id++) if (teks.has(id) && drawnBlock(BLOCKS[id])) TILE_OF[id] = ++slot;
 }
 
 export function faceTile(id: number, face: 0 | 1 | 2 | 3): number {
+  if (!tilesReady) assignTiles();
   return (TILE_OF[id] || 0) * 4 + face;
 }
 

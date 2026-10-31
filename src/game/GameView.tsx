@@ -895,6 +895,10 @@ function SettingsPanel({ game, onBack }: { game: GameApi; onBack: () => void }) 
             </Row>
             <Row title="FPS counter">
               <Toggle label="FPS counter" on={s.showFps} onChange={(v) => game.setShowFps(v)} />
+              <Toggle label="NPC AI quests (downloads a ~250 MB model in the background)" on={s.npcLlm} onChange={(v) => game.setNpcLlm(v)} />
+            </Row>
+            <Row title="Graphics adapter" detail={game.hud.gpuWarn || "Rendering on the GPU (high-performance requested)."}>
+              <span className="sc-status">{game.hud.gpu || "detecting…"}</span>
             </Row>
           </>
         )}
@@ -1333,8 +1337,10 @@ function Hud({ game, touchUI }: { game: GameApi; touchUI: boolean }) {
           {Math.floor(hud.x)} / {Math.floor(hud.y)} / {Math.floor(hud.z)}
         </div>
       </div>
+      {hud.gpuWarn && <div className="sc-toast" role="alert" style={{ top: 8, bottom: "auto", maxWidth: 560 }}>⚠ {hud.gpuWarn}</div>}
       <div className="sc-hud-tr">
-        {s.showFps && <div className="sc-fps">{hud.fps} FPS</div>}
+        {s.showFps && <div className="sc-fps">{hud.fps} FPS · {hud.gpu}</div>}
+        {s.npcLlm && hud.llm && <div className="sc-llm" style={{ position: "absolute", right: 8, bottom: 8, fontSize: 11, opacity: 0.75, pointerEvents: "none", color: "#fff", textShadow: "0 1px 2px #000" }}>{hud.llm}</div>}
         {hud.questTrack && !hud.creative && (
           <div className={"sc-quest" + (hud.questAlert ? " ready" : "")}>
             <ScrollIcon size={16} />
@@ -2464,12 +2470,25 @@ function StationScreen({ game }: { game: GameApi }) {
                     hud.furnace.cook > 0 ? (
                       <>Out of fuel — the cook holds at {Math.round(hud.furnace.cook * 100)}%. Add fuel to finish it.</>
                     ) : (
-                      <>Not lit — add fuel (coal burns 8s; one cook takes 5s).</>
+                      <>Not lit — add fuel: wood (log 3s, planks 1.5s), coal 8s, or burn quality plastic (ingot 6s, tempered 10s).</>
                     )
                   ) : (
-                    <>Put plastic pellets or ore in Input, and fuel in Fuel.</>
+                    <>Everything melts to plastic except water, rare ores and wood. Iron → good (tempered), copper → medium (plastic ingot), the rest → low (pellets); commons need 8–16 per unit. Wood goes in Fuel.</>
                   )}
                 </p>
+                <div className="sc-molten" style={{ border: `1px solid ${hud.furnace.tierColor ?? "#888"}`, borderRadius: 8, padding: "6px 8px", margin: "6px 0" }}>
+                  <p style={{ margin: 0, fontWeight: 700, color: hud.furnace.tierColor }}>
+                    Molten pool · {hud.furnace.tier ?? "Raw"} · purity {hud.furnace.purity ?? 0}%
+                  </p>
+                  <div aria-label="Heat" style={{ height: 8, borderRadius: 4, background: "#222", overflow: "hidden", margin: "4px 0" }}>
+                    <span style={{ display: "block", height: "100%", width: `${Math.round((hud.furnace.heat ?? 0) * 100)}%`, background: `linear-gradient(90deg, #7a2a10, ${hud.furnace.glow ?? "#ff8040"})`, boxShadow: `0 0 10px ${hud.furnace.glow ?? "#ff8040"}`, transition: "width .3s" }} />
+                  </div>
+                  <small>
+                    Heat {Math.round((hud.furnace.heat ?? 0) * 100)}% — a cold kiln cooks at ¼ speed.
+                    {hud.furnace.affix ? <> · <b>✨ {hud.furnace.affix} ({hud.furnace.charges} pours)</b></> : <> · Melt a rare drop (boss relic, prism, core) for a bonus batch.</>}
+                    {hud.furnace.nextTier ? <> · Upgrade to reach {hud.furnace.nextTier}.</> : null}
+                  </small>
+                </div>
                 <div className={`sc-upg-card lvl${hud.furnace.lvl}`}>
                   <p className="sc-upg-head">Foundry · Level {hud.furnace.lvl} — {hud.furnace.lvlName}</p>
                   <p className="sc-upg-stats">
@@ -2489,7 +2508,7 @@ function StationScreen({ game }: { game: GameApi }) {
                     <p className="sc-muted">Max level — this Foundry runs at full song.</p>
                   )}
                 </div>
-                <p className="sc-hint">Plastic pellets smelt into ingots here — and every pellet smelted also distils Fuel, dropped beside the kiln. Ingots cast bricks and Teks parts from the Crafting book. Tap an item below: ores and food go to Input, fuel to Fuel. Tap a kiln slot to take its stack back.</p>
+                <p className="sc-hint">Plastic pellets smelt into ingots here — higher purity tiers (Fine/Superior/Masterwork) pour bonus ingots, rare melts charge an affix — and every pellet smelted also distils Fuel, dropped beside the kiln. Ingots cast bricks and Teks parts from the Crafting book. Tap an item below: ores and food go to Input, fuel to Fuel. Tap a kiln slot to take its stack back.</p>
                 <BinGrid game={game} onPick={(id) => game.furnaceQuick(id)} />
               </>
             )}
@@ -2565,8 +2584,12 @@ function StationScreen({ game }: { game: GameApi }) {
             )}
             {hud.panel === "anvil" && (
               <div className="sc-station-body">
-                <MenuButton variant="primary" icon={<HammerIcon size={20} />} onClick={() => game.mend()} hint="Spend 1 ingot">
-                  Mend held tool
+                <p className="sc-status">{game.repairQuote() || "Hold a worn tool, weapon or part."}</p>
+                <MenuButton variant="primary" icon={<HammerIcon size={20} />} onClick={() => game.mend()} hint="Plastic of matching quality: pellets (basic), plastic ingots (tier 2), tempered ingots (tier 3+ / rare). Cost scales with missing durability.">
+                  Repair held tool
+                </MenuButton>
+                <MenuButton icon={<HammerIcon size={20} />} onClick={() => game.salvage()} hint="Melt it back: 50% of its plastic × durability left. Gem-made gear can't be salvaged.">
+                  Salvage held item
                 </MenuButton>
                 <MenuButton icon={<HammerIcon size={20} />} onClick={() => game.temper()} hint="Spend 1 level">
                   Temper held tool

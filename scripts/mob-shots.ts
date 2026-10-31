@@ -1,0 +1,31 @@
+// Dev-only harness for mob-redesign screenshots: /mob-shots.html?kind=creeper
+import * as THREE from "three";
+import { buildStuds } from "../src/game/game";
+import { mobLabel, type MobKind } from "../src/game/mobNames";
+
+const kind = (new URLSearchParams(location.search).get("kind") ?? "creeper") as MobKind;
+const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+r.setSize(512, 512);
+r.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(r.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xcfd8e3);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8899aa, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+sun.position.set(3, 5, -4);
+scene.add(sun);
+const body = buildStuds(kind as never, 1);
+scene.add(body.group);
+body.group.updateMatrixWorld(true);
+const box = new THREE.Box3().setFromObject(body.group);
+const c = box.getCenter(new THREE.Vector3());
+const s = box.getSize(new THREE.Vector3()).length();
+const cam = new THREE.PerspectiveCamera(35, 1, 0.01, 500);
+cam.position.set(c.x + s * 0.9, c.y + s * 0.45, c.z - s * 1.3);
+cam.lookAt(c);
+r.render(scene, cam);
+const tag = document.createElement("div");
+tag.textContent = `${mobLabel(kind)} (${kind})`;
+tag.style.cssText = "position:fixed;left:8px;bottom:8px;font:600 18px sans-serif;color:#1a120c";
+document.body.appendChild(tag);
+(window as unknown as { __ready: boolean }).__ready = true;

@@ -10,7 +10,7 @@ export function tradeLevelFor(xp: number): number {
   return xp >= TIER_XP[2] ? 3 : xp >= TIER_XP[1] ? 2 : 1;
 }
 
-export type TraderRole = "grocer" | "smith" | "mason" | "herder" | "clerk" | "mage" | "ranger" | "mechanic";
+export type TraderRole = "grocer" | "smith" | "mason" | "herder" | "clerk" | "mage" | "ranger" | "mechanic" | "outfitter" | "fence";
 
 export const TRADERS: Record<TraderRole, { name: string; blurb: string; offers: Offer[]; tint: number }> = {
   grocer: {
@@ -133,6 +133,32 @@ export const TRADERS: Record<TraderRole, { name: string; blurb: string; offers: 
       { pay: ID.Emerald, pn: 6, out: ID.Battery, on: 1, tier: 2 },
       { pay: ID.Emerald, pn: 8, out: ID.MotorM, on: 1, tier: 2 },
       { pay: ID.Emerald, pn: 10, out: ID.TechHub, on: 1, tier: 3 },
+    ],
+  },
+  outfitter: {
+    name: "Upgrades vendor",
+    blurb: "Matter for your machine, tool and vehicle upgrades — paid in emeralds.",
+    tint: 0x2f6fb0,
+    offers: [
+      { pay: ID.Emerald, pn: 2, out: ID.PlasticIngot, on: 2 },
+      { pay: ID.Emerald, pn: 2, out: ID.Copper, on: 3 },
+      { pay: ID.Emerald, pn: 3, out: ID.Gear16, on: 1 },
+      { pay: ID.Emerald, pn: 5, out: ID.TemperedIngot, on: 1, tier: 2 },
+      { pay: ID.Emerald, pn: 6, out: ID.Battery, on: 1, tier: 2 },
+      { pay: ID.Emerald, pn: 9, out: ID.EnchBook, on: 1, tier: 3 },
+    ],
+  },
+  fence: {
+    name: "Fence",
+    blurb: "No questions asked. Stolen goods in, emeralds out — at a cut.",
+    tint: 0x3b3b3b,
+    offers: [
+      { pay: ID.Gold, pn: 3, out: ID.Emerald, on: 1 },
+      { pay: ID.Ingot, pn: 5, out: ID.Emerald, on: 1 },
+      { pay: ID.Diamond, pn: 1, out: ID.Emerald, on: 2 },
+      { pay: ID.Crystal, pn: 2, out: ID.Emerald, on: 1 },
+      { pay: ID.Battery, pn: 1, out: ID.Emerald, on: 2, tier: 2 },
+      { pay: ID.Emerald, pn: 4, out: ID.TNT, on: 2, tier: 2 },
     ],
   },
 };

@@ -45,7 +45,7 @@ for (let x = 5; x <= 9; x++) for (let z = 5; z <= 9; z++) B(x, 10, z, ID.Stone);
 const fakeWorld = { get: (x: number, y: number, z: number) => blocks.get(K(x, y, z)) ?? 0 };
 
 // ---- renderer / scene, mirroring the game's realistic pipeline ----
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ powerPreference: "high-performance", antialias: true });
 renderer.setSize(1100, 1100);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;

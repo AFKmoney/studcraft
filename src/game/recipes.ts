@@ -1,5 +1,6 @@
 import { ID, TEKS, def } from "./blocks.ts";
 import { SPECS, type Spec } from "./teks.ts";
+import { MATERIALS, QUALITY_ITEM, QUALITY_VALUE, RARE_MELT, fuelValue, isMeltable, meltRatio, qualityOf, rejectReason, salvageYield } from "./foundry.ts";
 
 export type Recipe = {
   id: string;
@@ -48,6 +49,23 @@ export const RECIPES: Recipe[] = [
   r("stairs-cobble", "Cobble stairs", "6 cobble → 4", [[C, 6]], ID.StairsCobble0, 4, { shape: [C, 0, 0, C, C, 0, C, C, C], w: 3, h: 3, cat: "build" }),
   r("sign", "Sign", "6 planks + stick → 3", [[P, 6], [S, 1]], ID.Sign, 3, { shape: [P, P, P, P, P, P, 0, S, 0], w: 3, h: 3, cat: "build" }),
   r("hammer", "Brick hammer", "3 stone + 2 planks", [[ID.Stone, 3], [P, 2]], 0, 1, { special: "hammer", cat: "tools" }),
+  // biome bricks (16-bit chunk ids): shapeless pairs, so no 2x2 shape collides
+  r("sandstone", "Sandstone", "3 sand + 1 stone → 4", [[ID.Sand, 3], [ID.Stone, 1]], ID.Sandstone, 4, { cat: "build" }),
+  r("adobe", "Adobe brick", "2 clay + 2 sand → 4", [[ID.Clay, 2], [ID.Sand, 2]], ID.Adobe, 4, { cat: "build" }),
+  r("packed-snow", "Packed snow", "4 snow → 2", [[ID.Snow, 4]], ID.PackedSnow, 2, { cat: "build" }),
+  r("ice-brick", "Ice brick", "2 ice + 1 snow → 2", [[ID.Ice, 2], [ID.Snow, 1]], ID.IceBrick, 2, { cat: "build" }),
+  r("basalt-tile", "Basalt brick tile", "4 basalt → 4", [[ID.Basalt, 4]], ID.BasaltBrick, 4, { cat: "build" }),
+  r("obsidian-tile", "Obsidian tile", "2 void brick → 2", [[ID.Obsidian, 2]], ID.ObsidianTile, 2, { cat: "build" }),
+  r("mangrove", "Mangrove planks", "1 log + 1 mud → 4", [[ID.Log, 1], [ID.Mud, 1]], ID.Mangrove, 4, { cat: "build" }),
+  r("bamboo", "Bamboo", "3 cane → 2", [[ID.Cane, 3]], ID.Bamboo, 2, { cat: "build" }),
+  r("coral", "Coral brick", "2 shell + 2 sand → 4", [[ID.Shell, 2], [ID.Sand, 2]], ID.Coral, 4, { cat: "build" }),
+  r("crystal-brick", "Crystal brick", "2 crystal + 2 glass → 4", [[ID.Crystal, 2], [ID.Glass, 2]], ID.CrystalBrick, 4, { cat: "build" }),
+  r("jungle-stone", "Jungle stone", "3 cobble + 1 moss → 4", [[ID.Cobble, 3], [ID.Moss, 1]], ID.JungleStone, 4, { cat: "build" }),
+  r("mud-brick", "Mud brick", "3 mud + 1 hay → 4", [[ID.Mud, 3], [ID.Hay, 1]], ID.MudBrick, 4, { cat: "build" }),
+  r("red-rock", "Red rock", "3 stone + 1 red → 4", [[ID.Stone, 3], [ID.Red, 1]], ID.RedRock, 4, { cat: "build" }),
+  // rare structure pieces (shrines / mecha wrecks)
+  r("sanctum-stud", "Sanctum stud", "4 gold + 1 emerald + 1 crystal", [[ID.Gold, 4], [ID.Emerald, 1], [ID.Crystal, 1]], ID.SanctumStud, 1, { cat: "build" }),
+  r("mecha-core", "Mecha core", "6 scrap + 2 copper + 1 battery", [[ID.Scrap, 6], [ID.Copper, 2], [ID.Battery, 1]], ID.MechaCore, 1, { cat: "build" }),
   r("basalt", "Basalt brick", "4 stone → 4", [[ID.Stone, 4]], ID.Basalt, 4, { shape: [ID.Stone, ID.Stone, ID.Stone, ID.Stone], w: 2, h: 2, cat: "build" }),
   r("calcite", "Calcite brick", "4 sand → 4", [[ID.Sand, 4]], ID.Calcite, 4, { shape: [ID.Sand, ID.Sand, ID.Sand, ID.Sand], w: 2, h: 2, cat: "build" }),
   r("tuff", "Tuff brick", "4 cobble → 4", [[ID.Cobble, 4]], ID.Tuff, 4, { shape: [C, C, C, C], w: 2, h: 2, cat: "build" }),
@@ -581,7 +599,8 @@ export const RECIPES: Recipe[] = [
     h: 3,
     cat: "tools",
   }),
-  r("void-blade", "Voidblink katana", "2 ender cores + 1 ender pearl + 1 obsidian — end-tier blade", [[ID.VoidCore, 2], [ID.EnderPearl, 1], [ID.Obsidian, 1]], ID.VoidBlade, 1, {
+  r("blink-lens", "Blink lens", "3 void-glass shards — grind a Veilleur-Prisme lens (blink hop)", [[ID.VoidGlass, 3]], ID.EnderPearl, 1, { cat: "tools" }),
+  r("void-blade", "Voidblink katana", "2 sentinel cores + 1 blink lens + 1 obsidian — end-tier blade", [[ID.VoidCore, 2], [ID.EnderPearl, 1], [ID.Obsidian, 1]], ID.VoidBlade, 1, {
     shape: [0, ID.VoidCore, 0, ID.EnderPearl, ID.VoidCore, 0, 0, ID.Obsidian, 0],
     w: 3,
     h: 3,
@@ -1591,8 +1610,9 @@ export const SMELT: Record<number, number> = {
   [ID.RawIron]: ID.Ingot,
   [ID.IronOre]: ID.Ingot,
   [ID.Sand]: ID.Glass,
+  [ID.VoidGlass]: ID.Prism, // v5 (overridden below: foundry RARE_MELT rows smelt to pellets)
   [ID.Cobble]: ID.Stone,
-  [ID.Log]: ID.Coal,
+  // v6: wood is FUEL only (foundry.ts MATERIALS) — no Log→Coal melt.
   [ID.Clay]: ID.Hard,
   [ID.Netherrack]: ID.Ash,
   [ID.RawMeat]: ID.Cooked,
@@ -1626,7 +1646,67 @@ for (const id of TEKS) {
   SMELT_N[id] = Math.max(1, Math.round(teksCastCost(id).ingots * 0.5));
 }
 
+// Grok Bot foundry pass: rare drops melt into pellets AND charge the
+// molten pool with a purity spike + affix (see foundry.ts RARE_MELT).
+for (const [k, v] of Object.entries(RARE_MELT)) {
+  SMELT[+k] = ID.Pellets;
+  SMELT_N[+k] = v.pellets;
+}
+
+// v6 material table: plain materials melt to pellets at their ratio.
+for (const k of Object.keys(MATERIALS)) if (isMeltable(+k) && !RARE_MELT[+k]) SMELT[+k] = QUALITY_ITEM[qualityOf(+k)!];
+
+// v6: the refined materials recipes need are CAST from plastic now that
+// their ores melt to plastic (Philippe: nothing may become unobtainable).
+const CASTS: [string, string, number, number, number, number][] = [
+  // id, name, plastic item, plastic n, out, out n
+  ["cast-glass", "Cast glass", ID.Pellets, 2, ID.Glass, 4],
+  ["cast-hard", "Cast hard brick", ID.Pellets, 2, ID.Hard, 4],
+  ["cast-ash", "Cast ash brick", ID.Pellets, 2, ID.Ash, 4],
+  ["cast-tin", "Cast tin", ID.Pellets, 3, ID.Tin, 1],
+  ["cast-resin", "Cast resin", ID.Pellets, 4, ID.Resin, 1],
+  ["cast-amber", "Cast amber", ID.PlasticIngot, 2, ID.Amber, 1],
+  ["cast-copper", "Cast copper", ID.PlasticIngot, 1, ID.Copper, 1],
+  ["cast-chrome", "Cast chrome", ID.PlasticIngot, 2, ID.Chrome, 1],
+  ["cast-iron", "Cast iron ingot", ID.TemperedIngot, 1, ID.Ingot, 1],
+];
+for (const [id, name, pin, pn, out, on] of CASTS) RECIPES.push(r(id, name, `${pn} ${def(pin).name.toLowerCase()} → ${on}`, [[pin, pn]], out, on, { cat: "build" }));
+
+/** Gem/precious inputs: an item crafted from them is not salvageable. */
+export const RARE_INPUTS = new Set<number>([ID.Gold, ID.Diamond, ID.Emerald, ID.Crystal, ID.Sapphire, ID.Prism, ID.GoldOre, ID.DiamondOre]);
+const WOOD = new Set<number>([ID.Log, ID.Planks, ID.SlabPlanks, ID.Stick, ID.Leaves]);
+/** Plastic cost of one unit (LOW units), or -1 if it holds rare inputs. */
+export function plasticCost(id: number, depth = 0): number {
+  if (RARE_INPUTS.has(id)) return -1;
+  if (WOOD.has(id)) return 0;
+  if (id === ID.Pellets) return 1;
+  if (id === ID.PlasticIngot) return QUALITY_VALUE.medium;
+  if (id === ID.TemperedIngot) return QUALITY_VALUE.good;
+  const q = qualityOf(id);
+  if (q && !RARE_MELT[id]) return QUALITY_VALUE[q] / meltRatio(id);
+  if (depth > 6) return 0;
+  const rec = RECIPES.find((x) => x.out === id && !x.special);
+  if (!rec) return 0;
+  let sum = 0;
+  for (const [nid, n] of rec.need) {
+    const c = plasticCost(nid, depth + 1);
+    if (c < 0) return -1;
+    sum += c * n;
+  }
+  return sum / Math.max(1, rec.n);
+}
+/** Salvage a crafted/used item: LOW plastic units (pellets) it yields. */
+export function salvageOf(id: number, dur: number, maxDur: number): { ok: boolean; pellets: number; why?: string } {
+  const c = plasticCost(id);
+  if (c < 0) return { ok: false, pellets: 0, why: "Made with rare materials — not salvageable" };
+  if (c === 0) return { ok: false, pellets: 0, why: "Nothing plastic in it (wood burns as fuel)" };
+  return { ok: true, pellets: salvageYield(c, dur, maxDur) };
+}
+for (const k of Object.keys(MATERIALS)) if (rejectReason(+k)) delete SMELT[+k];
+
 export function fuelTime(id: number): number {
+  const v = fuelValue(id);
+  if (v > 0) return v;
   if (id === ID.LavaBucket) return 60;
   if (id === ID.Amber) return 14;
   if (id === ID.Blaze) return 12;
