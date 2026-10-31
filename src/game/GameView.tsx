@@ -1509,6 +1509,77 @@ function Hotbar({ game }: { game: GameApi }) {
 // Touch controls
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Build-mode rotation stick (Philippe, 2026-10-30): the second
+ *  joystick — left stick moves the build camera, THIS one pivots the
+ *  held part. Horizontal = yaw (A/D), vertical = pitch (W/S), stepped
+ *  through the same rotatePart path as the keys and the letter row;
+ *  holding a direction keeps stepping. */
+function RotStick({ game, buzz }: { game: GameApi; buzz: (ms: number) => void }) {
+  const origin = useRef<{ id: number; x: number; y: number } | null>(null);
+  const dirRef = useRef<{ axis: number; dir: number } | null>(null);
+  const lastRef = useRef(0);
+  const [knob, setKnob] = useState<{ kx: number; ky: number }>({ kx: 0, ky: 0 });
+  const R = 34;
+  const stepNow = () => {
+    const d = dirRef.current;
+    if (!d) return;
+    buzz(5);
+    game.rotatePart(d.axis, d.dir);
+    lastRef.current = Date.now();
+  };
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (dirRef.current && Date.now() - lastRef.current >= 175) stepNow();
+    }, 60);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const update = (dx: number, dy: number) => {
+    const m = Math.hypot(dx, dy) || 1;
+    const k = Math.min(1, R / m);
+    setKnob({ kx: dx * k, ky: dy * k });
+    const nx = dx / R;
+    const ny = dy / R;
+    let next: { axis: number; dir: number } | null = null;
+    if (Math.max(Math.abs(nx), Math.abs(ny)) > 0.55) {
+      if (Math.abs(nx) >= Math.abs(ny)) next = { axis: 1, dir: nx > 0 ? -1 : 1 };
+      else next = { axis: 0, dir: ny > 0 ? 1 : -1 };
+    }
+    const prev = dirRef.current;
+    dirRef.current = next;
+    if (next && (!prev || prev.axis !== next.axis || prev.dir !== next.dir)) stepNow();
+  };
+  const release = () => {
+    origin.current = null;
+    dirRef.current = null;
+    setKnob({ kx: 0, ky: 0 });
+  };
+  return (
+    <div
+      className="sc-rotstick-zone"
+      role="application"
+      aria-label="Rotation stick — pivot the held part"
+      onPointerDown={(e) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        origin.current = { id: e.pointerId, x: e.clientX, y: e.clientY };
+        update(0, 0);
+      }}
+      onPointerMove={(e) => {
+        const o = origin.current;
+        if (!o || o.id !== e.pointerId) return;
+        update(e.clientX - o.x, e.clientY - o.y);
+      }}
+      onPointerUp={(e) => origin.current?.id === e.pointerId && release()}
+      onPointerCancel={release}
+    >
+      <div className="sc-stick rotstick">
+        <div className="sc-stick-knob small" style={{ transform: `translate(${knob.kx}px, ${knob.ky}px)` }} />
+      </div>
+      <span className="sc-rotstick-label">Pivot</span>
+    </div>
+  );
+}
+
 function TouchControls({ game }: { game: GameApi }) {
   const origin = useRef<{ id: number; x: number; y: number } | null>(null);
   const [stick, setStick] = useState<{ bx: number; by: number; kx: number; ky: number } | null>(null);
@@ -1641,6 +1712,7 @@ function TouchControls({ game }: { game: GameApi }) {
               ▼
             </HoldButton>
           </div>
+          {techHeld && <RotStick game={game} buzz={buzz} />}
           {techHeld && (
             <div className="sc-touch-rot">
               {(
@@ -1837,6 +1909,7 @@ function InvHotbar({ game }: { game: GameApi }) {
           }}
         >
           <span className="sc-cell-hb">{i + 1}</span>
+          {i === hud.slot && item.id > 0 && <span className="sc-name-pill">{def(item.id).name}</span>}
           {item.id > 0 && <ItemIcon id={item.id} />}
           {item.id > 0 && !hud.creative && item.count > 1 && <em>{item.count > 999 ? "999+" : item.count}</em>}
         </button>
@@ -1911,6 +1984,7 @@ function BinGrid({ game, filter = "", cat = "all", onPick }: { game: GameApi; fi
             }}
           >
             {hbIndex >= 0 && <span className="sc-cell-hb">{hbIndex + 1}</span>}
+            {hud.cursor === id && <span className="sc-name-pill">{d.name}</span>}
             <ItemIcon id={id} />
             {d.maxUse > 0 && durPct >= 0 ? (
               <span className="sc-dur-bar">

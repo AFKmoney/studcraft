@@ -1579,20 +1579,30 @@ export class World {
 
   findSpawn(): { x: number; y: number; z: number } {
     if (this.flat) return { x: 6.5, y: 5.02, z: 6.5 };
-    for (let r = 0; r <= 90; r += 3) {
-      const n = r === 0 ? 1 : 12;
-      for (let i = 0; i < n; i++) {
-        const a = (i / n) * Math.PI * 2 + r * 0.15;
-        const x = Math.round(Math.cos(a) * r);
-        const z = Math.round(Math.sin(a) * r);
-        const h = this.heightAt(x, z);
-        if (h < SEA + 3) continue;
-        if (Math.abs(this.heightAt(x + 4, z - 2) - h) > 3) continue;
-        return { x: x + 0.5, y: h + 1.02, z: z + 0.5 };
+    // Philippe's law (2026-10-30): spawning ALWAYS lands on grass —
+    // never in a hole, on a beach or on bare rock. Pass 1 wants grass
+    // AND gentle ground nearby; pass 2 takes any grass top; only a
+    // world with no grass at all falls back to the old height rule.
+    const scan = (maxR: number, gentle: boolean): { x: number; y: number; z: number } | null => {
+      for (let r = 0; r <= maxR; r += 3) {
+        const n = r === 0 ? 1 : 12;
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2 + r * 0.15;
+          const x = Math.round(Math.cos(a) * r);
+          const z = Math.round(Math.sin(a) * r);
+          const h = this.heightAt(x, z);
+          if (h < SEA + 3) continue;
+          if (this.get(x, h, z) !== ID.Grass) continue;
+          if (gentle && Math.abs(this.heightAt(x + 4, z - 2) - h) > 3) continue;
+          return { x: x + 0.5, y: h + 1.02, z: z + 0.5 };
+        }
       }
-    }
-    const h = this.heightAt(0, 0);
-    return { x: 0.5, y: h + 1.02, z: 0.5 };
+      return null;
+    };
+    return scan(90, true) ?? scan(150, false) ?? (() => {
+      const h = this.heightAt(0, 0);
+      return { x: 0.5, y: h + 1.02, z: 0.5 };
+    })();
   }
 
   clearFeet(x: number, z: number): number {

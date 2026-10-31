@@ -2423,6 +2423,46 @@ kbd {
   pointer-events: none;
 }
 
+/* Build-mode rotation stick (the second joystick, Philippe
+   2026-10-30): fixed base above the right-hand action cluster. */
+.sc-rotstick-zone {
+  position: absolute;
+  right: calc(12px + var(--safe-r));
+  bottom: calc(292px + var(--safe-b));
+  width: 128px;
+  height: 128px;
+  touch-action: none;
+  z-index: 6;
+}
+
+.sc-stick.rotstick {
+  left: 50%;
+  top: 50%;
+  width: 104px;
+  height: 104px;
+  margin: -52px 0 0 -52px;
+  opacity: 0.92;
+}
+
+.sc-stick-knob.small {
+  width: 48px;
+  height: 48px;
+  margin: -24px 0 0 -24px;
+}
+
+.sc-rotstick-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -16px;
+  text-align: center;
+  font: 700 10px/1 var(--font-sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 240, 214, 0.75);
+  pointer-events: none;
+}
+
 .sc-rot-btn {
   width: 46px;
   height: 46px;
@@ -2571,6 +2611,29 @@ kbd {
   background: rgba(14, 10, 7, 0.78);
   color: var(--sc-gold);
   font: 700 9.5px/14px var(--font-sans);
+  pointer-events: none;
+}
+
+/* Philippe (2026-10-30): the selected item's name rides in a small pill
+   on the icon's own top-right corner — in the bag grid and in the
+   panel hotbar alike, not only in a header line. */
+.sc-name-pill {
+  position: absolute;
+  top: -7px;
+  right: -5px;
+  z-index: 8;
+  max-width: 160px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(16, 12, 8, 0.94);
+  border: 1px solid rgba(255, 214, 140, 0.6);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
+  color: #ffe9c4;
+  font: 700 11px/16px var(--font-sans);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   pointer-events: none;
 }
 
@@ -3916,4 +3979,16 @@ kbd {
 @media (max-height: 460px) {
   .sc-inv-hotbar { gap: 4px; padding-top: 6px; margin-top: 4px; }
   .sc-inv-hotbar .sc-cell { aspect-ratio: auto; height: 40px; }
+
+  /* Pause menu on a short landscape phone (Philippe, 2026-10-30 —
+     "le menu pause est bizarre"): the centered card was TALLER than
+     the screen, so the viewport clipped the logo at the top and the
+     last buttons at the bottom. Compact the card until it fits, and
+     let the screen scroll as a safety net. */
+  .sc-pause-screen { max-height: 100%; overflow-y: auto; }
+  .sc-pause-card { padding: 14px 16px; }
+  .sc-pause-card .sc-logo { margin-bottom: 2px; }
+  .sc-pause-card .sc-logo-sm .sc-logo-img { width: 104px; }
+  .sc-pause-card .sc-menu-col { gap: 8px; margin-top: 4px; }
+  .sc-pause-card .sc-menu-btn { min-height: 42px; font-size: 15px; }
 }
