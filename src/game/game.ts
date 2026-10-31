@@ -12648,6 +12648,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     for (const [id, count] of Object.entries(inv)) if (count > 0) invList.push([Number(id), count]);
     return {
       v: 1,
+      ids: 16,
       seed,
       seedText,
       flat,

@@ -79,17 +79,17 @@ export type Theme = {
 };
 
 export const THEMES: Record<ZoneId, Theme> = {
-  jungle: { walls: [ID.Planks, ID.Green], trim: ID.Log, roof: ID.Leaves, floor: ID.Planks, ground: ID.Moss, path: ID.Mud, post: ID.Log, light: ID.Lantern, glass: ID.Air, shape: "stilt", center: "totem", stone: ID.Moss, pillar: ID.Cobble, accent: ID.Green, gem: ID.EmeraldOre },
-  desert: { walls: [ID.Yellow, ID.Calcite], trim: ID.Orange, roof: ID.Orange, floor: ID.Sand, ground: ID.Sand, path: ID.Calcite, post: ID.Log, light: ID.Torch, glass: ID.Air, shape: "adobe", center: "well", stone: ID.Yellow, pillar: ID.Calcite, accent: ID.Orange, gem: ID.Gold },
-  arctic: { walls: [ID.Snow], trim: ID.Ice, roof: ID.Snow, floor: ID.Planks, ground: ID.Snow, path: ID.Stone, post: ID.Log, light: ID.Lantern, glass: ID.Ice, shape: "dome", center: "fire", stone: ID.Ice, pillar: ID.White, accent: ID.Azure, gem: ID.CrystalOre },
-  volcano: { walls: [ID.Basalt, ID.Tuff], trim: ID.Obsidian, roof: ID.Obsidian, floor: ID.Basalt, ground: ID.AshSoil, path: ID.Basalt, post: ID.Obsidian, light: ID.Lantern, glass: ID.Glass, shape: "bunker", center: "pyre", stone: ID.Basalt, pillar: ID.Obsidian, accent: ID.Red, gem: ID.PrismOre },
+  jungle: { walls: [ID.Bamboo, ID.Planks, ID.Green], trim: ID.Log, roof: ID.Leaves, floor: ID.Planks, ground: ID.Moss, path: ID.Mud, post: ID.Log, light: ID.Lantern, glass: ID.Air, shape: "stilt", center: "totem", stone: ID.JungleStone, pillar: ID.JungleStone, accent: ID.Green, gem: ID.EmeraldOre },
+  desert: { walls: [ID.Adobe, ID.Sandstone, ID.Yellow], trim: ID.Orange, roof: ID.Orange, floor: ID.Sand, ground: ID.Sand, path: ID.Calcite, post: ID.Log, light: ID.Torch, glass: ID.Air, shape: "adobe", center: "well", stone: ID.Sandstone, pillar: ID.Sandstone, accent: ID.Orange, gem: ID.Gold },
+  arctic: { walls: [ID.PackedSnow, ID.Snow], trim: ID.IceBrick, roof: ID.Snow, floor: ID.Planks, ground: ID.Snow, path: ID.Stone, post: ID.Log, light: ID.Lantern, glass: ID.Ice, shape: "dome", center: "fire", stone: ID.IceBrick, pillar: ID.PackedSnow, accent: ID.Azure, gem: ID.CrystalOre },
+  volcano: { walls: [ID.BasaltBrick, ID.Basalt, ID.Tuff], trim: ID.ObsidianTile, roof: ID.Obsidian, floor: ID.Basalt, ground: ID.AshSoil, path: ID.Basalt, post: ID.Obsidian, light: ID.Lantern, glass: ID.Glass, shape: "bunker", center: "pyre", stone: ID.BasaltBrick, pillar: ID.ObsidianTile, accent: ID.Red, gem: ID.PrismOre },
   valley: { walls: [ID.White, ID.Pink], trim: ID.Log, roof: ID.Pink, floor: ID.Planks, ground: ID.Grass, path: ID.Stone, post: ID.Log, light: ID.Lamp, glass: ID.Glass, shape: "cottage", center: "fountain", stone: ID.Calcite, pillar: ID.White, accent: ID.Pink, gem: ID.Bloom },
   plains: { walls: [ID.Red, ID.Blue, ID.Orange, ID.Green], trim: ID.Log, roof: ID.Yellow, floor: ID.Planks, ground: ID.Grass, path: ID.Cobble, post: ID.Log, light: ID.Lamp, glass: ID.Glass, shape: "cottage", center: "well", stone: ID.Stone, pillar: ID.Cobble, accent: ID.Yellow, gem: ID.Gold },
   mountain: { walls: [ID.Cobble, ID.Stone], trim: ID.Log, roof: ID.Black, floor: ID.Planks, ground: ID.Grass, path: ID.Cobble, post: ID.Log, light: ID.Lantern, glass: ID.Glass, shape: "tower", center: "fire", stone: ID.Tuff, pillar: ID.Stone, accent: ID.Blue, gem: ID.SapphireOre },
-  swamp: { walls: [ID.Planks, ID.Mud], trim: ID.Log, roof: ID.Moss, floor: ID.Planks, ground: ID.Mud, path: ID.Planks, post: ID.Log, light: ID.Lantern, glass: ID.Air, shape: "stilt", center: "totem", stone: ID.Mud, pillar: ID.Log, accent: ID.Moss, gem: ID.AmberOre },
-  canyon: { walls: [ID.Clay, ID.Orange], trim: ID.Red, roof: ID.Red, floor: ID.Planks, ground: ID.Clay, path: ID.Stone, post: ID.Log, light: ID.Torch, glass: ID.Air, shape: "adobe", center: "well", stone: ID.Clay, pillar: ID.Orange, accent: ID.Red, gem: ID.CopperOre },
-  desertCity: { walls: [ID.Yellow, ID.White, ID.Calcite, ID.Orange], trim: ID.Gold, roof: ID.White, floor: ID.Calcite, ground: ID.Sand, path: ID.Stone, post: ID.Log, light: ID.Lantern, glass: ID.Glass, shape: "adobe", center: "fountain", stone: ID.White, pillar: ID.Gold, accent: ID.Azure, gem: ID.Gold },
-  islands: { walls: [ID.White, ID.Azure], trim: ID.Planks, roof: ID.Blue, floor: ID.Planks, ground: ID.Sand, path: ID.Planks, post: ID.Log, light: ID.Lamp, glass: ID.Glass, shape: "stilt", center: "fountain", stone: ID.Calcite, pillar: ID.Azure, accent: ID.White, gem: ID.PrismOre },
+  swamp: { walls: [ID.Mangrove, ID.MudBrick], trim: ID.Log, roof: ID.Moss, floor: ID.Planks, ground: ID.Mud, path: ID.Planks, post: ID.Log, light: ID.Lantern, glass: ID.Air, shape: "stilt", center: "totem", stone: ID.MudBrick, pillar: ID.Mangrove, accent: ID.Moss, gem: ID.AmberOre },
+  canyon: { walls: [ID.RedRock, ID.Clay, ID.Orange], trim: ID.Red, roof: ID.Red, floor: ID.Planks, ground: ID.Clay, path: ID.Stone, post: ID.Log, light: ID.Torch, glass: ID.Air, shape: "adobe", center: "well", stone: ID.RedRock, pillar: ID.RedRock, accent: ID.Red, gem: ID.CopperOre },
+  desertCity: { walls: [ID.Sandstone, ID.White, ID.Adobe, ID.Calcite], trim: ID.Gold, roof: ID.White, floor: ID.Calcite, ground: ID.Sand, path: ID.Stone, post: ID.Log, light: ID.Lantern, glass: ID.Glass, shape: "adobe", center: "fountain", stone: ID.White, pillar: ID.Gold, accent: ID.Azure, gem: ID.Gold },
+  islands: { walls: [ID.White, ID.Coral, ID.Azure], trim: ID.Bamboo, roof: ID.Blue, floor: ID.Planks, ground: ID.Sand, path: ID.Planks, post: ID.Log, light: ID.Lamp, glass: ID.Glass, shape: "stilt", center: "fountain", stone: ID.Coral, pillar: ID.CrystalBrick, accent: ID.White, gem: ID.PrismOre },
 };
 
 /** Mecha paint schemes (main, secondary) — rolled per wreck. */
@@ -987,7 +987,7 @@ function nonSolid(id: number): boolean {
 
 /** Paint every structure slice that falls in this chunk (world.ts calls
  *  this right after the sites, like paintHamlet/paintSites). */
-export function paintStructures(w: StructWorld, data: Uint8Array, baseX: number, baseZ: number) {
+export function paintStructures(w: StructWorld, data: Uint16Array, baseX: number, baseZ: number) {
   if (w.flat) return;
   const at = (x: number, y: number, z: number) => x - baseX + (z - baseZ) * CS + y * CS * CS;
   const inside = (x: number, z: number) => x >= baseX && x < baseX + CS && z >= baseZ && z < baseZ + CS;

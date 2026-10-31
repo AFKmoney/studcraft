@@ -78,7 +78,7 @@ export class World {
   readonly seed: number;
   readonly flat: boolean;
   readonly noise: Noise;
-  readonly chunks = new Map<string, Uint8Array>();
+  readonly chunks = new Map<string, Uint16Array>();
   readonly edits = new Map<string, number>();
 
   constructor(seed: number, flat: boolean) {
@@ -153,9 +153,9 @@ export class World {
     return b;
   }
 
-  private generate(cx: number, cz: number): Uint8Array {
+  private generate(cx: number, cz: number): Uint16Array {
     if (!this.flat && inNether(cx * CS)) return this.generateNether(cx, cz);
-    const data = new Uint8Array(CS * HEIGHT * CS);
+    const data = new Uint16Array(CS * HEIGHT * CS);
     const baseX = cx * CS;
     const baseZ = cz * CS;
     const idx = (lx: number, y: number, lz: number) => lx + lz * CS + y * CS * CS;
@@ -426,7 +426,7 @@ export class World {
     return data;
   }
 
-  private carveWorms(data: Uint8Array, baseX: number, baseZ: number) {
+  private carveWorms(data: Uint16Array, baseX: number, baseZ: number) {
     const step = 28;
     const x0 = Math.floor((baseX - 80) / step) * step;
     const z0 = Math.floor((baseZ - 80) / step) * step;
@@ -496,7 +496,7 @@ export class World {
     }
   }
 
-  private carveRavines(data: Uint8Array, baseX: number, baseZ: number) {
+  private carveRavines(data: Uint16Array, baseX: number, baseZ: number) {
     const step = 56;
     const x0 = Math.floor((baseX - 48) / step) * step;
     const z0 = Math.floor((baseZ - 48) / step) * step;
@@ -534,8 +534,8 @@ export class World {
   }
 
   
-  private generateEnd(cx: number, cz: number): Uint8Array {
-    const data = new Uint8Array(CS * HEIGHT * CS);
+  private generateEnd(cx: number, cz: number): Uint16Array {
+    const data = new Uint16Array(CS * HEIGHT * CS);
     const baseX = cx * CS;
     const baseZ = cz * CS;
     const idx = (lx: number, y: number, lz: number) => lx + lz * CS + y * CS * CS;
@@ -564,8 +564,8 @@ export class World {
     return "Crimson wilds";
   }
 
-  private generateNether(cx: number, cz: number): Uint8Array {
-    const data = new Uint8Array(CS * HEIGHT * CS);
+  private generateNether(cx: number, cz: number): Uint16Array {
+    const data = new Uint16Array(CS * HEIGHT * CS);
     const baseX = cx * CS;
     const baseZ = cz * CS;
     const idx = (lx: number, y: number, lz: number) => lx + lz * CS + y * CS * CS;
@@ -641,7 +641,7 @@ export class World {
     return data;
   }
 
-  private paint(data: Uint8Array, baseX: number, baseZ: number, x: number, y: number, z: number, id: number) {
+  private paint(data: Uint16Array, baseX: number, baseZ: number, x: number, y: number, z: number, id: number) {
     if (y < 1 || y >= HEIGHT) return;
     if (x < baseX || x >= baseX + CS || z < baseZ || z >= baseZ + CS) return;
     const i = x - baseX + (z - baseZ) * CS + y * CS * CS;
@@ -650,7 +650,7 @@ export class World {
     if (cur === ID.Air || cur === ID.Water || cur === ID.Leaves || id === ID.Log) data[i] = id;
   }
 
-  private writeTree(data: Uint8Array, baseX: number, baseZ: number, x: number, h: number, z: number) {
+  private writeTree(data: Uint16Array, baseX: number, baseZ: number, x: number, h: number, z: number) {
     const trunk = 4 + (Math.floor(hash2(x, z + 3, this.seed) * 97) % 3);
     for (let i = 1; i <= trunk; i++) this.paint(data, baseX, baseZ, x, h + i, z, ID.Log);
     const top = h + trunk;
@@ -665,7 +665,7 @@ export class World {
     }
   }
 
-  private force(data: Uint8Array, baseX: number, baseZ: number, x: number, y: number, z: number, id: number) {
+  private force(data: Uint16Array, baseX: number, baseZ: number, x: number, y: number, z: number, id: number) {
     if (y < 1 || y >= HEIGHT) return;
     if (x < baseX || x >= baseX + CS || z < baseZ || z >= baseZ + CS) return;
     data[x - baseX + (z - baseZ) * CS + y * CS * CS] = id;
@@ -715,7 +715,7 @@ export class World {
     return best;
   }
 
-  private paintGate(data: Uint8Array, baseX: number, baseZ: number) {
+  private paintGate(data: Uint16Array, baseX: number, baseZ: number) {
     if (this.flat) return;
     const site = this.hamletAt(0, 0);
     if (!site) return;
@@ -750,7 +750,7 @@ export class World {
     }
   }
 
-  private decorateOcean(data: Uint8Array, baseX: number, baseZ: number) {
+  private decorateOcean(data: Uint16Array, baseX: number, baseZ: number) {
     const idx = (lx: number, y: number, lz: number) => lx + lz * CS + y * CS * CS;
     for (let lz = 0; lz < CS; lz++) {
       for (let lx = 0; lx < CS; lx++) {
@@ -773,7 +773,7 @@ export class World {
     }
   }
 
-  private paintCellar(data: Uint8Array, baseX: number, baseZ: number) {
+  private paintCellar(data: Uint16Array, baseX: number, baseZ: number) {
     if (this.flat || hash2(baseX, baseZ, this.seed + 88) < 0.988) return;
     const site = this.hamletAt(Math.floor(baseX / REGION), Math.floor(baseZ / REGION));
     if (site) {
@@ -796,7 +796,7 @@ export class World {
     this.force(data, baseX, baseZ, baseX + 5, y0 + 2, baseZ + 5, ID.Torch);
   }
 
-  private paintHamlet(data: Uint8Array, baseX: number, baseZ: number) {
+  private paintHamlet(data: Uint16Array, baseX: number, baseZ: number) {
     if (this.flat) return;
     const site = this.hamletAt(Math.floor(baseX / REGION), Math.floor(baseZ / REGION));
     if (!site) return;
@@ -1334,7 +1334,7 @@ export class World {
     return ID.Air;
   }
 
-  private paintLandmarkLayer(data: Uint8Array, baseX: number, baseZ: number, nether: boolean) {
+  private paintLandmarkLayer(data: Uint16Array, baseX: number, baseZ: number, nether: boolean) {
     const g0x = Math.floor((baseX - 30) / LM_STEP) - 1;
     const g1x = Math.floor((baseX + CS + 30) / LM_STEP) + 1;
     const g0z = Math.floor((baseZ - 30) / LM_STEP) - 1;
@@ -1408,7 +1408,7 @@ export class World {
     }
   }
 
-  private scatterCaps(data: Uint8Array, baseX: number, baseZ: number) {
+  private scatterCaps(data: Uint16Array, baseX: number, baseZ: number) {
     if (this.flat) return;
     const idx = (lx: number, y: number, lz: number) => lx + lz * CS + y * CS * CS;
     for (let lz = 0; lz < CS; lz++) {
@@ -1428,7 +1428,7 @@ export class World {
     }
   }
 
-  private paintSites(data: Uint8Array, baseX: number, baseZ: number) {
+  private paintSites(data: Uint16Array, baseX: number, baseZ: number) {
     if (this.flat) return;
     const g0x = Math.floor((baseX - 10) / SITE_STEP) - 1;
     const g1x = Math.floor((baseX + CS + 10) / SITE_STEP) + 1;
@@ -1553,7 +1553,7 @@ export class World {
     }
   }
 
-  ensure(cx: number, cz: number): Uint8Array {
+  ensure(cx: number, cz: number): Uint16Array {
     return this.chunks.get(this.ck(cx, cz)) ?? this.generate(cx, cz);
   }
 

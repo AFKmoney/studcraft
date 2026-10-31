@@ -989,7 +989,10 @@ export function buildAtlas(): BrickAtlases {
         block.id === ID.Gold ||
         block.id === ID.Diamond ||
         block.id === ID.Ice ||
-        block.id === ID.IceSheet;
+        block.id === ID.IceSheet ||
+        block.id === ID.IceBrick ||
+        block.id === ID.CrystalBrick ||
+        block.id === ID.ObsidianTile;
       const baseRough = isGlossy ? 0.20 : 0.30;
       for (let py = 0; py < T; py++) {
         for (let px = 0; px < T; px++) {

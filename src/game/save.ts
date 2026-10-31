@@ -4,6 +4,10 @@ const INDEX_KEY = "studcraft-worlds";
 
 export type SaveV1 = {
   v: 1;
+  /** Chunk id width the save was written with: absent = legacy 8-bit
+   *  (all ids < 256), 16 = 16-bit chunks (ids up to 65535). Edits are
+   *  id tuples either way, so legacy saves load unchanged. */
+  ids?: 8 | 16;
   seed: number;
   flat: boolean;
   creative: boolean;
@@ -119,9 +123,7 @@ export function loadSave(): SaveV1 | null {
   try {
     const raw = localStorage.getItem(WORLD_KEY);
     if (!raw) return null;
-    const data = JSON.parse(raw) as SaveV1;
-    if (!data || data.v !== 1 || !Array.isArray(data.edits)) return null;
-    return data;
+    return normalizeSave(JSON.parse(raw));
   } catch {
     return null;
   }
@@ -170,9 +172,7 @@ function slotKey(id: string) {
 function parseSave(raw: string | null): SaveV1 | null {
   if (!raw) return null;
   try {
-    const data = JSON.parse(raw) as SaveV1;
-    if (!data || data.v !== 1 || !Array.isArray(data.edits)) return null;
-    return data;
+    return normalizeSave(JSON.parse(raw));
   } catch {
     return null;
   }
@@ -293,4 +293,15 @@ export function writeSettings(s: SettingsSave): void {
   } catch {
     /* ignore */
   }
+}
+
+/** Validate a parsed save and migrate legacy 8-bit saves to the 16-bit
+ *  marker. Edits whose id does not fit the save's width are dropped. */
+export function normalizeSave(raw: unknown): SaveV1 | null {
+  const data = raw as SaveV1;
+  if (!data || data.v !== 1 || !Array.isArray(data.edits)) return null;
+  const max = data.ids === 16 ? 0xffff : 0xff;
+  data.edits = data.edits.filter((e) => Array.isArray(e) && e.length === 4 && Number.isInteger(e[3]) && e[3] >= 0 && e[3] <= max);
+  data.ids = 16;
+  return data;
 }
