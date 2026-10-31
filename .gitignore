@@ -22,3 +22,6 @@ report.mjs
 dig.mjs
 place*.mjs
 fps.mjs
+
+# reference photos stay local (NFR fits them into src/game/nfrFields.ts)
+refs/

@@ -1,4 +1,6 @@
 import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
+import { NFR_FIELDS, type NfrLayer } from "./nfrFields";
 import { ATLAS_COLS, ATLAS_ROWS, BLOCKS, CREATIVE_BAR, ID, TEKS, def, faceTile, stairsVariant, type BlockDef } from "./blocks";
 import { TechWorld, ORIENTS, composeO, worldCells, rot, SENSOR_RANGES, SENSOR_TARGETS, nextSensorCfg, sensorCfgLabel, colorFamilyOf, bbox as techBbox, spec as techSpec, type Part as TechPart, type Plan as TechPlan, type Target as TechTarget } from "./teks";
 import { buildTeksGeometry, buildTeksRodGeometries } from "./teksGeo";
@@ -17027,135 +17029,348 @@ export function applyBiomeLook(group: THREE.Object3D, tint: number, amount: numb
   });
 }
 
-/** biomes-bosses: the original toy-brick collection (refs/collection.jpg) —
- *  six parametric archetypes. Bright solid plastic, white plates, grey
- *  Technic joints (cylinders), glowing trans eyes. Existing primitives only. */
+/** biomes-bosses v2: the toy-brick collection (refs/collection.jpg) rebuilt for
+ *  fidelity — domed studded shells, bevelled armour plates, grey ball-and-axle
+ *  Technic joints, two-segment limbs, big emissive green eyes in dark bezels,
+ *  and the NFR "crab" shell field (fitted on the ref photo) in the SNR shader. */
 export function buildSpecies(spec: SpeciesSpec): StudsBody {
   const g = new THREE.Group();
-  const main = skin(spec.color);
+  const shellMap: NfrMap = { field: "crab", plane: "xz", scale: [2.6, 2.6], amt: 0.32 };
+  const main = nfrSkin(spec.color, shellMap);
+  const plain = skin(spec.color);
   const acc = skin(spec.accent);
-  const joint = skin(spec.joint ?? 0x5a5f66);
-  const dark = skin(0x3a3e44);
-  const eye = transTile(spec.eye ?? 0x5cff6a, 0x1a8a2a);
+  const joint = skin(spec.joint ?? 0x6b7078);
+  const dark = skin(0x2e3238);
+  const eyeHex = spec.eye ?? 0x4dff6a;
   const legs: THREE.Object3D[] = [];
   const head = new THREE.Group();
   g.add(head);
   g.userData.head = head;
-  const eyes = (x: number, y: number, z: number, r = 0.035) => {
-    for (const sx of [-x, x]) put(head, geoBox(r * 1.6, r * 1.2, 0.02), eye, sx, y, z, 0, true);
+  const eyes = (x: number, y: number, z: number, r: number) => {
+    for (const sx of [-x, x]) glowEye(head, sx, y, z, r, eyeHex, dark);
   };
-  const jointLeg = (x: number, y: number, z: number, h: number, w: number, foot: THREE.Material, splay = 0) => {
-    const leg = legBox(g, joint, w, h, w, x, y, z);
-    put(leg, geoCyl(w * 0.62, w * 1.1, 10), joint, 0, -h * 0.5, 0, Math.PI / 2, true).rotation.z = Math.PI / 2; // knee joint
-    put(leg, geoBox(w * 1.25, w * 0.7, w * 1.6), foot, 0, -h + w * 0.3, -w * 0.2, 0, true); // coloured foot
-    leg.rotation.z = splay;
-    legs.push(leg);
-    return leg;
+  /** Studs on an ellipsoid dome (centre c, radii rx/ry/rz), normals follow the curve. */
+  const domeStuds = (parent: THREE.Object3D, mat: THREE.Material, cx: number, cy: number, cz: number, rx: number, ry: number, rz: number, rings: [number, number][], sr: number) => {
+    const up = new THREE.Vector3(0, 1, 0);
+    for (const [t, n] of rings) {
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * Math.PI * 2 + (n > 1 ? 0.3 : 0);
+        const ex = Math.cos(a) * t, ez = Math.sin(a) * t;
+        const ey = Math.sqrt(Math.max(0, 1 - ex * ex - ez * ez));
+        const s = put(parent, geoCyl(sr * 0.94, sr * 0.7, 14, sr), mat, cx + ex * rx, cy + ey * ry, cz + ez * rz, 0, true);
+        s.quaternion.setFromUnitVectors(up, new THREE.Vector3(ex / rx, ey / ry, ez / rz).normalize());
+      }
+    }
+  };
+  /** Two-segment Technic limb: hip ball → upper → knee ball → lower → foot. The pivot
+   *  (pushed to legs[]) only swings on X for the walk cycle; splay/bend live inside. */
+  const limb = (x: number, y: number, z: number, o: { up: number; low: number; w: number; splay: number; bend: number; upMat?: THREE.Material; lowMat?: THREE.Material; foot?: THREE.Material; footLen?: number; pitch?: number }) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(x, y, z);
+    g.add(pivot);
+    legs.push(pivot);
+    const s = new THREE.Group();
+    s.rotation.z = o.splay;
+    s.rotation.x = o.pitch ?? 0;
+    pivot.add(s);
+    put(s, geoBall(o.w * 0.78), joint, 0, 0, 0, 0, true);
+    put(s, geoRBox(o.w, o.up, o.w * 1.1, o.w * 0.3), o.upMat ?? plain, 0, -o.up / 2, 0);
+    const k = new THREE.Group();
+    k.position.y = -o.up;
+    k.rotation.z = o.bend;
+    k.rotation.x = -(o.pitch ?? 0) * 1.6;
+    s.add(k);
+    put(k, geoBall(o.w * 0.72), joint, 0, 0, 0, 0, true);
+    put(k, geoCyl(o.w * 0.2, o.w * 1.7, 8), dark, 0, 0, 0, 0, true).rotation.z = Math.PI / 2; // axle pin
+    put(k, geoRBox(o.w * 0.82, o.low, o.w * 0.9, o.w * 0.26), o.lowMat ?? joint, 0, -o.low / 2, 0);
+    const f = new THREE.Group();
+    f.position.y = -o.low;
+    f.rotation.z = -(o.splay + o.bend);
+    f.rotation.x = (o.pitch ?? 0) * 0.6;
+    k.add(f);
+    const fl = o.footLen ?? o.w * 1.7;
+    put(f, geoRBox(o.w * 1.25, o.w * 0.62, fl, o.w * 0.22), o.foot ?? plain, 0, -o.w * 0.12, -fl * 0.22, 0, true);
+    return pivot;
   };
   let body: THREE.Mesh;
   if (spec.arch === "crab") {
-    body = block(g, main, 0.5, 0.2, 0.4, 0, 0.3, 0, 3, 2);
-    put(g, geoBox(0.52, 0.06, 0.12), acc, 0, 0.36, 0.06, 0, true); // white band
-    head.position.set(0, 0.28, -0.2);
-    put(head, geoBox(0.3, 0.1, 0.04), dark, 0, 0, 0, 0, true);
-    eyes(0.08, 0.0, -0.025);
+    // red domed shell, white side armour, dark face, white-tipped pincers
+    body = put(g, geoDome(0.3, 28), main, 0, 0.3, 0.02);
+    body.scale.set(1, 0.62, 0.86);
+    domeStuds(g, plain, 0, 0.3, 0.02, 0.3, 0.186, 0.258, [[0, 1], [0.42, 6], [0.74, 10]], 0.035);
+    put(g, geoRBox(0.6, 0.09, 0.5, 0.04), plain, 0, 0.29, 0.02); // shell rim
+    put(g, geoRBox(0.42, 0.11, 0.38, 0.04), dark, 0, 0.21, 0.02, 0, true); // grey under-frame
     for (const sx of [-1, 1]) {
+      const p = put(g, geoRBox(0.09, 0.15, 0.24, 0.035), acc, sx * 0.29, 0.33, -0.08, 0, true); // white side plates
+      p.rotation.y = sx * 0.45;
+      p.rotation.z = -sx * 0.25;
+    }
+    head.position.set(0, 0.28, -0.22);
+    put(head, geoRBox(0.3, 0.11, 0.08, 0.03), dark, 0, 0, 0, 0, true);
+    eyes(0.075, 0.005, -0.045, 0.036);
+    for (const sx of [-1, 1]) {
+      const arm = new THREE.Group();
+      arm.position.set(sx * 0.27, 0.27, -0.2);
+      g.add(arm);
+      legs.push(arm);
+      put(arm, geoBall(0.055), joint, 0, 0, 0, 0, true);
+      const seg = put(arm, geoRBox(0.09, 0.09, 0.2, 0.03), plain, sx * 0.05, -0.02, -0.08);
+      seg.rotation.y = -sx * 0.5;
+      put(arm, geoBall(0.05), joint, sx * 0.1, -0.03, -0.17, 0, true);
       const claw = new THREE.Group();
-      claw.position.set(sx * 0.3, 0.26, -0.18);
-      g.add(claw);
-      put(claw, geoCyl(0.05, 0.06, 10), joint, 0, 0, 0, 0, true);
-      put(claw, geoBox(0.12, 0.1, 0.16), main, sx * 0.04, 0, -0.12, 0, true);
-      put(claw, geoBox(0.05, 0.06, 0.12), acc, sx * 0.07, 0.04, -0.24, 0, true); // pincer
-      put(claw, geoBox(0.05, 0.05, 0.1), acc, sx * 0.07, -0.04, -0.23, 0, true);
-      legs.push(claw);
-      for (const lz of [-0.06, 0.1]) jointLeg(sx * 0.27, 0.27, lz, 0.22, 0.06, acc, sx * 0.35);
+      claw.position.set(sx * 0.12, -0.04, -0.2);
+      claw.rotation.y = sx * 0.35;
+      arm.add(claw);
+      put(claw, geoRBox(0.13, 0.12, 0.14, 0.04), plain, 0, 0, -0.05);
+      const up = put(claw, geoRBox(0.07, 0.06, 0.16, 0.025), acc, 0, 0.04, -0.17, 0, true); // white pincer
+      up.rotation.x = -0.35;
+      const lo = put(claw, geoRBox(0.06, 0.05, 0.13, 0.022), acc, 0, -0.04, -0.16, 0, true);
+      lo.rotation.x = 0.3;
+      put(claw, geoCone(0.03, 0.06, 8), acc, 0, 0.0, -0.27, -Math.PI / 2, true);
+      for (const lz of [-0.04, 0.1]) limb(sx * 0.26, 0.26, lz, { up: 0.12, low: 0.17, w: 0.055, splay: sx * 1.25, bend: -sx * 1.55, upMat: plain, lowMat: plain, foot: acc, footLen: 0.06 });
     }
   } else if (spec.arch === "beetle") {
-    body = block(g, main, 0.44, 0.18, 0.5, 0, 0.3, 0.02, 2, 3);
-    block(g, main, 0.36, 0.08, 0.4, 0, 0.43, 0.04, 2, 2); // dome cap
-    put(g, geoBox(0.02, 0.1, 0.42), dark, 0, 0.42, 0.04, 0, true); // wing-case seam
-    head.position.set(0, 0.28, -0.26);
-    put(head, geoBox(0.3, 0.14, 0.1), acc, 0, 0, 0, 0, true);
-    put(head, geoSlope(0.3, 0.06, 0.1), main, 0, 0.1, 0, 0, true);
-    eyes(0.08, 0.0, -0.055);
-    for (const sx of [-1, 1]) for (const lz of [-0.16, 0.02, 0.2]) jointLeg(sx * 0.24, 0.25, lz, 0.2, 0.06, main, sx * 0.25);
-  } else if (spec.arch === "ankylo") {
-    body = block(g, main, 0.44, 0.24, 0.62, 0, 0.42, 0, 2, 3);
-    for (const [sx, sz] of [[-0.14, -0.2], [0.14, -0.2], [0, -0.02], [-0.14, 0.16], [0.14, 0.16], [0, 0.3]] as const) {
-      put(g, geoCyl(0.005, 0.14, 8, 0.05), acc, sx, 0.6, sz, 0, true); // back spikes
+    // blue studded dome, white shoulder plates, dark visor face, six short legs
+    body = put(g, geoDome(0.27, 28), main, 0, 0.29, 0.03);
+    body.scale.set(1, 0.72, 1.18);
+    domeStuds(g, plain, 0, 0.29, 0.03, 0.27, 0.194, 0.318, [[0.3, 4], [0.62, 8]], 0.033);
+    put(g, geoRBox(0.012, 0.02, 0.44, 0.005), dark, 0, 0.47, 0.03, 0, true); // wing-case seam
+    put(g, geoRBox(0.52, 0.08, 0.6, 0.035), plain, 0, 0.28, 0.03); // rim
+    put(g, geoRBox(0.4, 0.1, 0.46, 0.035), dark, 0, 0.2, 0.03, 0, true);
+    head.position.set(0, 0.27, -0.29);
+    put(head, geoRBox(0.32, 0.16, 0.14, 0.045), plain, 0, 0.01, 0.02);
+    put(head, geoRBox(0.26, 0.07, 0.04, 0.02), dark, 0, -0.005, -0.06, 0, true);
+    for (const sx of [-1, 1]) {
+      const pl = put(head, geoRBox(0.1, 0.12, 0.08, 0.03), acc, sx * 0.17, 0.0, -0.02, 0, true); // white cheek plates
+      pl.rotation.y = sx * 0.4;
     }
-    for (const sx of [-1, 1]) put(g, geoCyl(0.005, 0.12, 8, 0.045), acc, sx * 0.24, 0.44, -0.1, 0, true).rotation.z = -sx * 1.2; // side spikes
-    put(g, geoBox(0.46, 0.08, 0.5), joint, 0, 0.29, 0, 0, true); // grey belly frame
+    eyes(0.07, 0.0, -0.085, 0.034);
+    for (const sx of [-1, 1]) for (const lz of [-0.15, 0.03, 0.21]) limb(sx * 0.22, 0.24, lz, { up: 0.09, low: 0.13, w: 0.055, splay: sx * 0.9, bend: -sx * 1.05, upMat: plain, lowMat: acc, foot: plain, footLen: 0.08 });
+  } else if (spec.arch === "ankylo") {
+    // white armoured body, rows of spikes, grey gear hips, club tail
+    body = put(g, geoRBox(0.48, 0.22, 0.62, 0.08), main, 0, 0.42, 0);
+    const back = put(g, geoDome(0.27, 24), main, 0, 0.5, 0.0);
+    back.scale.set(0.95, 0.5, 1.2);
+    const spikeM = skin(spec.accent);
+    for (const [sx, sz, h] of [[-0.13, -0.2, 0.13], [0.13, -0.2, 0.13], [0, -0.06, 0.16], [-0.16, 0.06, 0.14], [0.16, 0.06, 0.14], [0, 0.2, 0.15], [-0.12, 0.27, 0.11], [0.12, 0.27, 0.11]] as const) {
+      const c = put(g, geoCone(0.045, h, 10), spikeM, sx, 0.6 + h / 2 - 0.02 - Math.abs(sx) * 0.25, sz, 0, true);
+      c.rotation.z = -sx * 2.2;
+    }
+    for (const sx of [-1, 1]) for (const sz of [-0.2, 0.0, 0.2]) {
+      const c = put(g, geoCone(0.035, 0.12, 8), spikeM, sx * 0.27, 0.44, sz, 0, true);
+      c.rotation.z = -sx * 1.45;
+    }
+    put(g, geoRBox(0.44, 0.08, 0.52, 0.03), dark, 0, 0.29, 0, 0, true); // grey belly frame
+    for (const sx of [-1, 1]) for (const sz of [-0.2, 0.2]) {
+      const gr = gear(g, joint, dark, 0.07, 0.03, 10);
+      gr.position.set(sx * 0.25, 0.33, sz);
+      gr.rotation.z = Math.PI / 2;
+    }
     head.position.set(0, 0.42, -0.36);
-    block(head, main, 0.28, 0.2, 0.2, 0, 0, -0.04, 1, 1);
-    put(head, geoBox(0.29, 0.06, 0.12), acc, 0, -0.06, -0.08, 0, true);
-    eyes(0.08, 0.03, -0.145);
+    put(head, geoRBox(0.28, 0.2, 0.22, 0.06), plain, 0, 0.0, -0.04);
+    put(head, geoSlope(0.24, 0.08, 0.1), plain, 0, 0.06, -0.17, 0, true);
+    put(head, geoRBox(0.26, 0.06, 0.14, 0.02), dark, 0, -0.08, -0.09, 0, true);
+    for (const sx of [-1, 1]) put(head, geoCone(0.03, 0.08, 8), spikeM, sx * 0.13, 0.11, 0.02, 0, true).rotation.z = -sx * 0.6;
+    eyes(0.075, 0.03, -0.155, 0.032);
     const tail = new THREE.Group();
     tail.position.set(0, 0.42, 0.32);
     g.add(tail);
-    put(tail, geoBox(0.12, 0.1, 0.3), main, 0, 0, 0.15, 0, true);
-    put(tail, geoBox(0.2, 0.14, 0.12), acc, 0, 0, 0.32, 0, true); // club
+    put(tail, geoRBox(0.13, 0.11, 0.2, 0.04), plain, 0, 0, 0.1);
+    put(tail, geoBall(0.05), joint, 0, 0, 0.22, 0, true);
+    put(tail, geoRBox(0.09, 0.08, 0.16, 0.03), plain, 0, -0.01, 0.31);
+    put(tail, geoRBox(0.22, 0.14, 0.14, 0.05), acc, 0, -0.02, 0.43); // club
+    for (const sx of [-1, 1]) put(tail, geoCone(0.03, 0.08, 8), spikeM, sx * 0.13, -0.02, 0.43, 0, true).rotation.z = -sx * Math.PI / 2;
     g.userData.tail = tail;
-    for (const sx of [-1, 1]) for (const lz of [-0.2, 0.2]) jointLeg(sx * 0.18, 0.3, lz, 0.26, 0.1, acc);
+    for (const sx of [-1, 1]) for (const lz of [-0.2, 0.2]) limb(sx * 0.2, 0.32, lz, { up: 0.13, low: 0.15, w: 0.1, splay: sx * 0.25, bend: -sx * 0.25, upMat: plain, lowMat: dark, foot: acc, footLen: 0.14 });
   } else if (spec.arch === "raptor") {
-    body = block(g, main, 0.24, 0.24, 0.36, 0, 0.58, 0, 1, 2);
-    put(g, geoBox(0.2, 0.1, 0.3), acc, 0, 0.47, 0, 0, true); // pale belly
-    const neck = put(g, geoBox(0.12, 0.3, 0.12), main, 0, 0.8, -0.2);
-    neck.rotation.x = -0.35;
-    head.position.set(0, 0.98, -0.3);
-    block(head, main, 0.18, 0.14, 0.26, 0, 0, -0.06, 1, 1);
-    put(head, geoBox(0.16, 0.05, 0.2), acc, 0, -0.07, -0.08, 0, true); // lower jaw
-    eyes(0.07, 0.03, -0.12, 0.03);
+    // yellow long-necked raptor: studded back, S-neck, grey Technic hips, digitigrade legs
+    body = put(g, geoRBox(0.24, 0.24, 0.38, 0.08), main, 0, 0.58, 0.02);
+    studs(g, plain, 0, 0.7, 0.02, 0.18, 0.3, 2, 3);
+    put(g, geoRBox(0.2, 0.08, 0.3, 0.03), skin(spec.accent), 0, 0.47, 0.02, 0, true); // pale belly
+    for (const [k, ny, nz, rx] of [[0, 0.74, -0.17, -0.5], [1, 0.88, -0.24, -0.25], [2, 1.0, -0.27, 0.05]] as const) {
+      put(g, geoRBox(0.12 - k * 0.01, 0.16, 0.12, 0.035), plain, 0, ny, nz, rx);
+      put(g, geoBall(0.06), joint, 0, ny - 0.08, nz + 0.02, 0, true);
+    }
+    head.position.set(0, 1.08, -0.3);
+    put(head, geoRBox(0.17, 0.13, 0.22, 0.045), plain, 0, 0.0, -0.05);
+    put(head, geoSlope(0.15, 0.06, 0.12), plain, 0, 0.065, -0.11, 0, true);
+    put(head, geoRBox(0.14, 0.04, 0.18, 0.015), skin(spec.accent), 0, -0.075, -0.08, 0.18, true); // jaw
+    studs(head, plain, 0, 0.065, 0.02, 0.12, 0.08, 2, 1);
+    for (const sx of [-1, 1]) glowEye(head, sx * 0.087, 0.02, -0.08, 0.03, eyeHex, dark).rotation.y = -sx * Math.PI / 2;
     const tail = new THREE.Group();
-    tail.position.set(0, 0.62, 0.18);
+    tail.position.set(0, 0.62, 0.2);
     g.add(tail);
-    put(tail, geoBox(0.14, 0.12, 0.3), main, 0, 0.02, 0.15, 0, true).rotation.x = -0.25;
-    put(tail, geoBox(0.08, 0.08, 0.22), main, 0, 0.1, 0.38, 0, true).rotation.x = -0.45;
+    for (const [k, w, z, y, rx] of [[0, 0.15, 0.1, 0.02, -0.2], [1, 0.12, 0.27, 0.08, -0.35], [2, 0.09, 0.42, 0.15, -0.45], [3, 0.06, 0.55, 0.22, -0.5]] as const) {
+      put(tail, geoRBox(w, w * 0.85, 0.18, w * 0.3), plain, 0, y, z, rx);
+      if (k < 3) put(tail, geoBall(w * 0.42), joint, 0, y + 0.03, z + 0.09, 0, true);
+    }
     g.userData.tail = tail;
     for (const sx of [-1, 1]) {
-      put(g, geoCyl(0.06, 0.06, 10), joint, sx * 0.13, 0.5, 0.04, 0, true).rotation.z = Math.PI / 2; // hip joint
-      jointLeg(sx * 0.09, 0.48, 0.04, 0.4, 0.08, acc);
-      const arm = put(g, geoBox(0.05, 0.14, 0.05), joint, sx * 0.12, 0.56, -0.18, 0, true);
-      arm.rotation.x = -0.6;
+      limb(sx * 0.13, 0.52, 0.06, { up: 0.2, low: 0.24, w: 0.085, splay: 0, bend: 0, pitch: 0.45, upMat: plain, lowMat: joint, foot: plain, footLen: 0.17 });
+      const arm = new THREE.Group();
+      arm.position.set(sx * 0.13, 0.6, -0.16);
+      g.add(arm);
+      put(arm, geoBall(0.035), joint, 0, 0, 0, 0, true);
+      put(arm, geoRBox(0.04, 0.12, 0.04, 0.012), joint, 0, -0.05, -0.03, -0.6, true);
+      put(arm, geoCone(0.02, 0.05, 6), plain, 0, -0.1, -0.08, -2.2, true);
     }
   } else if (spec.arch === "drake") {
-    body = block(g, main, 0.28, 0.32, 0.24, 0, 0.66, 0, 1, 1);
-    put(g, geoBox(0.2, 0.26, 0.04), acc, 0, 0.64, -0.12, 0, true); // white chest plate
-    head.position.set(0, 0.98, -0.1);
-    block(head, main, 0.2, 0.14, 0.28, 0, 0, -0.06, 1, 1);
-    put(head, geoBox(0.18, 0.05, 0.22), acc, 0, -0.08, -0.08, 0, true);
-    for (const sx of [-1, 1]) put(head, geoBox(0.04, 0.12, 0.04), acc, sx * 0.07, 0.11, 0.04, -0.4, true); // horns
-    eyes(0.075, 0.02, -0.205, 0.03);
+    // red/white upright dragon: dark grey chassis, red chest armour, white plates,
+    // spread truss wings with white panels, curled tail, digitigrade legs
+    body = put(g, geoRBox(0.26, 0.34, 0.22, 0.07), main, 0, 0.7, 0);
+    put(g, geoRBox(0.18, 0.26, 0.06, 0.03), acc, 0, 0.67, -0.115, 0, true); // white chest plate
+    put(g, geoRBox(0.22, 0.22, 0.2, 0.05), dark, 0, 0.5, 0.02, 0, true); // grey hip chassis
+    for (const sx of [-1, 1]) put(g, geoBall(0.06), joint, sx * 0.15, 0.84, -0.02, 0, true); // shoulders
+    put(g, geoRBox(0.11, 0.14, 0.1, 0.03), dark, 0, 0.9, -0.06, -0.3);
+    put(g, geoBall(0.05), joint, 0, 0.96, -0.1, 0, true);
+    head.position.set(0, 1.04, -0.12);
+    put(head, geoRBox(0.19, 0.13, 0.22, 0.04), plain, 0, 0.0, -0.06);
+    put(head, geoSlope(0.17, 0.07, 0.14), plain, 0, 0.07, -0.13, 0, true);
+    put(head, geoRBox(0.15, 0.04, 0.2, 0.015), acc, 0, -0.08, -0.09, 0.22, true); // open lower jaw
+    for (const sx of [-1, 1]) {
+      const h = put(head, geoCone(0.025, 0.14, 8), acc, sx * 0.07, 0.1, 0.06, -0.9, true); // horns
+      h.rotation.z = -sx * 0.25;
+      put(head, geoRBox(0.025, 0.03, 0.06, 0.008), acc, sx * 0.06, -0.06, -0.17, 0, true); // fangs plate
+    }
+    eyes(0.06, 0.02, -0.18, 0.026);
     for (const sx of [-1, 1]) {
       const wing = new THREE.Group();
-      wing.position.set(sx * 0.16, 0.82, 0.06);
-      wing.rotation.z = sx * -0.5;
+      wing.position.set(sx * 0.16, 0.86, 0.06);
+      wing.rotation.z = sx * -0.55;
+      wing.rotation.y = sx * 0.25;
       g.add(wing);
-      put(wing, geoCyl(0.05, 0.06, 10), joint, 0, 0, 0, 0, true);
-      put(wing, geoBox(0.42, 0.05, 0.05), main, sx * 0.22, 0.02, 0, 0, true); // spar
-      put(wing, geoBox(0.34, 0.03, 0.24), acc, sx * 0.24, 0, 0.13, 0, true); // white membrane plate
-      put(wing, geoBox(0.12, 0.05, 0.05), main, sx * 0.46, 0.06, 0.02, 0, true); // tip
+      put(wing, geoBall(0.05), joint, 0, 0, 0, 0, true);
+      const spar = put(wing, geoRBox(0.46, 0.06, 0.06, 0.02), plain, sx * 0.24, 0.0, 0, 0);
+      spar.rotation.z = sx * 0.25;
+      put(wing, geoBall(0.04), joint, sx * 0.46, 0.06, 0, 0, true);
+      const tip = put(wing, geoRBox(0.24, 0.05, 0.05, 0.018), plain, sx * 0.58, 0.14, 0.0, 0);
+      tip.rotation.z = sx * 0.6;
+      const tri = (k: string, pts: [number, number][], m: THREE.Material, y: number) => put(wing, geoPlate(k, pts, 0.03), m, 0, y, 0, 0, true);
+      tri(`dw1${sx}`, [[sx * 0.05, 0.02], [sx * 0.46, 0.0], [sx * 0.2, 0.3]], acc, 0.0); // white membrane panels
+      tri(`dw2${sx}`, [[sx * 0.46, 0.0], [sx * 0.68, 0.0], [sx * 0.4, 0.28]], plain, 0.005);
       legs.push(wing);
-      jointLeg(sx * 0.1, 0.5, 0.02, 0.44, 0.09, main);
     }
     const tail = new THREE.Group();
-    tail.position.set(0, 0.56, 0.12);
+    tail.position.set(0, 0.5, 0.12);
     g.add(tail);
-    put(tail, geoBox(0.1, 0.1, 0.36), main, 0, -0.04, 0.18, 0, true).rotation.x = 0.35;
-    put(tail, geoBox(0.08, 0.08, 0.22), acc, 0, -0.12, 0.42, 0, true);
+    for (const [k, y, z, rx] of [[0, -0.04, 0.12, 0.5], [1, -0.12, 0.28, 0.2], [2, -0.14, 0.44, -0.3], [3, -0.06, 0.56, -0.9]] as const) {
+      put(tail, geoRBox(0.1 - k * 0.015, 0.09 - k * 0.012, 0.18, 0.03), k % 2 ? acc : plain, 0, y, z, rx);
+    }
     g.userData.tail = tail;
+    for (const sx of [-1, 1]) limb(sx * 0.11, 0.46, 0.04, { up: 0.2, low: 0.22, w: 0.09, splay: sx * 0.08, bend: -sx * 0.08, pitch: 0.4, upMat: plain, lowMat: joint, foot: plain, footLen: 0.15 });
   } else {
-    // spider
-    body = block(g, main, 0.4, 0.18, 0.42, 0, 0.36, 0.04, 2, 2);
-    block(g, main, 0.3, 0.08, 0.3, 0, 0.49, 0.06, 2, 2);
-    head.position.set(0, 0.34, -0.2);
-    put(head, geoBox(0.24, 0.12, 0.08), dark, 0, 0, 0, 0, true);
-    eyes(0.06, 0.0, -0.045);
-    for (const sx of [-1, 1]) for (const lz of [-0.15, -0.03, 0.09, 0.21]) jointLeg(sx * 0.24, 0.34, lz, 0.3, 0.05, acc, sx * 0.55);
+    // spider: blue studded abdomen dome, dark head with big eyes, eight jointed legs
+    body = put(g, geoDome(0.24, 28), main, 0, 0.36, 0.08);
+    body.scale.set(1, 0.75, 1.1);
+    domeStuds(g, plain, 0, 0.36, 0.08, 0.24, 0.18, 0.264, [[0, 1], [0.48, 6]], 0.032);
+    put(g, geoRBox(0.44, 0.08, 0.5, 0.035), plain, 0, 0.35, 0.08);
+    put(g, geoRBox(0.3, 0.1, 0.36, 0.035), dark, 0, 0.28, 0.06, 0, true);
+    head.position.set(0, 0.33, -0.2);
+    put(head, geoRBox(0.26, 0.14, 0.14, 0.04), plain, 0, 0.0, 0.0);
+    put(head, geoRBox(0.22, 0.08, 0.04, 0.015), dark, 0, -0.005, -0.07, 0, true);
+    eyes(0.06, 0.0, -0.085, 0.034);
+    for (const sx of [-1, 1]) for (const [lz, yaw] of [[-0.12, -0.5], [-0.02, -0.15], [0.1, 0.15], [0.2, 0.5]] as const) {
+      const p = limb(sx * 0.2, 0.33, lz, { up: 0.17, low: 0.44, w: 0.05, splay: sx * 2.4, bend: -sx * 2.9, upMat: plain, lowMat: plain, foot: joint, footLen: 0.06 });
+      p.rotation.y = sx * yaw;
+    }
   }
   body.userData.skin = "body";
   g.scale.setScalar(spec.size);
   return { group: g, legs, bodyMat: main };
+}
+
+/** Démoulé v2 (refs/demoule.jpg): no minifig parts at all — a chunky robot
+ *  pulled from the mould too early. Cube head with a wide cracked visor (one
+ *  dark pane, one glowing pane with SNR crack lines), a torso and limbs built
+ *  of offset greeble blocks, faded plastic carrying the NFR "demoule" field
+ *  (fitted on the photo's crazed torso) plus the SNR Voronoi crack rule, and a
+ *  long Teks liftarm dragged in one hand. Legs order matches makeFig
+ *  ([legL, legR, armR, armL]) so the zombie walk/arm pose is unchanged. */
+function makeDemoule(kind: string): StudsBody {
+  const pal =
+    kind === "husk" ? { c: 0xc2b088, eye: 0xffb03a } : kind === "drowned" ? { c: 0x4f8f86, eye: 0x4ef2f7 } : { c: 0x6b7660, eye: 0x46e070 };
+  const g = new THREE.Group();
+  const plastic = nfrSkin(pal.c, { field: "demoule", plane: "xy", scale: [3.2, 2.4], amt: 0.3, crack: 0.65 });
+  const plasticZ = nfrSkin(pal.c, { field: "demoule", plane: "zy", scale: [3.2, 2.4], amt: 0.3, crack: 0.65 });
+  const shade = nfrSkin(new THREE.Color(pal.c).multiplyScalar(0.88).getHex(), { field: "demoule", plane: "xy", scale: [5, 4], amt: 0.25, crack: 0.4 });
+  const dark = skin(0x1c211d);
+  let seed = kind.length * 7919 + 17;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  /** scatter offset greeble blocks over a box face set (front/back/sides) */
+  const greeble = (parent: THREE.Object3D, w: number, h: number, d: number, cx: number, cy: number, cz: number, n: number) => {
+    for (let i = 0; i < n; i++) {
+      const face = Math.floor(rnd() * 4);
+      const gw = 0.03 + rnd() * 0.07, gh = 0.03 + rnd() * 0.07, gd = 0.015 + rnd() * 0.03;
+      const u = (rnd() - 0.5) * 0.9, v = (rnd() - 0.5) * 0.9;
+      const m = rnd() < 0.3 ? shade : face < 2 ? plastic : plasticZ;
+      if (face < 2) put(parent, geoRBox(gw, gh, gd, 0.006), m, cx + u * w, cy + v * h, cz + (face ? 1 : -1) * (d / 2 + gd * 0.3), 0, true);
+      else put(parent, geoRBox(gd, gh, gw, 0.006), m, cx + (face === 2 ? 1 : -1) * (w / 2 + gd * 0.3), cy + v * h, cz + u * d, 0, true);
+    }
+  };
+  // torso + hips
+  const torso = put(g, geoRBox(0.44, 0.42, 0.26, 0.04), plastic, 0, 0.88, 0);
+  torso.userData.skin = "body";
+  put(g, geoRBox(0.36, 0.12, 0.22, 0.03), shade, 0, 0.62, 0);
+  put(g, geoRBox(0.2, 0.14, 0.05, 0.02), shade, -0.06, 0.95, -0.14, 0, true); // chest plates
+  put(g, geoRBox(0.14, 0.1, 0.05, 0.02), plastic, 0.1, 0.82, -0.145, 0, true);
+  greeble(g, 0.44, 0.42, 0.26, 0, 0.88, 0, 34);
+  // head: chunky cube with a wide cracked visor
+  const head = new THREE.Group();
+  head.position.set(0, 1.12, 0);
+  g.add(head);
+  g.userData.head = head;
+  put(head, geoRBox(0.06, 0.06, 0.06, 0.01), shade, 0, 0.0, 0, 0, true); // neck block
+  put(head, geoRBox(0.32, 0.27, 0.28, 0.035), plastic, 0, 0.17, 0);
+  greeble(head, 0.32, 0.27, 0.28, 0, 0.17, 0, 18);
+  put(head, geoRBox(0.3, 0.06, 0.24, 0.02), shade, 0, 0.32, 0.01, 0, true); // brow / top plate
+  put(head, geoRBox(0.3, 0.11, 0.04, 0.015), dark, 0, 0.15, -0.145, 0, true); // visor frame
+  const paneDark = nfrSkin(0x1e3326, { field: "demoule", plane: "xy", scale: [9, 9], amt: 0.1, crack: 1.0 }, { transparent: true, opacity: 0.85 });
+  paneDark.emissive = new THREE.Color(0x0c2a14);
+  put(head, geoRBox(0.125, 0.085, 0.02, 0.008), paneDark, -0.068, 0.15, -0.165, 0, true);
+  const paneGlow = nfrSkin(pal.eye, { field: "demoule", plane: "xy", scale: [9, 9], amt: 0.1, crack: 1.0 }, { transparent: true, opacity: 0.9 });
+  paneGlow.emissive = new THREE.Color(pal.eye);
+  (paneGlow as THREE.MeshStandardMaterial).emissiveIntensity = 0.9;
+  put(head, geoRBox(0.125, 0.085, 0.02, 0.008), paneGlow, 0.068, 0.15, -0.165, 0, true);
+  const halo = new THREE.MeshBasicMaterial({ color: pal.eye, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false });
+  put(head, geoBall(0.1, 12), halo, 0.068, 0.15, -0.18, 0, true).scale.set(1, 0.7, 0.25);
+  put(head, geoRBox(0.012, 0.1, 0.03, 0.004), dark, 0, 0.15, -0.165, 0, true); // visor mullion
+  // limbs
+  const limb = (x: number, y: number, w: number, upLen: number, lowLen: number, arm: boolean) => {
+    const p = new THREE.Group();
+    p.position.set(x, y, 0);
+    g.add(p);
+    put(p, geoRBox(w * 1.15, w * 1.0, w * 1.15, 0.02), shade, 0, -w * 0.3, 0, 0, true); // shoulder / hip block
+    put(p, geoRBox(w, upLen, w, 0.02), plastic, 0, -upLen / 2 - w * 0.2, 0);
+    put(p, geoRBox(w * 1.08, w * 0.5, w * 1.08, 0.015), shade, 0, -upLen - w * 0.2, 0, 0, true); // knee/elbow block
+    put(p, geoRBox(w * 0.95, lowLen, w * 0.95, 0.02), plastic, 0, -upLen - lowLen / 2 - w * 0.4, 0);
+    greeble(p, w, upLen + lowLen, w, 0, -(upLen + lowLen) / 2 - w * 0.3, 0, 8);
+    if (arm) put(p, geoRBox(w * 1.05, w * 0.7, w * 1.1, 0.015), shade, 0, -upLen - lowLen - w * 0.6, -0.01, 0, true); // blocky fist
+    else put(p, geoRBox(w * 1.2, w * 0.55, w * 1.5, 0.02), shade, 0, -upLen - lowLen - w * 0.55, -w * 0.15); // boot
+    return p;
+  };
+  const legL = limb(-0.11, 0.6, 0.15, 0.24, 0.22, false);
+  const legR = limb(0.11, 0.6, 0.15, 0.24, 0.22, false);
+  const armR = limb(0.3, 1.04, 0.12, 0.26, 0.26, true);
+  const armL = limb(-0.3, 1.04, 0.12, 0.26, 0.26, true);
+  // dragged Teks liftarm in the right hand (hangs from the fist, ring holes)
+  const beamM = skin(new THREE.Color(pal.c).multiplyScalar(1.12).getHex());
+  const beam = new THREE.Group();
+  beam.position.set(0, -0.62, -0.02);
+  beam.rotation.x = 0.35;
+  armR.add(beam);
+  put(beam, geoRBox(0.07, 0.7, 0.035, 0.03), beamM, 0, -0.3, 0);
+  for (let k = 0; k < 9; k++) {
+    put(beam, geoTorus(0.022, 0.006, 16), dark, 0, -0.01 - k * 0.075, -0.018, 0, true);
+    put(beam, geoCyl(0.02, 0.04, 12), dark, 0, -0.01 - k * 0.075, 0, Math.PI / 2, true);
+  }
+  if (kind === "husk") {
+    put(g, geoRBox(0.46, 0.05, 0.28, 0.015), skin(0xe8dec2), 0, 0.78, 0, 0, true); // sand-worn wrap plates
+    put(g, geoRBox(0.46, 0.05, 0.28, 0.015), skin(0xd8cca8), 0, 0.98, 0, 0, true);
+  } else if (kind === "drowned") {
+    for (const sx of [-0.12, 0.02, 0.14]) put(g, geoCyl(0.015, 0.3, 6), skin(0x2f8a4a), sx, 0.8, -0.15, 0.08, true); // weed hoses
+    put(armL, geoCyl(0.02, 0.6, 8), skin(0x2a8478), 0, -0.6, -0.05, 0.35, true); // kept trident shaft (drop parity)
+  }
+  return { group: g, legs: [legL, legR, armR, armL], bodyMat: plastic };
 }
 
 function makeFigure() {
@@ -17266,6 +17481,216 @@ function put(parent: THREE.Object3D, geo: THREE.BufferGeometry, mat: THREE.Mater
   mesh.receiveShadow = plasticOn;
   parent.add(mesh);
   return mesh;
+}
+
+// ───────────────────────── v2 quality pass (refs-faithful mobs) ─────────────────────────
+// Rounded/bevelled primitives so edges catch the SNR studio highlight like real ABS,
+// NFR/SIREN fields fitted on refs/*.jpg (src/game/nfrFields.ts, no raster shipped) evaluated
+// in the SNR shader, emissive glowing eyes, flex tubes, gears and crystal spikes.
+function cachedGeo(k: string, make: () => THREE.BufferGeometry) {
+  let g = figGeo.get(k);
+  if (!g) {
+    g = make();
+    figGeo.set(k, g);
+  }
+  return g;
+}
+const q3 = (n: number) => Number(n.toFixed(3));
+function geoRBox(w: number, h: number, d: number, r = Math.min(w, h, d) * 0.2) {
+  return cachedGeo(`rb:${q3(w)}:${q3(h)}:${q3(d)}:${q3(r)}`, () => new RoundedBoxGeometry(w, h, d, 2, Math.min(r, Math.min(w, h, d) * 0.49)));
+}
+function geoBall(r: number, n = 14) {
+  return cachedGeo(`ball:${q3(r)}:${n}`, () => new THREE.SphereGeometry(r, n, Math.ceil(n * 0.7)));
+}
+function geoDome(r: number, n = 24) {
+  return cachedGeo(`dome:${q3(r)}:${n}`, () => new THREE.SphereGeometry(r, n, Math.ceil(n / 2), 0, Math.PI * 2, 0, Math.PI / 2));
+}
+function geoTorus(R: number, t: number, n = 24) {
+  return cachedGeo(`tor:${q3(R)}:${q3(t)}:${n}`, () => new THREE.TorusGeometry(R, t, 10, n));
+}
+function geoCone(r: number, h: number, n = 10) {
+  return cachedGeo(`cone:${q3(r)}:${q3(h)}:${n}`, () => new THREE.ConeGeometry(r, h, n));
+}
+function geoOcta(r: number, stretch: number) {
+  return cachedGeo(`oct:${q3(r)}:${q3(stretch)}`, () => new THREE.OctahedronGeometry(r, 0).scale(1, stretch, 1));
+}
+/** Lathe profile (x = radius, y = height) — barrels, lids, flame tongues. */
+function geoLathe(key: string, pts: [number, number][], n = 32) {
+  return cachedGeo("lathe:" + key, () => new THREE.LatheGeometry(pts.map(([x, y]) => new THREE.Vector2(x, y)), n));
+}
+/** Bevelled flat triangle/quad plate in the XZ plane, thickness t (wing panels, armour). */
+function geoPlate(key: string, pts: [number, number][], t: number) {
+  return cachedGeo("plate:" + key, () => {
+    const sh = new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, z)));
+    const bev = Math.min(t * 0.35, 0.012);
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: Math.max(0.001, t - bev * 2), bevelEnabled: true, bevelThickness: bev, bevelSize: bev, bevelSegments: 2 });
+    geo.translate(0, 0, -(t - bev * 2) / 2);
+    geo.rotateX(Math.PI / 2); // shape XY → XZ, extrude along Y
+    geo.computeVertexNormals();
+    return geo;
+  });
+}
+function geoTube(key: string, pts: [number, number, number][], r: number) {
+  return cachedGeo("tube:" + key, () => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(([x, y, z]) => new THREE.Vector3(x, y, z))), 32, r, 8));
+}
+/** Ribbed flex tube: a smooth core plus torus ribs along a Catmull-Rom curve (refs: fuse hose, dragon cables). */
+function flexTube(parent: THREE.Object3D, mat: THREE.Material, key: string, pts: [number, number, number][], r: number, ribs: number) {
+  put(parent, geoTube(key, pts, r * 0.8), mat, 0, 0, 0, 0, true);
+  const curve = new THREE.CatmullRomCurve3(pts.map(([x, y, z]) => new THREE.Vector3(x, y, z)));
+  const up = new THREE.Vector3(0, 0, 1);
+  for (let k = 0; k <= ribs; k++) {
+    const t = k / ribs;
+    const p = curve.getPointAt(t);
+    const tan = curve.getTangentAt(t);
+    const rib = put(parent, geoTorus(r * 0.82, r * 0.3, 14), mat, p.x, p.y, p.z, 0, true);
+    rib.quaternion.setFromUnitVectors(up, tan);
+  }
+}
+/** Gear: bevelled disc, hub, axle hole and square teeth; axis along local Y. */
+function gear(parent: THREE.Object3D, mat: THREE.Material, hubMat: THREE.Material, r: number, t: number, teeth: number) {
+  const gp = new THREE.Group();
+  parent.add(gp);
+  put(gp, geoCyl(r, t, 28), mat, 0, 0, 0, 0, true);
+  put(gp, geoTorus(r * 0.62, t * 0.28, 24), mat, 0, 0, 0, Math.PI / 2, true);
+  put(gp, geoCyl(r * 0.3, t * 1.3, 16), hubMat, 0, 0, 0, 0, true);
+  for (let k = 0; k < teeth; k++) {
+    const a = (k / teeth) * Math.PI * 2;
+    const tooth = put(gp, geoRBox(r * 0.22, t * 0.95, r * 0.2, r * 0.04), mat, Math.cos(a) * r * 1.05, 0, Math.sin(a) * r * 1.05, 0, true);
+    tooth.rotation.y = -a;
+  }
+  for (let k = 0; k < 4; k++) {
+    const a = (k / 4) * Math.PI * 2 + 0.4;
+    put(gp, geoCyl(r * 0.1, t * 1.1, 10), skin(0x0c0b10), Math.cos(a) * r * 0.62, 0, Math.sin(a) * r * 0.62, 0, true); // spoke holes
+  }
+  return gp;
+}
+/** Glowing eye: dark bezel ring + emissive dome lens + soft additive halo, facing -Z. */
+function glowEye(parent: THREE.Object3D, x: number, y: number, z: number, r: number, color: number, bezel: THREE.Material, halo = true) {
+  const e = new THREE.Group();
+  e.position.set(x, y, z);
+  parent.add(e);
+  put(e, geoTorus(r * 1.05, r * 0.32, 20), bezel, 0, 0, 0, 0, true);
+  const lens = skin(new THREE.Color(color).multiplyScalar(0.55).getHex());
+  lens.emissive = new THREE.Color(color);
+  (lens as THREE.MeshStandardMaterial).emissiveIntensity = 0.75;
+  if ((lens as THREE.MeshStandardMaterial).isMeshStandardMaterial) (lens as THREE.MeshStandardMaterial).roughness = 0.12;
+  const dome = put(e, geoDome(r, 18), lens, 0, 0, -r * 0.05, -Math.PI / 2, true);
+  dome.scale.y = 0.55;
+  if (halo) {
+    const hm = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false });
+    put(e, geoBall(r * 1.7, 12), hm, 0, 0, -r * 0.2, 0, true).scale.z = 0.35;
+  }
+  return e;
+}
+
+// NFR/SIREN field → GLSL. Weights live in nfrFields.ts (int8 + fp16 scales); this
+// dequantises them once into const arrays and emits f(p) = W3·sin(30(W2·sin(30(W1·p+b1))+b2))+b3.
+const nfrGlslSrc = new Map<string, string>();
+function nfrGlsl(name: string) {
+  const hit = nfrGlslSrc.get(name);
+  if (hit) return hit;
+  const f = NFR_FIELDS[name];
+  const H = f.hidden;
+  const deq = (l: NfrLayer) => (l.w ? l.w : l.q!.map((v, k) => v * l.s![Math.floor(k / 64)]));
+  const arr = (a: number[]) => a.map((v) => (Number.isInteger(v) ? v.toFixed(1) : v.toPrecision(5))).join(",");
+  const [L1, L2, L3] = f.layers;
+  const src = `
+const float NFR_${name}_W1[${2 * H}] = float[](${arr(deq(L1))});
+const float NFR_${name}_B1[${H}] = float[](${arr(L1.b)});
+const float NFR_${name}_W2[${H * H}] = float[](${arr(deq(L2))});
+const float NFR_${name}_B2[${H}] = float[](${arr(L2.b)});
+const float NFR_${name}_W3[${H * f.ch}] = float[](${arr(deq(L3))});
+const float NFR_${name}_B3[${f.ch}] = float[](${arr(L3.b)});
+vec3 nfr_${name}(vec2 p) {
+  float h1[${H}];
+  for (int i = 0; i < ${H}; i++) h1[i] = sin(30.0 * (NFR_${name}_W1[i * 2] * p.x + NFR_${name}_W1[i * 2 + 1] * p.y + NFR_${name}_B1[i]));
+  float h2[${H}];
+  for (int i = 0; i < ${H}; i++) {
+    float s = NFR_${name}_B2[i];
+    for (int j = 0; j < ${H}; j++) s += NFR_${name}_W2[i * ${H} + j] * h1[j];
+    h2[i] = sin(30.0 * s);
+  }
+  vec3 o = vec3(0.0);
+  for (int c = 0; c < ${f.ch}; c++) {
+    float s = NFR_${name}_B3[c];
+    for (int j = 0; j < ${H}; j++) s += NFR_${name}_W3[c * ${H} + j] * h2[j];
+    o[c] = s;
+  }
+  return ${f.ch === 1 ? "vec3(o.x * 2.0)" : "o"};
+}`;
+  nfrGlslSrc.set(name, src);
+  return src;
+}
+type NfrMap = {
+  field: string;
+  /** projection of object-space position onto the field's [-1,1]² domain */
+  plane: "xy" | "zy" | "xz" | "cyl";
+  scale: [number, number];
+  offset?: [number, number];
+  /** 0..1 strength; luminance fields multiply albedo (palette-preserving), rgb fields mix in */
+  amt: number;
+  /** rgb fields also feed emission (trans panels) */
+  glow?: number;
+  /** Démoulé: SNR hairline cracks from a Voronoi-edge term, darkened plus a faint green seep */
+  crack?: number;
+};
+/** SNR skin + one NFR field (+ optional crack rule). Own program cache key per mapping. */
+function nfrSkin(color: number, map: NfrMap, extra: Parameters<typeof skin>[1] = {}) {
+  const mat = skin(color, extra);
+  if (!plasticOn || !(mat as THREE.MeshStandardMaterial).isMeshStandardMaterial) return mat;
+  const base = mat.onBeforeCompile;
+  const [sx, sy] = map.scale;
+  const [ox, oy] = map.offset ?? [0, 0];
+  const proj =
+    map.plane === "cyl"
+      ? `vec2(atan(vSirenPos.x, -vSirenPos.z) / 3.14159 * ${sx.toFixed(3)}, vSirenPos.y * ${sy.toFixed(3)})`
+      : map.plane === "xz"
+      ? `vec2(vSirenPos.x * ${sx.toFixed(3)}, -vSirenPos.z * ${sy.toFixed(3)})`
+      : map.plane === "zy"
+      ? `vec2(vSirenPos.z * ${sx.toFixed(3)}, vSirenPos.y * ${sy.toFixed(3)})`
+      : `vec2(vSirenPos.x * ${sx.toFixed(3)}, vSirenPos.y * ${sy.toFixed(3)})`;
+  const rgb = NFR_FIELDS[map.field].ch === 3;
+  mat.onBeforeCompile = (shader, renderer) => {
+    base.call(mat, shader, renderer);
+    shader.fragmentShader = shader.fragmentShader
+      .replace("uniform float uSirenAmt;", "uniform float uSirenAmt;\n" + nfrGlsl(map.field) + `
+vec2 nfrTri(vec2 t) { return abs(mod(t + 1.0, 4.0) - 2.0) - 1.0; }
+vec2 nfrCell(vec2 p) {
+  vec2 i = floor(p), f = fract(p); float d1 = 8.0, d2 = 8.0;
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    vec2 g = vec2(float(x), float(y));
+    vec2 o = fract(sin(vec2(dot(i + g, vec2(127.1, 311.7)), dot(i + g, vec2(269.5, 183.3)))) * 43758.5453);
+    float d = length(g + o - f);
+    if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+  }
+  return vec2(d1, d2);
+}`)
+      .replace(
+        "#include <map_fragment>",
+        `#include <map_fragment>
+vec3 nfrF = nfr_${map.field}(nfrTri(${proj} + vec2(${ox.toFixed(3)}, ${oy.toFixed(3)})));
+${
+  rgb
+    ? `diffuseColor.rgb = mix(diffuseColor.rgb, clamp(nfrF, 0.0, 1.0), ${map.amt.toFixed(3)} * uSirenAmt);`
+    : `diffuseColor.rgb *= mix(1.0, clamp(nfrF.x, 0.2, 1.7), ${map.amt.toFixed(3)} * uSirenAmt);`
+}
+float nfrCrack = 0.0;
+${
+  map.crack
+    ? `{ vec2 c = nfrCell(vSirenPos.xy * 14.0 + vSirenPos.zz * 9.0); nfrCrack = (1.0 - smoothstep(0.0, 0.06, c.y - c.x)) * ${map.crack.toFixed(3)} * uSirenAmt;
+  diffuseColor.rgb *= 1.0 - nfrCrack * 0.75; }`
+    : ""
+}`,
+      )
+      .replace(
+        "#include <emissivemap_fragment>",
+        `#include <emissivemap_fragment>
+${rgb && map.glow ? `totalEmissiveRadiance += clamp(nfrF, 0.0, 1.0) * ${map.glow.toFixed(3)} * uSirenAmt;` : ""}
+${map.crack ? `totalEmissiveRadiance += vec3(0.12, 0.55, 0.2) * nfrCrack * 0.35;` : ""}`,
+      );
+  };
+  mat.customProgramCacheKey = () => `siren-creature-v5-nfr-${map.field}-${map.plane}-${sx}-${sy}-${ox}-${oy}-${map.amt}-${map.glow ?? 0}-${map.crack ?? 0}-${extra.transparent ? "t" : "o"}`;
+  return mat;
 }
 
 // Pierced / hollow safety stud on top of STUDS Figure heads
@@ -17781,55 +18206,95 @@ function beast(kind: string): StudsBody {
     return { group: g, legs, bodyMat: dark };
   }
   if (kind === "creeper") {
-    // Pétabrique (refs/bombe.jpg): the small orange bomb — a squat round
-    // barrel ringed by two black bands, a studded lid, big yellow button eyes
-    // in black bezels, side nubs, a ribbed black hose fuse ending in a
-    // three-tongue trans-yellow flame, a wind-up key on the side and three
-    // stubby black hinged feet.
-    const orange = skin(0xf07820);
-    const band = skin(0x15110e);
-    const body = put(g, geoCyl(0.26, 0.4, 20), orange, 0, 0.5, 0);
+    // Pétabrique v2 (refs/bombe.jpg): a lathe-turned round barrel with rolled
+    // rims, two bevelled black bands, a studded domed lid, big glossy yellow
+    // button eyes glowing in thick black bezels, round side nubs, a black
+    // wind-up key with two ring bows, a ribbed flex-hose fuse curling up to a
+    // three-tongue trans-yellow flame, three black hinged feet. The barrel
+    // plastic carries the NFR "bombe" field fitted on the photo's barrel side.
+    const orange = nfrSkin(0xf07a1c, { field: "bombe", plane: "cyl", scale: [1.0, 3.4], offset: [0, -1.7], amt: 0.28 });
+    const orangeP = skin(0xf07a1c);
+    const band = skin(0x121012);
+    if ((band as THREE.MeshStandardMaterial).isMeshStandardMaterial) (band as THREE.MeshStandardMaterial).roughness = 0.25;
+    const R = 0.27;
+    const body = put(g, geoLathe("petab-body", [[0, 0.28], [R - 0.03, 0.28], [R, 0.31], [R + 0.004, 0.5], [R, 0.69], [R - 0.03, 0.72], [0, 0.72]], 40), orange, 0, 0, 0);
     body.userData.skin = "body";
-    put(g, geoCyl(0.27, 0.06, 20), band, 0, 0.34, 0, 0, true);
-    put(g, geoCyl(0.27, 0.06, 20), band, 0, 0.66, 0, 0, true);
-    put(g, geoCyl(0.22, 0.08, 20, 0.26), band, 0, 0.27, 0, 0, true); // under-skirt
+    for (const by of [0.36, 0.64]) {
+      put(g, geoLathe("petab-band", [[R - 0.01, -0.035], [R + 0.018, -0.03], [R + 0.026, 0], [R + 0.018, 0.03], [R - 0.01, 0.035]], 40), band, 0, by, 0, 0, true);
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2 + 0.26;
+        const clip = put(g, geoRBox(0.04, 0.075, 0.02, 0.008), band, Math.sin(a) * (R + 0.022), by, -Math.cos(a) * (R + 0.022), 0, true); // band clips
+        clip.rotation.y = -a;
+      }
+    }
+    put(g, geoLathe("petab-skirt", [[0.05, 0.22], [0.2, 0.22], [0.25, 0.26], [0.26, 0.3], [0.05, 0.3]], 32), band, 0, 0, 0, 0, true);
     for (const sx of [-1, 1]) {
-      const nub = put(g, geoCyl(0.045, 0.04, 12), orange, sx * 0.27, 0.5, -0.05, 0, true); // side nubs
-      nub.rotation.z = Math.PI / 2;
+      const nub = put(g, geoDome(0.05, 16), orangeP, sx * (R - 0.005), 0.5, 0.02, 0, true); // round side nubs
+      nub.rotation.z = -sx * Math.PI / 2;
+      nub.scale.y = 0.45;
+      put(g, geoTorus(0.05, 0.008, 18), orangeP, sx * (R + 0.004), 0.5, 0.02, 0, true).rotation.y = Math.PI / 2;
     }
-    // Wind-up key on the right side: shaft along X + two ring bows
+    // Wind-up key: hub + shaft + two torus ring bows
     const key = new THREE.Group();
-    key.position.set(0.27, 0.52, 0.04);
-    key.rotation.z = -Math.PI / 2;
+    key.position.set(R + 0.02, 0.52, 0.1);
     g.add(key);
-    put(key, geoCyl(0.03, 0.16, 10), band, 0, 0.08, 0, 0, true);
-    for (const kz of [-0.07, 0.07]) {
-      put(key, geoCyl(0.06, 0.035, 14), band, 0, 0.17, kz, Math.PI / 2, true);
-      put(key, geoCyl(0.028, 0.04, 10), orange, 0, 0.17, kz, Math.PI / 2, true); // ring hole
+    put(key, geoCyl(0.04, 0.03, 16), band, 0, 0, 0, 0, true).rotation.z = Math.PI / 2;
+    put(key, geoCyl(0.018, 0.14, 10), band, 0.07, 0, 0, 0, true).rotation.z = Math.PI / 2;
+    for (const kz of [-0.055, 0.055]) {
+      const bow = put(key, geoTorus(0.05, 0.018, 20), band, 0.15, 0, kz, 0, true);
+      bow.rotation.y = 0;
     }
+    put(key, geoRBox(0.03, 0.03, 0.16, 0.01), band, 0.15, 0, 0, 0, true);
     g.userData.key = key;
-    // Lid head: studded disc + hose fuse + trans flame
+    // Lid: domed cap with 8 + 1 studs, flex-hose fuse and flame
     const head = new THREE.Group();
-    head.position.set(0, 0.7, 0);
+    head.position.set(0, 0.72, 0);
     g.add(head);
     g.userData.head = head;
-    put(head, geoCyl(0.265, 0.1, 20), orange, 0, 0.05, 0);
+    put(head, geoLathe("petab-lid", [[0, 0], [R - 0.005, 0], [R - 0.005, 0.03], [R - 0.03, 0.06], [0, 0.065]], 40), orangeP, 0, 0, 0);
     for (let k = 0; k < 8; k++) {
       const a = (k / 8) * Math.PI * 2;
-      put(head, geoCyl(0.045, 0.04, 12), orange, Math.cos(a) * 0.18, 0.12, Math.sin(a) * 0.18, 0, true);
+      put(head, geoCyl(0.043, 0.035, 16, 0.046), orangeP, Math.cos(a) * 0.18, 0.08, Math.sin(a) * 0.18, 0, true);
     }
-    const eye = transTile(0xffd21f, 0xc98a00);
-    for (const sx of [-0.1, 0.1]) {
-      put(g, geoCyl(0.075, 0.03, 16), band, sx, 0.5, -0.255, Math.PI / 2, true);
-      put(g, geoCyl(0.055, 0.04, 16), eye, sx, 0.5, -0.265, Math.PI / 2, true);
+    put(head, geoCyl(0.075, 0.05, 20), band, 0, 0.085, 0, 0, true); // fuse socket
+    put(head, geoTorus(0.07, 0.014, 20), band, 0, 0.11, 0, Math.PI / 2, true);
+    flexTube(head, band, "petab-fuse", [[0, 0.1, 0], [0.01, 0.2, 0.0], [0.05, 0.3, 0.02], [0.12, 0.36, 0.03], [0.18, 0.37, 0.02]], 0.03, 11);
+    const flame = skin(0xffe14a, { transparent: true, opacity: 0.82, depthWrite: false });
+    flame.emissive = new THREE.Color(0xff9a10);
+    (flame as THREE.MeshStandardMaterial).emissiveIntensity = 1.3;
+    const tongue = geoLathe("petab-flame", [[0, 0], [0.03, 0.02], [0.034, 0.05], [0.022, 0.1], [0.008, 0.15], [0, 0.17]], 14);
+    for (const [fx, tilt, s] of [[-0.035, 0.45, 0.85], [0.0, 0.0, 1.1], [0.04, -0.5, 0.8]] as const) {
+      const t = put(head, tongue, flame, 0.2 + fx, 0.36, 0.02, 0, true);
+      t.rotation.z = tilt;
+      t.scale.setScalar(s);
     }
-    put(head, geoCyl(0.07, 0.05, 14), band, 0, 0.12, 0, 0, true); // fuse socket
-    for (let k = 0; k < 5; k++) put(head, geoCyl(0.034, 0.045, 10), band, 0.012 * k, 0.17 + k * 0.042, 0.004 * k, -0.08 * k, true); // ribbed hose
-    const flame = transTile(0xffe14a, 0xf09a10);
-    for (const [fx, tilt] of [[-0.03, 0.35], [0.04, 0], [0.1, -0.4]] as const) {
-      put(head, geoCyl(0.03, 0.14, 8, 0.004), flame, 0.06 + fx, 0.45, 0, 0, true).rotation.z = tilt;
+    const eyeBezel = band;
+    for (const sx of [-0.105, 0.105]) {
+      const a = sx / R;
+      const e = new THREE.Group();
+      e.position.set(Math.sin(a) * (R + 0.006), 0.5, -Math.cos(a) * (R + 0.006));
+      e.rotation.y = -a;
+      g.add(e);
+      put(e, geoCyl(0.085, 0.03, 28), eyeBezel, 0, 0, 0, Math.PI / 2, true); // thick black bezel
+      put(e, geoTorus(0.078, 0.014, 28), eyeBezel, 0, 0, -0.016, 0, true);
+      const lens = skin(0xffcc12);
+      lens.emissive = new THREE.Color(0xffb000);
+      (lens as THREE.MeshStandardMaterial).emissiveIntensity = 0.55;
+      if ((lens as THREE.MeshStandardMaterial).isMeshStandardMaterial) (lens as THREE.MeshStandardMaterial).roughness = 0.08;
+      const dome = put(e, geoDome(0.06, 24), lens, 0, 0, -0.012, -Math.PI / 2, true);
+      dome.scale.set(0.82, 0.45, 1.05); // tall oval button
     }
-    const legs = [[-0.13, -0.1], [0.13, -0.1], [0, 0.15]].map(([lx, lz]) => legBox(g, band, 0.1, 0.24, 0.13, lx, 0.25, lz));
+    // three black feet: Technic ball hips + rounded hinged boots
+    const legs = [[-0.13, -0.08], [0.13, -0.08], [0, 0.15]].map(([lx, lz]) => {
+      const p = new THREE.Group();
+      p.position.set(lx, 0.24, lz);
+      g.add(p);
+      put(p, geoBall(0.05), band, 0, 0, 0, 0, true);
+      put(p, geoRBox(0.07, 0.12, 0.07, 0.02), band, 0, -0.07, 0, 0, true);
+      put(p, geoCyl(0.03, 0.1, 12), skin(0x2a2a2e), 0, -0.13, 0, 0, true).rotation.z = Math.PI / 2;
+      put(p, geoRBox(0.12, 0.07, 0.17, 0.025), band, 0, -0.19, -0.03);
+      return p;
+    });
     return { group: g, legs, bodyMat: orange };
   }
   if (kind === "ghast") {
@@ -17870,86 +18335,120 @@ function beast(kind: string): StudsBody {
     return { group: g, legs: [left, right], bodyMat: wing };
   }
   if (kind === "dragon") {
-    // La Grande Presse (mob-redesign §3.4, boss): the first injection press turned
-    // dragon. Black studded hull, gear shoulders, Teks-frame wings with trans
-    // panels, a two-plate mould jaw. Boss rule #1 "Moule chaud" (bossSkin
-    // "molten"): molten bands travel up the hull.
-    const hide = bossSkin(0x1a1622, "molten");
-    const frame = skin(0x2a2a34);
-    const panel = transTile(0xb04cff, 0x5a1a8a);
-    const body = block(g, hide, 0.44, 0.44, 1.5, 0, 0.7, 0, 2, 5);
-    body.userData.skin = "body";
-    for (const sz of [-0.45, -0.15, 0.15, 0.45]) put(g, geoSlope(0.10, 0.16, 0.16), panel, 0, 0.98, sz, Math.PI, true);
-    // Gear shoulders: hub + 12 teeth
-    for (const sx of [-1, 1]) {
-      put(g, geoCyl(0.2, 0.06, 16), frame, sx * 0.25, 0.86, -0.1, 0, true);
-      for (let t = 0; t < 12; t++) {
-        const a = (t / 12) * Math.PI * 2;
-        put(g, geoBox(0.05, 0.06, 0.05), frame, sx * 0.25 + Math.cos(a) * 0.22, 0.86, -0.1 + Math.sin(a) * 0.22, 0, true);
-      }
+    // La Grande Presse v2 (refs/dragon.jpg), boss rule "molten" on the hull:
+    // segmented black studded hull, angular press head with an open toothed
+    // jaw and a 4×2 glowing eye-pixel grid, trans-purple crystal spikes along
+    // the spine, ribbed flex-tube cables, big vertical root gears and triangular
+    // Teks-truss wings whose trans panels carry the NFR "dragon" field (fitted
+    // on the ref photo's wing panel) as colour + emission.
+    const hide = bossSkin(0x16131c, "molten");
+    const frame = skin(0x23222a);
+    const black = skin(0x0b0a0e);
+    const panel = nfrSkin(0xa44cf0, { field: "dragon", plane: "xz", scale: [2.2, 2.6], amt: 0.55, glow: 0.55 }, { transparent: true, opacity: 0.82, depthWrite: false, side: THREE.DoubleSide });
+    panel.emissive = new THREE.Color(0x5a1a8a);
+    (panel as THREE.MeshStandardMaterial).emissiveIntensity = 0.6;
+    const crystal = skin(0xc77bff, { transparent: true, opacity: 0.8 });
+    crystal.emissive = new THREE.Color(0x8a2ad0);
+    (crystal as THREE.MeshStandardMaterial).emissiveIntensity = 0.9;
+    if ((crystal as THREE.MeshStandardMaterial).isMeshStandardMaterial) (crystal as THREE.MeshStandardMaterial).roughness = 0.05;
+    const eyeM = skin(0xf0a0ff);
+    eyeM.emissive = new THREE.Color(0xd040ff);
+    (eyeM as THREE.MeshStandardMaterial).emissiveIntensity = 2.2;
+    // hull: 5 tapering bevelled segments with studs, joined by grey axle discs
+    let body: THREE.Mesh | null = null;
+    for (const [k, z, w, h] of [[0, -0.45, 0.46, 0.44], [1, -0.12, 0.5, 0.46], [2, 0.2, 0.46, 0.42], [3, 0.48, 0.38, 0.34], [4, 0.7, 0.3, 0.26]] as const) {
+      const seg = put(g, geoRBox(w, h, 0.3, 0.06), hide, 0, 0.72 - k * 0.03, z);
+      if (k === 1) body = seg;
+      studs(g, hide, 0, 0.72 - k * 0.03 + h / 2, z, w * 0.7, 0.22, 2, 1);
+      put(g, geoCyl(w * 0.36, 0.04, 20), frame, 0, 0.72 - k * 0.03, z + 0.16, Math.PI / 2, true);
     }
+    body!.userData.skin = "body";
+    for (let k = 0; k < 7; k++) {
+      const c = put(g, geoOcta(0.06 - k * 0.004, 2.4), crystal, (k % 2 ? 0.05 : -0.05), 0.98 - k * 0.025, -0.55 + k * 0.2, 0, true); // crystal spine spikes
+      c.rotation.z = k % 2 ? -0.3 : 0.3;
+      c.rotation.x = 0.35;
+    }
+    // head: angular press
     const head = new THREE.Group();
-    head.position.set(0, 0.90, -0.75);
+    head.position.set(0, 0.86, -0.72);
     g.add(head);
     g.userData.head = head;
-    block(head, hide, 0.42, 0.22, 0.5, 0, 0.1, -0.14, 2, 2); // upper mould plate
-    put(head, geoBox(0.4, 0.1, 0.46), frame, 0, -0.1, -0.2, 0.22, true); // lower mould plate (open press)
-    for (const sx of [-0.12, 0, 0.12]) put(head, geoBox(0.04, 0.08, 0.04), panel, sx, -0.02, -0.4, 0, true); // ejector pins
-    put(head, geoCyl(0.05, 0.28, 8), frame, -0.12, 0.32, -0.12, -0.35, true);
-    put(head, geoCyl(0.05, 0.28, 8), frame, 0.12, 0.32, -0.12, -0.35, true);
-    const eyeM = transTile(0xe07aff, 0x8a24b4);
-    put(head, geoBox(0.1, 0.06, 0.032), eyeM, -0.1, 0.12, -0.395, 0, true);
-    put(head, geoBox(0.1, 0.06, 0.032), eyeM, 0.1, 0.12, -0.395, 0, true);
+    put(head, geoRBox(0.42, 0.22, 0.5, 0.05), hide, 0, 0.1, -0.14);
+    put(head, geoSlope(0.4, 0.12, 0.22), hide, 0, 0.26, -0.26, 0, true);
+    studs(head, hide, 0, 0.21, 0.0, 0.3, 0.16, 2, 1);
+    const jaw = put(head, geoRBox(0.38, 0.08, 0.46, 0.03), frame, 0, -0.1, -0.2, 0.3, true); // open lower mould plate
+    void jaw;
+    for (let k = 0; k < 6; k++) {
+      put(head, geoCone(0.018, 0.06, 6), skin(0xd8d0e8), -0.15 + k * 0.06, -0.015, -0.38, Math.PI, true); // upper teeth
+      put(head, geoCone(0.016, 0.05, 6), skin(0xd8d0e8), -0.13 + k * 0.05, -0.06, -0.3, 0.3, true);
+    }
+    for (const sx of [-1, 1]) {
+      const horn = put(head, geoCone(0.04, 0.3, 8), black, sx * 0.14, 0.32, 0.02, -0.9, true);
+      horn.rotation.z = -sx * 0.25;
+    }
+    for (const sx of [-0.14, -0.05, 0.05, 0.14]) for (const sy of [0.15, 0.09]) put(head, geoRBox(0.05, 0.045, 0.03, 0.01), eyeM, sx, sy, -0.395, 0, true);
+    const halo = new THREE.MeshBasicMaterial({ color: 0xd060ff, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false });
+    put(head, geoBall(0.2, 14), halo, 0, 0.12, -0.42, 0, true).scale.set(1.2, 0.5, 0.25);
+    // flex-tube cables neck → shoulders, both sides
+    for (const sx of [-1, 1]) {
+      flexTube(g, black, `presse-cable-a${sx}`, [[sx * 0.12, 0.8, -0.62], [sx * 0.3, 0.62, -0.5], [sx * 0.32, 0.56, -0.25], [sx * 0.26, 0.78, -0.1]], 0.035, 16);
+      flexTube(g, black, `presse-cable-b${sx}`, [[sx * 0.2, 0.62, 0.0], [sx * 0.3, 0.48, 0.22], [sx * 0.22, 0.5, 0.48]], 0.028, 12);
+    }
     const tail = new THREE.Group();
-    tail.position.set(0, 0.62, 0.72);
-    block(tail, hide, 0.28, 0.2, 0.58, 0, 0, 0.28, 1, 2);
-    put(tail, geoSlope(0.09, 0.14, 0.16), panel, 0, 0.16, 0.28, Math.PI, true);
+    tail.position.set(0, 0.62, 0.84);
+    g.add(tail);
+    for (const [k, z, y] of [[0, 0.12, 0], [1, 0.32, -0.04], [2, 0.5, -0.06], [3, 0.66, -0.06]] as const) {
+      put(tail, geoRBox(0.24 - k * 0.045, 0.18 - k * 0.03, 0.2, 0.04), hide, 0, y, z);
+      put(tail, geoOcta(0.04 - k * 0.006, 2.2), crystal, 0, y + 0.12 - k * 0.015, z, 0.4, true);
+    }
     g.add(tail);
     g.userData.tail = tail;
-    // refs/dragon.jpg: triangular Teks-truss wings (two trans-purple
-    // panels each, braced by diagonal beams), vertical gear wheels at the
-    // wing roots, ribbed flex-tube cables, trans crystal spikes on the spine,
-    // a 2×3 grid of glowing purple eye pixels.
     const wing = (sx: number) => {
       const w = new THREE.Group();
-      w.position.set(sx * 0.3, 0.98, -0.05);
+      w.position.set(sx * 0.3, 0.98, -0.1);
+      w.rotation.z = sx * 0.8; // raised like the ref
       g.add(w);
-      const beam = (len: number, x: number, z: number, yaw: number) => {
-        const m = put(w, geoBox(len, 0.05, 0.05), frame, x, 0, z);
-        m.rotation.y = yaw;
-        for (let k = -2; k <= 2; k++) put(w, geoCyl(0.018, 0.055, 6), skin(0x0c0a10), x + Math.cos(yaw) * k * len * 0.2, 0.0, z - Math.sin(yaw) * k * len * 0.2, 0, true);
-        return m;
+      const beam = (key: string, a: [number, number], b: [number, number]) => {
+        const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        const m = put(w, geoRBox(len, 0.05, 0.05, 0.012), frame, (a[0] + b[0]) / 2, 0, (a[1] + b[1]) / 2);
+        m.rotation.y = -Math.atan2(b[1] - a[1], b[0] - a[0]);
+        const n = Math.max(2, Math.round(len / 0.09));
+        for (let k = 1; k < n; k++) {
+          const t = k / n;
+          put(w, geoCyl(0.014, 0.056, 8), black, a[0] + (b[0] - a[0]) * t, 0, a[1] + (b[1] - a[1]) * t, 0, true); // beam holes
+        }
+        void key;
       };
-      beam(1.2, sx * 0.6, -0.3, sx * 0.18); // leading spar, raised to the tip
-      beam(0.75, sx * 0.85, 0.05, -sx * 0.9); // tip-to-trailing diagonal
-      beam(0.7, sx * 0.4, 0.05, sx * 0.75); // inner diagonal brace
-      put(w, geoBox(0.5, 0.025, 0.36), panel, sx * 0.38, 0, -0.08, 0, true);
-      put(w, geoBox(0.42, 0.025, 0.28), panel, sx * 0.86, 0, -0.18, 0, true);
-      for (const [px, pz] of [[0.38, -0.08], [0.86, -0.18]]) put(w, geoCyl(0.05, 0.035, 12), panel, sx * px, 0.02, pz, 0, true); // panel studs
-      // Root gear: vertical disc + 14 teeth (faces outward along X)
-      const gear = new THREE.Group();
-      gear.rotation.z = Math.PI / 2;
-      w.add(gear);
-      put(gear, geoCyl(0.2, 0.06, 18), frame, 0, 0, 0, 0, true);
-      put(gear, geoCyl(0.08, 0.075, 12), panel, 0, 0, 0, 0, true);
-      for (let t = 0; t < 14; t++) {
-        const a = (t / 14) * Math.PI * 2;
-        put(gear, geoBox(0.05, 0.06, 0.05), frame, Math.cos(a) * 0.22, 0, Math.sin(a) * 0.22, 0, true);
+      const P0: [number, number] = [0, 0], P1: [number, number] = [sx * 1.25, -0.42], P2: [number, number] = [sx * 0.95, 0.2], P3: [number, number] = [sx * 0.45, 0.3];
+      beam("a", P0, P1);
+      beam("b", P1, P2);
+      beam("c", P2, P3);
+      beam("d", P3, P0);
+      beam("e", P0, P2);
+      put(w, geoPlate(`presse-p1${sx}`, [P0, P1, P2], 0.022), panel, 0, 0.0, 0, 0, true);
+      put(w, geoPlate(`presse-p2${sx}`, [P0, P2, P3], 0.022), panel, 0, 0.0, 0, 0, true);
+      for (const [px, pz] of [[sx * 0.72, -0.07], [sx * 0.48, 0.17]]) {
+        put(w, geoCyl(0.055, 0.035, 18), panel, px, 0.02, pz, 0, true); // panel studs
+        put(w, geoTorus(0.07, 0.01, 20), frame, px, 0.02, pz, Math.PI / 2, true);
       }
+      const gr = gear(w, frame, crystal, 0.2, 0.06, 16); // vertical root gear
+      gr.rotation.z = Math.PI / 2;
+      gr.position.set(sx * 0.04, 0, 0);
       return w;
     };
-    for (let k = 0; k < 6; k++) put(g, geoCyl(0.012, 0.18 - k * 0.015, 6, 0.06 - k * 0.006), panel, 0, 1.0, -0.5 + k * 0.28, 0, true); // crystal spine spikes
-    for (const sx of [-1, 1]) {
-      for (let k = 0; k < 9; k++) {
-        // flex-tube cable: ribbed segments on a half loop from neck to shoulder
-        const t = (k / 8) * Math.PI;
-        put(g, geoCyl(0.032, 0.06, 8), frame, sx * (0.12 + Math.sin(t) * 0.24), 0.78 - Math.sin(t) * 0.28, -0.55 + (k / 8) * 0.5, 0, true);
-      }
-    }
-    for (const sx of [-0.13, -0.07, 0.07, 0.13]) for (const sy of [0.15, 0.09]) put(head, geoBox(0.045, 0.045, 0.03), eyeM, sx, sy, -0.395, 0, true); // eye pixel grid
     const left = wing(-1);
     const right = wing(1);
-    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => legBox(g, frame, 0.12, 0.4, 0.12, sx * 0.14, 0.52, sz * 0.48)));
+    const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => {
+      const p = new THREE.Group();
+      p.position.set(sx * 0.2, 0.52, sz * 0.42);
+      g.add(p);
+      put(p, geoBall(0.09), frame, 0, 0, 0, 0, true);
+      put(p, geoRBox(0.13, 0.24, 0.14, 0.03), hide, 0, -0.12, 0);
+      put(p, geoBall(0.07), frame, 0, -0.26, 0, 0, true);
+      put(p, geoRBox(0.1, 0.18, 0.1, 0.03), frame, 0, -0.36, -0.02);
+      for (const cx of [-0.04, 0, 0.04]) put(p, geoCone(0.022, 0.08, 6), black, cx, -0.46, -0.1, -Math.PI / 2, true); // claws
+      return p as THREE.Object3D;
+    }));
     legs.push(left, right);
     g.scale.setScalar(1.35);
     return { group: g, legs, bodyMat: hide };
@@ -18454,18 +18953,14 @@ export function buildStuds(kind: string, scale: number): StudsBody {
   const figKind =
     kind === "villager"
       ? makeFig(0x8d5a34, 0x6b3e22, 0x4a3424, "nose")
-      : kind === "walker"
-        ? makeFig(0x6f7a62, 0x66705a, 0x6f7a62, "mad", 0x7a8570)
+      : kind === "walker" || kind === "husk" || kind === "drowned"
+        ? makeDemoule(kind)
         : kind === "skelly"
           ? makeFig(0xa8adb3, 0x8a9096, 0x6e747a, "skull", 0xc4c9ce)
           : kind === "piglin"
             ? makeFig(0x7a4222, 0x4a2a18, 0xf2a2c0, "snout", 0xf2a2c0)
             : kind === "witch"
               ? makeFig(0x4a2a6a, 0x223824, 0x14101c, "nose", 0xd8b088)
-              : kind === "drowned"
-                ? makeFig(0x3a8a86, 0x2a5e5c, 0x1f4a48, "mad", 0x7cc2b8)
-                : kind === "husk"
-                  ? makeFig(0xc9b98f, 0xa8986e, 0x8a7a52, "mad", 0xd8cba4)
                   : kind === "stray"
                     ? makeFig(0x8fb4c8, 0x6a8ea2, 0xc8e4f0, "skull", 0xdff0f7)
                     : kind === "pillager"
@@ -18484,37 +18979,7 @@ export function buildStuds(kind: string, scale: number): StudsBody {
   const darkIron = skin(0x424750);
   const woodM = skin(0x7c522b);
 
-  if (kind === "walker" || kind === "husk" || kind === "drowned") {
-    // Démoulé family (mob-redesign §3.3): figures pulled out of the mould too
-    // early — faded plastic, flash burrs on the edges, one arm swapped for a Teks
-    // beam (dark discs = the beam holes), trans eyes.
-    // refs/demoule.jpg: the face is a wide cracked visor (one dark pane,
-    // one glowing trans pane), the plastic is crazed with dark hairline
-    // cracks, and one hand drags a long Teks liftarm with ring holes.
-    const eyeHex = kind === "drowned" ? [0x4ef2f7, 0x128898] : kind === "husk" ? [0xffb03a, 0x8a4a08] : [0x3cd860, 0x0e6a26];
-    const visorM = transTile(eyeHex[0], eyeHex[1]);
-    put(head, geoBox(0.29, 0.1, 0.03), skin(0x1c2420), 0, 1.15 + hy, -0.15, 0, true); // visor frame (dark pane)
-    put(head, geoBox(0.13, 0.08, 0.035), visorM, 0.07, 1.15 + hy, -0.155, 0, true); // glowing pane
-    const crackM = skin(0x2c3328);
-    for (const [cx, cy, cw, ch] of [[-0.08, 1.24, 0.12, 0.012], [0.05, 1.27, 0.012, 0.06], [-0.1, 0.8, 0.012, 0.14], [0.08, 0.7, 0.1, 0.012], [0.02, 0.86, 0.06, 0.012], [-0.04, 0.6, 0.012, 0.08]] as const) {
-      put(cy > 1 ? head : g, geoBox(cw, ch, 0.01), crackM, cx, cy + (cy > 1 ? hy : 0), cy > 1 ? -0.16 : -0.128, 0, true);
-    }
-    const burr = skin(kind === "husk" ? 0xe0d4b0 : kind === "drowned" ? 0x9ad8d0 : 0x8a967c);
-    put(g, geoBox(0.05, 0.04, 0.03), burr, -0.2, 0.92, -0.12, 0, true);
-    put(g, geoBox(0.04, 0.05, 0.03), burr, 0.19, 0.66, -0.12, 0, true);
-    put(head, geoBox(0.05, 0.04, 0.03), burr, 0.13, 1.25 + hy, -0.1, 0, true);
-    const beamM = skin(kind === "husk" ? 0x8a7a52 : 0x7a8570);
-    const holeM = skin(0x2c3328);
-    put(g, geoBox(0.07, 0.62, 0.07), beamM, 0.3, 0.42, -0.1, 0.25, true); // dragged liftarm
-    for (let k = 0; k < 7; k++) put(g, geoCyl(0.024, 0.075, 10), holeM, 0.3, 0.15 + k * 0.08, -0.1 - (k - 3) * 0.02, Math.PI / 2 + 0.25, true);
-    if (kind === "husk") {
-      put(g, geoBox(0.38, 0.05, 0.245), skin(0xe8dec2), 0, 0.78, 0, 0, true); // sand-worn wrap plates
-      put(g, geoBox(0.38, 0.05, 0.245), skin(0xd8cca8), 0, 0.64, 0, 0, true);
-    } else if (kind === "drowned") {
-      for (const sx of [-0.12, 0.02, 0.14]) put(g, geoCyl(0.015, 0.3, 6), skin(0x2f8a4a), sx, 0.72, -0.13, 0.08, true); // weed hoses
-      put(g, geoCyl(0.02, 0.52, 8), skin(0x2a8478), -0.28, 0.54, -0.16, 0.35, true); // kept trident shaft (drop parity)
-    }
-  } else if (kind === "skelly" || kind === "stray") {
+  if (kind === "skelly" || kind === "stray") {
     // Squelek (mob-redesign §3.3): a beam-and-axle archer — Teks hub ring around
     // the head, rib liftarms on the torso, red trans eyes, a beam crossbow with a
     // rubber band. Stray = frosted trans variant.
