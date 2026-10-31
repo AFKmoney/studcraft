@@ -201,7 +201,7 @@ Pas de redstone. Le cœur tourne : graphe de rotation local et borné.
 - **Inclinaison dans le hub** : le véhicule publie pitch/roll (hauteurs de roues); au-delà de ~40° le hub coupe les moteurs (protection retournement) + message, cooldown 6 s.
 - Config persistée : `Part.cfg` (portée/cible packée), 8e élément optionnel du tuple de sauvegarde Teks; lecture runtime `Part.sense` (non persistée). Icônes 472/473 par le pipeline B12; recettes de fonderie + catalogue automatiques (SPECS/registre).
 
-- [ ] Capteurs (distance 1–200 cm, couleur, inclinaison dans le hub) + logique simple sur hub : les machines réagissent toutes seules
+- [x] **P5d LIVRÉ (code + tests, `c3f8d964`)** : capteurs 472 (proximité, 4 portées) + 473 (couleur, 7 cibles) — specs/géométrie/icônes du pipeline B12 (lentille sombre + LED cyan; anneau blanc + 4 pastilles de couleur); évaluation dans game.ts `tickSensors` (0,25 s) : rayon échantillonné à 0,25 bloc pour la distance (blocs solides OU cellules Teks), sonde à face +0,55 pour la couleur (une pièce Teks dans la cellule gagne sur le bloc derrière; familles par `colorFamilyOf`, fonction pure testée); drive (a) voisins directs au contact (loi B7) + (b) relais hub par canal dans la composante; protection inclinaison câblée dans la boucle de conduite (throttle forcé à 0 au-delà de 0,7 rad de pitch/roll, message à cooldown 6 s). Gestes : use = cycle portée/cible (+ say), sneak+use = bind canal. Crochet QA `getSensors()`. Portes : tsc 0, tests 81/81 (+3 : specs, cycle cfg + labels, familles de couleur), build OK. Fermeture = verdict Pages de Philippe (la case parente reste ouverte jusqu'à son retest)
 
 ## 8. Lane RPG
 
