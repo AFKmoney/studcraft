@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { beadSegments, weldComponentOf } from "./weld.ts";
+import { beadSegments, supportCant, weldComponentOf } from "./weld.ts";
 
 describe("P2 welding — pure half", () => {
   it("components walk the joint graph and stop at its edge", () => {
@@ -54,5 +54,57 @@ describe("P2 welding — pure half", () => {
   it("non-touching bricks get no bead", () => {
     assert.deepEqual(beadSegments({ sx: 0, sy: 10, sz: 0 }, { sx: 6, sy: 10, sz: 0 }), []);
     assert.deepEqual(beadSegments({ sx: 0, sy: 10, sz: 0 }, { sx: 0, sy: 13, sz: 0 }), []);
+  });
+});
+
+describe("integrity support — only the ground seeds (tester bug 2026-10-31)", () => {
+  const K = (b: { sx: number; sy: number; sz: number }) => `${b.sx},${b.sy},${b.sz}`;
+  const pair = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+  const B = (sx: number, sy: number, sz: number) => ({ sx, sy, sz });
+
+  it("a welded stack with no ground contact holds NOTHING — it must fall", () => {
+    const a = B(0, 5, 0), b = B(0, 6, 0), c = B(0, 7, 0);
+    const welds = new Set([pair(K(a), K(b)), pair(K(b), K(c))]);
+    // No seed: the pile floats in mid-air. The old seed (any brick
+    // resting on another brick) anchored b and c, and the weld fed
+    // support back down to a — the pile held itself up forever.
+    assert.equal(supportCant([a, b, c], welds, K, pair, new Set()).size, 0);
+  });
+
+  it("the same welded stack stands once its base touches the ground", () => {
+    const a = B(0, 5, 0), b = B(0, 6, 0), c = B(0, 7, 0);
+    const welds = new Set([pair(K(a), K(b)), pair(K(b), K(c))]);
+    const cant = supportCant([a, b, c], welds, K, pair, new Set([K(a)]));
+    assert.equal(cant.size, 3);
+    assert.equal(cant.get(K(c)), 0);
+  });
+
+  it("an unwelded stack stands on a seeded base and falls without one", () => {
+    const a = B(0, 5, 0), b = B(0, 6, 0), c = B(0, 7, 0);
+    assert.equal(supportCant([a, b, c], new Set(), K, pair, new Set([K(a)])).size, 3);
+    assert.equal(supportCant([a, b, c], new Set(), K, pair, new Set()).size, 0);
+  });
+
+  it("a welded side-by-side pair floats without a seed", () => {
+    const a = B(0, 5, 0), b = B(2, 5, 0);
+    const welds = new Set([pair(K(a), K(b))]);
+    assert.equal(supportCant([a, b], welds, K, pair, new Set()).size, 0);
+    assert.equal(supportCant([a, b], welds, K, pair, new Set([K(a)])).get(K(b)), 0);
+  });
+
+  it("sideways support costs 1 per step and stops past the cap of 2", () => {
+    const base = B(0, 5, 0), s1 = B(2, 5, 0), s2 = B(4, 5, 0), s3 = B(6, 5, 0);
+    const cant = supportCant([base, s1, s2, s3], new Set(), K, pair, new Set([K(base)]));
+    assert.equal(cant.get(K(s1)), 1);
+    assert.equal(cant.get(K(s2)), 2);
+    assert.equal(cant.has(K(s3)), false);
+  });
+
+  it("a weld carries support at equal cost, past the cantilever cap", () => {
+    const base = B(0, 5, 0), s1 = B(2, 5, 0), far = B(6, 5, 0);
+    const welds = new Set([pair(K(s1), K(far))]);
+    const cant = supportCant([base, s1, far], welds, K, pair, new Set([K(base)]));
+    assert.equal(cant.get(K(s1)), 1);
+    assert.equal(cant.get(K(far)), 1); // the weld jumps the gap at s1's cost
   });
 });

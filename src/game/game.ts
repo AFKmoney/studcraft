@@ -4,7 +4,7 @@ import { TechWorld, ORIENTS, composeO, worldCells, rot, SENSOR_RANGES, SENSOR_TA
 import { buildTeksGeometry, buildTeksRodGeometries } from "./teksGeo";
 import { analyzeComponent } from "./gravity";
 import { dissolvedYield } from "./dissolve";
-import { beadSegments, weldComponentOf, type BeadSeg } from "./weld";
+import { beadSegments, supportCant, weldComponentOf, type BeadSeg } from "./weld";
 import { AFFIXES, PATHS, PATH_CHANGE_COST, rollRelic, type AffixKey, type PathId, type Relic } from "./identity";
 import { fuelFromMelt, jointAffine, jointChain, jointForce, parkPoses, partWorldPoint, refuel as vehRefuel, stepVehicle as stepVeh, vehicleFromAssembly, type Vehicle, type VPart } from "./vehicle";
 import { FUEL, type Channel } from "./p5bProto";
@@ -2693,11 +2693,15 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
               ? 0x6a4424
               : shiftHex(baseHex, 1.08);
     const bodyHex = isGrassLike ? 0x7c5432 : baseHex;
-    const matTop = skin(topHex);
-    const matA = skin(bodyHex);
-    const matB = skin(shiftHex(bodyHex, 0.90));
-    const matC = skin(shiftHex(bodyHex, 1.06));
-    const seamMat = skin(shiftHex(bodyHex, 0.35));
+    // Tester 2026-10-31: Window and Ice are transparent in the world —
+    // in hand they must read transparent too, not as opaque white bricks.
+    const glassy = id === ID.Glass || id === ID.Ice;
+    const skinX = (hex: number) => (glassy ? skin(hex, { transparent: true, opacity: 0.45, depthWrite: false }) : skin(hex));
+    const matTop = skinX(topHex);
+    const matA = skinX(bodyHex);
+    const matB = skinX(shiftHex(bodyHex, 0.90));
+    const matC = skinX(shiftHex(bodyHex, 1.06));
+    const seamMat = skinX(shiftHex(bodyHex, 0.35));
 
     if (d.slab) {
       addBoxPart(group, s, s * 0.48, s, 0, -hs + s * 0.24, 0, matTop);
@@ -6889,11 +6893,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   let integrityAcc = 0;
   let lastIntegrity = { total: 0, supported: 0, stressed: [] as string[], falling: 0 };
 
-  function studQuadrantCovered(b: Brick, qx: number, qz: number): boolean {
+  function studQuadrantCovered(b: Brick, qx: number, qz: number, bricksToo = true): boolean {
     const wx = Math.floor((b.sx + qx) * 0.5 + 0.25);
     const wz = Math.floor((b.sz + qz) * 0.5 + 0.25);
     const below = world.get(wx, b.sy - 1, wz);
     if (below !== ID.Air && def(below).solid) return true;
+    if (!bricksToo) return false;
     const near: Brick[] = [];
     bricksNearCell(wx, b.sy - 1, wz, near);
     for (const ob of near) {
@@ -6906,6 +6911,16 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   function studsCoveredBelow(b: Brick): number {
     let n = 0;
     for (let qx = 0; qx < 2; qx++) for (let qz = 0; qz < 2; qz++) if (studQuadrantCovered(b, qx, qz)) n++;
+    return n;
+  }
+
+  // Studs resting on solid VOXEL terrain only — the integrity seed.
+  // Kept apart from studsCoveredBelow (which also counts bricks and
+  // feeds the weight rule): only real ground contact may anchor a
+  // brick, otherwise a welded pile anchors itself (see supportCant).
+  function voxelStudsBelow(b: Brick): number {
+    let n = 0;
+    for (let qx = 0; qx < 2; qx++) for (let qz = 0; qz < 2; qz++) if (studQuadrantCovered(b, qx, qz, false)) n++;
     return n;
   }
 
@@ -6933,46 +6948,22 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   }
 
   function computeIntegrity() {
-    const cant = new Map<string, number>();
     const all = [...bricks.values()];
     // Recalibrated 2026-10-29 (Philippe): ONE covered stud anchors the
     // brick itself — real STUDS clutch holds on a single corner stud, and
     // the old >= 2 seed made every 1-stud landing over a voxel block
     // fall within a scan (voxels can't grant support by propagation).
     // Strength still scales with coverage via maxWeightForStuds below.
-    for (const b of all) if (studsCoveredBelow(b) >= 1) cant.set(brickKey(b.sx, b.sy, b.sz), 0);
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const b of all) {
-        const k = brickKey(b.sx, b.sy, b.sz);
-        if (cant.has(k)) continue;
-        let best = -1;
-        for (const ob of all) {
-          if (ob === b) continue;
-          const okey = brickKey(ob.sx, ob.sy, ob.sz);
-          const oc = cant.get(okey);
-          if (oc === undefined) continue;
-          // P2: a welded joint is a permanent bond — support crosses it
-          // at the SAME cantilever count, no matter the direction, so a
-          // welded run holds far past the free cantilever max of 2.
-          if (welds.size > 0 && welds.has(weldKey(k, okey))) {
-            best = best < 0 ? oc : Math.min(best, oc);
-            continue;
-          }
-          const ox = Math.min(b.sx + 2, ob.sx + 2) - Math.max(b.sx, ob.sx);
-          const oz = Math.min(b.sz + 2, ob.sz + 2) - Math.max(b.sz, ob.sz);
-          if (ob.sy === b.sy - 1 && ox > 0 && oz > 0) best = best < 0 ? oc : Math.min(best, oc);
-          else if (ob.sy === b.sy && ((ox === 0 && oz > 0) || (oz === 0 && ox > 0)) && oc + 1 <= 2)
-            best = best < 0 ? oc + 1 : Math.min(best, oc + 1);
-        }
-        if (best >= 0) {
-          cant.set(k, best);
-          changed = true;
-        }
-      }
-    }
-    return cant;
+    //
+    // Tester fix 2026-10-31: the seed counts VOXEL contact only. The
+    // old seed also counted bricks below, so every stacked brick was
+    // its own anchor — and a welded pile then held ITSELF up in
+    // mid-air, the bottom brick drawing support back through the weld
+    // from the brick "anchored" on top of it. Voxels seed; bricks
+    // propagate (supportCant in weld.ts, unit-tested).
+    const seeded = new Set<string>();
+    for (const b of all) if (voxelStudsBelow(b) >= 1) seeded.add(brickKey(b.sx, b.sy, b.sz));
+    return supportCant(all, welds, (b) => brickKey(b.sx, b.sy, b.sz), weldKey, seeded);
   }
 
   function detachBrick(key: string) {
@@ -7174,7 +7165,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     if (bricks.size === 0) {
       if (brickStress.size) brickStress.clear();
       if (brickSagged.size) brickSagged.clear();
-      lastIntegrity = { total: 0, supported: 0, stressed: [], falling: fallingBricks.length };
+      lastIntegrity = { total: 0, supported: 0, stressed: [], falling: fallingBricks.length + fallingGroups.reduce((n, g) => n + g.members.length, 0) };
       return;
     }
     integrityAcc += dt;
@@ -7237,7 +7228,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
     }
     for (const id of sagIds) rebuildBrickMesh(id);
-    lastIntegrity = { total: bricks.size, supported: cant.size, stressed, falling: fallingBricks.length };
+    lastIntegrity = { total: bricks.size, supported: cant.size, stressed, falling: fallingBricks.length + fallingGroups.reduce((n, g) => n + g.members.length, 0) };
   }
 
   // P2: welding torch action on the aimed brick. First click primes a
@@ -12457,6 +12448,15 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const jumpEdge = sample.first && sample.jump && !prevJump;
     prevJump = sample.jump;
 
+    // Tester 2026-10-31: a NaN position (a physics/knockback glitch)
+    // would soft-lock the world forever — reset to spawn instead.
+    if (!Number.isFinite(player.x) || !Number.isFinite(player.y) || !Number.isFinite(player.z)) {
+      player.x = spawnPoint.x;
+      player.y = spawnPoint.y + 0.2;
+      player.z = spawnPoint.z;
+      player.vx = player.vy = player.vz = 0;
+    }
+
     const fxBlock = Math.floor(player.x);
     const fyBlock = Math.floor(player.y);
     const fzBlock = Math.floor(player.z);
@@ -14633,6 +14633,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const b = bricks.get(brickKey(sx2, sy2, sz2));
       if (!a || !b || !bricksTouch(a, b)) return false;
       welds.add(weldKey(brickKey(sx1, sy1, sz1), brickKey(sx2, sy2, sz2)));
+      weldBeadsDirty = true; // tester 2026-10-31: rigs read the bead right after weldAt
       saveDirty = true;
       return true;
     },
@@ -16372,6 +16373,7 @@ float gSrnH;
 float gSrnSubH;
 float gSrnScratch;
 float gSrnEdgeSSS;
+float gSrnStud;
 vec3 gSrnBevelW;
 vec3 gSrnMicroNrmW;
 float srnHashW(vec3 c) { return fract(sin(dot(c, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }`,
@@ -16416,8 +16418,10 @@ float srnHashW(vec3 c) { return fract(sin(dot(c, vec3(12.9898, 78.233, 37.719)))
   gSrnSeam = 0.0;
   gSrnBevelW = vec3(0.0);
   gSrnEdgeSSS = 0.0;
+  gSrnStud = 0.0;
 
   if (srnOnStud) {
+    gSrnStud = 1.0;
     // 3D Stud Surface: never slice the stud with the y=0 block boundary seam!
     float studIdx = (srnFp.x < 0.5 ? 0.0 : 1.0) + (srnFp.z < 0.5 ? 0.0 : 2.0);
     gSrnSubH = srnHashW(srnCell + vec3(studIdx * 3.7, 9.1, 0.0));
@@ -16589,12 +16593,21 @@ float srnHashW(vec3 c) { return fract(sin(dot(c, vec3(12.9898, 78.233, 37.719)))
     outgoingLight += vec3(0.88, 0.96, 1.04) * srnFresnel * 0.35 * srnLightGate;
   }
 
+  // Tester 2026-10-31: the studio coat is near-white and ADDITIVE — on
+  // the small curved studs it stacked over the whole visible surface
+  // and washed saturated colours to beige (a red brick's studs read
+  // tan: measured (218,143,136) on the stud vs (229,92,64) uncoated).
+  // A stud must read as its own plastic first: calm the coat hard and
+  // the SSS a notch on stud fragments only; the body keeps the full
+  // satin treatment.
+  srnCoatCol *= mix(1.0, 0.30, gSrnStud);
+  srnSSS *= mix(1.0, 0.65, gSrnStud);
   outgoingLight += (srnSSS + srnCoatCol) * uSrnAmt;
 }
 #include <opaque_fragment>`,
       );
   };
-  mat.customProgramCacheKey = () => cacheKey + "-siren-v6";
+  mat.customProgramCacheKey = () => cacheKey + "-siren-v7";
   return mat;
 }
 

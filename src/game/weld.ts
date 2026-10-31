@@ -7,6 +7,69 @@
 
 export type BrickLike = { sx: number; sy: number; sz: number };
 
+/**
+ * Cantilever support propagation (P1/P2 integrity). Pure: the caller
+ * supplies the brick list, the weld set and the set of keys seeded by
+ * REAL ground contact (a brick resting on solid voxel terrain). Support
+ * then flows: from the brick directly below at the same cost, sideways
+ * at +1 per step (capped at maxCant), and across a weld at the same
+ * cost in any direction.
+ *
+ * Bricks must NEVER seed each other: a brick resting on another brick
+ * is not an anchor. The pre-2026-10-31 seed counted bricks below, so a
+ * welded pile held ITSELF up in mid-air — each brick was "anchored" by
+ * resting on the next, and the bottom one drew support back through
+ * the weld (game-tester report, 2026-10-31: a welded stack floated
+ * forever after its ground support was removed). Only voxels seed;
+ * bricks propagate.
+ */
+export function supportCant(
+  all: BrickLike[],
+  welds: ReadonlySet<string>,
+  keyOf: (b: BrickLike) => string,
+  pairKey: (a: string, b: string) => string,
+  seeded: ReadonlySet<string>,
+  maxCant = 2,
+): Map<string, number> {
+  const cant = new Map<string, number>();
+  for (const b of all) {
+    const k = keyOf(b);
+    if (seeded.has(k)) cant.set(k, 0);
+  }
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const b of all) {
+      const k = keyOf(b);
+      if (cant.has(k)) continue;
+      let best = -1;
+      for (const ob of all) {
+        if (ob === b) continue;
+        const okey = keyOf(ob);
+        const oc = cant.get(okey);
+        if (oc === undefined) continue;
+        // A welded joint is a permanent bond — support crosses it at
+        // the SAME cantilever count, no matter the direction, so a
+        // welded run holds far past the free cantilever max.
+        if (welds.size > 0 && welds.has(pairKey(k, okey))) {
+          best = best < 0 ? oc : Math.min(best, oc);
+          continue;
+        }
+        const ox = Math.min(b.sx + 2, ob.sx + 2) - Math.max(b.sx, ob.sx);
+        const oz = Math.min(b.sz + 2, ob.sz + 2) - Math.max(b.sz, ob.sz);
+        if (ob.sy === b.sy - 1 && ox > 0 && oz > 0) best = best < 0 ? oc : Math.min(best, oc);
+        else if (ob.sy === b.sy && ((ox === 0 && oz > 0) || (oz === 0 && ox > 0)) && oc + 1 <= maxCant)
+          best = best < 0 ? oc + 1 : Math.min(best, oc + 1);
+      }
+      if (best >= 0) {
+        cant.set(k, best);
+        changed = true;
+      }
+    }
+  }
+  return cant;
+}
+
 /** The welded component containing `start`: every brick key
  *  reachable through weld pairs. `welds` holds "keyA|keyB" strings;
  *  `keyOf` maps a brick back to its key. */
