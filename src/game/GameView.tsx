@@ -2466,6 +2466,11 @@ function StationScreen({ game }: { game: GameApi }) {
                 <div className="sc-kiln-mode" style={{ display: "flex", gap: 6, margin: "4px 0" }}>
                   <button type="button" className={game.furnaceMode() ? "" : "on"} aria-pressed={!game.furnaceMode()} onClick={() => game.setFurnaceMode(false)}>Normal</button>
                   <button type="button" className={game.furnaceMode() ? "on" : ""} aria-pressed={game.furnaceMode()} onClick={() => game.setFurnaceMode(true)}>Plastic</button>
+                  {game.furnaceMode() && (
+                    <button type="button" onClick={() => game.kilnSalvage()} title="Melt the held used item: 50 % of its plastic × durability left. Gem-made / wood-only items refused.">
+                      Melt held item
+                    </button>
+                  )}
                 </div>
                 <p className="sc-kiln-state">
                   {hud.furnace.burn > 0 ? (
@@ -2593,11 +2598,24 @@ function StationScreen({ game }: { game: GameApi }) {
             {hud.panel === "anvil" && (
               <div className="sc-station-body">
                 <p className="sc-status">{game.repairQuote() || "Hold a worn tool, weapon or part."}</p>
+                <p className="sc-status">{game.anvilSlotLabel()}{game.armorLabel() ? " · " + game.armorLabel() : ""}</p>
                 <MenuButton variant="primary" icon={<HammerIcon size={20} />} onClick={() => game.mend()} hint="Plastic of matching quality: pellets (basic), plastic ingots (tier 2), tempered ingots (tier 3+ / rare). Cost scales with missing durability.">
                   Repair held tool
                 </MenuButton>
                 <MenuButton icon={<HammerIcon size={20} />} onClick={() => game.salvage()} hint="Melt it back: 50% of its plastic × durability left. Gem-made gear can't be salvaged.">
                   Salvage held item
+                </MenuButton>
+                <MenuButton icon={<HammerIcon size={20} />} onClick={() => game.repairArmor()} hint="Repairs every worn armor piece with plastic of matching quality.">
+                  Repair worn armor
+                </MenuButton>
+                <MenuButton icon={<HammerIcon size={20} />} onClick={() => game.anvilStore()} hint="Slot 2: park the held tool here, then craft or hold a second copy.">
+                  Store held in anvil slot
+                </MenuButton>
+                <MenuButton icon={<HammerIcon size={20} />} onClick={() => game.anvilMerge()} hint="Held copy + anvil slot copy → one item: summed durability + 10 % bonus, capped at max.">
+                  Merge with anvil slot
+                </MenuButton>
+                <MenuButton icon={<HammerIcon size={20} />} onClick={() => game.anvilTake()} hint="Take the stored copy back.">
+                  Take back from anvil slot
                 </MenuButton>
                 <MenuButton icon={<HammerIcon size={20} />} onClick={() => game.temper()} hint="Spend 1 level">
                   Temper held tool

@@ -262,3 +262,27 @@ export function repairCost(dur: number, maxDur: number, tier: number, rare: bool
 export function combineDur(a: number, b: number, maxDur: number): number {
   return Math.min(maxDur, Math.round(a + b + maxDur * 0.1));
 }
+
+/** Armor durability: tools-style maxUse if set, else from its armor value. */
+export function armorMaxDur(d: { armor: number; maxUse: number }): number {
+  return d.maxUse > 0 ? d.maxUse : Math.round(60 + d.armor * 400);
+}
+/** Wear one worn piece takes from a hit of `dmg` (before armor). */
+export function armorHitWear(dmg: number): number {
+  return dmg <= 0 ? 0 : Math.max(1, Math.ceil(dmg / 2));
+}
+/** Apply a hit to worn armor: returns new wear per slot and which pieces broke. */
+export function wearArmor(pieces: readonly number[], wear: Record<number, number>, dmg: number, maxOf: (id: number) => number): { wear: Record<number, number>; broken: number[] } {
+  const w = { ...wear };
+  const broken: number[] = [];
+  const add = armorHitWear(dmg);
+  for (const id of pieces) {
+    if (!id || add <= 0) continue;
+    w[id] = (w[id] ?? 0) + add;
+    if (w[id] >= maxOf(id)) {
+      broken.push(id);
+      delete w[id];
+    }
+  }
+  return { wear: w, broken };
+}
