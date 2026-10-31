@@ -896,6 +896,9 @@ function SettingsPanel({ game, onBack }: { game: GameApi; onBack: () => void }) 
             <Row title="FPS counter">
               <Toggle label="FPS counter" on={s.showFps} onChange={(v) => game.setShowFps(v)} />
             </Row>
+            <Row title="Graphics adapter" detail={game.hud.gpuWarn || "Rendering on the GPU (high-performance requested)."}>
+              <span className="sc-status">{game.hud.gpu || "detecting…"}</span>
+            </Row>
           </>
         )}
         {tab === "controls" && (
@@ -1333,8 +1336,9 @@ function Hud({ game, touchUI }: { game: GameApi; touchUI: boolean }) {
           {Math.floor(hud.x)} / {Math.floor(hud.y)} / {Math.floor(hud.z)}
         </div>
       </div>
+      {hud.gpuWarn && <div className="sc-toast" role="alert" style={{ top: 8, bottom: "auto", maxWidth: 560 }}>⚠ {hud.gpuWarn}</div>}
       <div className="sc-hud-tr">
-        {s.showFps && <div className="sc-fps">{hud.fps} FPS</div>}
+        {s.showFps && <div className="sc-fps">{hud.fps} FPS · {hud.gpu}</div>}
         {hud.questTrack && !hud.creative && (
           <div className={"sc-quest" + (hud.questAlert ? " ready" : "")}>
             <ScrollIcon size={16} />
@@ -2464,10 +2468,10 @@ function StationScreen({ game }: { game: GameApi }) {
                     hud.furnace.cook > 0 ? (
                       <>Out of fuel — the cook holds at {Math.round(hud.furnace.cook * 100)}%. Add fuel to finish it.</>
                     ) : (
-                      <>Not lit — add fuel (coal burns 8s; one cook takes 5s).</>
+                      <>Not lit — add fuel: wood (log 3s, planks 1.5s), coal 8s, or burn quality plastic (ingot 6s, tempered 10s).</>
                     )
                   ) : (
-                    <>Put plastic pellets or ore in Input, and fuel in Fuel.</>
+                    <>Everything melts to plastic except gold, diamonds and wood. Commons (dirt, stone) need 12–16 per pellet; rare drops melt 1:1 at high purity. Wood goes in Fuel.</>
                   )}
                 </p>
                 <div className="sc-molten" style={{ border: `1px solid ${hud.furnace.tierColor ?? "#888"}`, borderRadius: 8, padding: "6px 8px", margin: "6px 0" }}>

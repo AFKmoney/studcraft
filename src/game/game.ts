@@ -18,7 +18,7 @@ import * as FS from "./fireState";
 import * as TS from "./tuftState";
 import * as CH from "./chipState";
 import { NEIGHBORS, RECIPES, SMELT, SMELT_N, fuelTime, matchGrid, teksCastCost } from "./recipes";
-import { AFFIX_INFO, RARE_MELT, TIERS, cookRate, meltInto, poolGlow, pour, stepHeat, tierIndex, type Pool } from "./foundry";
+import { AFFIX_INFO, MATERIALS, RARE_MELT, TIERS, cookRate, meltInto, meltRatioStep, rejectReason, poolGlow, pour, stepHeat, tierIndex, type Pool } from "./foundry";
 import { DISCOVER, MOB_XP, ORE_HEAR, ORE_XP, nextPerk, rankTitle, xpNeed } from "./ranks";
 import { manaMaxFor, skillById, spellsFor } from "./skills";
 import { QUESTS, CHAINS, chainStepOf, questActive, traderOf, tradeLevelFor, TIER_NAMES, TIER_XP, type TraderRole } from "./quests";
@@ -31,6 +31,7 @@ import { stockChest } from "./loot";
 import { banditFolk, civicOf, patrolOf, findStructure, garageOf, structureFolk, structuresNear, structureLabel, structureOwning, stockStructureChest, type StructKind, type Structure } from "./structures";
 import { BOUNTY_ARREST, banditQuests, chiefOf, chiefQuests, COIN, CRIME, guildEntryQuest, guildQuests, GUILDS, mobTag, seenBy, type CrimeKind, type Observer } from "./society";
 import { Society } from "./societyState";
+import { classifyRenderer, presetFor, readGl, SOFTWARE_HINT } from "./gpu";
 import { mayYield, spillSlots } from "./yields";
 import { Upscaler, upscaleScale } from "./upscale";
 import { BTN, PadEdges, activePad, padBusy, padLabel, rumble, stick } from "./gamepad";
@@ -128,6 +129,9 @@ export type Hud = {
   traderLevel: string;
   traderNext: string;
   netStatus: string;
+  /** Detected GPU (tier · renderer) and the software-rendering warning. */
+  gpu: string;
+  gpuWarn: string;
   quests: { id: string; name: string; detail: string; n: number; need: number; done: boolean; ready: boolean; reward: string; chain?: string; chainName?: string; from?: string; step?: number; steps?: number; locked?: boolean }[];
   questAlert: string;
   questTrack: string;
@@ -544,6 +548,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     traderLevel: "",
     traderNext: "",
     netStatus: "",
+    gpu: "",
+    gpuWarn: "",
     quests: [],
     questAlert: "",
     questTrack: "",
@@ -765,6 +771,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     // P5b: fractional Fuel distilled from smelted pellets (0.25 each),
     // paid out as whole Fuel items. Rides the {...f} save spread.
     fuelAcc?: number;
+    ratioAcc?: number;
     // P8: Foundry level (1..3) — cook time / fuel economy from
     // FOUNDRY_LVL. Rides the {...f} save spread; absent = level 1.
     lvl?: number;
@@ -928,7 +935,42 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     coyote: 0,
   };
 
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: "high-performance" });
+  // GPU first: ask for the high-performance adapter and refuse a "major
+  // performance caveat" (software) context; if that fails, take whatever
+  // the browser gives and flag it as software below.
+  let perfCaveat = false;
+  let renderer: THREE.WebGLRenderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: "high-performance", failIfMajorPerformanceCaveat: true });
+  } catch {
+    perfCaveat = true;
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: "high-performance" });
+  }
+  const gpuRaw = (() => {
+    try {
+      return readGl(renderer.getContext());
+    } catch {
+      return { renderer: "", vendor: "" };
+    }
+  })();
+  const gpu = perfCaveat ? { ...classifyRenderer(gpuRaw.renderer, gpuRaw.vendor), software: true, tier: "software" as const } : classifyRenderer(gpuRaw.renderer, gpuRaw.vendor);
+  console.info("[gpu]", gpu.tier, gpu.renderer, gpu.vendor);
+  {
+    // presets from the tier, only where the player hasn't chosen
+    const pre = presetFor(gpu.tier, narrow);
+    if (savedSettings?.quality === undefined) settings.quality = pre.quality === "high" ? "auto" : (pre.quality as Quality);
+    if (savedSettings?.radius === undefined || gpu.software) settings.radius = Math.min(settings.radius, pre.radius);
+    if (savedSettings?.realistic === undefined && !pre.shadows) settings.realistic = false;
+  }
+  const nav = navigator as Navigator & { gpu?: { requestAdapter(o?: object): Promise<{ info?: { vendor?: string; architecture?: string; description?: string } } | null> } };
+  let gpuAdapter = "";
+  nav.gpu
+    ?.requestAdapter({ powerPreference: "high-performance" })
+    .then((a) => {
+      const i = a?.info;
+      if (i) gpuAdapter = [i.vendor, i.architecture, i.description].filter(Boolean).join(" ");
+    })
+    .catch(() => {});
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, narrow ? 1.75 : 2));
   renderer.setClearColor(0x8ec8f5, 1);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -4374,6 +4416,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const tXp = tradeXp[traderRole] ?? 0;
     const tLv = tradeLevelFor(tXp);
     hud.traderLevel = TIER_NAMES[tLv];
+    hud.gpu = gpu.tier + " · " + gpu.renderer + (gpuAdapter ? " · WebGPU: " + gpuAdapter : "");
+    hud.gpuWarn = gpu.software ? SOFTWARE_HINT : "";
     hud.netStatus = mp.connected ? "🌐 Room " + mp.room + " · " + (mp.peers.size + 1) + " online" : "";
     hud.traderNext = tLv >= 3 ? tXp + " trades · Master" : tXp + " trades · " + (TIER_XP[tLv] - tXp) + " to " + TIER_NAMES[tLv + 1];
     const tKey = curTraderKey();
@@ -14684,7 +14728,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           // §11 recycling yield; R4 Founder path raises it to ~75%.
           const yieldN = SMELT_N[inId] ?? 1;
           let distilMul = 1;
-          if (product === ID.Pellets || product === ID.PlasticIngot) meltInto(f, inId, f.lvl ?? 1, { regrind: (TEKS as readonly number[]).includes(inId) });
+          // v6: plain materials melt at their table ratio (many commons → 1 pellet)
+          const ratioRow = product === ID.Pellets && !RARE_MELT[inId] && MATERIALS[inId]?.kind === "plastic";
+          const ratioN = ratioRow ? meltRatioStep(f, inId) : 0;
+          if (!ratioRow && (product === ID.Pellets || product === ID.PlasticIngot)) meltInto(f, inId, f.lvl ?? 1, { regrind: (TEKS as readonly number[]).includes(inId) });
           if (RARE_MELT[inId]) {
             say("Rare melt! " + AFFIX_INFO[RARE_MELT[inId].affix].name + " batch — " + AFFIX_INFO[RARE_MELT[inId].affix].desc + " ×" + f.charges, 2600);
             audio.rank();
@@ -14695,8 +14742,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
             f.outN += p.n;
             distilMul = p.fuelMul;
           } else {
-            f.out = product;
-            f.outN += product === ID.Pellets && pathId === "founder" ? Math.ceil(yieldN * 1.5) : yieldN;
+            const baseOut = ratioRow ? ratioN : yieldN;
+            if (baseOut > 0) f.out = product;
+            else if (!f.outN) f.out = 0;
+            f.outN += product === ID.Pellets && pathId === "founder" && baseOut > 0 ? Math.ceil(baseOut * 1.5) : baseOut;
           }
           // P5b (Muse): the Foundry's second yield — smelting pellets
           // (the only road to a PlasticIngot) also distils FUEL at
@@ -16102,7 +16151,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const slotN = part === 0 ? f.inN : f.fuelN;
       if (cursor && (creative || (inv[cursor] ?? 0) > 0)) {
         if (part === 1 && fuelTime(cursor) <= 0) return say("That isn't fuel");
-        if (part === 0 && !SMELT[cursor]) return say("The kiln won't take that");
+        if (part === 0 && !SMELT[cursor]) return say(rejectReason(cursor) ?? "The kiln won't take that");
         if (slotId && slotId !== cursor) return;
         if (!creative) inv[cursor] -= 1;
         if (part === 0) {
@@ -16183,7 +16232,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (have <= 0) return say("You don't have that");
       const toIn = !!SMELT[id] && (!f.in || f.in === id);
       const toFuel = !toIn && fuelTime(id) > 0 && (!f.fuel || f.fuel === id);
-      if (!toIn && !toFuel) return say(SMELT[id] || fuelTime(id) > 0 ? "That slot is busy" : "The kiln won't take that");
+      if (!toIn && !toFuel) return say(SMELT[id] || fuelTime(id) > 0 ? "That slot is busy" : rejectReason(id) ?? "The kiln won't take that");
       const cur = toIn ? f.inN : f.fuelN;
       const k = Math.min(have, 64 - cur);
       if (k <= 0) return say("That slot is full");

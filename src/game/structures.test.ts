@@ -241,7 +241,7 @@ test("desert city long bay: the Rig Digger's cells are all open air under the ca
   for (const p of dig.parts) {
     const [x, y, z] = [0, 1, 2].map((i) => Math.floor((A[i] + p.dq[i]) / 4));
     if (y < g.bay2.display[1]) continue; // part origin sits in the floor cell's top quarter (same as the buggy)
-    assert.ok([undefined, ID.Air].includes(at(x, y, z) as number | undefined), `part ${p.id} at ${x},${y},${z} hits ${at(x, y, z)}`);
+    assert.ok(([undefined, ID.Air] as (number | undefined)[]).includes(at(x, y, z)), `part ${p.id} at ${x},${y},${z} hits ${at(x, y, z)}`);
   }
   const village = S.garageOf({ ...s, w: S.VILLAGE_W, d: S.VILLAGE_W, zone: "plains" }, SEED)!;
   assert.equal(village.bay2, null);

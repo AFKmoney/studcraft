@@ -93,3 +93,34 @@ it("v5 remap: void-glass shard and blink lens melt as rares, the sentinel core s
   assert.equal(RARE_MELT[ID.VoidCore].purity, top);
   assert.ok(RARE_MELT[ID.EnderPearl].purity < RARE_MELT[ID.VoidGlass].purity);
 });
+
+import { MATERIALS, meltRatio, meltRatioStep, fuelValue, rejectReason, isMeltable } from "./foundry.ts";
+import { fuelTime } from "./recipes.ts";
+describe("v6 material table", () => {
+  it("ratio scales with rarity: commons 8–16:1, rares 1–2:1", () => {
+    for (const id of [ID.Dirt, ID.Cobble, ID.Stone, ID.Gravel]) assert.ok(meltRatio(id) >= 8 && meltRatio(id) <= 16);
+    for (const id of [ID.Crystal, ...Object.keys(RARE_MELT).map(Number)]) assert.ok(meltRatio(id) >= 1 && meltRatio(id) <= 2);
+    assert.ok((MATERIALS[ID.Crystal] as { purity: number }).purity > (MATERIALS[ID.Dirt] as { purity: number }).purity);
+    const p: { purity?: number; ratioAcc?: number } = {};
+    let n = 0;
+    for (let i = 0; i < 32; i++) n += meltRatioStep(p, ID.Dirt);
+    assert.equal(n, 2);
+    assert.equal(meltRatioStep({}, ID.Crystal), 1);
+  });
+  it("gold, diamond and wood are never melted", () => {
+    for (const id of [ID.Gold, ID.GoldOre, ID.Diamond, ID.DiamondOre]) {
+      assert.ok(rejectReason(id));
+      assert.equal(SMELT[id], undefined);
+    }
+    for (const id of [ID.Log, ID.Planks]) {
+      assert.equal(isMeltable(id), false);
+      assert.equal(SMELT[id], undefined);
+    }
+  });
+  it("wood and quality plastic burn as fuel; gold does not", () => {
+    assert.ok(fuelTime(ID.Log) > 0 && fuelTime(ID.Planks) > 0);
+    assert.ok(fuelValue(ID.PlasticIngot) > 0 && fuelTime(ID.TemperedIngot) > fuelTime(ID.PlasticIngot));
+    assert.equal(fuelTime(ID.Gold), 0);
+    assert.equal(fuelTime(ID.Diamond), 0);
+  });
+});

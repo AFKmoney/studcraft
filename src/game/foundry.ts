@@ -143,3 +143,78 @@ export function poolGlow(p: Pool, lvl: number): string {
   const mix = (i: number) => Math.round(parseInt(c.slice(i, i + 2), 16) * (1 - h * 0.4) + 255 * h * 0.4);
   return "#" + [1, 3, 5].map((i) => mix(i).toString(16).padStart(2, "0")).join("");
 }
+
+// ── v6 material table (Philippe, 2026-10-31) ─────────────────────────
+// « Tout est plastique sauf l'or, les diamants et le bois. » One data
+// table: every melt ratio (inputs per pellet), its purity push and every
+// fuel value. Common/abundant stuff needs MANY inputs per pellet and
+// barely lifts purity; rare stuff melts near 1:1 and lifts it a lot.
+// Wood is the fuel; quality plastic (ingots) also burns. Gold and
+// diamond are never meltable (currency / upgrade materials).
+// RARE_MELT rows above keep their spike + affix on top of this.
+export type MatRow =
+  | { kind: "plastic"; ratio: number; purity: number; fuel?: number }
+  | { kind: "fuel"; fuel: number }
+  | { kind: "reject"; why: string };
+const P = (ratio: number, purity: number, fuel?: number): MatRow => ({ kind: "plastic", ratio, purity, fuel });
+export const MATERIALS: Record<number, MatRow> = {
+  // never melted
+  [ID.Gold]: { kind: "reject", why: "Gold is currency — the kiln won't melt it" },
+  [ID.GoldOre]: { kind: "reject", why: "Gold is currency — the kiln won't melt it" },
+  [ID.Diamond]: { kind: "reject", why: "Diamonds are for upgrades — the kiln won't melt them" },
+  [ID.DiamondOre]: { kind: "reject", why: "Diamonds are for upgrades — the kiln won't melt them" },
+  // wood = fuel (seconds of burn)
+  [ID.Log]: { kind: "fuel", fuel: 3 },
+  [ID.Planks]: { kind: "fuel", fuel: 1.5 },
+  [ID.SlabPlanks]: { kind: "fuel", fuel: 0.8 },
+  [ID.Stick]: { kind: "fuel", fuel: 0.8 },
+  [ID.Leaves]: { kind: "fuel", fuel: 0.4 },
+  // common, abundant → large quantities (8–16 : 1), low purity
+  [ID.Dirt]: P(16, 0.5),
+  [ID.Grass]: P(16, 0.5),
+  [ID.Gravel]: P(14, 0.75),
+  [ID.Snow]: P(16, 0.5),
+  [ID.Cobble]: P(12, 1),
+  [ID.Stone]: P(12, 1),
+  [ID.Basalt]: P(10, 1.5),
+  [ID.Sandstone]: P(10, 1.5),
+  [ID.Ice]: P(10, 1),
+  // mid: ores / plastic bricks (3–6 : 1)
+  [ID.Red]: P(2, 3), [ID.Blue]: P(2, 3), [ID.Yellow]: P(2, 3), [ID.White]: P(2, 3), [ID.Black]: P(2, 3),
+  [ID.Orange]: P(2, 3), [ID.Green]: P(2, 3), [ID.Pink]: P(2, 3), [ID.Azure]: P(2, 3),
+  [ID.Obsidian]: P(4, 4),
+  // rarer → small quantities (1–2 : 1), high purity
+  [ID.Crystal]: P(1, 8),
+  // NOTE: Sand→Glass, Clay→Hard, Netherrack→Ash and the metal/gem ores
+  // (iron, tin, copper, chrome, sapphire, amber, resin, prism) keep their
+  // refining rows: 30+ recipes need Glass/Copper/Chrome — open question
+  // for Philippe before turning them into plastic too.
+  // quality plastic: also burnable as fuel
+  [ID.PlasticIngot]: { kind: "fuel", fuel: 6 },
+  [ID.TemperedIngot]: { kind: "fuel", fuel: 10 },
+};
+// rare drops (RARE_MELT) are 1:1 plastic and keep their bonuses
+for (const k of Object.keys(RARE_MELT)) MATERIALS[+k] ??= P(1, 0);
+
+export const isMeltable = (id: number) => MATERIALS[id]?.kind === "plastic";
+export const meltRatio = (id: number) => (MATERIALS[id]?.kind === "plastic" ? (MATERIALS[id] as { ratio: number }).ratio : 0);
+export function fuelValue(id: number): number {
+  const m = MATERIALS[id];
+  return m && m.kind !== "reject" ? (m as { fuel?: number }).fuel ?? 0 : 0;
+}
+export function rejectReason(id: number): string | null {
+  const m = MATERIALS[id];
+  return m?.kind === "reject" ? m.why : null;
+}
+/** Feed one input; returns whole pellets emitted (accumulator on the
+ *  pool keeps big ratios exact and deterministic). */
+export function meltRatioStep(p: Pool & { ratioAcc?: number }, id: number): number {
+  const r = meltRatio(id);
+  if (!r) return 0;
+  const m = MATERIALS[id] as { purity: number };
+  p.purity = Math.min(100, (p.purity ?? 0) + m.purity);
+  p.ratioAcc = (p.ratioAcc ?? 0) + 1 / r;
+  let n = 0;
+  while (p.ratioAcc >= 1 - 1e-9) { p.ratioAcc -= 1; n++; }
+  return n;
+}

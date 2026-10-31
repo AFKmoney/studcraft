@@ -1,6 +1,6 @@
 import { ID, TEKS, def } from "./blocks.ts";
 import { SPECS, type Spec } from "./teks.ts";
-import { RARE_MELT } from "./foundry.ts";
+import { MATERIALS, RARE_MELT, fuelValue, isMeltable, rejectReason } from "./foundry.ts";
 
 export type Recipe = {
   id: string;
@@ -1612,7 +1612,7 @@ export const SMELT: Record<number, number> = {
   [ID.Sand]: ID.Glass,
   [ID.VoidGlass]: ID.Prism, // v5 (overridden below: foundry RARE_MELT rows smelt to pellets)
   [ID.Cobble]: ID.Stone,
-  [ID.Log]: ID.Coal,
+  // v6: wood is FUEL only (foundry.ts MATERIALS) — no Log→Coal melt.
   [ID.Clay]: ID.Hard,
   [ID.Netherrack]: ID.Ash,
   [ID.RawMeat]: ID.Cooked,
@@ -1653,7 +1653,13 @@ for (const [k, v] of Object.entries(RARE_MELT)) {
   SMELT_N[+k] = v.pellets;
 }
 
+// v6 material table: plain materials melt to pellets at their ratio.
+for (const k of Object.keys(MATERIALS)) if (isMeltable(+k) && !RARE_MELT[+k]) SMELT[+k] = ID.Pellets;
+for (const k of Object.keys(MATERIALS)) if (rejectReason(+k)) delete SMELT[+k];
+
 export function fuelTime(id: number): number {
+  const v = fuelValue(id);
+  if (v > 0) return v;
   if (id === ID.LavaBucket) return 60;
   if (id === ID.Amber) return 14;
   if (id === ID.Blaze) return 12;
