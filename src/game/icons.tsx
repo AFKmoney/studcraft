@@ -154,7 +154,7 @@ export function ItemIcon({ id, muted = false }: { id: number; muted?: boolean })
         className="item-icon"
         src={img}
         alt=""
-        style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 4 }}
+        style={{ objectFit: "contain", borderRadius: 4 }}
         onError={(e) => {
           (e.currentTarget as HTMLImageElement).style.display = "none";
         }}
@@ -338,7 +338,7 @@ function TeksItemIcon({ id, fill }: { id: number; fill: string }) {
       className="item-icon"
       src={src}
       alt=""
-      style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 4 }}
+      style={{ objectFit: "contain", borderRadius: 4 }}
       onError={() => setFailed(true)}
     />
   );

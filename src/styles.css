@@ -115,6 +115,27 @@
   pointer-events: none;
 }
 
+/* Icons inside grid cells are anchored to the CELL box, not sized in
+   flow. In flow, width/height:100% lets a square icon keep its
+   width-driven height when a cell's height is decoupled from its
+   width — the short-landscape rule (.sc-inv-hotbar .sc-cell height:
+   40px) made icons spill ~41px below their cells on phones
+   (Philippe's A54 report, 2026-10-30; measured in isolation:
+   cell 88x40, icon 74x74). Absolute insets resolve against the cell
+   itself, so the icon always fits, square cell or not. The cell's
+   other children (number badge, stack count) are absolute already. */
+.sc-cell > .item-icon {
+  position: absolute;
+  inset: 7px;
+  /* !important: the base .item-icon rule's width/height:100% otherwise
+     wins for a replaced element here and the square icon overflows a
+     short cell (measured: 88x88 icon in an 88x40 cell). Percentages
+     resolve against the cell's own box, so the icon always fits. */
+  width: calc(100% - 14px) !important;
+  height: calc(100% - 14px) !important;
+  margin: auto;
+}
+
 /* ── Typography ─────────────────────────────────────────────────────────── */
 
 .sc-h2 {
