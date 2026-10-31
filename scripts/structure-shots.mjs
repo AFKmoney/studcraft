@@ -10,7 +10,7 @@ p.setDefaultTimeout(240000);
 await p.addInitScript(() => { if (!localStorage.getItem("studcraft-settings-v1")) localStorage.setItem("studcraft-settings-v1", JSON.stringify({ v: 3, sens: 1, radius: Number(globalThis.__R || 3), sound: false, studs: true, music: 0, sfx: 0 })); });
 p.on("pageerror", (e) => console.log("ERR", e.message));
 const shot = (name) => p.screenshot({ path: `${OUT}/${name}.png`, timeout: 240000 });
-const click = async (re) => { const l = p.getByRole("button", { name: re }).first(); await l.click({ timeout: 60000 }); };
+const click = async (re) => { const l = p.getByRole("button", { name: re }).first(); await l.scrollIntoViewIfNeeded().catch(() => {}); await l.click({ timeout: 60000, force: true }); };
 await p.goto("http://127.0.0.1:5199/", { waitUntil: "domcontentloaded" });
 await p.waitForSelector("text=Play", { timeout: 120000 });
 await click(/^Play/);
