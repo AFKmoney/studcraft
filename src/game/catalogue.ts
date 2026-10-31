@@ -96,7 +96,7 @@ export function removeModel(list: VehicleModel[], name: string): VehicleModel[] 
  *  catalogue.test.ts re-validates it headless through
  *  vehicleFromAssembly. Positions are hub-anchored lattice offsets. */
 export function builtinModels(): VehicleModel[] {
-  const P = (id: number, dq: [number, number, number]): ModelPart => ({ id, o: 0, dq });
+  const P = (id: number, dq: [number, number, number], o = 0): ModelPart => ({ id, o, dq });
   return [
     {
       name: "Starter Buggy",
@@ -108,6 +108,30 @@ export function builtinModels(): VehicleModel[] {
         P(446, [0, 0, 0]),
         P(447, [0, 7, -4]),
         P(452, [12, -1, 0]),
+      ],
+    },
+    {
+      // P5c-3: the excavator. Same base as the buggy; a turret servo
+      // (o=4: its output axis points UP) carries the platform, then
+      // boom / stick / bucket servos chain to the digging bucket.
+      // Joints auto-bind B / C / D / D at load (catalogueLoadModel).
+      name: "Rig Digger",
+      author: "Studs Garage",
+      savedAt: 0,
+      parts: [
+        P(378, [0, -5, -4]), P(378, [0, -5, 4]), P(378, [10, -5, -4]), P(378, [10, -5, 4]),
+        P(356, [6, -7, -4]), P(356, [-6, -7, -4]), P(356, [6, -7, 4]), P(356, [-6, -7, 4]),
+        P(446, [0, 0, 0]),
+        P(447, [0, 7, -4]),
+        P(452, [12, -1, 0]),
+        P(450, [0, 7, 0], 4),
+        P(454, [0, 13, 0]),
+        P(450, [10, 15, 0]),
+        P(454, [16, 19, 0]),
+        P(450, [26, 19, 0]),
+        P(379, [32, 15, 0]),
+        P(450, [38, 15, 0]),
+        P(471, [44, 12, 0]),
       ],
     },
   ];

@@ -477,6 +477,21 @@ put(
 );
 S.get(ID.CylBlock)!.discs.push({ c: [0, 0.5, 0], ax: 1, r: 0.95, len: 2 });
 put(new B(ID.EnginePiston, "2851", LBG, 1).cyl(1, [0, 0.1, 0], 0.6, 1.1, MET, true).hole([0, -0.1, 0], 2, 1, "P").done());
+// P5c-3: the digging bucket (our own design ID, gunmetal steel — a
+// generic functional shape: back wall, floor blade with a stepped
+// lip, two cheeks, twin pin mounts at the back top). The opening
+// faces local −Z; capacity and digging live in game.ts/vehicle.ts.
+put(
+  new B(ID.DigBucket, "90047", GUN, 2)
+    .box([-1.5, -0.2, 0.8], [1.5, 1.2, 1.2], GUN) // back wall
+    .box([-1.5, -1.2, -1.2], [1.5, -0.8, 1.2], GUN) // floor
+    .box([-1.5, -1.25, -1.75], [1.5, -0.85, -1.2], DGM) // cutting lip
+    .box([-1.5, -1.2, -1.2], [-1.1, 1.2, 1.2], GUN) // cheeks
+    .box([1.1, -1.2, -1.2], [1.5, 1.2, 1.2], GUN)
+    .hole([-1, 1, 1], 2, 1, "P")
+    .hole([1, 1, 1], 2, 1, "P")
+    .done(),
+);
 
 // ---------- PANELS / FAIRINGS ----------
 function panel(id: number, part: string, L: number, curve: number, mirror: number, col = WHT) {

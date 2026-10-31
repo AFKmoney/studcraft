@@ -1604,13 +1604,14 @@ function TouchControls({ game }: { game: GameApi }) {
       >
         ▦
       </button>
-      {hud.techAim && (
+      {(hud.techAim || hud.driving) && (
         <button
           className="sc-touch-channel"
-          aria-label="Use or cycle channel on the aimed part"
+          aria-label={hud.driving ? "Cycle the vehicle's channel" : "Use or cycle channel on the aimed part"}
           onClick={() => {
             buzz(10);
-            game.techUse();
+            if (hud.driving) game.cycleChannel();
+            else game.techUse();
           }}
         >
           CH
@@ -1682,6 +1683,18 @@ function TouchControls({ game }: { game: GameApi }) {
           <HoldButton className="steerr" label="Steer right" onHold={(v) => (game.touch.moveX = v ? 1 : 0)} buzz={buzz}>
             ▶
           </HoldButton>
+          {hud.bucketCap > 0 && (
+            <button
+              className="sc-touch-dump"
+              aria-label="Dump the dig bucket"
+              onClick={() => {
+                buzz(10);
+                game.dumpBucket();
+              }}
+            >
+              ⛏ {hud.bucketLoad}/{hud.bucketCap}
+            </button>
+          )}
         </div>
       ) : (
       <div className="sc-touch-actions">

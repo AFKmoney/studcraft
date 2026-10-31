@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { ID } from "./blocks.ts";
 import { bbox, centroid, composeO, rot, type Part } from "./teks.ts";
 import {
+  applyJointPoint,
   fuelFromMelt,
   parkPoses,
   refuel,
@@ -239,5 +240,75 @@ describe("p5b energy: battery, generator, fuel", () => {
     assert.equal(refuel(v, 1), 0.5);
     assert.equal(v.fuel, 4);
     assert.equal(refuel(v, 1), 0);
+  });
+});
+
+describe("p5c-3 vehicle joints", () => {
+  // The shared fixture's wheels float 2 q-units under the liftarms
+  // (fine for the old conversion, which never needed connectivity);
+  // a buildable assembly has them touching, like a pinned real build.
+  const connected = () => fixture().map((p) => (p.id === ID.Wheel ? { ...p, q: [p.q[0], 2, p.q[2]] as [number, number, number] } : p));
+
+  it("a servo splits the assembly: its beam swings only on the servo's channel, and parking folds it to the lattice", () => {
+    const parts = [
+      ...connected(),
+      part(10, ID.Servo, [0, 14, 0]),
+      part(11, ID.Liftarm11, [0, 18, 0]),
+    ];
+    const bindings = new Map([[10, "B" as const]]);
+    const { vehicle: v, missing } = vehicleFromAssembly(parts, { bindings });
+    assert.deepEqual(missing, []);
+    assert.equal(v.joints.length, 1);
+    const j = v.joints[0];
+    assert.equal(j.kind, "servo");
+    assert.equal(j.channel, "B");
+    const beam = v.parts.find((p) => p.uid === 11)!;
+    const servo = v.parts.find((p) => p.uid === 10)!;
+    assert.equal(beam.group, j.group);
+    assert.equal(servo.group, 0, "the servo body rides the parent side");
+    const endRest = applyJointPoint(v, beam.group, { x: beam.localPos.x + 2, y: beam.localPos.y, z: beam.localPos.z });
+    // Channel A drives the wheels, not the joint.
+    drive(v, 1, { throttle: 1, steer: 0, channel: "A" });
+    assert.equal(j.angle, 0);
+    // Channel B swings the servo to its +90° stop.
+    drive(v, 1, { throttle: 1, steer: 0, channel: "B" });
+    assert.ok(j.angle > 1.4, "servo swung: " + j.angle);
+    const endMoved = applyJointPoint(v, beam.group, { x: beam.localPos.x + 2, y: beam.localPos.y, z: beam.localPos.z });
+    assert.ok(Math.hypot(endMoved.x - endRest.x, endMoved.y - endRest.y, endMoved.z - endRest.z) > 1, "beam end travelled");
+    // Parking folds the joint to the quarter turn and stays valid.
+    const poses = parkPoses(v);
+    assert.ok(poses, "park poses exist");
+    const beamPose = poses!.find((p) => p.uid === 11)!;
+    const beamRest = vehicleFromAssembly(parts, { bindings }).vehicle;
+    const restPose = parkPoses(beamRest)!.find((p) => p.uid === 11)!;
+    assert.notDeepEqual(beamPose.q, restPose.q, "the folded beam re-seats somewhere else");
+    assert.notEqual(beamPose.o, restPose.o, "and its orientation folded with the joint");
+  });
+
+  it("a screw actuator is a telescopic joint: throttle on its channel slides its subgroup", () => {
+    const parts = [...connected(), part(10, ID.Actuator, [6, 12, 0]), part(11, ID.Liftarm5, [16, 12, 0])];
+    const bindings = new Map([[10, "C" as const]]);
+    const { vehicle: v, missing } = vehicleFromAssembly(parts, { bindings });
+    assert.deepEqual(missing, []);
+    assert.equal(v.joints.length, 1);
+    const j = v.joints[0];
+    assert.equal(j.kind, "screw");
+    assert.equal(j.channel, "C");
+    const beam = v.parts.find((p) => p.uid === 11)!;
+    assert.equal(beam.group, j.group);
+    const rest = applyJointPoint(v, beam.group, beam.centreLocal);
+    drive(v, 1, { throttle: 1, steer: 0, channel: "A" });
+    assert.equal(j.ext, 0, "drive channel does not slide it");
+    drive(v, 1, { throttle: 1, steer: 0, channel: "C" });
+    assert.ok(j.ext > 0.7, "extended: " + j.ext);
+    const slid = applyJointPoint(v, beam.group, beam.centreLocal);
+    const moved = Math.hypot(slid.x - rest.x, slid.y - rest.y, slid.z - rest.z);
+    assert.ok(moved > 0.5 && moved < 1.1, "slid by ext x stroke: " + moved);
+  });
+
+  it("a plain vehicle has no joints and every part in group 0", () => {
+    const { vehicle: v } = vehicleFromAssembly(connected());
+    assert.equal(v.joints.length, 0);
+    assert.ok(v.parts.every((p) => p.group === 0));
   });
 });

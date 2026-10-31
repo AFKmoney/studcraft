@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { ATLAS_COLS, ATLAS_ROWS, BLOCKS, CREATIVE_BAR, ID, TEKS, def, faceTile, stairsVariant, type BlockDef } from "./blocks";
 import { TechWorld, ORIENTS, composeO, worldCells, bbox as techBbox, spec as techSpec, type Part as TechPart, type Plan as TechPlan, type Target as TechTarget } from "./teks";
 import { buildTeksGeometry, buildTeksRodGeometries } from "./teksGeo";
-import { fuelFromMelt, parkPoses, refuel as vehRefuel, stepVehicle as stepVeh, vehicleFromAssembly, type Vehicle, type VPart } from "./vehicle";
+import { fuelFromMelt, jointAffine, jointChain, jointForce, parkPoses, partWorldPoint, refuel as vehRefuel, stepVehicle as stepVeh, vehicleFromAssembly, type Vehicle, type VPart } from "./vehicle";
 import { FUEL, type Channel } from "./p5bProto";
 import { builtinModels, decodeModel, encodeModel, loadCatalogue, modelFromParts, removeModel, storeCatalogue, upsertModel, type VehicleModel } from "./catalogue";
 import { createAudio } from "./audio";
@@ -82,6 +82,9 @@ export type Hud = {
   techAimHub: boolean;
   /** A vehicle is being driven right now: the touch UI swaps its action cluster for driving controls and shows the Park button (§22.2). */
   driving: boolean;
+  /** P5c-3: dig bucket load / capacity while driving a digger (0 when none). */
+  bucketLoad: number;
+  bucketCap: number;
   /** Build mode (Tab / fly camera) is on: the touch UI shows fly + rotation controls. */
   buildMode: boolean;
   signEdit: { x: number; y: number; z: number; text: string } | null;
@@ -187,6 +190,10 @@ export type GameApi = {
   rotatePart: (axis: number, dir: number) => void;
   /** Replay the Teks use gesture on the aimed part (touch Channel button — la télécommande à l'écran). */
   techUse: () => void;
+  /** Cycle the driven vehicle's channel (touch CH button while driving, KeyC). */
+  cycleChannel: () => void;
+  /** Dump the dig bucket (touch button while driving a digger). */
+  dumpBucket: () => void;
   /** Enter the aimed hub's vehicle, or park + exit the driven one (touch Enter/Park button, §22.2 2026-10-30). */
   enterExitVehicle: () => void;
   /** Vehicle catalogue (section 22 P-A): persistent, outside worlds. */
@@ -366,6 +373,9 @@ declare global {
       completeBlueprintQa?: (i: number) => void;
       stepTeks?: (dt: number) => { parts: number; jammed: boolean; omegas: Record<string, number>; angles: Record<string, number> };
       getVehicle?: () => { pos: { x: number; y: number; z: number }; vel: number; yaw: number; fuel: number; battery: number; load: number; parts: number } | null;
+      getJoints?: () => { uid: number; kind: string; channel: string; group: number; angle: number; ext: number }[];
+      getBucket?: () => { load: [number, number][]; cap: number; total: number } | null;
+      cycleChannelQa?: () => void;
       getBuildMode?: () => { on: boolean; fly: boolean; techHeld: boolean; wantO: number | null };
       spinTech?: () => number;
       getMineState?: () => { mine: number; time: number; key: string; target: string };
@@ -481,6 +491,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     techAim: false,
     techAimHub: false,
     driving: false,
+    bucketLoad: 0,
+    bucketCap: 0,
     buildMode: false,
     signEdit: null as { x: number; y: number; z: number; text: string } | null,
     seed: 0,
@@ -5663,7 +5675,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         audio.place();
         saveDirty = true;
       }
-    } else if (sneak && tspec?.drive === "motor") {
+    } else if (sneak && (tspec?.drive === "motor" || tspec?.drive === "screw")) {
+      // Motors AND screw actuators (P5c-3 joints) bind to channels.
       const nx = nextChannel(motorChannelByQ.get(qKey(p.q)) ?? "A");
       motorChannelByQ.set(qKey(p.q), nx);
       say(def(p.id).name + " bound to channel " + nx);
@@ -5725,6 +5738,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     ];
     let placed = 0;
     let holo = 0;
+    let jointN = 0;
     for (const mp of model.parts) {
       const q: [number, number, number] = [anchorQ[0] + mp.dq[0], anchorQ[1] + mp.dq[1], anchorQ[2] + mp.dq[2]];
       const fits = tech.test(mp.id, mp.o, q, techSolidAt) >= 0 && !techHitsPlayer(mp.id, mp.o, q);
@@ -5733,11 +5747,20 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         tech.add(mp.id, mp.o, q);
         if (!creative) spend(mp.id, 1);
         placed++;
+        // P5c-3: a loaded model's joints arrive pre-bound in order
+        // (B, C, then D) so an articulated machine works out of the
+        // catalogue; the player can re-bind any of them by hand.
+        const msp = techSpec(mp.id);
+        if (mp.id === ID.Servo || msp?.drive === "screw") {
+          motorChannelByQ.set(qKey(q), (["B", "C", "D"] as Channel[])[Math.min(jointN, 2)]);
+          jointN++;
+        }
       } else {
         blueprints.push({ id: mp.id, o: mp.o, q });
         holo++;
       }
     }
+    if (jointN > 0) say("Joints pre-bound to channels B / C / D — cycle with C or the CH button while driving");
     syncHoloMeshes();
     saveDirty = true;
     if (holo === 0) say("Model loaded: " + name + " — " + placed + " parts placed");
@@ -5787,7 +5810,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     v: Vehicle;
     group: THREE.Group;
     baseQuat: THREE.Quaternion;
-    meshes: { vp: VPart; mesh: THREE.Mesh; base: THREE.Matrix4 }[];
+    meshes: { vp: VPart; mesh: THREE.Mesh; base: THREE.Matrix4; rodMesh: THREE.Mesh | null }[];
+    // P5c-3: the digging bucket aboard (if any) and its load.
+    bucket: { vp: VPart; load: Map<number, number>; cap: number } | null;
+    lastBucketPos: { x: number; y: number; z: number } | null;
+    digSayCd: number;
   };
   let vehEnt: VehEnt | null = null;
   /** uid of the Teks part under the crosshair this frame (-1 = none):
@@ -5830,15 +5857,36 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     group.quaternion.copy(yawQ).multiply(vehEnt.baseQuat);
     group.rotateX(v.pitch);
     group.rotateZ(v.roll);
-    // Wheel spin, in each wheel's own geometry space (its prim axis).
-    for (const { vp, mesh, base } of vehEnt.meshes) {
-      if (vp.role !== "wheel") continue;
-      const prim = techSpec(vp.id)?.prim ?? 2;
-      const axis = new THREE.Vector3(prim === 0 ? 1 : 0, prim === 1 ? 1 : 0, prim === 2 ? 1 : 0);
-      const spin = new THREE.Matrix4().makeRotationAxis(axis, v.wheelSpin);
-      mesh.matrix.multiplyMatrices(base, spin);
+    // P5c-3: joint chains re-pose their subgroups every frame; wheel
+    // spin still applies in each wheel's own geometry space.
+    for (const { vp, mesh, base, rodMesh } of vehEnt.meshes) {
+      if (v.joints.length) {
+        const aff = jointAffine(v, vp.group);
+        const r = aff.r;
+        _vehJ.set(r[0], r[1], r[2], aff.t.x * 4, r[3], r[4], r[5], aff.t.y * 4, r[6], r[7], r[8], aff.t.z * 4, 0, 0, 0, 1);
+        mesh.matrix.multiplyMatrices(_vehJ, base);
+      } else {
+        mesh.matrix.copy(base);
+      }
+      if (vp.role === "wheel") {
+        const prim = techSpec(vp.id)?.prim ?? 2;
+        const axis = new THREE.Vector3(prim === 0 ? 1 : 0, prim === 1 ? 1 : 0, prim === 2 ? 1 : 0);
+        const spin = new THREE.Matrix4().makeRotationAxis(axis, v.wheelSpin);
+        mesh.matrix.multiply(spin);
+      }
+      mesh.matrixWorldNeedsUpdate = true;
+      if (rodMesh) {
+        // A screw joint's own rod slides with its joint state; any
+        // other rod part keeps the extension it was converted with.
+        const j = v.joints.find((jj) => jj.uid === vp.uid && jj.kind === "screw");
+        const stroke = techSpec(vp.id)?.rod?.stroke ?? 0;
+        rodMesh.matrix.copy(mesh.matrix).multiply(_vehSlide.makeTranslation((j ? j.ext : vp.ext0) * stroke, 0, 0));
+        rodMesh.matrixWorldNeedsUpdate = true;
+      }
     }
   }
+  const _vehJ = new THREE.Matrix4();
+  const _vehSlide = new THREE.Matrix4();
 
   /** "Use" on a hub whose assembly is a complete vehicle: drive it.
    *  Returns false (with the reason said) when it is not one yet. */
@@ -5881,16 +5929,33 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const baseM = new THREE.Matrix4().set(om[0], om[1], om[2], 0, om[3], om[4], om[5], 0, om[6], om[7], om[8], 0, 0, 0, 0, 1);
     const group = new THREE.Group();
     const meshes = vehicle.parts.map((vp) => {
-      const mesh = new THREE.Mesh(techGeoOf(vp.id), techMatSolid);
+      const pair = techGeoPairOf(vp.id);
+      const mesh = new THREE.Mesh(pair.main, techMatSolid);
       mesh.matrixAutoUpdate = false;
       const base = new THREE.Matrix4();
       techBaseMatrix(vp.localO, [vp.localPos.x * 4, vp.localPos.y * 4, vp.localPos.z * 4], base);
       mesh.matrix.copy(base);
       group.add(mesh);
-      return { vp, mesh, base };
+      let rodMesh: THREE.Mesh | null = null;
+      if (pair.rod) {
+        rodMesh = new THREE.Mesh(pair.rod, techMatSolid);
+        rodMesh.matrixAutoUpdate = false;
+        rodMesh.matrix.copy(base);
+        group.add(rodMesh);
+      }
+      return { vp, mesh, base, rodMesh };
     });
     scene.add(group);
-    vehEnt = { v: vehicle, group, baseQuat: new THREE.Quaternion().setFromRotationMatrix(baseM), meshes };
+    const bucketVp = vehicle.parts.find((p) => p.id === ID.DigBucket);
+    vehEnt = {
+      v: vehicle,
+      group,
+      baseQuat: new THREE.Quaternion().setFromRotationMatrix(baseM),
+      meshes,
+      bucket: bucketVp ? { vp: bucketVp, load: new Map<number, number>(), cap: 4 } : null,
+      lastBucketPos: null,
+      digSayCd: 0,
+    };
     hud.driving = true;
     placeVehGroup();
     say("Driving — W/S throttle, A/D steer, Shift park · Fuel " + vehicle.fuel.toFixed(1) + "/" + FUEL.tankCapacity + " · Battery " + Math.round(vehicle.battery * 100) + "%");
@@ -5910,11 +5975,19 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     for (const ps of poses) {
       if (tech.test(ps.id, ps.o, ps.q, (bx, by, bz) => def(world.get(bx, by, bz)).solid) < 0) return false;
     }
+    // The bucket's load is matter: it goes to the player (or the
+    // ground) before the machine becomes a build again.
+    if (ent.bucket) emptyBucket(ent, ent.v.pos.x, ent.v.pos.y + 0.5, ent.v.pos.z);
     // Reserves + bindings follow the hub / motors to their new keys.
     for (const ps of poses) {
       const added = tech.add(ps.id, ps.o, ps.q, ps.uid);
       const vp = ent.v.parts.find((p) => p.uid === ps.uid);
       if (vp) added.on = vp.on;
+      // P5c-3: rod states ride back to the lattice (a screw joint's
+      // travel, any other rod part's conversion extension).
+      const jnt = ent.v.joints.find((j) => j.uid === ps.uid && j.kind === "screw");
+      if (jnt) added.ext = jnt.ext;
+      else if (vp && vp.ext0) added.ext = vp.ext0;
       if (vp?.role === "motor") motorChannelByQ.set(qKey(ps.q), vp.channel);
       if (vp?.role === "hub") {
         hubChannelByQ.set(qKey(ps.q), ent.v.hubChannel);
@@ -5935,12 +6008,105 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     return true;
   }
 
+  function sayCd(ent: VehEnt, msg: string) {
+    if (ent.digSayCd <= 0) {
+      say(msg);
+      ent.digSayCd = 2.5;
+    }
+  }
+
+  /** P5c-3: dig with the bucket at a world point. Blocks the moving
+   *  bucket touches are checked against the driving joint's force
+   *  (hardness × volume ≤ force — the plan's accounting); dug blocks
+   *  go INTO the bucket up to its capacity, never dropped, never
+   *  deleted. */
+  function digAt(ent: VehEnt, c: { x: number; y: number; z: number }) {
+    const b = ent.bucket!;
+    let total = 0;
+    for (const n of b.load.values()) total += n;
+    if (total >= b.cap) {
+      sayCd(ent, "Bucket full — dump it with Use");
+      return;
+    }
+    const drv = jointChain(ent.v, b.vp.group).at(-1);
+    const force = drv ? jointForce(drv) : 1.1;
+    const R = 1.15;
+    let dug = 0;
+    for (let bx = Math.floor(c.x - R); bx <= Math.floor(c.x + R); bx++)
+      for (let by = Math.floor(c.y - R); by <= Math.floor(c.y + R); by++)
+        for (let bz = Math.floor(c.z - R); bz <= Math.floor(c.z + R); bz++) {
+          if (total + dug >= b.cap) break;
+          const id = world.get(bx, by, bz);
+          if (id === ID.Air || id === ID.Bedrock || id === ID.Chest || id === ID.Melted || id === ID.Fire) continue;
+          const d = def(id);
+          if (!d.solid || d.hard === Infinity || d.sign) continue;
+          if (Math.hypot(bx + 0.5 - c.x, by + 0.5 - c.y, bz + 0.5 - c.z) > R) continue;
+          if ((d.hard ?? 1) > force) {
+            sayCd(ent, "Too hard for the bucket — a stronger joint would bite");
+            continue;
+          }
+          world.set(bx, by, bz, ID.Air);
+          markDirtyAt(bx, bz);
+          netSendEdit(bx, by, bz, ID.Air);
+          b.load.set(id, (b.load.get(id) ?? 0) + 1);
+          dug++;
+        }
+    if (dug) {
+      audio.place();
+      saveDirty = true;
+    }
+  }
+
+  /** Cycle the channel the driven vehicle answers (the remote, while
+   *  driving): drive motors and joints are bound per channel. */
+  function cycleDriveChannel() {
+    if (!vehEnt) return;
+    const v = vehEnt.v;
+    v.hubChannel = nextChannel(v.hubChannel);
+    const joints = v.joints.filter((j) => j.channel === v.hubChannel).length;
+    const motors = v.motors.filter((m) => m.channel === v.hubChannel && m.size !== "servo").length;
+    const bits: string[] = [];
+    if (motors) bits.push(motors + " motor" + (motors > 1 ? "s" : ""));
+    if (joints) bits.push(joints + " joint" + (joints > 1 ? "s" : ""));
+    say("Channel " + v.hubChannel + (bits.length ? " — " + bits.join(", ") : " — nothing bound to it"));
+    audio.place();
+  }
+
+  /** Dump the bucket at its current position (Use while driving). */
+  function dumpBucketNow() {
+    if (!vehEnt?.bucket) return;
+    let total = 0;
+    for (const n of vehEnt.bucket.load.values()) total += n;
+    if (!total) return;
+    const bp = partWorldPoint(vehEnt.v, vehEnt.bucket.vp, vehEnt.bucket.vp.centreLocal);
+    emptyBucket(vehEnt, bp.x, bp.y, bp.z);
+    say("Bucket dumped — " + total + " block" + (total > 1 ? "s" : ""));
+    audio.place();
+  }
+
+  /** Empty the dig bucket: load goes to the player's inventory,
+   *  overflow drops as items at (x, y, z). Matter is never deleted. */
+  function emptyBucket(ent: VehEnt, x: number, y: number, z: number) {
+    if (!ent.bucket) return;
+    for (const [id, n] of ent.bucket.load) {
+      const before = inv[id] ?? 0;
+      give(id, n);
+      const left = n - ((inv[id] ?? 0) - before);
+      if (left > 0) dropItem(id, left, x, y, z);
+    }
+    ent.bucket.load.clear();
+  }
+
   /** Save-time fallback: if the vehicle cannot be parked while
    *  serializing, its parts drop as items at the body — a save never
    *  deletes a part (the migration law). */
   function dropVehicleParts() {
     if (!vehEnt) return;
     const ent = vehEnt;
+    if (ent.bucket) {
+      for (const [id, n] of ent.bucket.load) dropItem(id, n, ent.v.pos.x, ent.v.pos.y + 0.5, ent.v.pos.z);
+      ent.bucket.load.clear();
+    }
     for (const vp of ent.v.parts) dropItem(vp.id, 1, ent.v.pos.x, ent.v.pos.y + 0.5, ent.v.pos.z);
     scene.remove(ent.group);
     vehEnt = null;
@@ -12483,6 +12649,25 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         }
         stepVeh(v, dt, { throttle: sample.fwd, steer: sample.str, channel: v.hubChannel }, (x, z) => groundY(x, z));
         placeVehGroup();
+        // P5c-3: channel cycling while driving (KeyC / the CH button),
+        // bucket digging (the bucket digs where it MOVES through
+        // blocks) and dumping (Use, unless refuelling).
+        if (keys.has("KeyC")) {
+          keys.delete("KeyC");
+          cycleDriveChannel();
+        }
+        if (vehEnt.bucket) {
+          vehEnt.digSayCd = Math.max(0, vehEnt.digSayCd - dt);
+          const bp = partWorldPoint(v, vehEnt.bucket.vp, vehEnt.bucket.vp.centreLocal);
+          const last = vehEnt.lastBucketPos;
+          if (last && Math.hypot(bp.x - last.x, bp.y - last.y, bp.z - last.z) > 0.05) digAt(vehEnt, bp);
+          vehEnt.lastBucketPos = bp;
+          let bl = 0;
+          for (const n of vehEnt.bucket.load.values()) bl += n;
+          hud.bucketLoad = bl;
+          hud.bucketCap = vehEnt.bucket.cap;
+          if (sample.place && hotbar[slot] !== ID.Fuel && bl > 0) dumpBucketNow();
+        }
         player.x = v.pos.x;
         player.z = v.pos.z;
         player.y = v.pos.y + 1.05;
@@ -13763,6 +13948,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     },
     // P5b QA witness (inert in play): the driven vehicle, if any.
     getVehicle: () => (vehEnt ? { pos: { ...vehEnt.v.pos }, vel: vehEnt.v.vel, yaw: vehEnt.v.yaw, fuel: vehEnt.v.fuel, battery: vehEnt.v.battery, load: vehEnt.v.load, parts: vehEnt.v.parts.length } : null),
+    getJoints: () => (vehEnt ? vehEnt.v.joints.map((j) => ({ uid: j.uid, kind: j.kind, channel: j.channel, group: j.group, angle: j.angle, ext: j.ext })) : []),
+    getBucket: () =>
+      vehEnt?.bucket
+        ? { load: [...vehEnt.bucket.load.entries()] as [number, number][], cap: vehEnt.bucket.cap, total: [...vehEnt.bucket.load.values()].reduce((s, n) => s + n, 0) }
+        : null,
+    cycleChannelQa: () => cycleDriveChannel(),
     // All-devices QA witness (inert in play): build-mode state for the
     // touch/pad rig — toggled via the DOM Build button, rotated via
     // the DOM rotation buttons.
@@ -14280,6 +14471,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (phase !== "play" || aimTechUid < 0) return;
       const p = tech.parts.get(aimTechUid);
       if (p) techUseAction(p, isSneaking());
+    },
+    cycleChannel() {
+      if (phase !== "play") return;
+      cycleDriveChannel();
+    },
+    dumpBucket() {
+      if (phase !== "play") return;
+      dumpBucketNow();
     },
     catalogueList() {
       return [
@@ -14983,8 +15182,16 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         spend(ID.PlasticIngot, price.ingots);
         if (price.copper > 0) spend(ID.Copper, price.copper);
       }
+      let jointN = 0;
       for (const mp of model.parts) {
-        tech.add(mp.id, mp.o, [A[0] + mp.dq[0], A[1] + mp.dq[1], A[2] + mp.dq[2]]);
+        const q: [number, number, number] = [A[0] + mp.dq[0], A[1] + mp.dq[1], A[2] + mp.dq[2]];
+        tech.add(mp.id, mp.o, q);
+        // P5c-3: prefab joints arrive pre-bound B / C / D, like the catalogue.
+        const msp = techSpec(mp.id);
+        if (mp.id === ID.Servo || msp?.drive === "screw") {
+          motorChannelByQ.set(qKey(q), (["B", "C", "D"] as Channel[])[Math.min(jointN, 2)]);
+          jointN++;
+        }
       }
       tradeXp[traderRole] = (tradeXp[traderRole] ?? 0) + 1;
       if (repAtKey(key) < 30) addRep(key, 1);

@@ -74,12 +74,46 @@ function rotY(yaw: number, p: Vec3): Vec3 {
 
 export type PartRole = "wheel" | "motor" | "hub" | "battery" | "remote" | "chassis";
 
+export type VJoint = {
+  /** The joint part's uid. */
+  uid: number;
+  kind: "servo" | "screw";
+  /** The channel this joint answers (bindings, like motors). */
+  channel: Channel;
+  /** Subgroup this joint moves (the child side). */
+  group: number;
+  /** Subgroup the joint is mounted on (the parent side). */
+  parentGroup: number;
+  /** Joint part centre, vehicle frame (blocks). Servo: rotation pivot. */
+  pivot: Vec3;
+  /** Servo: rotation axis (vehicle frame, unit). Screw: slide axis. */
+  axis: Vec3;
+  /** Servo state, radians, −π/2..π/2. */
+  angle: number;
+  /** Screw state, 0..1 of stroke. */
+  ext: number;
+  /** Screw stroke in blocks. */
+  stroke: number;
+};
+
+/** Push force of a joint, in the same bore² units as teks cylForce:
+ *  a servo's torque, a screw actuator's screw advantage. The bucket
+ *  digs only what its driving joint can push (plan P5c accounting). */
+export function jointForce(j: VJoint): number {
+  return j.kind === "servo" ? 1.1 : 0.36 * 1.6;
+}
+
 export type VPart = {
   uid: number;
   id: number;
   o: number; // lattice orientation at conversion
   on: boolean;
   role: PartRole;
+  /** P5c-3: subgroup index (0 = the hub's base group). Joint parts
+   *  carry their parent group: they render/move with the parent side. */
+  group: number;
+  /** Rod extension at conversion (a non-joint rod part keeps it). */
+  ext0: number;
   /** Part origin offset from the vehicle origin, WORLD frame at conversion (blocks). For parking. */
   relOrigin: Vec3;
   /** Part origin in the vehicle frame (x right, y up, z rear), blocks. */
@@ -132,6 +166,9 @@ export type Vehicle = {
   load: number;
   /** Drive rpm of the last step (motor side of the reduction). */
   rpm: number;
+  /** P5c-3: articulation joints (servos = rotation, screw actuators
+   *  = telescopic slide). Empty for a plain rigid vehicle. */
+  joints: VJoint[];
 };
 
 export function roleOf(id: number): PartRole {
@@ -271,6 +308,55 @@ export function vehicleFromAssembly(
     return { x: r[0], y: r[1], z: r[2] };
   };
 
+  // --- P5c-3: subgroups + joints. Removing the joint parts (servos,
+  // screw actuators) splits the assembly into rigid subgroups; a joint
+  // part touching ≥2 subgroups articulates them. The hub's subgroup
+  // is the base (group 0). Adjacency = AABB touch, like the air
+  // networks and the game's component walk.
+  const isJointPart = (p: Part) => motorSizeOf(p.id) === "servo" || spec(p.id)?.drive === "screw";
+  const boxesOf = parts.map((p) => {
+    const [lo, hi] = bbox(p.id, p.o);
+    return {
+      lo: [lo[0] + p.q[0], lo[1] + p.q[1], lo[2] + p.q[2]],
+      hi: [hi[0] + p.q[0], hi[1] + p.q[1], hi[2] + p.q[2]],
+    };
+  });
+  const touchIdx = (a: number, b: number) => {
+    const A = boxesOf[a];
+    const B = boxesOf[b];
+    for (let i = 0; i < 3; i++) if (A.lo[i] > B.hi[i] + 1 || B.lo[i] > A.hi[i] + 1) return false;
+    return true;
+  };
+  const groupOfIdx: number[] = parts.map(() => -1);
+  {
+    let ng = 0;
+    for (let i = 0; i < parts.length; i++) {
+      if (isJointPart(parts[i]) || groupOfIdx[i] >= 0) continue;
+      const stack = [i];
+      groupOfIdx[i] = ng;
+      while (stack.length) {
+        const a = stack.pop()!;
+        for (let b = 0; b < parts.length; b++) {
+          if (b === a || isJointPart(parts[b]) || groupOfIdx[b] >= 0) continue;
+          if (touchIdx(a, b)) {
+            groupOfIdx[b] = ng;
+            stack.push(b);
+          }
+        }
+      }
+      ng++;
+    }
+    // Renumber so the hub's group is 0.
+    const hubIdx = parts.findIndex((p) => roleOf(p.id) === "hub");
+    const baseG = hubIdx >= 0 ? groupOfIdx[hubIdx] : 0;
+    if (baseG > 0) {
+      for (let i = 0; i < groupOfIdx.length; i++) {
+        if (groupOfIdx[i] === 0) groupOfIdx[i] = baseG;
+        else if (groupOfIdx[i] === baseG) groupOfIdx[i] = 0;
+      }
+    }
+  }
+
   const vparts: VPart[] = parts.map((p, i) => {
     const role = roles[i];
     const wo = partWorldOrigin(p);
@@ -281,6 +367,8 @@ export function vehicleFromAssembly(
       o: p.o,
       on: p.on !== false,
       role,
+      group: Math.max(0, groupOfIdx[i]),
+      ext0: p.ext ?? 0,
       relOrigin: sub(wo, origin),
       localPos: toLocal(wo),
       localO: localO >= 0 ? localO : p.o,
@@ -311,6 +399,74 @@ export function vehicleFromAssembly(
   }
   const hub = vparts.find((p) => p.role === "hub");
 
+  // --- P5c-3: joints, hierarchised by BFS from the base group. ---
+  const joints: VJoint[] = [];
+  {
+    const unitFor = (ax: number): V3 => (ax === 0 ? [1, 0, 0] : ax === 1 ? [0, 1, 0] : [0, 0, 1]);
+    // (ax arrives as a plain number from the spec holes; it is an Ax.)
+    // group adjacency through joint parts
+    const jointTouched = new Map<number, number[]>(); // part index -> touched groups
+    for (let i = 0; i < parts.length; i++) {
+      if (!isJointPart(parts[i])) continue;
+      const gs = new Set<number>();
+      for (let b = 0; b < parts.length; b++) {
+        if (b === i || isJointPart(parts[b])) continue;
+        if (touchIdx(i, b)) gs.add(groupOfIdx[b]);
+      }
+      jointTouched.set(i, [...gs]);
+    }
+    const depth = new Map<number, number>([[0, 0]]);
+    const adj = new Map<number, { to: number; joint: number }[]>();
+    for (const [i, gs] of jointTouched) {
+      for (let a = 0; a < gs.length; a++)
+        for (let b = a + 1; b < gs.length; b++) {
+          (adj.get(gs[a]) ?? adj.set(gs[a], []).get(gs[a])!).push({ to: gs[b], joint: i });
+          (adj.get(gs[b]) ?? adj.set(gs[b], []).get(gs[b])!).push({ to: gs[a], joint: i });
+        }
+    }
+    const queue = [0];
+    while (queue.length) {
+      const g = queue.shift()!;
+      for (const e of adj.get(g) ?? []) {
+        if (!depth.has(e.to)) {
+          depth.set(e.to, (depth.get(g) ?? 0) + 1);
+          queue.push(e.to);
+        }
+      }
+    }
+    for (const [i, gs] of jointTouched) {
+      const vp = vparts[i];
+      if (!gs.length) continue;
+      const sorted = [...gs].sort((a, b) => (depth.get(a) ?? 999) - (depth.get(b) ?? 999));
+      const parentGroup = sorted[0];
+      vp.group = parentGroup;
+      if (gs.length < 2) continue;
+      const s = spec(parts[i].id);
+      const kind: VJoint["kind"] = motorSizeOf(parts[i].id) === "servo" ? "servo" : "screw";
+      let axisLocal: V3 = [1, 0, 0];
+      if (kind === "servo") {
+        const hole = s?.holes.find((h) => h.t === "A");
+        axisLocal = unitFor(hole ? hole.ax : 2);
+      }
+      const axisW = rot(vp.localO, axisLocal);
+      const axis: Vec3 = { x: axisW[0], y: axisW[1], z: axisW[2] };
+      for (const child of sorted.slice(1)) {
+        joints.push({
+          uid: parts[i].uid,
+          kind,
+          channel: (opts.bindings?.get(parts[i].uid) ?? "A") as Channel,
+          group: child,
+          parentGroup,
+          pivot: { ...vp.centreLocal },
+          axis,
+          angle: 0,
+          ext: kind === "screw" ? (parts[i].ext ?? 0) : 0,
+          stroke: (s?.rod?.stroke ?? 0) * 0.5,
+        });
+      }
+    }
+  }
+
   const vehicle: Vehicle = {
     parts: vparts,
     wheels: vWheels,
@@ -337,6 +493,7 @@ export function vehicleFromAssembly(
     hubChannel: opts.hubChannel ?? "A",
     load: 0,
     rpm: 0,
+    joints,
   };
   return { vehicle, missing };
 }
@@ -415,6 +572,21 @@ export function stepVehicle(v: Vehicle, dt: number, cmd: DriveCmd, heightAt: (x:
   v.pos.x += -Math.sin(v.yaw) * v.vel * dt;
   v.pos.z += -Math.cos(v.yaw) * v.vel * dt;
 
+  // --- P5c-3: joints answer their own channel's throttle. A servo
+  // swings toward throttle × 90°; a screw actuator slides its stroke.
+  // Drive motors use the same cmd, so a subsystem moves only when
+  // the player binds it to the channel they are commanding.
+  for (const j of v.joints) {
+    if (j.channel !== cmd.channel) continue;
+    if (j.kind === "servo") {
+      const target = throttle * (Math.PI / 2);
+      const stepMax = 2.2 * dt;
+      j.angle += Math.max(-stepMax, Math.min(stepMax, target - j.angle));
+    } else {
+      j.ext = Math.max(0, Math.min(1, j.ext + throttle * dt * 0.8));
+    }
+  }
+
   // --- Suspension: raycast every wheel against the real terrain. ---
   if (v.wheels.length) {
     const supports: number[] = [];
@@ -457,6 +629,77 @@ export function wheelWorldPos(v: Vehicle, w: VPart): Vec3 {
   return { x: v.pos.x + spun.x, y: v.pos.y + spun.y, z: v.pos.z + spun.z };
 }
 
+// ---- P5c-3: articulation helpers -----------------------------------
+type Affine = { r: Mat; t: Vec3 };
+const AFF_I: Mat = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+function matVec(m: Mat, p: Vec3): Vec3 {
+  return {
+    x: m[0] * p.x + m[1] * p.y + m[2] * p.z,
+    y: m[3] * p.x + m[4] * p.y + m[5] * p.z,
+    z: m[6] * p.x + m[7] * p.y + m[8] * p.z,
+  };
+}
+function rotAxisMat(axis: Vec3, ang: number): Mat {
+  const { x, y, z } = axis;
+  const c = Math.cos(ang);
+  const s = Math.sin(ang);
+  const C = 1 - c;
+  return [
+    c + x * x * C, x * y * C - z * s, x * z * C + y * s,
+    y * x * C + z * s, c + y * y * C, y * z * C - x * s,
+    z * x * C - y * s, z * y * C + x * s, c + z * z * C,
+  ];
+}
+function jointLocal(j: VJoint, angle: number, ext: number): Affine {
+  if (j.kind === "servo") {
+    const r = rotAxisMat(j.axis, angle);
+    const rp = matVec(r, j.pivot);
+    return { r, t: { x: j.pivot.x - rp.x, y: j.pivot.y - rp.y, z: j.pivot.z - rp.z } };
+  }
+  return { r: AFF_I, t: { x: j.axis.x * ext * j.stroke, y: j.axis.y * ext * j.stroke, z: j.axis.z * ext * j.stroke } };
+}
+/** The joints moving a group, ordered base → leaf. */
+export function jointChain(v: Vehicle, group: number): VJoint[] {
+  const byGroup = new Map(v.joints.map((j) => [j.group, j]));
+  const out: VJoint[] = [];
+  let g = group;
+  while (g !== 0) {
+    const j = byGroup.get(g);
+    if (!j) break;
+    out.unshift(j);
+    g = j.parentGroup;
+  }
+  return out;
+}
+/** Accumulated affine (vehicle frame, blocks) for a subgroup. With
+ *  `snapped`, servo angles quantise to quarter turns (parking folds
+ *  the machine back onto the lattice). */
+export function jointAffine(v: Vehicle, group: number, snapped = false): Affine {
+  let acc: Affine = { r: AFF_I, t: { x: 0, y: 0, z: 0 } };
+  for (const j of jointChain(v, group)) {
+    const ang = snapped ? Math.round(j.angle / (Math.PI / 2)) * (Math.PI / 2) : j.angle;
+    const jl = jointLocal(j, ang, j.ext);
+    const t = matVec(acc.r, jl.t);
+    acc = { r: matMul(acc.r, jl.r), t: { x: t.x + acc.t.x, y: t.y + acc.t.y, z: t.z + acc.t.z } };
+  }
+  return acc;
+}
+/** Apply a subgroup's joint chain to a vehicle-frame point. */
+export function applyJointPoint(v: Vehicle, group: number, p: Vec3, snapped = false): Vec3 {
+  const a = jointAffine(v, group, snapped);
+  const r = matVec(a.r, p);
+  return { x: r.x + a.t.x, y: r.y + a.t.y, z: r.z + a.t.z };
+}
+/** World position (blocks) of a vehicle-frame point on a part:
+ *  joints, then the body transform (pos/yaw; pitch/roll ignored —
+ *  digging tolerates the small tilt error). */
+export function partWorldPoint(v: Vehicle, vp: VPart, local: Vec3): Vec3 {
+  const j = applyJointPoint(v, vp.group, local);
+  const bw = rot(v.frameO >= 0 ? v.frameO : 0, [j.x, j.y, j.z]);
+  const spun = rotY(v.yaw - v.yaw0, { x: bw[0], y: bw[1], z: bw[2] });
+  return { x: v.pos.x + spun.x, y: v.pos.y + spun.y, z: v.pos.z + spun.z };
+}
+
 /** Fuel units yielded by melting `plasticUnits` of plastic (FUEL: 0.25/unit). */
 export function fuelFromMelt(plasticUnits: number): number {
   return plasticUnits * FUEL.meltPlasticYield;
@@ -484,11 +727,20 @@ export function parkPoses(v: Vehicle): ParkPose[] | null {
   let rk = 0; // orientation index of Rk = Ryaw(snapped)
   for (let i = 0; i < Math.abs(dq); i++) rk = composeO(rk, 1, dir as 1 | -1);
   const out: ParkPose[] = [];
+  const B = ORIENTS[v.frameO >= 0 ? v.frameO : 0];
+  const Bt = matT(B);
   for (const p of v.parts) {
-    let o = p.o;
-    for (let i = 0; i < Math.abs(dq); i++) o = composeO(o, 1, dir as 1 | -1);
+    // P5c-3: fold the joint chain in (servo angles snapped to the
+    // quarter turn — parking folds the machine back onto the lattice;
+    // screw slides stay, their travel rounds into the lattice q).
+    // Orientation = RyawSnap × (B × Rchain × Bᵀ) × rest, all as mats.
+    const rChain = jointAffine(v, p.group, true).r;
+    const rConv = matMul(matMul(B, rChain), Bt);
+    const o = orientIndex(matMul(ORIENTS[rk], matMul(rConv, ORIENTS[p.o])));
     if (o < 0) return null;
-    const off = rot(rk, [p.relOrigin.x, p.relOrigin.y, p.relOrigin.z]);
+    const jw = applyJointPoint(v, p.group, p.localPos, true);
+    const bw = rot(v.frameO >= 0 ? v.frameO : 0, [jw.x, jw.y, jw.z]);
+    const off = rot(rk, bw);
     out.push({
       uid: p.uid,
       id: p.id,

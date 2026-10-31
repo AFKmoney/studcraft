@@ -13,7 +13,7 @@ import {
   upsertModel,
 } from "./catalogue.ts";
 import { TechWorld } from "./teks.ts";
-import { vehicleFromAssembly } from "./vehicle.ts";
+import { stepVehicle, vehicleFromAssembly } from "./vehicle.ts";
 
 const HUB = 446;
 const fakeStorage = () => {
@@ -101,6 +101,36 @@ test("built-in models convert to complete vehicles (P-B validation)", () => {
     assert.deepEqual(missing, [], model.name + " must be a complete vehicle");
     assert.equal(vehicle.parts.length, model.parts.length);
   }
+});
+
+test("the Rig Digger converts with a 4-servo joint chain (P5c-3)", () => {
+  const model = builtinModels().find((m) => m.name === "Rig Digger")!;
+  assert.ok(model, "Rig Digger is a built-in");
+  const tech = new TechWorld();
+  const A: [number, number, number] = [200, 40, 200];
+  for (const mp of model.parts) tech.add(mp.id, mp.o, [A[0] + mp.dq[0], A[1] + mp.dq[1], A[2] + mp.dq[2]]);
+  const parts = [...tech.parts.values()];
+  // Servo uids in model order: turret, boom, stick, bucket.
+  const servoUids = parts.filter((p) => p.id === 450).map((p) => p.uid);
+  assert.equal(servoUids.length, 4);
+  const bindings = new Map([
+    [servoUids[0], "B" as const],
+    [servoUids[1], "C" as const],
+    [servoUids[2], "D" as const],
+    [servoUids[3], "D" as const],
+  ]);
+  const { vehicle: v, missing } = vehicleFromAssembly(parts, { bindings, hubChannel: "A", battery: 1, fuel: 0 });
+  assert.deepEqual(missing, []);
+  assert.equal(v.joints.length, 4, "four servo joints: " + JSON.stringify(v.joints.map((j) => [j.kind, j.channel, j.group, j.parentGroup])));
+  assert.ok(v.joints.every((j) => j.kind === "servo"));
+  const bucket = v.parts.find((p) => p.id === 471)!;
+  assert.ok(bucket, "the digging bucket is aboard");
+  assert.equal(bucket.group, Math.max(...v.joints.map((j) => j.group)), "the bucket rides the deepest subgroup");
+  // Channel discipline: commanding C swings only the boom joint.
+  for (let i = 0; i < 60; i++) stepVehicle(v, 1 / 60, { throttle: 1, steer: 0, channel: "C" }, () => 0);
+  const boom = v.joints.find((j) => j.channel === "C")!;
+  assert.ok(boom.angle > 1.2, "boom swung on C: " + boom.angle);
+  for (const j of v.joints) if (j !== boom) assert.equal(j.angle, 0, "other joints stay put");
 });
 
 test("share code round-trips and rejects junk", () => {

@@ -2307,6 +2307,24 @@ kbd {
   font-size: 20px;
 }
 
+/* P5c-3: dig-bucket dump button inside the driving cluster. */
+.sc-touch-dump {
+  position: absolute;
+  right: 62px;
+  bottom: 216px;
+  min-width: 64px;
+  height: 44px;
+  padding: 0 10px;
+  border: 2px solid rgba(255, 236, 205, 0.25);
+  border-radius: 22px;
+  background: rgba(14, 10, 7, 0.55);
+  color: var(--sc-text);
+  font-size: 15px;
+  pointer-events: auto;
+  touch-action: none;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+}
+
 .sc-hold.mine {
   right: 0;
   bottom: 60px;
