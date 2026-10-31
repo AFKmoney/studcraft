@@ -2337,12 +2337,18 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       // Stock
       addBoxPart(group, 0.18, 0.032, 0.028, -0.04, 0, 0, woodMat);
       addBoxPart(group, 0.06, 0.028, 0.032, -0.12, -0.01, 0, woodMat);
-      // Prod (horizontal bow)
-      addBoxPart(group, 0.22, 0.018, 0.016, 0.04, 0.02, 0, woodMat);
-      addBoxPart(group, 0.018, 0.018, 0.018, 0.15, 0.02, 0, metalMat);
-      addBoxPart(group, 0.018, 0.018, 0.018, -0.07, 0.02, 0, metalMat);
+      // Prod — B17: the bow limb spans Z, PERPENDICULAR to the
+      // stock. It used to run along X, collinear with the stock:
+      // the whole model was one thin line (0.31 × 0.05 × 0.03), so
+      // no first-person transform could ever give it a readable
+      // silhouette — measured as a sliver at the frame's edge
+      // across three rig runs. Across the stock, it reads as a
+      // crossbow from every side.
+      addBoxPart(group, 0.016, 0.018, 0.22, 0.04, 0.02, 0, woodMat);
+      addBoxPart(group, 0.018, 0.018, 0.018, 0.04, 0.02, 0.095, metalMat);
+      addBoxPart(group, 0.018, 0.018, 0.018, 0.04, 0.02, -0.095, metalMat);
       // String
-      addBoxPart(group, 0.22, 0.006, 0.006, 0.04, 0.01, 0, stringMat);
+      addBoxPart(group, 0.006, 0.006, 0.22, 0.04, 0.01, 0, stringMat);
       // Bolt
       const bolt = addCylPart(group, 0.006, 0.006, 0.16, 0.02, 0, 0, woodMat, 8);
       bolt.rotation.z = Math.PI / 2;
@@ -3504,13 +3510,33 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const len = Math.max(1e-3, size.x, size.y, size.z);
       // model -> sprite space: handle end at the sprite's bottom-left, shaft on the diagonal
       const f = (15.5 / 16 * Math.SQRT2 * 0.84) / len;
+      // B17 (Philippe): a tool whose long axis is X — the Crossbow,
+      // built lying flat along its aim axis (0.31 in X × 0.05 tall),
+      // butt at −X, bolt tip at +X. Anchored by its bottom centre
+      // and swung −45° like a pick, half its span dropped under the
+      // frame: the rig capture showed only a sliver at the bottom
+      // edge, the body below NDC y ≈ −1.2, far smaller on screen
+      // than the pick. Realign it on the pick's own logic: pre-
+      // rotate the model in sprite space so its long axis runs
+      // along +Y like every other tool's — butt at the grip, tip
+      // at the far end of the diagonal — then the standard display
+      // above applies unchanged.
+      const flatX = size.x > size.y * 1.5 && size.x >= size.z;
       const sprite = new THREE.Matrix4()
         .makeTranslation(2 / 16, 1.5 / 16, 0.5)
         .multiply(new THREE.Matrix4().makeRotationZ(-Math.PI / 4))
-        .multiply(new THREE.Matrix4().makeScale(f, f, f))
-        .multiply(new THREE.Matrix4().makeTranslation(-c.x, -box.min.y, -c.z));
+        .multiply(new THREE.Matrix4().makeScale(f, f, f));
+      if (flatX) {
+        sprite
+          .multiply(new THREE.Matrix4().makeRotationZ(Math.PI / 2))
+          .multiply(new THREE.Matrix4().makeTranslation(-box.min.x, -c.y, -c.z));
+      } else {
+        sprite.multiply(new THREE.Matrix4().makeTranslation(-c.x, -box.min.y, -c.z));
+      }
       M = MC_HANDHELD.clone().multiply(sprite);
-      const grip = new THREE.Vector3(c.x, box.min.y + len * (d.tool === "sword" ? 0.1 : 0.16), c.z).applyMatrix4(M);
+      const grip = flatX
+        ? new THREE.Vector3(box.min.x + len * 0.16, c.y, c.z).applyMatrix4(M)
+        : new THREE.Vector3(c.x, box.min.y + len * (d.tool === "sword" ? 0.1 : 0.16), c.z).applyMatrix4(M);
       const shaft = new THREE.Vector3(0, 1, 0).transformDirection(M);
       const mouth = ARM_OUT.clone().negate();
       // clip bore sized to the handle: the figure hand closes on it
@@ -4938,6 +4964,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (ext) p.ext = ext;
       if (cfg !== undefined && techSpec(id)?.sensor) p.cfg = cfg;
     }
+    // B17: a save written mid-drive carries the dig bucket's load —
+    // it lands in the player's inventory here (the machine itself
+    // comes back parked from its teks rows): a save deletes nothing.
+    for (const [id, n] of data.vehBucket ?? []) give(id, n);
     // P5b restore: channel bindings + hub fuel/battery reserves,
     // keyed by lattice position (see the P5b block at toggleTechPart).
     motorChannelByQ.clear();
@@ -6716,6 +6746,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     digSayCd: number;
   };
   let vehEnt: VehEnt | null = null;
+  /** B17: the driver's eye point in the vehicle frame, searched
+   *  at entry by computeSeatEye (null = fall back to the hub). */
+  let vehSeatEye: { x: number; y: number; z: number } | null = null;
   /** uid of the Teks part under the crosshair this frame (-1 = none):
    * the touch Channel button replays the use gesture on it. */
   let aimTechUid = -1;
@@ -6787,6 +6820,53 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   const _vehJ = new THREE.Matrix4();
   const _vehSlide = new THREE.Matrix4();
 
+  /** B17: the driver's eye point in the vehicle frame, searched
+   *  at entry. Behind the hub (+z is the rear) and above it, the
+   *  first candidate that clears every part's frame AABB by
+   *  ≥ 0.45 blocks AND sits in open air in the world. Two hand-
+   *  placed seats (the mass centre, then on/behind the hub)
+   *  ended up inside the Rig Digger's own bodywork — its mast,
+   *  motor and servos crowd the hub on every side — so the seat
+   *  is computed from the machine's actual geometry instead of
+   *  guessed. Falls back to the widest-clearance candidate. */
+  function computeSeatEye(v: Vehicle): { x: number; y: number; z: number } | null {
+    const hub = v.parts.find((p) => p.role === "hub");
+    if (!hub) return null;
+    const c = hub.centreLocal;
+    const clearance = (eye: { x: number; y: number; z: number }): number => {
+      let d = Infinity;
+      for (const p of v.parts) {
+        if (!p.box) continue;
+        const dx = Math.max(p.box.min.x - eye.x, 0, eye.x - p.box.max.x);
+        const dy = Math.max(p.box.min.y - eye.y, 0, eye.y - p.box.max.y);
+        const dz = Math.max(p.box.min.z - eye.z, 0, eye.z - p.box.max.z);
+        d = Math.min(d, Math.hypot(dx, dy, dz));
+      }
+      return d;
+    };
+    const inWorld = (eye: { x: number; y: number; z: number }): boolean => {
+      const w = partWorldPoint(v, hub, eye);
+      const bx = Math.floor(w.x), by = Math.floor(w.y), bz = Math.floor(w.z);
+      for (const [ox, oy, oz] of [[0, 0, 0], [0, 1, 0], [0, -1, 0]] as const)
+        if (def(world.get(bx + ox, by + oy, bz + oz)).solid) return false;
+      return true;
+    };
+    let best: { x: number; y: number; z: number } | null = null;
+    let bestD = -1;
+    for (const rear of [1.2, 2, 2.8, 3.6]) {
+      for (const up of [1.2, 1.8, 2.4, 3]) {
+        for (const xoff of [0, 1, -1]) {
+          const eye = { x: c.x + xoff, y: c.y + up, z: c.z + rear };
+          if (!inWorld(eye)) continue;
+          const d = clearance(eye);
+          if (d > bestD) { bestD = d; best = eye; }
+          if (d >= 0.45) return eye;
+        }
+      }
+    }
+    return best;
+  }
+
   /** "Use" on a hub whose assembly is a complete vehicle: drive it.
    *  Returns false (with the reason said) when it is not one yet. */
   function tryEnterVehicle(hubPart: TechPart): boolean {
@@ -6857,6 +6937,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       digSayCd: 0,
     };
     hud.driving = true;
+    vehSeatEye = computeSeatEye(vehicle);
     placeVehGroup();
     say("Driving — W/S throttle, A/D steer, Shift park · Fuel " + vehicle.fuel.toFixed(1) + "/" + FUEL.tankCapacity + " · Battery " + Math.round(vehicle.battery * 100) + "%");
     audio.place();
@@ -6897,6 +6978,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     scene.remove(ent.group);
     vehEnt = null;
+    vehSeatEye = null;
     hud.driving = false;
     syncTechMeshes();
     player.x = ent.v.pos.x + 1.6;
@@ -6996,26 +7078,6 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (left > 0) dropItem(id, left, x, y, z);
     }
     ent.bucket.load.clear();
-  }
-
-  /** Save-time fallback: if the vehicle cannot be parked while
-   *  serializing, its parts drop as items at the body — a save never
-   *  deletes a part (the migration law). */
-  function dropVehicleParts() {
-    if (!vehEnt) return;
-    const ent = vehEnt;
-    if (ent.bucket) {
-      for (const [id, n] of ent.bucket.load) dropItem(id, n, ent.v.pos.x, ent.v.pos.y + 0.5, ent.v.pos.z);
-      ent.bucket.load.clear();
-    }
-    for (const vp of ent.v.parts) dropItem(vp.id, 1, ent.v.pos.x, ent.v.pos.y + 0.5, ent.v.pos.z);
-    scene.remove(ent.group);
-    vehEnt = null;
-    hud.driving = false;
-    player.x = ent.v.pos.x;
-    player.z = ent.v.pos.z;
-    player.y = ent.v.pos.y + 1;
-    player.vy = 0;
   }
 
   // Save conversion (Teks étape 4): a Teks part stored as a P0
@@ -8647,7 +8709,17 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const spec = techSpec(p.id);
       if (!spec?.sensor) continue;
       const reading = evalSensor(p, spec.sensor, teksCells);
+      // B17 (Philippe): EDGE-triggered, never level. The old code
+      // re-asserted the reading onto every driven part every 250 ms,
+      // so a sensor whose reading stayed false held its neighbours
+      // and its channel's motors OFF permanently — on the Rig Digger
+      // the hub was switched back off between the player's two entry
+      // uses and the rig could never be boarded (the sensor "loop").
+      // A sensor now speaks only when its reading CHANGES; between
+      // edges, driven parts belong to manual control again.
+      const edge = (p.sense ?? 0) !== (reading ? 1 : 0);
       p.sense = reading ? 1 : 0;
+      if (!edge) continue;
       const drive = (q: TechPart) => {
         if (q.on !== reading) {
           q.on = reading;
@@ -13132,10 +13204,72 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   }
 
   function packSave(): SaveV1 {
-    // P5b: a driven vehicle's parts are off-lattice — park before
-    // serializing; if it cannot park, the parts drop as items at the
-    // body (dropVehicleParts). A save never deletes a part.
-    if (vehEnt && !leaveVehicle()) dropVehicleParts();
+    // B17 (Philippe): a save must NEVER move the player. The old code
+    // parked the driven vehicle on EVERY save (and dropped its parts
+    // as items when parking failed) — the periodic autosave ejected
+    // the driver mid-drive. The driven vehicle is now serialized in
+    // place: its parts are written at their parking poses (or, if the
+    // body cannot be lattice-fitted right now, at their conversion
+    // poses) with bindings / reserves / machine levels re-keyed to
+    // the written poses — the same re-keying leaveVehicle performs —
+    // so a reload restores the machine whole and parked. The live
+    // vehicle, its bucket load and the driver are not touched.
+    let vehRows: number[][] = [];
+    let vehBucket: [number, number][] | undefined;
+    let bindMap = motorChannelByQ;
+    let hubChMap = hubChannelByQ;
+    let fuelMap = vehFuelByQ;
+    let battMap = vehBattByQ;
+    let lvlMap = teksLvl;
+    if (vehEnt) {
+      const ent = vehEnt;
+      const convQ = (vp: (typeof ent.v.parts)[number]): [number, number, number] => [
+        Math.round((ent.v.origin0.x + vp.relOrigin.x) * 4),
+        Math.round((ent.v.origin0.y + vp.relOrigin.y) * 4),
+        Math.round((ent.v.origin0.z + vp.relOrigin.z) * 4),
+      ];
+      const poses =
+        parkPoses(ent.v) ??
+        ent.v.parts.map((vp) => ({ uid: vp.uid, id: vp.id, o: vp.o, q: convQ(vp) }));
+      bindMap = new Map(motorChannelByQ);
+      hubChMap = new Map(hubChannelByQ);
+      fuelMap = new Map(vehFuelByQ);
+      battMap = new Map(vehBattByQ);
+      lvlMap = new Map(teksLvl);
+      const oldKeys = new Map<number, string>();
+      for (const vp of ent.v.parts) {
+        const k = qKey(convQ(vp));
+        oldKeys.set(vp.uid, k);
+        bindMap.delete(k);
+        hubChMap.delete(k);
+        fuelMap.delete(k);
+        battMap.delete(k);
+      }
+      for (const ps of poses) {
+        const vp = ent.v.parts.find((p) => p.uid === ps.uid);
+        if (!vp) continue;
+        const row = [vp.id, ps.o, ps.q[0], ps.q[1], ps.q[2], vp.on ? 1 : 0] as number[];
+        if (techSpec(vp.id)?.sensor) row.push(0, vp.cfg ?? 0);
+        else {
+          const jnt = ent.v.joints.find((j) => j.uid === ps.uid && j.kind === "screw");
+          const ext = jnt ? jnt.ext : vp.ext0;
+          if (ext) row.push(Math.round(ext * 1000) / 1000);
+        }
+        vehRows.push(row);
+        const key = qKey(ps.q);
+        if (vp.role === "motor") bindMap.set(key, vp.channel);
+        if (vp.role === "hub") {
+          hubChMap.set(key, ent.v.hubChannel);
+          fuelMap.set(key, ent.v.fuel);
+          battMap.set(key, ent.v.battery);
+        }
+        const oldKey = oldKeys.get(vp.uid) ?? "";
+        const lvl = lvlMap.get(oldKey);
+        if (oldKey) lvlMap.delete(oldKey);
+        if (lvl) lvlMap.set(key, lvl);
+      }
+      if (ent.bucket && ent.bucket.load.size) vehBucket = [...ent.bucket.load.entries()];
+    }
     const edits: [number, number, number, number][] = [];
     let n = 0;
     for (const [key, id] of world.edits) {
@@ -13215,13 +13349,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         if (techSpec(p.id)?.sensor) row.push(p.ext ? Math.round(p.ext * 1000) / 1000 : 0, p.cfg ?? 0);
         else if (p.ext) row.push(Math.round(p.ext * 1000) / 1000);
         return row;
-      }),
+      }).concat(vehRows),
       blueprints: blueprints.map((b) => [b.id, b.o, b.q[0], b.q[1], b.q[2]] as [number, number, number, number, number]),
-      vehBind: [...motorChannelByQ.entries()],
-      vehHubCh: [...hubChannelByQ.entries()],
-      vehFuel: [...vehFuelByQ.entries()],
-      vehBatt: [...vehBattByQ.entries()],
-      teksLvl: [...teksLvl.entries()],
+      vehBind: [...bindMap.entries()],
+      vehHubCh: [...hubChMap.entries()],
+      vehFuel: [...fuelMap.entries()],
+      vehBatt: [...battMap.entries()],
+      vehBucket,
+      teksLvl: [...lvlMap.entries()],
       welds: [...welds].map((w) => {
         const [a, b] = w.split("|");
         const [ax, ay, az] = a.split(",").map(Number);
@@ -14109,9 +14244,28 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           hud.bucketCap = vehEnt.bucket.cap;
           if (sample.place && hotbar[slot] !== ID.Fuel && bl > 0) dumpBucketNow();
         }
-        player.x = v.pos.x;
-        player.z = v.pos.z;
-        player.y = v.pos.y + 1.05;
+        // B17 (Philippe): the driver sits at the seat searched at
+        // entry (computeSeatEye) — behind/above the hub with a
+        // measured clearance from every part of the machine. The
+        // original anchor (the mass centre) put the eye inside
+        // the Rig Digger's bodywork: the driving view was a black
+        // screen (rig capture, 2026-10-31).
+        const hubVp = v.parts.find((p) => p.role === "hub");
+        if (hubVp && vehSeatEye) {
+          const eyeW = partWorldPoint(v, hubVp, vehSeatEye);
+          player.x = eyeW.x;
+          player.z = eyeW.z;
+          player.y = eyeW.y - EYE;
+        } else if (hubVp) {
+          const seat = partWorldPoint(v, hubVp, hubVp.centreLocal);
+          player.x = seat.x;
+          player.z = seat.z;
+          player.y = seat.y + 0.9;
+        } else {
+          player.x = v.pos.x;
+          player.z = v.pos.z;
+          player.y = v.pos.y + 1.05;
+        }
         player.vx = 0;
         player.vy = 0;
         player.vz = 0;

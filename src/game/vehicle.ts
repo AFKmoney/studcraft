@@ -114,6 +114,9 @@ export type VPart = {
   group: number;
   /** Rod extension at conversion (a non-joint rod part keeps it). */
   ext0: number;
+  /** Sensor configuration at conversion (P5d cfg; 0 for the rest).
+   *  B17: carried so a mid-drive save restores the sensor as-is. */
+  cfg: number;
   /** Part origin offset from the vehicle origin, WORLD frame at conversion (blocks). For parking. */
   relOrigin: Vec3;
   /** Part origin in the vehicle frame (x right, y up, z rear), blocks. */
@@ -122,6 +125,9 @@ export type VPart = {
   localO: number;
   /** Part centroid in the vehicle frame, blocks. */
   centreLocal: Vec3;
+  /** Part AABB in the vehicle frame, blocks. B17: the driving
+   *  seat search tests candidate eye points against these. */
+  box?: { min: Vec3; max: Vec3 };
   mass: number;
   // wheels
   radius: number;
@@ -361,6 +367,22 @@ export function vehicleFromAssembly(
     const role = roles[i];
     const wo = partWorldOrigin(p);
     const localO = frameO >= 0 ? orientIndex(matMul(Bt, ORIENTS[p.o])) : p.o;
+    // B17: frame-space AABB — the part's lattice box corners
+    // carried through the same basis as centreLocal.
+    const [blo, bhi] = bbox(p.id, p.o);
+    const mn = { x: Infinity, y: Infinity, z: Infinity };
+    const mx = { x: -Infinity, y: -Infinity, z: -Infinity };
+    for (const cx of [blo[0] + p.q[0], bhi[0] + p.q[0]])
+      for (const cy of [blo[1] + p.q[1], bhi[1] + p.q[1]])
+        for (const cz of [blo[2] + p.q[2], bhi[2] + p.q[2]]) {
+          const l = toLocal({ x: cx / 4, y: cy / 4, z: cz / 4 });
+          if (l.x < mn.x) mn.x = l.x;
+          if (l.y < mn.y) mn.y = l.y;
+          if (l.z < mn.z) mn.z = l.z;
+          if (l.x > mx.x) mx.x = l.x;
+          if (l.y > mx.y) mx.y = l.y;
+          if (l.z > mx.z) mx.z = l.z;
+        }
     return {
       uid: p.uid,
       id: p.id,
@@ -369,10 +391,12 @@ export function vehicleFromAssembly(
       role,
       group: Math.max(0, groupOfIdx[i]),
       ext0: p.ext ?? 0,
+      cfg: p.cfg ?? 0,
       relOrigin: sub(wo, origin),
       localPos: toLocal(wo),
       localO: localO >= 0 ? localO : p.o,
       centreLocal: toLocal(centres[i]),
+      box: { min: mn, max: mx },
       mass: partMass(p.id),
       radius: role === "wheel" ? wheelRadius(p) : 0,
       size: role === "motor" ? motorSizeOf(p.id) : null,

@@ -98,6 +98,10 @@ export type SaveV1 = {
   vehHubCh?: [string, string][];
   vehFuel?: [string, number][];
   vehBatt?: [string, number][];
+  /** B17: dig-bucket load of a vehicle that was being DRIVEN when the
+   *  save was written ([itemId, count]); restored into the player's
+   *  inventory on load — a save never deletes matter. */
+  vehBucket?: [number, number][];
   /** P8 machine levels for Teks parts (motors, hubs), keyed by lattice qKey. */
   teksLvl?: [string, number][];
   /** R4: the committed build-identity path ("" / absent = unchosen). */
