@@ -3,6 +3,7 @@ import { CATALOG, COLORS, ID, TEKS, def } from "./blocks";
 import type { EnterKind, GameApi, Phase, Quality, Upscale } from "./game";
 import { RECIPES, type Recipe } from "./recipes";
 import { CODEX, PERKS } from "./ranks";
+import { PATHS, PATH_CHANGE_COST } from "./identity";
 import { ItemIcon } from "./icons";
 import { SKILLS } from "./skills";
 import type { WorldSlot } from "./save";
@@ -1879,7 +1880,7 @@ function Inventory({ game }: { game: GameApi }) {
           <div className="sc-scroll">
             {page === "bin" && <BinPage game={game} />}
             {page === "craft" && <CraftPage game={game} />}
-            {page === "ranks" && <Ranks hud={hud} />}
+            {page === "ranks" && <Ranks hud={hud} game={game} />}
             {page === "quests" && <QuestList hud={hud} onClaim={(id) => game.claim(id)} />}
             {page === "skills" && <SkillTree hud={hud} onUnlock={(id) => game.unlock(id)} />}
           </div>
@@ -1909,7 +1910,7 @@ function InvHotbar({ game }: { game: GameApi }) {
           }}
         >
           <span className="sc-cell-hb">{i + 1}</span>
-          {i === hud.slot && item.id > 0 && <span className="sc-name-pill">{def(item.id).name}</span>}
+          {i === hud.slot && item.id > 0 && <span className="sc-name-pill">{hud.named[item.id] ?? def(item.id).name}</span>}
           {item.id > 0 && <ItemIcon id={item.id} />}
           {item.id > 0 && !hud.creative && item.count > 1 && <em>{item.count > 999 ? "999+" : item.count}</em>}
         </button>
@@ -1999,7 +2000,7 @@ function BinGrid({ game, filter = "", cat = "all", onPick }: { game: GameApi; fi
             }}
           >
             {hbIndex >= 0 && <span className="sc-cell-hb">{hbIndex + 1}</span>}
-            {hud.cursor === id && <span className="sc-name-pill">{d.name}</span>}
+            {hud.cursor === id && <span className="sc-name-pill">{hud.named[id] ?? d.name}</span>}
             <ItemIcon id={id} />
             {d.maxUse > 0 && durPct >= 0 ? (
               <span className="sc-dur-bar">
@@ -2061,7 +2062,7 @@ function BinPage({ game }: { game: GameApi }) {
         </div>
         {hud.cursor > 0 && (
           <div className="sc-item-bubble" key={hud.cursor}>
-            <ItemIcon id={hud.cursor} /> {def(hud.cursor).name}
+            <ItemIcon id={hud.cursor} /> {hud.named[hud.cursor] ?? def(hud.cursor).name}
           </div>
         )}
         <div className="sc-chips sc-bin-chips">
@@ -2767,7 +2768,7 @@ function SkillTree({ hud, onUnlock }: { hud: GameApi["hud"]; onUnlock: (id: stri
   );
 }
 
-function Ranks({ hud }: { hud: GameApi["hud"] }) {
+function Ranks({ hud, game }: { hud: GameApi["hud"]; game: GameApi }) {
   const known = useMemo(() => new Set(hud.found), [hud.found]);
   const pct = Math.min(100, (hud.xp / Math.max(1, hud.xpNeed)) * 100);
   return (
@@ -2784,6 +2785,35 @@ function Ranks({ hud }: { hud: GameApi["hud"] }) {
           </small>
         </div>
       </div>
+      <p className="sc-label">Your path — build identity</p>
+      <ul className="sc-cards">
+        {PATHS.map((p) => {
+          const active = hud.path === p.id;
+          const changing = !!hud.path && !active;
+          const afford = (hud.inv[ID.Emerald] ?? 0) >= PATH_CHANGE_COST;
+          return (
+            <li key={p.id} className={"sc-card" + (active ? " learned" : "")}>
+              <div className="sc-card-text">
+                <strong>
+                  {p.name}
+                  {active ? " — your path" : ""}
+                </strong>
+                <span>{p.bonus}</span>
+              </div>
+              {!active && (
+                <MenuButton
+                  variant={changing ? "ghost" : "primary"}
+                  disabled={changing && !hud.creative && !afford}
+                  onClick={() => game.choosePath(p.id)}
+                  hint={changing ? `Changing your path costs ${PATH_CHANGE_COST} emeralds — identity is a commitment` : "Commit to this path — the first choice is free"}
+                >
+                  {changing ? `Change · ${PATH_CHANGE_COST} emeralds` : "Choose"}
+                </MenuButton>
+              )}
+            </li>
+          );
+        })}
+      </ul>
       <p className="sc-label">Perks</p>
       <ul className="sc-cards">
         {PERKS.map((perk) => (

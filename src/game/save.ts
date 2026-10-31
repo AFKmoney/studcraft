@@ -85,6 +85,10 @@ export type SaveV1 = {
   vehBatt?: [string, number][];
   /** P8 machine levels for Teks parts (motors, hubs), keyed by lattice qKey. */
   teksLvl?: [string, number][];
+  /** R4: the committed build-identity path ("" / absent = unchosen). */
+  path?: string;
+  /** R4: named relics riding on owned gear: [baseId, name, affixKeys]. */
+  named?: [number, string, string[]][];
   worldDays?: number;
 };
 

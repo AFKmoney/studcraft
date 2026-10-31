@@ -4,6 +4,7 @@ import { TechWorld, ORIENTS, composeO, worldCells, rot, SENSOR_RANGES, SENSOR_TA
 import { buildTeksGeometry, buildTeksRodGeometries } from "./teksGeo";
 import { analyzeComponent } from "./gravity";
 import { dissolvedYield } from "./dissolve";
+import { AFFIXES, PATHS, PATH_CHANGE_COST, rollRelic, type AffixKey, type PathId, type Relic } from "./identity";
 import { fuelFromMelt, jointAffine, jointChain, jointForce, parkPoses, partWorldPoint, refuel as vehRefuel, stepVehicle as stepVeh, vehicleFromAssembly, type Vehicle, type VPart } from "./vehicle";
 import { FUEL, type Channel } from "./p5bProto";
 import { builtinModels, decodeModel, encodeModel, loadCatalogue, modelFromParts, removeModel, storeCatalogue, upsertModel, type VehicleModel } from "./catalogue";
@@ -20,7 +21,7 @@ import { MpClient } from "./mp";
 import { clearSave, deleteWorld, hasSave, listWorlds, loadLatest, loadSettings, loadWorld, writeSettings, writeWorld, type SaveV1, type WorldSlot } from "./save";
 import { buildAtlas } from "./textures";
 import { CS, HEIGHT, SEA, World, decorate, folkLayout, inNether, penSheep, paintEndCrystals, END_PILLARS, type Decor, type FolkSpot } from "./world";
-import { debrisAt } from "./debris";
+import { DEBRIS_ADVANCED, debrisAt } from "./debris";
 import { stockChest } from "./loot";
 import { mayYield, spillSlots } from "./yields";
 import { Upscaler, upscaleScale } from "./upscale";
@@ -44,6 +45,9 @@ export type Hud = {
   xpNeed: number;
   level: number;
   rank: string;
+  /** R4: committed path id ("" = unchosen) + relic display names by gear id. */
+  path: string;
+  named: Record<number, string>;
   nextPerk: string;
   found: number[];
   oxygen: number;
@@ -224,6 +228,7 @@ export type GameApi = {
   armorTap: (i: number) => void;
   furnaceTap: (part: number) => void;
   upgradeFurnace: () => void;
+  choosePath: (id: string) => void;
   chestTap: (i: number) => void;
   chestStore: (id: number) => void;
   furnaceQuick: (id: number) => void;
@@ -365,6 +370,9 @@ declare global {
       placeTechAt?: (id: number, o: number, qx: number, qy: number, qz: number) => boolean;
       getTeks?: () => [number, number, number, number, number, number][];
       getSensors?: () => { id: number; cfg: number; sense: number; ch: string }[];
+      getPath?: () => string;
+      getRelics?: () => { baseId: number; name: string; affixes: string[] }[];
+      grantRelicQa?: () => void;
       openTradeQa?: (role: string) => boolean;
       getFolkRoles?: () => string[];
       getPrefabs?: () => { name: string; parts: number; ingots: number; copper: number; afford: boolean }[];
@@ -459,6 +467,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     xpNeed: 10,
     level: 0,
     rank: "Bricklet",
+    path: "",
+    named: {},
     nextPerk: "Steady hands",
     found: [],
     oxygen: 10,
@@ -667,6 +677,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let hungerEx = 0;
   let xp = 0;
   let rankLv = 0;
+  // R4 build identity: the committed specialization ("" = not yet
+  // chosen) and the named relics riding on owned gear ids.
+  let pathId: PathId | "" = "";
+  const namedGear = new Map<number, Relic>();
+  const hasAffix = (id: number, key: AffixKey) => namedGear.get(id)?.affixes.includes(key) ?? false;
+  const foundryCookMul = () => (pathId === "founder" ? 0.8 : 1);
   const skills = new Set<string>();
   let mana = 8;
   let spellIx = 0;
@@ -3812,6 +3828,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     hud.xpNeed = needXp;
     hud.level = rankLv;
     hud.rank = rankTitle(rankLv);
+    hud.path = pathId;
+    hud.named = Object.fromEntries([...namedGear.values()].map((r) => [r.baseId, r.name]));
     hud.nextPerk = nextPerk(rankLv)?.name ?? "";
     // v4.18 perf diet: snapshot() runs ~8×/s — don't re-spread the catalogue
     // (hundreds of ids late-game) unless it actually grew.
@@ -3837,9 +3855,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const nxt = (furn.lvl ?? 1) < 3 ? FOUNDRY_LVL[furn.lvl ?? 1] : null;
       hud.furnace = {
         in: furn.in, inN: furn.inN, fuel: furn.fuel, fuelN: furn.fuelN, out: furn.out, outN: furn.outN,
-        cook: furn.cook / fl.cook, burn: furn.burn,
-        lvl: furn.lvl ?? 1, lvlName: fl.name, cookSecs: fl.cook, fuelMul: fl.fuelMul,
-        upg: nxt ? { cost: nxt.cost!, ok: lvlAfford(nxt.cost!), cookSecs: nxt.cook, fuelMul: nxt.fuelMul } : null,
+        cook: furn.cook / (fl.cook * foundryCookMul()), burn: furn.burn,
+        lvl: furn.lvl ?? 1, lvlName: fl.name, cookSecs: Math.round(fl.cook * foundryCookMul() * 10) / 10, fuelMul: fl.fuelMul,
+        upg: nxt ? { cost: lvlCostFor(nxt.cost!), ok: lvlAfford(nxt.cost!), cookSecs: Math.round(nxt.cook * foundryCookMul() * 10) / 10, fuelMul: nxt.fuelMul } : null,
       };
     } else {
       hud.furnace = { in: 0, inN: 0, fuel: 0, fuelN: 0, out: 0, outN: 0, cook: 0, burn: 0, lvl: 1, lvlName: "Foundry", cookSecs: 5, fuelMul: 1, upg: null };
@@ -4060,6 +4078,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     if (skills.has("joint") && Math.random() < 0.4) return;
     const unb = enchLvl(id, "unbreaking");
     if (unb > 0 && Math.random() < unb * 0.22) return;
+    if (hasAffix(id, "sturdy") && Math.random() < 0.5) return; // R4 relic affix
     inv[id] = (inv[id] ?? 0) - 1;
     if (inv[id] <= 0) {
       inv[id] = 0;
@@ -4301,6 +4320,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     for (const id of data.found ?? []) found.add(id);
     skills.clear();
     for (const id of data.skills ?? []) skills.add(id);
+    pathId = (PATHS.some((p) => p.id === data.path) ? data.path : "") as PathId | "";
+    namedGear.clear();
+    for (const [bid, name, affs] of data.named ?? []) {
+      const ok = (affs ?? []).filter((a) => a === "keen" || a === "swift" || a === "sturdy" || a === "lucky") as AffixKey[];
+      if (ok.length === 2) namedGear.set(bid, { baseId: bid, name, affixes: [ok[0], ok[1]] });
+    }
     mana = data.mana ?? manaMaxFor(skills);
     spellIx = data.spell ?? 0;
     oxygen = 10;
@@ -4895,7 +4920,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const canDrop = mayYield(creative, block.need, tier);
     // Yields fall in both modes. Creative used to swallow every drop.
     const yieldAt = (dropId: number) => dropItem(dropId, 1, x + 0.5, y + 0.55, z + 0.5);
-    if (canDrop) for (let p = 0, py = plasticYield(id); p < py; p++) yieldAt(ID.Pellets);
+    if (canDrop) for (let p = 0, py = plasticYield(id) + (plasticYield(id) > 0 && hasAffix(hotbar[slot], "lucky") ? 1 : 0); p < py; p++) yieldAt(ID.Pellets); // R4 Lucky affix
     if (canDrop && id === ID.Leaves) {
       if (Math.random() < 0.08) yieldAt(ID.Apple);
       if (Math.random() < 0.12) yieldAt(ID.Stick);
@@ -5982,11 +6007,17 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   function lvlCostText(cost: LvlCost): string {
     return cost.map(([cid, n]) => n + "× " + def(cid).name).join(" + ");
   }
+  /** R4 Mechanic path: machine upgrades cost 25% less matter. This
+   *  is the single choke point — every afford/pay/display of an
+   *  upgrade cost routes through here. */
+  function lvlCostFor(cost: LvlCost): LvlCost {
+    return pathId === "mechanic" ? (cost.map(([cid, n]) => [cid, Math.max(1, Math.ceil(n * 0.75))] as [number, number]) as LvlCost) : cost;
+  }
   function lvlAfford(cost: LvlCost): boolean {
-    return cost.every(([cid, n]) => (inv[cid] ?? 0) >= n);
+    return lvlCostFor(cost).every(([cid, n]) => (inv[cid] ?? 0) >= n);
   }
   function lvlPay(cost: LvlCost) {
-    for (const [cid, n] of cost) spend(cid, n);
+    for (const [cid, n] of lvlCostFor(cost)) spend(cid, n);
   }
   tech.rpmMul = (p) => MOTOR_LVL[(teksLvl.get(qKey(p.q)) ?? 1) - 1].mul;
   // Upgrade gesture state: first Use (holding ingots) makes the
@@ -6011,7 +6042,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       : "speed ×" + MOTOR_LVL[lvl].mul;
     if ((upgPending.get(k) ?? 0) > elapsed) {
       if (!lvlAfford(target.cost!)) {
-        say("Upgrade needs " + lvlCostText(target.cost!) + " — you don't have it all");
+        say("Upgrade needs " + lvlCostText(lvlCostFor(target.cost!)) + " — you don't have it all");
         upgPending.delete(k);
         return true;
       }
@@ -6024,7 +6055,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return true;
     }
     upgPending.set(k, elapsed + 3);
-    say(name + " L" + lvl + " → L" + (lvl + 1) + ": " + effect + " · " + lvlCostText(target.cost!) + " — use again to confirm");
+    say(name + " L" + lvl + " → L" + (lvl + 1) + ": " + effect + " · " + lvlCostText(lvlCostFor(target.cost!)) + " — use again to confirm");
     return true;
   }
   type VehEnt = {
@@ -6730,7 +6761,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const canDrop = !block.need || tier >= block.need;
       const yieldAt = (dropId: number) => dropItem(dropId, 1, bx + 0.5, b.sy + 0.55, bz + 0.5);
       // P6: a broken brick yields foundry pellets too (same table as voxel).
-      if (canDrop) for (let p = 0, py = plasticYield(b.id); p < py; p++) yieldAt(ID.Pellets);
+      if (canDrop) for (let p = 0, py = plasticYield(b.id) + (plasticYield(b.id) > 0 && hasAffix(hotbar[slot], "lucky") ? 1 : 0); p < py; p++) yieldAt(ID.Pellets); // R4 Lucky affix
       if (canDrop && block.drop !== -1) yieldAt(enchLvl(hotbar[slot], "silk") > 0 ? b.id : block.drop || b.id);
       if (canDrop && block.drop !== -1 && (ORE_XP[b.id] ?? 0) > 0 && enchLvl(hotbar[slot], "silk") === 0) {
         const fort = held.tool === "pick" ? enchLvl(hotbar[slot], "fortune") : 0;
@@ -7297,7 +7328,21 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
             : near
               ? "hamlet"
               : "wild";
+      const freshBin = !bin.ids.some((bid) => bid > 0);
       stockChest(bin, x, y, z, world.seed, lootPool);
+      // R4: on the FIRST opening of a monument chest, its vault can
+      // yield a named relic; the Scavenger path doubles that chance
+      // and guarantees the §11 Teks jackpot part.
+      if (freshBin && ["wreck", "ruin", "mine", "shrine", "tomb", "reef", "dungeon", "pyramid", "temple", "castle", "mansion", "monument", "witch_hut"].includes(lootPool)) {
+        if (pathId === "scavenger" && !bin.ids.some((bid) => TEKS_SET.has(bid))) {
+          const slotIx = bin.ids.findIndex((bid) => !bid);
+          if (slotIx >= 0) {
+            bin.ids[slotIx] = DEBRIS_ADVANCED[Math.floor(Math.random() * DEBRIS_ADVANCED.length)];
+            bin.ns[slotIx] = 1;
+          }
+        }
+        if (Math.random() < (pathId === "scavenger" ? 0.5 : 0.25)) grantRelic("vault");
+      }
     }
     if (next === "furnace") ensureFurnace(x + "," + y + "," + z, x, y, z);
     if (phase !== "inventory") {
@@ -10677,9 +10722,30 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     spawnKind("creeper", x, z);
   }
 
+  // R4: grant a rolled named relic. The bag holds one instance per
+  // gear id, so a base the player already owns (named or not)
+  // converts to pellets instead — nothing is ever lost.
+  function grantRelic(source: string) {
+    const relic = rollRelic(Math.random(), Math.random(), Math.random());
+    if (namedGear.has(relic.baseId) || (inv[relic.baseId] ?? 0) > 0) {
+      addInv(ID.Pellets, 8);
+      say("A second " + def(relic.baseId).name + " would clash — the " + source + " relic melts into 8 pellets");
+      return;
+    }
+    namedGear.set(relic.baseId, relic);
+    give(relic.baseId, 1);
+    say("✦ Relic found: " + relic.name + " — " + relic.affixes.map((a) => AFFIXES[a].desc).join(" · "), 4200);
+    saveDirty = true;
+  }
+
   function killMob(mob: Mob) {
     if (mob.dead) return;
     mob.dead = true;
+    // R4: bosses and mini-bosses can drop named relics.
+    if ((mob.byPlayerT ?? 0) > 0) {
+      const relicChance = mob.kind === "dragon" || mob.kind === "wither" ? 0.4 : mob.kind === "ravager" || mob.kind === "evoker" ? 0.15 : 0;
+      if (relicChance > 0 && Math.random() < relicChance) grantRelic(mob.kind);
+    }
     topple(mob);
     if ((mob.byPlayerT ?? 0) > 0) {
       if (mob.kind === "villager") addRep(repKeyFor(mob.homeX ?? mob.x, mob.homeZ ?? mob.z), -20);
@@ -12086,6 +12152,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       village: villageAt,
       quests: quests.map((q) => ({ id: q.id, n: q.n, done: q.done })),
       skills: [...skills],
+      path: pathId,
+      named: [...namedGear.values()].map((r) => [r.baseId, r.name, [...r.affixes]] as [number, string, string[]]),
       mana,
       spell: spellIx,
       won,
@@ -12562,6 +12630,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         if ((blade.tool === "sword" || blade.tool === "axe") && mob.kind === "spider") dmg += enchLvl(heldWeaponId, "bane") * 2;
         if ((heldWeaponId === ID.TidalBlade || heldWeaponId === ID.Trident) && (mob.kind === "guardian" || mob.kind === "drowned" || inWaterNow())) dmg += 3;
         if (rankLv >= 18 && blade.tool === "sword") dmg += 1;
+        if (hasAffix(heldWeaponId, "keen")) dmg += 2; // R4 relic affix
         const hostile =
           mob.kind === "walker" ||
           mob.kind === "creeper" ||
@@ -12699,6 +12768,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         const eff = enchLvl(hotbar[slot], "efficiency");
         if (eff > 0 && rightTool) need = (block.hard * (slowRate ? 5 : 1.5)) / (speed + eff * eff + 1);
         if (rankLv >= 2) need /= 1.15;
+        if (pathId === "breaker") need /= 1.25; // R4 Breaker path
+        if (hasAffix(hotbar[slot], "swift")) need /= 1.15; // R4 relic affix
         if (hammer && block.tough) need *= 0.38;
         hud.mine = Math.min(1, mineTime / Math.max(need, 0.01));
         hideCrack(); // v1: no crack overlay on bricks — hud.mine + sound carry it
@@ -12817,11 +12888,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
               const left: number[] = [];
               for (let p = 0; p < 12; p++) if (!(rm & (1 << p))) left.push(p);
               left.sort((a, b) => depth(a) - depth(b) || Math.random() - 0.5);
-              chipPieces(hit.x, hit.y, hit.z, left.slice(0, 2), () => [
+              chipPieces(hit.x, hit.y, hit.z, left.slice(0, pathId === "breaker" ? 3 : 2), () => [ // R4 Breaker: 3 chips a stage
                 hit.nx * 2.2 + (Math.random() - 0.5) * 1.4,
                 1.6 + hit.ny * 1.5 + Math.random() * 1.2,
                 hit.nz * 2.2 + (Math.random() - 0.5) * 1.4,
-              ], { n: 2 });
+              ], { n: pathId === "breaker" ? 3 : 2 });
             } else {
               burst(
                 hit.x + 0.5 + hit.nx * 0.55 + (Math.random() - 0.5) * 0.3,
@@ -13748,12 +13819,15 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       if (f.burn > 0 && can) {
         f.cook += dt;
-        if (f.cook >= flvl.cook) {
+        if (f.cook >= flvl.cook * foundryCookMul()) {
           f.cook = 0;
+          const inId = f.in; // capture BEFORE the decrement zeroes it (the yield keys on the input)
           f.inN -= 1;
           if (f.inN <= 0) f.in = 0;
           f.out = product;
-          f.outN += SMELT_N[f.in] ?? 1; // §11: recycling a Teks part yields several pellets
+          // §11 recycling yield; R4 Founder path raises it to ~75%.
+          const yieldN = SMELT_N[inId] ?? 1;
+          f.outN += product === ID.Pellets && pathId === "founder" ? Math.ceil(yieldN * 1.5) : yieldN;
           // P5b (Muse): the Foundry's second yield — smelting pellets
           // (the only road to a PlasticIngot) also distils FUEL at
           // 0.25/pellet (the FUEL numbers in p5bProto.ts), paid out as
@@ -14273,6 +14347,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     getTeks: () => [...tech.parts.values()].map((p) => [p.id, p.o, p.q[0], p.q[1], p.q[2], p.on === false ? 0 : 1] as [number, number, number, number, number, number]),
     // P5d QA hook (inert in play): live sensor configs + readings.
     getSensors: () => [...tech.parts.values()].filter((p) => techSpec(p.id)?.sensor).map((p) => ({ id: p.id, cfg: p.cfg ?? 0, sense: p.sense ?? 0, ch: motorChannelByQ.get(qKey(p.q)) ?? "A" })),
+    // R4 QA hooks (inert in play).
+    getPath: () => pathId,
+    getRelics: () => [...namedGear.values()].map((r) => ({ baseId: r.baseId, name: r.name, affixes: [...r.affixes] })),
+    grantRelicQa: () => grantRelic("qa"),
     // Section 22 P-A QA hooks (inert in play).
     openTradeQa: (role: string) => {
       const mob = mobs.find((m) => !m.dead && m.kind === "villager" && m.role === role && Math.hypot(m.x - player.x, m.z - player.z) < 32);
@@ -15092,6 +15170,19 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       armor[i] = 0;
       addInv(id, 1);
       emit();
+    },
+    choosePath(id) {
+      const target = PATHS.find((p) => p.id === id);
+      if (!target) return;
+      if (pathId === target.id) return say("You already walk " + target.name);
+      if (pathId && !creative) {
+        if ((inv[ID.Emerald] ?? 0) < PATH_CHANGE_COST) return say("Changing your path costs " + PATH_CHANGE_COST + " emeralds — identity is a commitment");
+        spend(ID.Emerald, PATH_CHANGE_COST);
+      }
+      pathId = target.id;
+      say("Your path: " + target.name + " — " + target.bonus, 4200);
+      audio.place();
+      saveDirty = true;
     },
     upgradeFurnace() {
       const f = furnaces.get(focus.x + "," + focus.y + "," + focus.z);
