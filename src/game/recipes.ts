@@ -1,5 +1,6 @@
 import { ID, TEKS, def } from "./blocks.ts";
 import { SPECS, type Spec } from "./teks.ts";
+import { RARE_MELT } from "./foundry.ts";
 
 export type Recipe = {
   id: string;
@@ -1624,6 +1625,13 @@ export const SMELT_N: Record<number, number> = {};
 for (const id of TEKS) {
   SMELT[id] = ID.Pellets;
   SMELT_N[id] = Math.max(1, Math.round(teksCastCost(id).ingots * 0.5));
+}
+
+// Grok Bot foundry pass: rare drops melt into pellets AND charge the
+// molten pool with a purity spike + affix (see foundry.ts RARE_MELT).
+for (const [k, v] of Object.entries(RARE_MELT)) {
+  SMELT[+k] = ID.Pellets;
+  SMELT_N[+k] = v.pellets;
 }
 
 export function fuelTime(id: number): number {
