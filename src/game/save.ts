@@ -24,6 +24,10 @@ export type SaveV1 = {
   rankXp?: number;
   found?: number[];
   armor?: number[];
+  /** v6: wear per armor id (durability = max − wear). */
+  armorWear?: Record<string, number>;
+  /** v6: the anvil's second slot (a stored copy waiting to be combined). */
+  anvilSpare?: { id: number; dur: number } | null;
   hammer: boolean;
   hotbar: number[];
   inv: [number, number][];

@@ -161,3 +161,13 @@ Journal de travail de studs game tester (Grok Bot) sur StudCraft. Heures en heur
 - **Ids `:llm`** : `baseQuestId()` retire le suffixe. `next()`, `accept()`, `claim()`, `done` et le pré-chargement du directeur comparent maintenant les ids de base. Nouveau test dans societyState.test.ts.
 - **GPU logiciel** : `gpuLayers()` force `n_gpu_layers = 0` sur SwiftShader, llvmpipe ou un adaptateur logiciel détecté.
 - **Délai de pré-génération** : `PREFETCH_TIMEOUT_MS` = 75 s pour la génération en arrière-plan sur CPU. Le délai interactif reste à 12 s.
+
+## 2026-10-31 — Vérification des déploiements (#8, #9, #10)
+- studcraft.pages.dev a servi chaque merge environ 13 à 15 min plus tard. GitHub n'a reçu aucun statut Cloudflare, donc la vérification s'est faite dans le chunk `game-*.js` en ligne, avec des marqueurs propres à chaque PR : « Bonsai » et `genWorker` pour #8, « Kiln: PLASTIC » pour #9, `/:llm$/` pour #10 (en ligne à 13 h 51 HP).
+- Attention : le site renvoie 200 et index.html pour tout asset inexistant (fallback SPA). Un code 200 ne prouve donc rien, il faut vérifier le contenu.
+
+## 2026-10-31 — Les 3 petites choses (Philippe, t77u)
+- **Fusion à l'enclume** : l'enclume a un 2e emplacement (`anvilSpare`, sauvegardé). « Ranger » y met l'outil tenu, ce qui permet d'en fabriquer ou d'en tenir un deuxième. « Fusionner » additionne les durabilités + 10 % du max, plafonné au max (`combineDur`). « Reprendre » rend l'outil rangé.
+- **Durabilité des armures** : usure par id (`armorWear`, sauvegardée). Chaque coup reçu use chaque pièce portée de ceil(dégâts / 2). La pièce casse à 0 et est retirée. Max = maxUse s'il existe, sinon 60 + armure × 400. Le bouton « Réparer l'armure portée » de l'enclume répare avec du plastique de qualité adaptée (même `repairCost`). Retirer et remettre une pièce garde l'usure ; une pièce neuve repart à 0.
+- **Fonte au four** : en mode Plastique, le bouton « Melt held item » fond l'objet tenu (outil ou armure) selon les mêmes règles que l'enclume : 50 % du coût plastique × durabilité restante, objets en gemmes et en bois refusés.
+- Tests : `armor.test.ts` (4 tests).

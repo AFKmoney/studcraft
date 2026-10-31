@@ -22,7 +22,7 @@ import { Director, generateQuest, newStory, storyFrom, type WorldView } from "./
 import { PREFETCH_TIMEOUT_MS } from "./llm/prompt";
 import { NpcModel } from "./llm/runtime";
 import { GenPool, poolSize, type WorkerLike } from "./genPool";
-import { repairCost } from "./foundry";
+import { armorMaxDur, combineDur, repairCost, wearArmor } from "./foundry";
 import { plasticCost, salvageOf } from "./recipes";
 import { AFFIX_INFO, MATERIALS, RARE_MELT, TIERS, cookRate, meltInto, meltRatioStep, rejectReason, poolGlow, pour, stepHeat, tierIndex, type Pool } from "./foundry";
 import { DISCOVER, MOB_XP, ORE_HEAR, ORE_XP, nextPerk, rankTitle, xpNeed } from "./ranks";
@@ -269,6 +269,16 @@ export type GameApi = {
   mend: () => void;
   salvage: () => void;
   repairQuote: () => string;
+  /** v6: repair all worn armor with plastic. */
+  repairArmor: () => void;
+  /** v6 combine: anvil 2nd slot — store / take back / merge with the held copy. */
+  anvilStore: () => void;
+  anvilTake: () => void;
+  anvilMerge: () => void;
+  anvilSlotLabel: () => string;
+  armorLabel: () => string;
+  /** v6: kiln (plastic mode) salvage of the held used item. */
+  kilnSalvage: () => void;
   temper: () => void;
   brew: (kind: string) => void;
   beacon: (buff: string) => void;
@@ -770,6 +780,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let growAcc = 0;
   let lightAcc = 0;
   const armor = [0, 0, 0, 0];
+  // v6: armor durability (wear per armor id) and the anvil's 2nd slot.
+  let armorWear: Record<number, number> = {};
+  let anvilSpare: { id: number; dur: number } | null = null;
+  const armorMax = (id: number) => armorMaxDur(def(id));
   let grid = [0, 0, 0, 0, 0, 0, 0, 0, 0];
   let cursor = 0;
   let panel: "bag" | "bench" | "furnace" | "chest" | "enchant" | "anvil" | "brew" | "trade" | "beacon" = "bag";
@@ -4629,6 +4643,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const prev = armor[d.armorSlot - 1];
       if (prev) addInv(prev, 1);
       armor[d.armorSlot - 1] = id;
+      if (!(inv[id] ?? 0)) delete armorWear[id]; // a freshly made piece is new
       say(d.name + " on");
     } else addInv(id, n);
     saveDirty = true;
@@ -4649,6 +4664,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     flash = 0;
     invuln = 0;
     armor[0] = armor[1] = armor[2] = armor[3] = 0;
+    armorWear = {};
+    anvilSpare = null;
     grid = [0, 0, 0, 0, 0, 0, 0, 0, 0];
     cursor = 0;
     panel = "bag";
@@ -4856,6 +4873,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     oxygen = 10;
     flying = false;
     hammer = !!data.hammer;
+    armorWear = {};
+    for (const [k, v] of Object.entries(data.armorWear ?? {})) if (Number.isFinite(+k) && typeof v === "number" && v > 0) armorWear[+k] = v;
+    anvilSpare = data.anvilSpare && typeof data.anvilSpare.id === "number" && typeof data.anvilSpare.dur === "number" ? { id: data.anvilSpare.id, dur: data.anvilSpare.dur } : null;
     armor[0] = data.armor?.[0] ?? 0;
     armor[1] = data.armor?.[1] ?? 0;
     armor[2] = data.armor?.[2] ?? 0;
@@ -5288,6 +5308,17 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       prot += enchLvl(id, "protection");
     }
     const dealt = Math.max(1, Math.round(n * (1 - Math.min(0.8, resist + prot * 0.03))));
+    // v6: worn armor wears with each hit and breaks at 0.
+    if (armor.some((a) => a)) {
+      const r = wearArmor(armor, armorWear, n, armorMax);
+      armorWear = r.wear;
+      for (const b of r.broken) {
+        const i = armor.indexOf(b);
+        if (i >= 0) armor[i] = 0;
+        say(def(b).name + " broke");
+      }
+      saveDirty = true;
+    }
     health = Math.max(0, health - dealt);
     invuln = 0.7;
     hurtAgo = 0;
@@ -13134,6 +13165,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       rankXp: xp,
       found: [...found],
       armor: [...armor],
+      armorWear: { ...armorWear },
+      anvilSpare,
       hammer,
       hotbar: [...hotbar],
       inv: invList,
@@ -14793,6 +14826,23 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // so the QA rig can advance it deterministically (stepFurnace hook —
   // the stepBricks precedent: rig frames run far slower than game time,
   // so a 5 s cook would otherwise take minutes of wall time to observe).
+  /** v6: salvage the held used item (anvil or plastic-mode kiln): 50 % of
+   *  its plastic × durability left; gem-made / wood-only items refused. */
+  function salvageHeld(where: "anvil" | "kiln") {
+    const id = hotbar[slot];
+    const d = def(id);
+    if (!id || (!d.maxUse && !d.armor && !plasticCost(id))) return say("Hold a crafted item to salvage");
+    const max = d.maxUse || (d.armor ? armorMax(id) : 1);
+    const dur = d.maxUse ? (inv[id] ?? 0) : d.armor ? max - (armorWear[id] ?? 0) : 1;
+    const sv = salvageOf(id, dur, max);
+    if (!sv.ok) return say(sv.why ?? "Can't salvage that");
+    if (!creative) spend(id, d.maxUse ? (inv[id] ?? 0) : 1);
+    if (d.armor && !(inv[id] ?? 0)) delete armorWear[id];
+    if (sv.pellets > 0) addInv(ID.Pellets, sv.pellets);
+    say((where === "kiln" ? "Melted down" : "Salvaged") + " → " + sv.pellets + " pellets");
+    saveDirty = true;
+    emit();
+  }
   /** v6 final: normal mode = SMELT (unchanged crafting); plastic mode = PLASTIC. */
   function smeltFor(f: { plastic?: boolean }, id: number): number {
     return (f.plastic ? PLASTIC[id] : SMELT[id]) ?? 0;
@@ -16623,15 +16673,76 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       emit();
     },
     salvage() {
+      salvageHeld("anvil");
+    },
+    kilnSalvage() {
+      const f = furnaces.get(focus.x + "," + focus.y + "," + focus.z);
+      if (!f?.plastic) return say("Switch the kiln to Plastic mode to salvage");
+      salvageHeld("kiln");
+    },
+    repairArmor() {
+      const worn = armor.filter((a) => a && (armorWear[a] ?? 0) > 0);
+      if (!worn.length) return say("Your armor is in full shape");
+      let done = 0;
+      for (const id of worn) {
+        const d = def(id);
+        const max = armorMax(id);
+        const cost = repairCost(max - (armorWear[id] ?? 0), max, d.tier || (d.armor >= 1 ? 3 : 1), plasticCost(id) < 0);
+        if (cost.n <= 0) continue;
+        if (!creative && (inv[cost.item] ?? 0) < cost.n) {
+          say("Need " + cost.n + " " + def(cost.item).name + " for " + d.name);
+          continue;
+        }
+        if (!creative) spend(cost.item, cost.n);
+        delete armorWear[id];
+        done++;
+      }
+      if (done) say("Armor repaired (" + done + ")");
+      saveDirty = true;
+      emit();
+    },
+    anvilStore() {
       const id = hotbar[slot];
       const d = def(id);
-      if (!id || (!d.maxUse && !d.armor && !plasticCost(id))) return say("Hold a crafted item to salvage");
-      const sv = salvageOf(id, d.maxUse ? (inv[id] ?? 0) : 1, d.maxUse || 1);
-      if (!sv.ok) return say(sv.why ?? "Can't salvage that");
-      if (!creative) spend(id, d.maxUse ? (inv[id] ?? 0) : 1);
-      if (sv.pellets > 0) give(ID.Pellets, sv.pellets);
-      say("Salvaged → " + sv.pellets + " pellets");
+      if (!d.maxUse) return say("Hold a tool or weapon to store");
+      if (anvilSpare) return say("The anvil slot is taken — take it back or merge first");
+      anvilSpare = { id, dur: inv[id] ?? 0 };
+      inv[id] = 0;
+      hotbar[slot] = 0;
+      say(d.name + " stored in the anvil slot — hold another one to merge");
+      saveDirty = true;
       emit();
+    },
+    anvilTake() {
+      if (!anvilSpare) return say("The anvil slot is empty");
+      const { id, dur } = anvilSpare;
+      if ((inv[id] ?? 0) > 0) return say("You already carry a " + def(id).name.toLowerCase() + " — merge instead");
+      inv[id] = dur;
+      if (!hotbar.includes(id)) {
+        const e = hotbar.indexOf(0);
+        if (e >= 0) hotbar[e] = id;
+      }
+      anvilSpare = null;
+      saveDirty = true;
+      emit();
+    },
+    anvilMerge() {
+      const id = hotbar[slot];
+      if (!anvilSpare) return say("Store a copy in the anvil slot first");
+      if (id !== anvilSpare.id) return say("Hold the same item as the anvil slot (" + def(anvilSpare.id).name + ")");
+      const max = def(id).maxUse;
+      inv[id] = combineDur(inv[id] ?? 0, anvilSpare.dur, max);
+      anvilSpare = null;
+      say("Merged → " + inv[id] + "/" + max);
+      saveDirty = true;
+      emit();
+    },
+    anvilSlotLabel() {
+      return anvilSpare ? "Anvil slot: " + def(anvilSpare.id).name + " " + anvilSpare.dur + "/" + def(anvilSpare.id).maxUse : "Anvil slot: empty";
+    },
+    armorLabel() {
+      const w = armor.filter((a) => a).map((a) => def(a).name + " " + (armorMax(a) - (armorWear[a] ?? 0)) + "/" + armorMax(a));
+      return w.length ? "Armor: " + w.join(" · ") : "";
     },
     repairQuote() {
       const id = hotbar[slot];
