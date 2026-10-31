@@ -54,6 +54,10 @@ export type Spec = {
   // P5c-2: passive air parts. Air flows between air parts (rod pump/cyl
   // kinds included) whose world AABBs touch.
   air?: "tank" | "valve" | "pipe";
+  // P5d: sensors. Facing = local +X (a motor's output side). The
+  // reading is evaluated in game.ts (it needs the voxel world);
+  // per-part configuration is packed in Part.cfg.
+  sensor?: "dist" | "color";
   hand?: number; // optional display scale in hand
 };
 
@@ -493,6 +497,89 @@ put(
     .done(),
 );
 
+// P5d: sensors — generic functional housings (black body, gunmetal
+// top, dark lens on the +X face; the colour sensor adds a white lens
+// ring and four colour dots on top). Behaviour lives in game.ts.
+put(
+  new B(ID.SensorDist, "90048", BLK, 1)
+    .box([-1.5, -1, -1], [1.5, 1, 1], BLK)
+    .box([-1.4, 1, -0.9], [1.4, 1.15, 0.9], GUN, false)
+    .cyl(0, [1.9, 0, 0], 0.55, 0.8, 0x141414)
+    .op({ k: "dot", c: [0, 1.32, 0], ax: 1, r: 0.16, col: 0x35d3ff })
+    .hole([-1, -1, 0], 2, 2, "P")
+    .hole([1, -1, 0], 2, 2, "P")
+    .done({ sensor: "dist" }),
+);
+put(
+  new B(ID.SensorColor, "90049", BLK, 1)
+    .box([-1.5, -1, -1], [1.5, 1, 1], BLK)
+    .box([-1.4, 1, -0.9], [1.4, 1.15, 0.9], GUN, false)
+    .cyl(0, [1.85, 0, 0], 0.62, 0.7, WHT)
+    .cyl(0, [2.05, 0, 0], 0.4, 0.5, 0x141414)
+    .op({ k: "dot", c: [-0.9, 1.32, 0], ax: 1, r: 0.15, col: 0xe23b2f })
+    .op({ k: "dot", c: [-0.3, 1.32, 0], ax: 1, r: 0.15, col: 0x3fae4a })
+    .op({ k: "dot", c: [0.3, 1.32, 0], ax: 1, r: 0.15, col: 0x2f6fd0 })
+    .op({ k: "dot", c: [0.9, 1.32, 0], ax: 1, r: 0.15, col: 0xf5c518 })
+    .hole([-1, -1, 0], 2, 2, "P")
+    .hole([1, -1, 0], 2, 2, "P")
+    .done({ sensor: "color" }),
+);
+
+// ---------- P5d SENSOR CONFIG (pure — unit-tested) ----------
+// Part.cfg packs one index: into SENSOR_RANGES for a distance sensor,
+// into SENSOR_TARGETS for a colour sensor.
+export const SENSOR_RANGES = [
+  { blocks: 1, label: "25 cm" },
+  { blocks: 2, label: "50 cm" },
+  { blocks: 4, label: "1 m" },
+  { blocks: 8, label: "2 m" },
+] as const;
+export const SENSOR_TARGETS = ["Anything", "Red", "Yellow", "Green", "Blue", "White", "Dark"] as const;
+export function sensorCfgCount(id: number): number {
+  const s = SPECS.get(id);
+  if (!s?.sensor) return 0;
+  return s.sensor === "dist" ? SENSOR_RANGES.length : SENSOR_TARGETS.length;
+}
+export function nextSensorCfg(id: number, cfg: number): number {
+  const n = sensorCfgCount(id);
+  if (!n) return 0;
+  return (((cfg | 0) % n) + 1) % n;
+}
+export function sensorCfgLabel(id: number, cfg: number): string {
+  const s = SPECS.get(id);
+  if (!s?.sensor) return "";
+  const i = Math.max(0, Math.min(cfg | 0, sensorCfgCount(id) - 1));
+  return s.sensor === "dist" ? "Range " + SENSOR_RANGES[i].label : "Target " + SENSOR_TARGETS[i];
+}
+/** The colour sensor's whole world model: which family a hex colour
+ *  (number or "#rrggbb") belongs to. Near-greys resolve by lightness
+ *  (White / Dark / Other); saturated colours by hue. */
+export function colorFamilyOf(hex: number | string): string {
+  const n = typeof hex === "string" ? parseInt(hex.replace("#", ""), 16) : hex;
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  const mx = Math.max(r, g, b);
+  const mn = Math.min(r, g, b);
+  if (mx - mn < 42) {
+    if (mx > 185) return "White";
+    if (mx < 80) return "Dark";
+    return "Other";
+  }
+  const d = mx - mn;
+  let h: number;
+  if (mx === r) h = ((g - b) / d) % 6;
+  else if (mx === g) h = (b - r) / d + 2;
+  else h = (r - g) / d + 4;
+  h *= 60;
+  if (h < 0) h += 360;
+  if (h < 18 || h >= 345) return "Red";
+  if (h < 75) return "Yellow";
+  if (h < 165) return "Green";
+  if (h < 265) return "Blue";
+  return "Other";
+}
+
 // ---------- PANELS / FAIRINGS ----------
 function panel(id: number, part: string, L: number, curve: number, mirror: number, col = WHT) {
   const h = (L - 1) / 2;
@@ -671,7 +758,7 @@ export function localCells(id: number): Cell[] {
   return out;
 }
 
-export type Part = { uid: number; id: number; o: number; q: V3; on?: boolean; ext?: number };
+export type Part = { uid: number; id: number; o: number; q: V3; on?: boolean; ext?: number; cfg?: number; sense?: 0 | 1 };
 type Occ = { uid: number; t: Cell["t"]; ax: Ax };
 const K = (x: number, y: number, z: number) => x + "," + y + "," + z;
 

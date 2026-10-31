@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { ID, TEKS } from "./blocks.ts";
-import { ORIENTS, SPECS, TechWorld, axOf, localCells, rot } from "./teks.ts";
+import { ORIENTS, SPECS, TechWorld, axOf, localCells, rot, SENSOR_RANGES, SENSOR_TARGETS, nextSensorCfg, sensorCfgLabel, colorFamilyOf } from "./teks.ts";
 
 const find = (f: (o: number) => boolean) => ORIENTS.findIndex((_, o) => f(o));
 
@@ -144,5 +144,40 @@ describe("teks", () => {
     assert.ok(n.airPressureOf(nc.uid) <= 0.35 && n.airPressureOf(nc.uid) > 0.05, "tankless cap: " + n.airPressureOf(nc.uid));
     assert.ok((nc.ext ?? 0) > 0, "tankless line still moves the rod");
     assert.ok((pump.ext ?? 0) !== 0 || true); // pump piston visual is state, asserted in-game
+  });
+});
+
+describe("teks P5d sensors", () => {
+  it("has dist + color sensor specs with geometry and connectors", () => {
+    assert.equal(SPECS.get(ID.SensorDist)?.sensor, "dist");
+    assert.equal(SPECS.get(ID.SensorColor)?.sensor, "color");
+    for (const id of [ID.SensorDist, ID.SensorColor]) {
+      const s = SPECS.get(id)!;
+      assert.ok(s.ops.length > 0 && localCells(id).length > 0 && s.holes.length > 0, "spec " + id);
+    }
+  });
+  it("cycles the packed cfg and labels it", () => {
+    let cfg = 0;
+    const seen: number[] = [0];
+    for (let i = 0; i < SENSOR_RANGES.length; i++) {
+      cfg = nextSensorCfg(ID.SensorDist, cfg);
+      seen.push(cfg);
+    }
+    assert.deepEqual(seen, [0, 1, 2, 3, 0]); // wraps through every range
+    assert.equal(sensorCfgLabel(ID.SensorDist, 0), "Range 25 cm");
+    assert.equal(sensorCfgLabel(ID.SensorDist, 3), "Range 2 m");
+    assert.equal(sensorCfgLabel(ID.SensorColor, 0), "Target Anything");
+    assert.equal(sensorCfgLabel(ID.SensorColor, SENSOR_TARGETS.length - 1), "Target Dark");
+    assert.equal(nextSensorCfg(ID.Wheel, 0), 0); // not a sensor: no cfg
+  });
+  it("classifies colour families like the sensor reads them", () => {
+    assert.equal(colorFamilyOf(0xe23b2f), "Red");
+    assert.equal(colorFamilyOf("#f5c518"), "Yellow");
+    assert.equal(colorFamilyOf(0x3fae4a), "Green");
+    assert.equal(colorFamilyOf(0x2f6fd0), "Blue");
+    assert.equal(colorFamilyOf(0xf2ead8), "White");
+    assert.equal(colorFamilyOf("#23272c"), "Dark");
+    assert.equal(colorFamilyOf(0x71808f), "Other"); // GUN grey-blue: mid lightness, low saturation
+    assert.equal(colorFamilyOf(0x8a4fd0), "Other"); // purple has no target family
   });
 });

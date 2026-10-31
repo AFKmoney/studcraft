@@ -483,6 +483,9 @@ export const ID = {
   // P5c-3: the excavator's digging bucket — a Teks part (spec in
   // teks.ts), cast at the Foundry like every Teks part. ID 471.
   DigBucket: 471,
+  // P5d: sensors — Teks parts (specs in teks.ts), cast at the Foundry.
+  SensorDist: 472,
+  SensorColor: 473,
   // P6 step 4 / P7 tool moulds (Muse): plastic tools cast at the
   // Foundry — the mould is the shape, the ingot is the stock. Tier 2
   // (stone class), 120 uses: moulded plastic, honestly mid-table.
@@ -1435,6 +1438,8 @@ put(b(ID.CVJoint, "CV joint", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9", { hard
 put(b(ID.ActMini, "Linear actuator mini", "#6c6e68", "#6c6e68", "#6c6e68", "#6c6e68", { hard: 0.4 }));
 put(b(ID.ActXL, "Linear actuator XL", "#6c6e68", "#6c6e68", "#6c6e68", "#6c6e68", { hard: 0.4 }));
 put(b(ID.DigBucket, "Digging bucket", "#71808f", "#71808f", "#71808f", "#71808f", { hard: 0.4 }));
+put(b(ID.SensorDist, "Proximity sensor", "#23272c", "#23272c", "#23272c", "#23272c", { hard: 0.4 }));
+put(b(ID.SensorColor, "Colour sensor", "#23272c", "#23272c", "#23272c", "#23272c", { hard: 0.4 }));
 put(b(ID.Turn28, "Turntable 28T", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
 put(b(ID.Turn56, "Turntable 56T", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
 // Piston engine
@@ -1669,6 +1674,8 @@ export const TEKS = [
   ID.ActMini,
   ID.ActXL,
   ID.DigBucket,
+  ID.SensorDist,
+  ID.SensorColor,
   ID.Turn28,
   ID.Turn56,
   ID.CylBlock,

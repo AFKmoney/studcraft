@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { ATLAS_COLS, ATLAS_ROWS, BLOCKS, CREATIVE_BAR, ID, TEKS, def, faceTile, stairsVariant, type BlockDef } from "./blocks";
-import { TechWorld, ORIENTS, composeO, worldCells, bbox as techBbox, spec as techSpec, type Part as TechPart, type Plan as TechPlan, type Target as TechTarget } from "./teks";
+import { TechWorld, ORIENTS, composeO, worldCells, rot, SENSOR_RANGES, SENSOR_TARGETS, nextSensorCfg, sensorCfgLabel, colorFamilyOf, bbox as techBbox, spec as techSpec, type Part as TechPart, type Plan as TechPlan, type Target as TechTarget } from "./teks";
 import { buildTeksGeometry, buildTeksRodGeometries } from "./teksGeo";
 import { fuelFromMelt, jointAffine, jointChain, jointForce, parkPoses, partWorldPoint, refuel as vehRefuel, stepVehicle as stepVeh, vehicleFromAssembly, type Vehicle, type VPart } from "./vehicle";
 import { FUEL, type Channel } from "./p5bProto";
@@ -361,6 +361,7 @@ declare global {
       getBricks?: () => [number, number, number, number][];
       placeTechAt?: (id: number, o: number, qx: number, qy: number, qz: number) => boolean;
       getTeks?: () => [number, number, number, number, number, number][];
+      getSensors?: () => { id: number; cfg: number; sense: number; ch: string }[];
       openTradeQa?: (role: string) => boolean;
       getFolkRoles?: () => string[];
       getPrefabs?: () => { name: string; parts: number; ingots: number; copper: number; afford: boolean }[];
@@ -4300,12 +4301,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (bricks.has(ka) && bricks.has(kb)) welds.add(weldKey(ka, kb));
     }
     rebuildAllBrickMeshes();
-    // Teks layer restore: [id, o, qx, qy, qz, on, ext?].
-    for (const [id, o, qx, qy, qz, on, ext] of data.teks ?? data.technic ?? []) {
+    // Teks layer restore: [id, o, qx, qy, qz, on, ext?, cfg?].
+    for (const [id, o, qx, qy, qz, on, ext, cfg] of data.teks ?? data.technic ?? []) {
       if (!TEKS_SET.has(id)) continue;
       const p = tech.add(id, o, [qx, qy, qz]);
       p.on = on !== 0;
       if (ext) p.ext = ext;
+      if (cfg !== undefined && techSpec(id)?.sensor) p.cfg = cfg;
     }
     // P5b restore: channel bindings + hub fuel/battery reserves,
     // keyed by lattice position (see the P5b block at toggleTechPart).
@@ -5675,11 +5677,20 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         audio.place();
         saveDirty = true;
       }
-    } else if (sneak && (tspec?.drive === "motor" || tspec?.drive === "screw")) {
-      // Motors AND screw actuators (P5c-3 joints) bind to channels.
+    } else if (sneak && (tspec?.drive === "motor" || tspec?.drive === "screw" || tspec?.sensor)) {
+      // Motors AND screw actuators (P5c-3 joints) bind to channels —
+      // and sensors too (P5d): the channel is how a hub relays a
+      // sensor's reading to the motors that should react.
       const nx = nextChannel(motorChannelByQ.get(qKey(p.q)) ?? "A");
       motorChannelByQ.set(qKey(p.q), nx);
       say(def(p.id).name + " bound to channel " + nx);
+      audio.place();
+      saveDirty = true;
+    } else if (tspec?.sensor) {
+      // P5d: plain use cycles the sensor's own setting (range for the
+      // proximity sensor, target colour for the colour sensor).
+      p.cfg = nextSensorCfg(p.id, p.cfg ?? 0);
+      say(def(p.id).name + " — " + sensorCfgLabel(p.id, p.cfg));
       audio.place();
       saveDirty = true;
     } else if (tspec?.drive || tspec?.air === "valve") {
@@ -7512,6 +7523,108 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (st.prev !== want) {
         st.prev = want;
         if (!far) applySwitch(x, y, z, want ? "on" : "off");
+      }
+    }
+  }
+
+  // ================= P5d: SENSORS + AUTOMATION =================
+  // The B7 law, extended to Teks parts: no wires, no signal levels —
+  // a sensor is CONTROL, power still comes from the hub. Every 0.25 s
+  // each sensor evaluates its reading (it needs the voxel world, so
+  // it lives here, not in teks.ts), then (a) sets `on` = reading on
+  // the parts that TOUCH it, exactly like a switch block, and (b) if
+  // a hub in its connected component listens on the sensor's channel,
+  // every motor / screw actuator bound to that channel in the
+  // component follows the reading — machines react on their own.
+  let sensorAcc = 0;
+  let tiltWarnCd = 0;
+
+  function evalSensor(p: TechPart, kind: "dist" | "color", teksCells: Set<string>): boolean {
+    const dir = rot(p.o, [1, 0, 0]);
+    const a = techPartAabb(p.id, p.o, p.q);
+    const c = a.c;
+    const face = (Math.abs(dir[0]) * a.s[0] + Math.abs(dir[1]) * a.s[1] + Math.abs(dir[2]) * a.s[2]) / 2;
+    if (kind === "color") {
+      const px = Math.floor(c[0] + dir[0] * (face + 0.55));
+      const py = Math.floor(c[1] + dir[1] * (face + 0.55));
+      const pz = Math.floor(c[2] + dir[2] * (face + 0.55));
+      let hex: number | string | null = null;
+      for (const q of tech.parts.values()) {
+        if (q.uid === p.uid) continue;
+        let hit = false;
+        for (const cell of worldCells(q)) {
+          if (cell.x === px && cell.y === py && cell.z === pz) {
+            hex = techSpec(q.id)?.col ?? null;
+            hit = true;
+            break;
+          }
+        }
+        if (hit) break;
+      }
+      if (hex === null) {
+        const bid = world.get(px, py, pz);
+        if (bid !== ID.Air) hex = def(bid).color;
+      }
+      if (hex === null) return false;
+      const target = SENSOR_TARGETS[Math.max(0, Math.min(p.cfg ?? 0, SENSOR_TARGETS.length - 1))];
+      return target === "Anything" || colorFamilyOf(hex) === target;
+    }
+    const range = SENSOR_RANGES[Math.max(0, Math.min(p.cfg ?? 0, SENSOR_RANGES.length - 1))].blocks;
+    for (let t = face + 0.25; t <= face + range; t += 0.25) {
+      const px = Math.floor(c[0] + dir[0] * t);
+      const py = Math.floor(c[1] + dir[1] * t);
+      const pz = Math.floor(c[2] + dir[2] * t);
+      const bid = world.get(px, py, pz);
+      if (bid !== ID.Air && def(bid).solid) return true;
+      if (teksCells.has(px + "," + py + "," + pz)) return true;
+    }
+    return false;
+  }
+
+  function tickSensors(dt: number) {
+    sensorAcc += dt;
+    if (sensorAcc < 0.25) return;
+    sensorAcc = 0;
+    let any = false;
+    for (const p of tech.parts.values()) if (techSpec(p.id)?.sensor) { any = true; break; }
+    if (!any) return;
+    const cellOwner = new Map<string, number>();
+    const teksCells = new Set<string>();
+    for (const p of tech.parts.values()) {
+      for (const c of worldCells(p)) {
+        teksCells.add(c.key);
+        if (!cellOwner.has(c.key)) cellOwner.set(c.key, p.uid);
+      }
+    }
+    for (const p of tech.parts.values()) {
+      const spec = techSpec(p.id);
+      if (!spec?.sensor) continue;
+      const reading = evalSensor(p, spec.sensor, teksCells);
+      p.sense = reading ? 1 : 0;
+      const drive = (q: TechPart) => {
+        if (q.on !== reading) {
+          q.on = reading;
+          saveDirty = true;
+        }
+      };
+      const seen = new Set<number>();
+      for (const c of worldCells(p)) {
+        for (const [ox, oy, oz] of NEIGHBORS6) {
+          const uid = cellOwner.get(c.x + ox + "," + (c.y + oy) + "," + (c.z + oz));
+          if (uid === undefined || uid === p.uid || seen.has(uid)) continue;
+          seen.add(uid);
+          const q = tech.parts.get(uid);
+          if (q && !techSpec(q.id)?.sensor) drive(q);
+        }
+      }
+      const myCh = motorChannelByQ.get(qKey(p.q)) ?? "A";
+      const comp = techComponent(p.uid);
+      const relay = comp.some((q) => q.id === ID.TechHub && (hubChannelByQ.get(qKey(q.q)) ?? "A") === myCh);
+      if (relay) {
+        for (const q of comp) {
+          const qs = techSpec(q.id);
+          if ((qs?.drive === "motor" || qs?.drive === "screw") && (motorChannelByQ.get(qKey(q.q)) ?? "A") === myCh) drive(q);
+        }
       }
     }
   }
@@ -11719,7 +11832,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         return [x, y, z, v] as [number, number, number, number];
       }),
       bricks: [...bricks.values()].map((b) => [b.id, b.sx, b.sy, b.sz] as [number, number, number, number]),
-      teks: [...tech.parts.values()].map((p) => [p.id, p.o, p.q[0], p.q[1], p.q[2], p.on === false ? 0 : 1, ...(p.ext ? [Math.round(p.ext * 1000) / 1000] : [])] as number[]),
+      teks: [...tech.parts.values()].map((p) => {
+        const row = [p.id, p.o, p.q[0], p.q[1], p.q[2], p.on === false ? 0 : 1] as number[];
+        // P5d: sensor parts always write the ext slot (0) + their cfg,
+        // so the loader can tell cfg apart from a rod extension.
+        if (techSpec(p.id)?.sensor) row.push(p.ext ? Math.round(p.ext * 1000) / 1000 : 0, p.cfg ?? 0);
+        else if (p.ext) row.push(Math.round(p.ext * 1000) / 1000);
+        return row;
+      }),
       blueprints: blueprints.map((b) => [b.id, b.o, b.q[0], b.q[1], b.q[2]] as [number, number, number, number, number]),
       vehBind: [...motorChannelByQ.entries()],
       vehHubCh: [...hubChannelByQ.entries()],
@@ -12647,7 +12767,16 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           if (!creative) spend(ID.Fuel, 1);
           say("Fuel " + v.fuel.toFixed(1) + " / " + FUEL.tankCapacity);
         }
-        stepVeh(v, dt, { throttle: sample.fwd, steer: sample.str, channel: v.hubChannel }, (x, z) => groundY(x, z));
+        // P5d: hub tilt protection — the hub reads the body's pitch /
+        // roll (from the wheel heights) and cuts the motors past ~40°
+        // so a tipping machine stops instead of digging itself in.
+        tiltWarnCd = Math.max(0, tiltWarnCd - dt);
+        const tilted = Math.abs(v.pitch) > 0.7 || Math.abs(v.roll) > 0.7;
+        if (tilted && tiltWarnCd <= 0) {
+          say("Hub tilt protection — motors cut");
+          tiltWarnCd = 6;
+        }
+        stepVeh(v, dt, { throttle: tilted ? 0 : sample.fwd, steer: sample.str, channel: v.hubChannel }, (x, z) => groundY(x, z));
         placeVehGroup();
         // P5c-3: channel cycling while driving (KeyC / the CH button),
         // bucket digging (the bucket digs where it MOVES through
@@ -13550,6 +13679,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       tickHoppers(dt);
       tickSwitches(dt);
+      tickSensors(dt);
       tickFire(dt);
       tickFurnaces(dt);
       lightAcc += dt;
@@ -13920,6 +14050,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return true;
     },
     getTeks: () => [...tech.parts.values()].map((p) => [p.id, p.o, p.q[0], p.q[1], p.q[2], p.on === false ? 0 : 1] as [number, number, number, number, number, number]),
+    // P5d QA hook (inert in play): live sensor configs + readings.
+    getSensors: () => [...tech.parts.values()].filter((p) => techSpec(p.id)?.sensor).map((p) => ({ id: p.id, cfg: p.cfg ?? 0, sense: p.sense ?? 0, ch: motorChannelByQ.get(qKey(p.q)) ?? "A" })),
     // Section 22 P-A QA hooks (inert in play).
     openTradeQa: (role: string) => {
       const mob = mobs.find((m) => !m.dead && m.kind === "villager" && m.role === role && Math.hypot(m.x - player.x, m.z - player.z) < 32);
