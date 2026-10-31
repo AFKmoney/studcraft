@@ -463,6 +463,13 @@ Le testeur **confirme en jeu les correctifs B15** : recettes et doublons réglé
 - [x] **Leaf brick sans recette — pire : sans AUCUNE source** CONFIRMÉ : `drop = −1`, casser des feuilles ne paie que pommes (8 %) / bâtons (12 %), même au silk, et la recette du Sapling **consomme** une Leaf brick (recette morte). **Correctif : les cisailles (ou un outil silk) sur les feuilles récoltent le bloc lui-même**; à mains nues, fruits et bâtons comme avant.
 - [x] **Garde anti re-craft d'outil — code CORRECT, test invalide** : le testeur a testé établi fermé; dans `craft()` le refus « Needs a 3×3 Crafting Bench » précède la garde (ordre voulu : la recette est d'abord infaisable). Procédure de retest : établi ouvert + outil déjà porté → « You already carry a … » et aucun matériau dépensé.
 
+### B17 · Véhicule/affichage (ordre de Philippe, 2026-10-31) — LIVRÉ `8394bed7`, fermeture = retest Pages (Grok) + verdict de Philippe
+
+- [x] **Digger impossible à embarquer** : capteurs sur FRONT seulement (fini le niveau qui tenait hub/moteur à OFF entre les deux « use » d'entrée). Mesuré : avant 0/0 sur 6/6 + 6 échecs d'entrée; après 1/1 sur 6/6, embarqué en 2 pulsations, assis 10/10 sur 10 s, avance.
+- [x] **Autosave en conduite** : `packSave` ne gare ni ne vide plus jamais un véhicule actif; sérialisation en place (poses de parcage, re-clé bindings/réserves/niveaux, `vehBucket` restauré au boot). Mesuré : sauvegarde écrite en pleine conduite, conducteur en place, les 20 pièces du Digger dans la sauvegarde (comptes par id revérifiés).
+- [x] **Crossbow** : axe du modèle réaligné sur la diagonale des outils (pré-rotation sprite, crosse à la poignée) + prod du modèle perpendiculaire à la crosse (le modèle était une ligne 0,31×0,05×0,03, son prod colinéaire — aucun cadrage ne pouvait le sauver). Capture : arme entière, lisible, même famille que la pioche.
+- [x] **Caméra conduite** : siège CALCULÉ à l'embarquement (`computeSeatEye` + `VPart.box`) : premier point derrière/au-dessus du hub dégageant chaque pièce ≥ 0,45 bloc et en air libre. Captures : avant = monde + pont sous l'œil + bras au-dessus; côtés/arrière ouverts. Fini l'écran noir.
+
 ## 22. Catalogue de véhicules + contrôles véhicule (ordres de Philippe, 2026-10-30 ~16h06-16h07 PDT)
 
 ### 22.1 Le catalogue (le modèle = une liste de pièces Teks relatives)
