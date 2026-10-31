@@ -237,9 +237,9 @@ Pas de redstone. Le cœur tourne : graphe de rotation local et borné.
 ## 11. Sites de débris
 
 - [x] v1 câblé et jouable : 3 pièces/chunk, pool de 6, dispersion par hash
-- [ ] Design complet : **double voie pour TOUTES les pièces avancées** — les fabriquer OU les trouver; jamais une pièce loot-only non craftable (le crafting = le pity timer, à 3–5× le coût)
-- [ ] Topologie de spawn : routes = artères de loot, monuments = gros lots, rareté par tiers de zone
-- [ ] Recyclage à ~50 % : les débris non utilisés = plastique à fondre (lien P6)
+- [x] **Design complet : double voie pour TOUTES les pièces avancées** — les fabriquer OU les trouver; jamais une pièce loot-only non craftable (le crafting = le pity timer, à 3–5× le coût) — **LIVRÉE (`eaa963d2`)** : le côté FABRIQUER était complet depuis B4 (recettes de moulage générées pour les 102 pièces); le côté TROUVER est livré ici (pools par tiers ci-dessous). Fermeture = verdict Pages de Philippe
+- [x] **Topologie de spawn — LIVRÉE (`eaa963d2`)** : routes = artères de loot, monuments = gros lots, rareté par tiers de zone — **DESIGN ARRÊTÉ (même claim)** : zones par distance à l'origine (zone 0 < 20 chunks, zone 1 < 56, zone 2 au-delà); **artères** = un champ de bruit basse fréquence (crête = densité ×0,6→×2,2) qui concentre les sites en bandes apprenables; présence ~38 % × artère (v1 mettait un site par chunk, sans lecture); composition — zone 0 : 2–4 pièces de base (+ 8 % un avancé « teaser », jamais du rare), zone 1 : 3–5 + 1 avancé garanti, zone 2 : 4–6 + 2 avancés garantis; rareté dans les slots avancés : 12 % (z1) / 28 % (z2) de tirer du RARE (hub, gros moteurs, servo, remote, capteurs, ActXL); **monuments = jackpots** : les coffres des sites (wreck/ruin/mine/shrine/tomb/reef + majeurs) gagnent ~55 % du temps une pièce avancée bonus (20 % de rare) via le même patron que le bonus boss-mats de `stockChest`
+- [x] **Recyclage à ~50 % — LIVRÉ (`eaa963d2`)** : les débris non utilisés = plastique à fondre (lien P6) — **DESIGN ARRÊTÉ (même claim)** : chaque pièce Teks devient un input de Fonderie valide (`SMELT[pièce] = Pellets`, rendement `SMELT_N` = 50 % arrondi de son coût de moulage en lingots; le cuivre des moteurs = les frais du recycleur). Le tick du four apprend les rendements multiples (défaut 1)
 
 ## 12. Gravité — la loi de Philippe (2026-10-29)
 
