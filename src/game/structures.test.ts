@@ -133,3 +133,12 @@ test("structure crates get their pool and signature pieces", () => {
   assert.ok(studs > 0 && studs < 30);
   assert.ok(cores > 0 && cores < 30);
 });
+
+test("every village and the desert city has a trader garage: workbench, racks, lift and a parked vehicle", () => {
+  for (const zone of ZONE_IDS) {
+    const size = S.structSize("village", zone);
+    const bricks = S.structureBricks({ x: 0, z: 0, y: 40, w: size, d: size, kind: "village", zone, gx: 0, gz: 0 }, SEED);
+    const has = (id: number) => bricks.some((b) => b.id === id);
+    for (const id of [ID.Anvil, ID.Furnace, ID.Bench, ID.Barrel, ID.IronBlock, ID.Black]) assert.ok(has(id), zone + " garage misses " + id);
+  }
+});
