@@ -5669,8 +5669,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       say(def(p.id).name + " bound to channel " + nx);
       audio.place();
       saveDirty = true;
-    } else if (tspec?.drive) {
-      toggleTechPart(p);
+    } else if (tspec?.drive || tspec?.air === "valve") {
+      toggleTechPart(p); // P5c-2: a valve's on/off chooses the air direction
     }
   }
 
