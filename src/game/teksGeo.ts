@@ -1066,3 +1066,31 @@ export function buildTeksGeometry(id: number): THREE.BufferGeometry | null {
   geoCache.set(id, g);
   return g;
 }
+
+// P5c: split build for sliding-rod parts (Spec.rod). `main` is the body;
+// `rod` holds the ops flagged `rod` (the sliding rod + its end mount),
+// rendered translated by ext * stroke along local +X. Parts without rod
+// ops return rod: null. Hole dots belong to the body pass only.
+const rodGeoCache = new Map<number, { main: THREE.BufferGeometry; rod: THREE.BufferGeometry | null }>();
+export function buildTeksRodGeometries(id: number): { main: THREE.BufferGeometry; rod: THREE.BufferGeometry | null } | null {
+  const hit = rodGeoCache.get(id);
+  if (hit) return hit;
+  const s = SPECS.get(id);
+  if (!s) return null;
+  const hasRod = s.ops.some((o) => (o.k === "tube" || o.k === "cyl") && o.rod);
+  if (!hasRod) {
+    const out = { main: buildTeksGeometry(id)!, rod: null };
+    rodGeoCache.set(id, out);
+    return out;
+  }
+  const bkMain = new Bucket();
+  const bkRod = new Bucket();
+  for (const op of s.ops) {
+    const isRod = (op.k === "tube" || op.k === "cyl") && op.rod;
+    opGeo(isRod ? bkRod : bkMain, s, op);
+  }
+  orphanHoleDots(bkMain, s);
+  const out = { main: bkMain.build(), rod: bkRod.build() };
+  rodGeoCache.set(id, out);
+  return out;
+}

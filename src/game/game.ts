@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { ATLAS_COLS, ATLAS_ROWS, BLOCKS, CREATIVE_BAR, ID, TEKS, def, faceTile, stairsVariant, type BlockDef } from "./blocks";
 import { TechWorld, ORIENTS, composeO, worldCells, bbox as techBbox, spec as techSpec, type Part as TechPart, type Plan as TechPlan, type Target as TechTarget } from "./teks";
-import { buildTeksGeometry } from "./teksGeo";
+import { buildTeksGeometry, buildTeksRodGeometries } from "./teksGeo";
 import { fuelFromMelt, parkPoses, refuel as vehRefuel, stepVehicle as stepVeh, vehicleFromAssembly, type Vehicle, type VPart } from "./vehicle";
 import { FUEL, type Channel } from "./p5bProto";
 import { builtinModels, decodeModel, encodeModel, loadCatalogue, modelFromParts, removeModel, storeCatalogue, upsertModel, type VehicleModel } from "./catalogue";
@@ -4288,11 +4288,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (bricks.has(ka) && bricks.has(kb)) welds.add(weldKey(ka, kb));
     }
     rebuildAllBrickMeshes();
-    // Teks layer restore: [id, o, qx, qy, qz, on].
-    for (const [id, o, qx, qy, qz, on] of data.teks ?? data.technic ?? []) {
+    // Teks layer restore: [id, o, qx, qy, qz, on, ext?].
+    for (const [id, o, qx, qy, qz, on, ext] of data.teks ?? data.technic ?? []) {
       if (!TEKS_SET.has(id)) continue;
       const p = tech.add(id, o, [qx, qy, qz]);
       p.on = on !== 0;
+      if (ext) p.ext = ext;
     }
     // P5b restore: channel bindings + hub fuel/battery reserves,
     // keyed by lattice position (see the P5b block at toggleTechPart).
@@ -5230,7 +5231,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   const techGroup = new THREE.Group();
   scene.add(techGroup);
   const techMeshes = new Map<number, THREE.Mesh>();
+  const techRodMeshes = new Map<number, THREE.Mesh>(); // P5c: sliding-rod sub-mesh per rod part uid
   const techGeos = new Map<number, THREE.BufferGeometry>();
+  const techGeoPairs = new Map<number, { main: THREE.BufferGeometry; rod: THREE.BufferGeometry | null }>();
   // Non-realistic fallback: Phong (cheap Blinn specular sheen — modern
   // Lambert has no specular term at all, so it cannot fake the metal).
   const techMatLam = new THREE.MeshPhongMaterial({ vertexColors: true, specular: 0x8a97a5, shininess: 48 });
@@ -5430,16 +5433,30 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     out.premultiply(_techSpinM);
   }
 
+  function techGeoPairOf(id: number): { main: THREE.BufferGeometry; rod: THREE.BufferGeometry | null } {
+    let pr = techGeoPairs.get(id);
+    if (!pr) {
+      pr = buildTeksRodGeometries(id) ?? { main: techGeoOf(id), rod: null };
+      techGeoPairs.set(id, pr);
+    }
+    return pr;
+  }
   function syncTechMeshes() {
     for (const [uid, mesh] of techMeshes) {
       if (!tech.parts.has(uid)) {
         techGroup.remove(mesh);
         techMeshes.delete(uid);
+        const rodMesh = techRodMeshes.get(uid);
+        if (rodMesh) {
+          techGroup.remove(rodMesh);
+          techRodMeshes.delete(uid);
+        }
       }
     }
     for (const p of tech.parts.values()) {
       if (techMeshes.has(p.uid)) continue;
-      const mesh = new THREE.Mesh(techGeoOf(p.id), techMatSolid);
+      const pair = techGeoPairOf(p.id);
+      const mesh = new THREE.Mesh(pair.main, techMatSolid);
       mesh.frustumCulled = false;
       mesh.matrixAutoUpdate = false;
       if (plasticOn) {
@@ -5450,12 +5467,36 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       mesh.matrixWorldNeedsUpdate = true;
       techGroup.add(mesh);
       techMeshes.set(p.uid, mesh);
+      if (pair.rod) {
+        const rodMesh = new THREE.Mesh(pair.rod, techMatSolid);
+        rodMesh.frustumCulled = false;
+        rodMesh.matrixAutoUpdate = false;
+        if (plasticOn) {
+          rodMesh.castShadow = true;
+          rodMesh.receiveShadow = true;
+        }
+        techWriteRodMatrix(p, rodMesh.matrix);
+        rodMesh.matrixWorldNeedsUpdate = true;
+        techGroup.add(rodMesh);
+        techRodMeshes.set(p.uid, rodMesh);
+      }
     }
+  }
+  // P5c: the rod sub-mesh matrix = the part's full matrix (spin group
+  // included) post-multiplied by the extension slide along local +X.
+  const _rodSlide = new THREE.Matrix4();
+  function techWriteRodMatrix(p: TechPart, out: THREE.Matrix4) {
+    techWriteMatrix(p, out);
+    const stroke = techSpec(p.id)?.rod?.stroke ?? 0;
+    const ext = (p.ext ?? 0) * stroke;
+    if (ext) out.multiply(_rodSlide.makeTranslation(ext, 0, 0));
   }
   function clearTech() {
     tech.clear();
     for (const mesh of techMeshes.values()) techGroup.remove(mesh);
     techMeshes.clear();
+    for (const mesh of techRodMeshes.values()) techGroup.remove(mesh);
+    techRodMeshes.clear();
     techRevSeen = -1;
     techGhostMesh.visible = false;
   }
@@ -5529,6 +5570,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (!p) continue;
       techWriteMatrix(p, mesh.matrix);
       mesh.matrixWorldNeedsUpdate = true;
+      const rodMesh = techRodMeshes.get(uid);
+      if (rodMesh) {
+        techWriteRodMatrix(p, rodMesh.matrix);
+        rodMesh.matrixWorldNeedsUpdate = true;
+      }
     }
   }
 
@@ -11507,7 +11553,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         return [x, y, z, v] as [number, number, number, number];
       }),
       bricks: [...bricks.values()].map((b) => [b.id, b.sx, b.sy, b.sz] as [number, number, number, number]),
-      teks: [...tech.parts.values()].map((p) => [p.id, p.o, p.q[0], p.q[1], p.q[2], p.on === false ? 0 : 1] as [number, number, number, number, number, number]),
+      teks: [...tech.parts.values()].map((p) => [p.id, p.o, p.q[0], p.q[1], p.q[2], p.on === false ? 0 : 1, ...(p.ext ? [Math.round(p.ext * 1000) / 1000] : [])] as number[]),
       blueprints: blueprints.map((b) => [b.id, b.o, b.q[0], b.q[1], b.q[2]] as [number, number, number, number, number]),
       vehBind: [...motorChannelByQ.entries()],
       vehHubCh: [...hubChannelByQ.entries()],

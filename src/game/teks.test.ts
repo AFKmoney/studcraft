@@ -68,4 +68,32 @@ describe("teks", () => {
     const wc = r.gOmega.get(r.groups.get(c.uid)!)!;
     assert.ok(Math.abs(wc / wa + 1 / 3) < 1e-6);
   });
+  it("P5c-1: a motor-driven screw actuator extends, clamps, holds, and reverses with a flipped drive axle", () => {
+    const zPlus = find((o) => axOf(o, 0)[0] === 2 && axOf(o, 0)[1] === 1);
+    const zMinus = find((o) => axOf(o, 0)[0] === 2 && axOf(o, 0)[1] === -1);
+    // Actuator (L7, stroke 1.94) at the origin, o=0: its input cross
+    // hole sits at world [-4,0,0] on the Z axis. One axle along Z
+    // through both the actuator input and a Motor M output at z=4.
+    const build = (axleO: number, motorO: number, motorQ: [number, number, number]) => {
+      const w = new TechWorld();
+      const act = w.add(ID.Actuator, 0, [0, 0, 0]);
+      const ax = w.add(ID.Axle, axleO, [-4, 0, 2]);
+      w.add(ID.MotorM, motorO, motorQ);
+      return { w, act, ax };
+    };
+    const { w, act, ax } = build(zPlus, zPlus, [-4, 0, -1]);
+    w.step(0.5, () => true);
+    assert.ok((act.ext ?? 0) > 0.3 && (act.ext ?? 0) < 0.9, "extends under power: " + act.ext);
+    w.step(2, () => true);
+    assert.equal(act.ext, 1, "clamps at full stroke (end-of-travel clutch)");
+    w.step(1, () => false);
+    assert.equal(act.ext, 1, "holds its load unpowered (self-locking screw)");
+    // Same build with the drive axle flipped end-for-end: travel reverses.
+    const b = build(zMinus, zMinus, [-4, 0, 9]);
+    b.act.ext = 0.8;
+    b.w.step(0.5, () => true);
+    assert.ok((b.act.ext ?? 1) < 0.5 && (b.act.ext ?? 0) > 0, "retracts with a flipped drive: " + b.act.ext);
+    // The actuator body itself never joins the spinning group.
+    assert.notEqual(w.groups.get(act.uid), w.groups.get(ax.uid));
+  });
 });

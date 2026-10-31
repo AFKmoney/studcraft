@@ -18,9 +18,9 @@ export type Op =
   | { k: "plate"; segs: Seg[]; holes: [number, number, HoleT | "N"][]; z0: number; z1: number; col: number; w: number }
   | { k: "axle"; x0: number; x1: number; col: number; stop?: number }
   | { k: "pin"; x0: number; x1: number; collar: number[]; col: number; ball?: boolean }
-  | { k: "tube"; ax: Ax; c: V3; r: number; len: number; hole: HoleT | "N"; col: number; flange?: number }
+  | { k: "tube"; ax: Ax; c: V3; r: number; len: number; hole: HoleT | "N"; col: number; flange?: number; rod?: boolean }
   | { k: "box"; a: V3; b: V3; col: number }
-  | { k: "cyl"; ax: Ax; c: V3; r: number; len: number; col: number; seg?: number }
+  | { k: "cyl"; ax: Ax; c: V3; r: number; len: number; col: number; seg?: number; rod?: boolean }
   | { k: "sphere"; c: V3; r: number; col: number }
   | { k: "gear"; n: number; z0: number; z1: number; col: number; taper?: "one" | "two"; holes?: [number, number, HoleT][]; ax?: Ax; at?: V3 }
   | { k: "worm"; x0: number; x1: number; col: number }
@@ -45,8 +45,12 @@ export type Spec = {
   discs: { c: V3; ax: Ax; r: number; len: number }[];
   ops: Op[];
   gears: GearInfo[];
-  drive?: "motor" | "crank" | "power";
+  drive?: "motor" | "crank" | "power" | "screw";
   rpm?: number;
+  // P5c: sliding-rod parts (screw actuators, pumps, air cylinders). The
+  // rod ops (flagged `rod` on tube/cyl ops) render translated by
+  // ext * stroke along local +X; stroke is in modules.
+  rod?: { stroke: number; kind: "screw" | "pump" | "cyl" };
   hand?: number; // optional display scale in hand
 };
 
@@ -113,8 +117,8 @@ class B {
     if (!ball) this.s.males.push({ c: [(x0 + x1) / 2, 0, 0], ax: 0, len: x1 - x0, t: "p" });
     return this;
   }
-  tube(ax: Ax, c: V3, r: number, len: number, hole: HoleT | "N", col = this.s.col, flange?: number) {
-    this.s.ops.push({ k: "tube", ax, c, r, len, hole, col, flange });
+  tube(ax: Ax, c: V3, r: number, len: number, hole: HoleT | "N", col = this.s.col, flange?: number, rod = false) {
+    this.s.ops.push({ k: "tube", ax, c, r, len, hole, col, flange, rod: rod || undefined });
     if (hole !== "N") this.s.holes.push({ c, ax, len, t: hole });
     this.s.discs.push({ c, ax, r: Math.max(r, 0.45), len });
     return this;
@@ -124,8 +128,8 @@ class B {
     if (occ) this.s.boxes.push([a, b]);
     return this;
   }
-  cyl(ax: Ax, c: V3, r: number, len: number, col = this.s.col, occ = false, seg?: number) {
-    this.s.ops.push({ k: "cyl", ax, c, r, len, col, seg });
+  cyl(ax: Ax, c: V3, r: number, len: number, col = this.s.col, occ = false, seg?: number, rod = false) {
+    this.s.ops.push({ k: "cyl", ax, c, r, len, col, seg, rod: rod || undefined });
     if (occ) this.s.discs.push({ c, ax, r, len });
     return this;
   }
@@ -410,26 +414,29 @@ for (let i = -2; i <= 2; i++) S.get(ID.Trap)!.holes.push({ c: [i, 0, -0.3], ax: 
 // ---------- ACTUATORS / PNEUMATICS / ENGINE ----------
 function rodPart(id: number, part: string, L: number, body: number, rod: number, r: number, input: boolean) {
   const e = (L - 1) / 2;
-  const b = new B(id, part, body, 0).tube(2, [-e, 0, 0], 0.46, 0.96, "P", body).tube(2, [e, 0, 0], 0.46, 0.96, "P", rod);
+  const b = new B(id, part, body, 0).tube(2, [-e, 0, 0], 0.46, 0.96, "P", body).tube(2, [e, 0, 0], 0.46, 0.96, "P", rod, undefined, true);
   const bodyLen = L * 0.58;
   b.cyl(0, [-e + 0.5 + bodyLen / 2, 0, 0], r, bodyLen, body, true);
-  b.cyl(0, [(-e + 0.5 + bodyLen + e - 0.5) / 2, 0, 0], 0.2, e - 0.5 - (-e + 0.5 + bodyLen), rod);
+  b.cyl(0, [(-e + 0.5 + bodyLen + e - 0.5) / 2, 0, 0], 0.2, e - 0.5 - (-e + 0.5 + bodyLen), rod, false, undefined, true);
   if (input) b.hole([-e + 1, 0, 0], 2, 1, "A");
   return b;
 }
-put(rodPart(ID.ActMini, "92693", 5, DBG, LBG, 0.5, true).done());
-put(rodPart(ID.Actuator, "61927", 7, DBG, LBG, 0.6, true).done());
-put(rodPart(ID.ActXL, "47224", 11, DBG, LBG, 0.7, true).done());
-put(rodPart(ID.Pump, "19482", 6, LBG, BLU, 0.6, false).done());
-put(rodPart(ID.Cylinder, "19461", 6, LBG, MET, 0.55, false).done());
-put(rodPart(ID.SpringPump, "2797", 6, TRC, LBG, 0.5, false).op({ k: "helix", ax: 0, c: [0.6, 0, 0], r: 0.33, tr: 0.05, len: 2, turns: 6, col: MET }).done());
+// stroke (modules) a rod of total length L can travel: the rod stays
+// engaged in the body by at least ~1 module at full extension.
+const rodStroke = (L: number) => Math.round((L - L * 0.58 - 1) * 100) / 100;
+put(rodPart(ID.ActMini, "92693", 5, DBG, LBG, 0.5, true).done({ drive: "screw", rod: { stroke: rodStroke(5), kind: "screw" } }));
+put(rodPart(ID.Actuator, "61927", 7, DBG, LBG, 0.6, true).done({ drive: "screw", rod: { stroke: rodStroke(7), kind: "screw" } }));
+put(rodPart(ID.ActXL, "47224", 11, DBG, LBG, 0.7, true).done({ drive: "screw", rod: { stroke: rodStroke(11), kind: "screw" } }));
+put(rodPart(ID.Pump, "19482", 6, LBG, BLU, 0.6, false).done({ rod: { stroke: rodStroke(6), kind: "pump" } }));
+put(rodPart(ID.Cylinder, "19461", 6, LBG, MET, 0.55, false).done({ rod: { stroke: rodStroke(6), kind: "cyl" } }));
+put(rodPart(ID.SpringPump, "2797", 6, TRC, LBG, 0.5, false).op({ k: "helix", ax: 0, c: [0.6, 0, 0], r: 0.33, tr: 0.05, len: 2, turns: 6, col: MET }).done({ rod: { stroke: rodStroke(6), kind: "pump" } }));
 put(
   new B(ID.SmallPump, "47225", LBG, 0)
     .box([-1.5, -0.5, -1], [0.5, 0.5, 1], DBG)
-    .cyl(0, [1.25, 0, 0], 0.45, 1.5, LBG, true)
+    .cyl(0, [1.25, 0, 0], 0.45, 1.5, LBG, true, undefined, true)
     .hole([-1, 0, 0], 1, 1, "P")
     .hole([0, 0, 0], 1, 1, "A")
-    .done(),
+    .done({ rod: { stroke: 1, kind: "pump" } }),
 );
 put(
   new B(ID.Valve, "19476", LBG, 2)
@@ -646,7 +653,7 @@ export function localCells(id: number): Cell[] {
   return out;
 }
 
-export type Part = { uid: number; id: number; o: number; q: V3; on?: boolean };
+export type Part = { uid: number; id: number; o: number; q: V3; on?: boolean; ext?: number };
 type Occ = { uid: number; t: Cell["t"]; ax: Ax };
 const K = (x: number, y: number, z: number) => x + "," + y + "," + z;
 
@@ -907,7 +914,10 @@ export class TechWorld {
       return r;
     };
     for (const uid of this.parts.keys()) par.set(uid, uid);
-    const isStatic = (uid: number) => S.get(this.parts.get(uid)!.id)?.drive === "motor" || S.get(this.parts.get(uid)!.id)?.drive === "power";
+    const isStatic = (uid: number) => {
+      const d = S.get(this.parts.get(uid)!.id)?.drive;
+      return d === "motor" || d === "power" || d === "screw"; // a screw actuator's body never spins: its input axle turns inside it
+    };
     for (const a of this.occ.values()) {
       if (a.length < 2) continue;
       const h = a.find((e) => e.t === "A");
@@ -1014,6 +1024,29 @@ export class TechWorld {
     if (this.jammed) om.clear();
     this.gOmega = om;
     for (const [g, w] of om) this.gAngle.set(g, ((this.gAngle.get(g) ?? 0) + w * dt) % (Math.PI * 2));
+    // P5c-1: screw linear actuators. The body is static; the axle sitting
+    // in its input cross-hole spins, and the screw converts that spin
+    // into extension (1 module of travel per input revolution). The
+    // screw is self-locking: no input spin, no motion — the load is
+    // held. At either end of the stroke the extension clamps and the
+    // input slips: the end-of-travel clutch.
+    for (const p of this.parts.values()) {
+      const s = S.get(p.id)!;
+      if (s.drive !== "screw" || !s.rod) continue;
+      let w = 0;
+      for (const c of worldCells(p)) {
+        if (c.t !== "A") continue;
+        for (const e of this.occ.get(c.key) ?? []) {
+          if (e.uid === p.uid || e.t !== "a") continue;
+          // direction: the screw answers the spin about the input axis —
+          // building the drive axle in flipped (or meshing an idler gear,
+          // which flips the group omega) reverses the travel.
+          const ap = this.parts.get(e.uid)!;
+          w = (om.get(this.groups.get(e.uid)!) ?? 0) * axOf(ap.o, 0)[1];
+        }
+      }
+      if (w) p.ext = Math.max(0, Math.min(1, (p.ext ?? 0) + ((w / (Math.PI * 2)) / s.rod.stroke) * dt));
+    }
   }
 }
 
