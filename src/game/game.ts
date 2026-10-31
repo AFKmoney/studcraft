@@ -4,6 +4,7 @@ import { TechWorld, ORIENTS, composeO, worldCells, rot, SENSOR_RANGES, SENSOR_TA
 import { buildTeksGeometry, buildTeksRodGeometries } from "./teksGeo";
 import { analyzeComponent } from "./gravity";
 import { dissolvedYield } from "./dissolve";
+import { beadSegments, weldComponentOf, type BeadSeg } from "./weld";
 import { AFFIXES, PATHS, PATH_CHANGE_COST, rollRelic, type AffixKey, type PathId, type Relic } from "./identity";
 import { fuelFromMelt, jointAffine, jointChain, jointForce, parkPoses, partWorldPoint, refuel as vehRefuel, stepVehicle as stepVeh, vehicleFromAssembly, type Vehicle, type VPart } from "./vehicle";
 import { FUEL, type Channel } from "./p5bProto";
@@ -4383,6 +4384,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const kb = brickKey(bx, by, bz);
       if (bricks.has(ka) && bricks.has(kb)) welds.add(weldKey(ka, kb));
     }
+    weldBeadsDirty = true;
     rebuildAllBrickMeshes();
     // Teks layer restore: [id, o, qx, qy, qz, on, ext?, cfg?].
     for (const [id, o, qx, qy, qz, on, ext, cfg] of data.teks ?? data.technic ?? []) {
@@ -5365,9 +5367,48 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   function unweldBrick(key: string) {
     for (const w of [...welds]) {
       const [a, b] = w.split("|");
-      if (a === key || b === key) welds.delete(w);
+      if (a === key || b === key) {
+        welds.delete(w);
+        weldBeadsDirty = true;
+      }
     }
     if (weldPrime === key) weldPrime = "";
+  }
+
+  // P2 residue: the VISIBLE weld bead — one InstancedMesh whose ring
+  // segments trace every welded pair's contact rectangle, half-proud
+  // of the surface (weld.ts holds the pure geometry). Rebuilt only
+  // when the joint set changes (dirty flag, consumed by tickBricks
+  // and immediately by the weld gesture).
+  const weldBeadMat = new THREE.MeshStandardMaterial({ color: 0xe9edf3, metalness: 0.85, roughness: 0.32 });
+  const beadUnitGeo = new THREE.BoxGeometry(1, 1, 1);
+  let weldBeadMesh: THREE.InstancedMesh | null = null;
+  let weldBeadsDirty = true;
+  function refreshWeldBeads() {
+    weldBeadsDirty = false;
+    const segs: BeadSeg[] = [];
+    for (const w of welds) {
+      const [ka, kb] = w.split("|");
+      const a = bricks.get(ka);
+      const b = bricks.get(kb);
+      if (a && b) segs.push(...beadSegments(a, b));
+    }
+    if (weldBeadMesh) {
+      scene.remove(weldBeadMesh);
+      weldBeadMesh.dispose();
+      weldBeadMesh = null;
+    }
+    if (!segs.length) return;
+    weldBeadMesh = new THREE.InstancedMesh(beadUnitGeo, weldBeadMat, segs.length);
+    const m = new THREE.Matrix4();
+    segs.forEach((s, i) => {
+      m.makeScale(s.sx, s.sy, s.sz);
+      m.setPosition(s.cx, s.cy, s.cz);
+      weldBeadMesh!.setMatrixAt(i, m);
+    });
+    weldBeadMesh.instanceMatrix.needsUpdate = true;
+    weldBeadMesh.frustumCulled = false;
+    scene.add(weldBeadMesh);
   }
   function bricksTouch(a: Brick, b: Brick): boolean {
     const ox = Math.min(a.sx + 2, b.sx + 2) - Math.max(a.sx, b.sx);
@@ -6446,6 +6487,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     brickSagged.clear();
     for (const f of fallingBricks) scene.remove(f.mesh);
     fallingBricks.length = 0;
+    for (const g of fallingGroups) scene.remove(g.group);
+    fallingGroups.length = 0;
+    weldBeadsDirty = true;
     for (const m of brickMeshes.values()) {
       scene.remove(m);
       m.dispose();
@@ -6814,6 +6858,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // ids whose bricks recovered support and must rise back to 0).
   type FallingBrick = { id: number; x: number; z: number; y: number; vy: number; mesh: THREE.Mesh };
   const fallingBricks: FallingBrick[] = [];
+  // P2 residue: an unanchored WELDED component falls as ONE rigid
+  // body — members keep their relative stud offsets, the body lands
+  // on the highest support any member meets, and the internal welds
+  // are restored at the landing (shifted by the fall).
+  type FallingGroup = { members: { id: number; dsx: number; dsz: number; dsy: number }[]; pairs: [number, number][]; sx: number; sz: number; y: number; vy: number; group: THREE.Group };
+  const fallingGroups: FallingGroup[] = [];
   const brickStress = new Map<string, number>();
   const brickSagged = new Set<string>(); // brick keys currently rendered with sag > 0
   const BRICK_STRESS_MAX = 0.12; // was 0.75 — Philippe: STUDS gravity was not visible
@@ -7003,8 +7053,124 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
   }
 
+  function detachWeldGroup(compKeys: string[]) {
+    const origin = bricks.get(compKeys[0]);
+    if (!origin) return;
+    const indexOf = new Map(compKeys.map((k, i) => [k, i] as [string, number]));
+    const pairs: [number, number][] = [];
+    for (const w of welds) {
+      const [a, b] = w.split("|");
+      if (indexOf.has(a) && indexOf.has(b)) pairs.push([indexOf.get(a)!, indexOf.get(b)!]);
+    }
+    if (fallingBricks.length + fallingGroups.length >= FALL_CAP) {
+      for (const k of compKeys) {
+        const b = bricks.get(k);
+        if (b) {
+          removeBrick(k);
+          dropItem(b.id, 1, b.sx / 2 + 0.5, b.sy + 0.55, b.sz / 2 + 0.5);
+        }
+      }
+      return;
+    }
+    const members: FallingGroup["members"] = [];
+    for (const k of compKeys) {
+      const b = bricks.get(k);
+      if (b) members.push({ id: b.id, dsx: b.sx - origin.sx, dsz: b.sz - origin.sz, dsy: b.sy - origin.sy });
+    }
+    for (const k of compKeys) {
+      removeBrick(k);
+      brickStress.delete(k);
+      brickSagged.delete(k);
+    }
+    const group = new THREE.Group();
+    for (const mem of members) {
+      const mesh = new THREE.Mesh(brickGeo(mem.id), opaqueLam);
+      mesh.position.set(mem.dsx / 2 + 0.5, mem.dsy + 0.5, mem.dsz / 2 + 0.5);
+      if (plasticOn) {
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+      }
+      group.add(mesh);
+    }
+    group.position.set(origin.sx / 2, origin.sy, origin.sz / 2);
+    scene.add(group);
+    fallingGroups.push({ members, pairs, sx: origin.sx, sz: origin.sz, y: origin.sy, vy: 0, group });
+    burst(origin.sx / 2 + 0.5, origin.sy + 0.4, origin.sz / 2 + 0.5, "#cfd6dd", 8);
+    audio.break();
+    saveDirty = true;
+  }
+
+  function updateFallingGroups(dt: number) {
+    for (let i = fallingGroups.length - 1; i >= 0; i--) {
+      const f = fallingGroups[i];
+      f.vy -= FALL_G * dt;
+      if (f.vy < FALL_TERM) f.vy = FALL_TERM;
+      const steps = Math.max(1, Math.ceil((Math.abs(f.vy) * dt) / 0.45));
+      const sdt = dt / steps;
+      let landY = -Infinity;
+      for (let s = 0; s < steps && landY === -Infinity; s++) {
+        const prevY = f.y;
+        f.y += f.vy * sdt;
+        let hit = -Infinity;
+        for (const mem of f.members) {
+          const my = f.y + mem.dsy;
+          const cy = Math.floor(my);
+          const probe: Brick = { id: mem.id, sx: f.sx + mem.dsx, sy: cy, sz: f.sz + mem.dsz };
+          for (const ck of brickCells(probe)) {
+            const [cx, , cz] = ck.split(",").map(Number);
+            if (def(world.get(cx, cy, cz)).solid) {
+              hit = Math.max(hit, cy + 1 - mem.dsy);
+              continue;
+            }
+            const near: Brick[] = [];
+            bricksNearCell(cx, cy, cz, near);
+            bricksNearCell(cx, cy - 1, cz, near);
+            for (const ob of near) {
+              const ox = Math.min((f.sx + mem.dsx) / 2 + 1, ob.sx / 2 + 1) - Math.max((f.sx + mem.dsx) / 2, ob.sx / 2);
+              const oz = Math.min((f.sz + mem.dsz) / 2 + 1, ob.sz / 2 + 1) - Math.max((f.sz + mem.dsz) / 2, ob.sz / 2);
+              if (ox > 0 && oz > 0 && ob.sy + 1 <= prevY + mem.dsy + 0.001 && ob.sy + 1 > my) hit = Math.max(hit, ob.sy + 1 - mem.dsy);
+            }
+          }
+        }
+        if (hit > -Infinity) landY = hit;
+      }
+      if (landY > -Infinity) {
+        scene.remove(f.group);
+        fallingGroups.splice(i, 1);
+        const oy = Math.round(landY);
+        const landed = new Map<number, string>();
+        f.members.forEach((mem, ix) => {
+          const nsx = f.sx + mem.dsx;
+          const nsy = oy + mem.dsy;
+          const nsz = f.sz + mem.dsz;
+          if (brickSpaceFree(nsx, nsy, nsz) && !brickHitsPlayer(nsx / 2, nsy, nsz / 2)) {
+            addBrick(mem.id, nsx, nsy, nsz);
+            landed.set(ix, brickKey(nsx, nsy, nsz));
+          } else dropItem(mem.id, 1, nsx / 2 + 0.5, nsy + 0.55, nsz / 2 + 0.5);
+        });
+        for (const [ai, bi] of f.pairs) {
+          const ka = landed.get(ai);
+          const kb = landed.get(bi);
+          if (ka && kb) welds.add(weldKey(ka, kb));
+        }
+        for (const mid of new Set(f.members.map((mm) => mm.id))) rebuildBrickMesh(mid);
+        weldBeadsDirty = true;
+        saveDirty = true;
+        continue;
+      }
+      if (f.y < -12) {
+        scene.remove(f.group);
+        fallingGroups.splice(i, 1);
+        continue;
+      }
+      f.group.position.set(f.sx / 2, f.y, f.sz / 2);
+    }
+  }
+
   function tickBricks(dt: number) {
     if (fallingBricks.length) updateFallingBricks(dt);
+    if (fallingGroups.length) updateFallingGroups(dt);
+    if (weldBeadsDirty) refreshWeldBeads();
     if (bricks.size === 0) {
       if (brickStress.size) brickStress.clear();
       if (brickSagged.size) brickSagged.clear();
@@ -7017,6 +7183,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     integrityAcc = 0;
     const cant = computeIntegrity();
     const stressed: string[] = [];
+    const doomed: string[] = []; // P2: detachments resolve AFTER the scan, per welded component
     const sagIds = new Set<number>(); // ids to rebuild for sag changes only
     const allBricks = [...bricks.values()];
     for (const b of allBricks) {
@@ -7037,10 +7204,36 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const s = (brickStress.get(k) ?? 0) + step;
       brickStress.set(k, s);
       stressed.push(k);
-      if (s >= stressMaxFor(b.id)) detachBrick(k);
+      if (s >= stressMaxFor(b.id)) doomed.push(k);
       else {
         brickSagged.add(k);
         sagIds.add(b.id); // sag grew this scan
+      }
+    }
+    // P2 residue: detachments resolve per WELDED COMPONENT. If any
+    // member of the component is still supported, the welds hold the
+    // whole component (stress released — a weld is a permanent bond,
+    // like mining refusing a welded brick). If NO member is
+    // supported, the component falls as ONE rigid body.
+    if (doomed.length) {
+      const handled = new Set<string>();
+      for (const k of doomed) {
+        if (handled.has(k) || !bricks.has(k)) continue;
+        if (brickWelded(k)) {
+          const comp = weldComponentOf(welds, k).filter((ck) => bricks.has(ck));
+          if (comp.every((ck) => !cant.has(ck))) detachWeldGroup(comp);
+          else {
+            for (const ck of comp) {
+              brickStress.delete(ck);
+              const cb = bricks.get(ck);
+              if (cb && brickSagged.delete(ck)) sagIds.add(cb.id);
+            }
+          }
+          for (const ck of comp) handled.add(ck);
+        } else {
+          detachBrick(k);
+          handled.add(k);
+        }
       }
     }
     for (const id of sagIds) rebuildBrickMesh(id);
@@ -7087,6 +7280,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return;
     }
     welds.add(wk);
+    refreshWeldBeads();
     weldPrime = "";
     wearHeld();
     burst((a.sx + b.sx) / 4 + 0.5, b.sy + 0.7, (a.sz + b.sz) / 4 + 0.5, "#ffcf5e", 10);
@@ -14491,7 +14685,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         welded.add(a);
         welded.add(b);
       }
-      return { count: welds.size, pairs: [...welds], welded: [...welded] };
+      return { count: welds.size, pairs: [...welds], welded: [...welded], fallingGroups: fallingGroups.length, beadSegs: weldBeadMesh ? weldBeadMesh.count : 0 };
     },
     // One evaluate can advance brick stress and the fall. The rig's frames
     // are ~700× slower than game time, so waiting on requestAnimationFrame
