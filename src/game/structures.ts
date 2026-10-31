@@ -838,7 +838,8 @@ function rollStructure(w: StructWorld, gx: number, gz: number): Structure | null
   const hs = pts.map(([dx, dz]) => w.heightAt(x + dx, z + dz));
   const zones = pts.map(([dx, dz]) => w.zoneAt(x + dx, z + dz));
   const same = zones.filter((zz) => zz === zone).length;
-  if (same < Math.ceil(pts.length * 0.6)) return null;
+  const rough = zone === "arctic" || zone === "volcano";
+  if (same < Math.ceil(pts.length * (rough ? 0.4 : 0.6))) return null;
   const min = Math.min(...hs);
   const max = Math.max(...hs);
   const sorted = [...hs].sort((a, b) => a - b);
@@ -852,10 +853,18 @@ function rollStructure(w: StructWorld, gx: number, gz: number): Structure | null
     if (max - min > 6 || min < SEA - 1) return null;
     return { x, z, y: median, w: size, d: size, kind, zone, gx, gz };
   }
+  if (zone === "islands") {
+    // islets: the pad fills the shallows up to a sand island
+    if (min < SEA - 8 || max - min > 10) return null;
+    return { x, z, y: Math.max(SEA + 1, Math.min(HEIGHT - 26, median)), w: size, d: size, kind, zone, gx, gz };
+  }
   if (min <= SEA) return null;
-  const tol = kind === "village" ? 8 : kind === "hidden" ? 10 : 6;
+  // rugged zones get a looser slope rule (the pad terraces them)
+  const rugged = zone === "arctic" || zone === "volcano" || zone === "mountain" || zone === "canyon";
+  const tol = (kind === "village" ? 8 : kind === "hidden" ? 10 : 6) + (rugged ? 6 : 0);
   if (max - min > tol) return null;
-  const y = Math.max(SEA + 2, Math.min(HEIGHT - 26, median));
+  const clearH = kind === "village" ? (zone === "desertCity" ? 28 : 14) : 18;
+  const y = Math.max(SEA + 2, Math.min(HEIGHT - 4 - clearH, median));
   if (kind === "hidden" && y < 20) return null;
   return { x, z, y, w: size, d: size, kind, zone, gx, gz };
 }
