@@ -487,6 +487,22 @@ export const ID = {
   SensorDist: 472,
   SensorColor: 473,
   VoidGlass: 474, // v5: Veilleur-Prisme drop — void-glass shard (rare melt input)
+  // biome-structures: rare shrine / mecha pieces (480+ to stay clear of parallel branches)
+  SanctumStud: 480,
+  MechaCore: 481,
+  Sandstone: 482,
+  Adobe: 483,
+  PackedSnow: 484,
+  IceBrick: 485,
+  BasaltBrick: 486,
+  ObsidianTile: 487,
+  Mangrove: 488,
+  Bamboo: 489,
+  Coral: 490,
+  CrystalBrick: 491,
+  JungleStone: 492,
+  MudBrick: 493,
+  RedRock: 494,
   // P6 step 4 / P7 tool moulds (Muse): plastic tools cast at the
   // Foundry — the mould is the shape, the ingot is the stock. Tier 2
   // (stone class), 120 uses: moulded plastic, honestly mid-table.
@@ -1300,6 +1316,22 @@ put(b(ID.PharaohGold, "Scarab relic", "#f5c518", "#ffd84a", "#c99812", "#9a700a"
 put(b(ID.WitchVenom, "Mixer essence", "#9b45e4", "#ba6eff", "#732ab5", "#4e1882", { placeable: false }));
 put(b(ID.IllagerBadge, "Raider badge", "#8e959c", "#cfd6dc", "#585e66", "#383d42", { placeable: false }));
 put(b(ID.VoidCore, "Prism sentinel core", "#2e9888", "#5cf2dc", "#1b5e54", "#103832", { placeable: false }));
+put(b(ID.SanctumStud, "Sanctum stud", "#ffe14a", "#fff3a8", "#e2b12e", "#9a700a", { placeable: false }));
+put(b(ID.MechaCore, "Mecha core", "#e23b2f", "#ff8a5c", "#8e959c", "#23272c", { placeable: false }));
+// Biome bricks (PR 3, 16-bit chunks): themed building stock, ids > 255.
+put(b(ID.Sandstone, "Sandstone", "#e3c98a", "#efd9a0", "#d4b674", "#b89a5c", { hard: 0.8 }));
+put(b(ID.Adobe, "Adobe brick", "#c98a5a", "#d89c6c", "#b87a4c", "#9a643c", { hard: 0.8 }));
+put(b(ID.PackedSnow, "Packed snow", "#eef4fa", "#ffffff", "#e0e8f0", "#cfd8e2", { hard: 0.8 }));
+put(b(ID.IceBrick, "Ice brick", "#9fd4f2", "#c4e8fa", "#8cc4e6", "#74acd2", { hard: 0.8, slip: true }));
+put(b(ID.BasaltBrick, "Basalt brick tile", "#4a4a50", "#5a5a62", "#3c3c42", "#2a2a30", { hard: 1.4, tough: true }));
+put(b(ID.ObsidianTile, "Obsidian tile", "#2c1e44", "#3e2c5e", "#22163a", "#140c24", { hard: 1.4, tough: true }));
+put(b(ID.Mangrove, "Mangrove planks", "#8a4a3a", "#9c5a48", "#7a3e30", "#5e2e24", { hard: 0.8 }));
+put(b(ID.Bamboo, "Bamboo", "#c8d46a", "#d8e27c", "#b4c25a", "#94a246", { hard: 0.8 }));
+put(b(ID.Coral, "Coral brick", "#ff7a8a", "#ff9aa6", "#f0606e", "#c8485a", { hard: 0.8 }));
+put(b(ID.CrystalBrick, "Crystal brick", "#b8e8ff", "#e0f6ff", "#a0d8f4", "#80bce0", { hard: 1.4, light: 6 }));
+put(b(ID.JungleStone, "Jungle stone", "#6a8a5a", "#7c9c6a", "#5c7a4c", "#4a6a3c", { hard: 1.4, tough: true }));
+put(b(ID.MudBrick, "Mud brick", "#6e5a42", "#7e6a50", "#604e38", "#4c3c2a", { hard: 0.8 }));
+put(b(ID.RedRock, "Red rock", "#c0603c", "#d0704a", "#ac5232", "#8c4026", { hard: 1.4, tough: true }));
 put(b(ID.TidalBlade, "Tidal trident blade", "#32b8cb", "#64e5f5", "#1f8da0", "#146070", { placeable: false, tool: "sword", tier: 4, maxUse: 480 }));
 put(b(ID.PharaohStaff, "Sun pharaoh scepter", "#ffd84a", "#fff088", "#d69b1a", "#9e6d0c", { placeable: false, tool: "sword", tier: 4, maxUse: 460 }));
 put(b(ID.WitchStaff, "Covensoul blade", "#a33de2", "#c875ff", "#7220a8", "#4a1072", { placeable: false, tool: "sword", tier: 4, maxUse: 440 }));
@@ -1493,34 +1525,28 @@ export function def(id: number): BlockDef {
 }
 
 export const ATLAS_COLS = 16;
-export const ATLAS_ROWS = 48;
+export const ATLAS_ROWS = 52; // 48 → 52 for the biome bricks (2048×6656 px, under the 8192 WebGL limit)
 export const TILE = 128;
 
-const TILE_OF = new Uint16Array(512);
-let tileSlot = 0;
-for (let id = 1; id < BLOCKS.length; id++) {
-  const block = BLOCKS[id];
-  if (!block) continue;
-  const drawn =
-    block.placeable ||
-    block.fluid ||
-    block.solid ||
-    block.plant ||
-    block.glass ||
-    block.torch ||
-    block.dust ||
-    block.lever ||
-    block.door ||
-    block.gate ||
-    block.plate ||
-    block.rail ||
-    block.cactus ||
-    block.ladder;
-  if (!drawn) continue;
-  TILE_OF[id] = ++tileSlot;
+// Atlas slots: world bricks first (id order, so every existing slot keeps
+// its place), Teks parts last — they render through the Teks layer, so a
+// slot past the atlas end only costs them a blank fallback tile.
+const TILE_OF = new Uint16Array(1024);
+let tilesReady = false;
+function drawnBlock(block: BlockDef | undefined): boolean {
+  if (!block) return false;
+  return !!(block.placeable || block.fluid || block.solid || block.plant || block.glass || block.torch || block.dust || block.lever || block.door || block.gate || block.plate || block.rail || block.cactus || block.ladder);
+}
+function assignTiles() {
+  tilesReady = true;
+  const teks = new Set<number>(TEKS);
+  let slot = 0;
+  for (let id = 1; id < BLOCKS.length; id++) if (!teks.has(id) && drawnBlock(BLOCKS[id])) TILE_OF[id] = ++slot;
+  for (let id = 1; id < BLOCKS.length; id++) if (teks.has(id) && drawnBlock(BLOCKS[id])) TILE_OF[id] = ++slot;
 }
 
 export function faceTile(id: number, face: 0 | 1 | 2 | 3): number {
+  if (!tilesReady) assignTiles();
   return (TILE_OF[id] || 0) * 4 + face;
 }
 

@@ -206,6 +206,33 @@ const TABLES: Record<string, Stack[]> = {
     [ID.Crossbow, 1],
     [ID.Lantern, 2],
   ],
+  // biome-structures: shrine, abandoned mecha, hidden vault
+  sanctum: [
+    [ID.Gold, 2],
+    [ID.Emerald, 2],
+    [ID.Lantern, 2],
+    [ID.Book, 1],
+    [ID.Prism, 1],
+    [ID.Crystal, 1],
+  ],
+  mecha: [
+    [ID.Scrap, 3],
+    [ID.Ingot, 2],
+    [ID.Chrome, 1],
+    [ID.Copper, 2],
+    [ID.Battery, 1],
+    [ID.Wheel, 2],
+    [ID.Pin2L, 4],
+  ],
+  vault: [
+    [ID.Gold, 3],
+    [ID.Diamond, 1],
+    [ID.Emerald, 3],
+    [ID.Sapphire, 1],
+    [ID.Prism, 2],
+    [ID.Tome, 1],
+    [ID.Totem, 1],
+  ],
   monument: [
     [ID.Prism, 3],
     [ID.GuardianSpike, 2],
@@ -229,7 +256,10 @@ export type LootKind =
   | "witch_hut"
   | "castle"
   | "mansion"
-  | "monument";
+  | "monument"
+  | "sanctum"
+  | "mecha"
+  | "vault";
 
 export function stockChest(bin: { ids: number[]; ns: number[] }, x: number, y: number, z: number, seed: number, kind: LootKind) {
   if (bin.ids.some((id) => id > 0)) return;
@@ -241,7 +271,8 @@ export function stockChest(bin: { ids: number[]; ns: number[] }, x: number, y: n
     kind === "castle" ||
     kind === "mansion" ||
     kind === "monument" ||
-    kind === "dungeon";
+    kind === "dungeon" ||
+    kind === "vault";
   const n = (isMajor ? 5 : 3) + Math.floor(hash2(x, z, seed + y + 17) * 3);
   for (let i = 0; i < n; i++) {
     const roll = hash3(x, y + i * 5, z, seed + 90 + i);

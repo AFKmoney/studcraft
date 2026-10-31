@@ -27,6 +27,9 @@ import { buildAtlas } from "./textures";
 import { CS, HEIGHT, SEA, World, decorate, folkLayout, inNether, penSheep, paintEndCrystals, END_PILLARS, type Decor, type FolkSpot } from "./world";
 import { DEBRIS_ADVANCED, debrisAt } from "./debris";
 import { stockChest } from "./loot";
+import { banditFolk, civicOf, findStructure, garageOf, structureFolk, structuresNear, structureLabel, structureOwning, stockStructureChest, type StructKind, type Structure } from "./structures";
+import { BOUNTY_ARREST, banditQuests, chiefOf, chiefQuests, COIN, CRIME, guildEntryQuest, guildQuests, GUILDS, mobTag, seenBy, type CrimeKind, type Observer } from "./society";
+import { Society } from "./societyState";
 import { mayYield, spillSlots } from "./yields";
 import { Upscaler, upscaleScale } from "./upscale";
 import { BTN, PadEdges, activePad, padBusy, padLabel, rumble, stick } from "./gamepad";
@@ -386,6 +389,7 @@ declare global {
       getPrefabs?: () => { name: string; parts: number; ingots: number; copper: number; afford: boolean }[];
       buyPrefabQa?: (name: string) => void;
       getVillageAt?: () => { x: number; z: number } | null;
+      findStructureQa?: (kind: string, zone?: string) => { x: number; z: number; y: number; w: number; d: number; kind: string; zone: string; label: string } | null;
       getCatalogue?: () => { name: string; parts: number }[];
       catalogueSaveQa?: (name: string) => boolean;
       catalogueLoadQa?: (name: string) => { placed: number; holo: number };
@@ -851,6 +855,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   // the traders themselves turn on you.
   let tradeStock: Record<string, number[]> = {};
   let reputation: Record<string, number> = {};
+  let society = new Society(); // PR 6: contracts, bounties, guilds (societyState.ts)
   let traderKeySet: string | null = null;
   let prevWorldTime = 0;
   function repKeyFor(x: number, z: number): string {
@@ -3572,6 +3577,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     tame?: boolean;
     lead?: boolean;
     role?: string;
+    soc?: string; // PR 6 society role: chief | guard | guild:<id> | fence | upgrades | bandit
+    socName?: string;
     homeX?: number;
     homeZ?: number;
     roam?: boolean;
@@ -4404,6 +4411,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const chainDef = q.chain ? CHAINS[q.chain] : undefined;
       return { id: q.id, name: q.name, detail: q.detail, n, need: q.need, done: prog.done, ready, reward, chain: q.chain, chainName: chainDef?.name, from: chainDef?.from, step, steps, locked: !prog.done && !active };
     });
+    for (const row of society.rows((id) => inv[id] ?? 0, (id) => def(id).name)) {
+      hud.quests.push(row);
+      if (row.ready && !alert) alert = row.name + " ready";
+    }
     hud.questAlert = alert;
     const readyQ = hud.quests.find((q) => q.ready);
     const openQ = hud.quests.find((q) => !q.done && !q.locked);
@@ -4565,6 +4576,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     traderRole = "grocer";
     tradeStock = {};
     reputation = {};
+    society = new Society();
     traderKeySet = null;
   }
 
@@ -4837,6 +4849,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     tradeStock = {};
     for (const [k, v] of Object.entries(data.tradeStock ?? {})) tradeStock[k] = v.slice();
     reputation = { ...(data.reputation ?? {}) };
+    society = Society.from(data.society);
     traderKeySet = null;
     hotbar = data.hotbar?.length === 9 ? [...data.hotbar] : [...CREATIVE_BAR];
     for (const k of Object.keys(inv)) delete inv[Number(k)];
@@ -5298,6 +5311,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const id = world.get(x, y, z);
     const block = def(id);
     if (id === ID.Air || id === ID.Bedrock || block.hard === Infinity) return;
+    societyCrimeAt(x, y, z, id === ID.Chest || id === ID.Barrel ? "steal" : "break");
     const rmBefore = CH.removedAt(x, y, z, id); // v4.17: pieces already knocked out
     CH.setRemoved(x, y, z, id, 0); // v4.17: the damaged block is gone entirely
     world.set(x, y, z, ID.Air);
@@ -7953,7 +7967,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
               ? "hamlet"
               : "wild";
       const freshBin = !bin.ids.some((bid) => bid > 0);
-      stockChest(bin, x, y, z, world.seed, lootPool);
+      // biome-structures: crates inside a village/shrine/mecha/vault/POI use its pool
+      const owner = structureOwning(world, x, y, z);
+      if (owner) stockStructureChest(bin, x, y, z, world.seed, owner);
+      else stockChest(bin, x, y, z, world.seed, lootPool);
       // R4: on the FIRST opening of a monument chest, its vault can
       // yield a named relic; the Scavenger path doubles that chance
       // and guarantees the §11 Teks jackpot part.
@@ -10025,6 +10042,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
             if (m.kind === "villager" || m.kind === "golem") {
               m.byPlayerT = 6;
               addRep(repKeyFor(m.homeX ?? m.x, m.homeZ ?? m.z), m.kind === "villager" ? -3 : -2);
+              if (m.soc === "guard") guardStruck = true;
             }
             if (s.punch && m.kind !== "shulker" && m.kind !== "dragon") shove(m, s.vx, s.vz, 0.4 + 0.5 * s.punch);
             if (m.kind === "enderman" || m.kind === "bee") m.mad = true;
@@ -10773,6 +10791,279 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
   }
 
+  // PR 3: themed-village life (structures.ts) — TEKS dealership display
+  // (real catalogue vehicle + Technic parts on the racks, dressed once
+  // per garage and only into free cells) and the village's traders.
+  const dressedGarages = new Set<string>();
+  function liveStructureVillages() {
+    for (const s of structuresNear(world, player.x, player.z, 1)) {
+      if (s.kind !== "village") continue;
+      if (Math.hypot(s.x + s.w / 2 - player.x, s.z + s.d / 2 - player.z) > 80) continue;
+      const g = garageOf(s, seed);
+      if (!g) continue;
+      const key = s.gx + "," + s.gz;
+      if (!dressedGarages.has(key) && world.get(g.display[0], g.display[1] - 1, g.display[2]) !== ID.Air) {
+        dressedGarages.add(key);
+        const show = builtinModels()[g.model];
+        const A: [number, number, number] = [g.display[0] * 4, g.display[1] * 4 + 5, g.display[2] * 4 + 2];
+        const free = show.parts.every((mp) => tech.test(mp.id, mp.o, [A[0] + mp.dq[0], A[1] + mp.dq[1], A[2] + mp.dq[2]], techSolidAt) >= 0);
+        if (free) for (const mp of show.parts) if (mp.id !== ID.Battery) tech.add(mp.id, mp.o, [A[0] + mp.dq[0], A[1] + mp.dq[1], A[2] + mp.dq[2]]);
+        g.racks.forEach(([x, y, z], i) => {
+          const q: [number, number, number] = [x * 4 + 2, y * 4, z * 4 + 2];
+          if (tech.test(g.rackParts[i], 0, q, techSolidAt) >= 0) tech.add(g.rackParts[i], 0, q);
+        });
+      }
+      const live = mobs.filter((m) => m.kind === "villager" && !m.dead);
+      if (live.length >= 21) continue;
+      for (const spot of structureFolk(s, seed)) {
+        if (live.some((m) => m.homeX !== undefined && m.homeZ !== undefined && Math.hypot(m.homeX - spot.x, m.homeZ - spot.z) < 2)) continue;
+        const mob = spawnKind("villager", spot.x, spot.z);
+        mob.role = spot.role;
+        mob.homeX = spot.x;
+        mob.homeZ = spot.z;
+        mob.roam = true;
+        mob.bodyMat?.color.setHex(traderOf(spot.role as TraderRole).tint);
+        decorateVillagerRole(mob.mesh, spot.role as TraderRole);
+        live.push(mob);
+      }
+    }
+  }
+
+  // PR 6: society glue — chiefs, guards, guild masters, the upgrades
+  // vendor and bandit camps stand on structures.ts anchors; every rule
+  // lives in society.ts / societyState.ts. These functions are the
+  // only game.ts side (kept here so PR #5/#7 conflicts stay small).
+  const banditCampsSpawned = new Set<string>();
+  let haltSaidAt = 0;
+  let guardStruck = false; // set by the player's own hits only
+  const socKey = (s: { gx: number; gz: number }) => s.gx + "," + s.gz;
+  const hexOf = (id: number) => parseInt(def(id).color.slice(1), 16) || 0x888888;
+  function villageAround(x: number, z: number): Structure | null {
+    for (const s of structuresNear(world, x, z, 1)) if (s.kind === "village" && x >= s.x - 2 && x <= s.x + s.w + 2 && z >= s.z - 2 && z <= s.z + s.d + 2) return s;
+    return null;
+  }
+  function spawnSoc(x: number, z: number, soc: string, name: string, role: TraderRole, tint: number) {
+    if (mobs.some((m) => !m.dead && m.soc === soc && m.homeX !== undefined && Math.hypot(m.homeX - x, (m.homeZ ?? 0) - z) < 2)) return;
+    const mob = spawnKind("villager", x, z);
+    mob.role = role;
+    mob.soc = soc;
+    mob.socName = name;
+    mob.homeX = x;
+    mob.homeZ = z;
+    mob.roam = true;
+    mob.bodyMat?.color.setHex(tint);
+    decorateVillagerRole(mob.mesh, role);
+  }
+  function losClear(ax: number, ay: number, az: number, bx: number, by: number, bz: number): boolean {
+    const d = Math.hypot(bx - ax, by - ay, bz - az);
+    for (let t = 0.6; t < d - 0.4; t += 0.5) {
+      const f = t / d;
+      if (def(world.get(Math.floor(ax + (bx - ax) * f), Math.floor(ay + (by - ay) * f), Math.floor(az + (bz - az) * f))).solid) return false;
+    }
+    return true;
+  }
+  /** Any villager (guards first among them) with a clear view of you. */
+  function playerSeen(): boolean {
+    const eye = player.y + 1.5;
+    const obs = mobs
+      .filter((m) => !m.dead && m.kind === "villager" && Math.hypot(m.x - player.x, m.z - player.z) < 40)
+      .map((m) => ({ x: m.x, z: m.z, yaw: m.yaw, range: m.soc === "guard" ? 20 : 12, m }));
+    const light = worldTime < 0.5 ? 1 : 0.35;
+    return seenBy(obs as Observer[], { x: player.x, z: player.z, sneaking: isSneaking(), light }, (o) => {
+      const m = (o as (typeof obs)[number]).m;
+      return !losClear(m.x, m.y + 1.5, m.z, player.x, eye, player.z);
+    });
+  }
+  function reportCrime(key: string, kind: CrimeKind, seen: boolean) {
+    const r = society.crime(key, kind, seen);
+    if (seen) {
+      addRep(repKeyFor(player.x, player.z), CRIME[kind].rep);
+      say("Seen! " + kind + " — bounty " + r.standing.bounty + " emeralds" + (r.failed.length ? " · contract failed: " + r.failed.map((q) => q.text.title).join(", ") : ""), 4200);
+    } else if (r.counted.length) say(r.counted.map((q) => q.text.title).join(", ") + " — ready to claim");
+    saveDirty = true;
+  }
+  const NATURAL = new Set<number>([ID.Grass, ID.Dirt, ID.Sand, ID.Snow, ID.Gravel, ID.Stone, ID.Leaves, ID.Water]);
+  function societyCrimeAt(x: number, y: number, z: number, kind: CrimeKind) {
+    if (creative || flat || realm !== 0) return;
+    if (kind === "break" && NATURAL.has(world.get(x, y, z))) return;
+    const s = structureOwning(world, x, y, z);
+    if (!s) return;
+    if (s.kind === "hidden") {
+      if (kind === "steal") reportCrime(socKey(s), "burgle", false);
+      return;
+    }
+    if (s.kind !== "village") return;
+    const g = garageOf(s, seed);
+    const k: CrimeKind = kind === "break" && g && x >= g.counter.x - 9 && x <= g.counter.x + 2 && z >= g.counter.z - 6 && z <= g.counter.z + 5 ? "sabotage" : kind;
+    reportCrime(socKey(s), k, playerSeen());
+  }
+  function societyKill(mob: Mob) {
+    const hits = [...society.bump("kill", mobTag(mob)), ...(mob.bossOf ? society.bump("kill", "boss:" + mob.bossOf) : [])];
+    if (hits.length) {
+      say(hits.map((q) => q.text.title).join(", ") + " — ready to claim");
+      saveDirty = true;
+    }
+  }
+  function societyClaim(id: string) {
+    const r = society.claim(id, (k) => (creative ? 9999 : (inv[k] ?? 0)));
+    if (!r.ok) return say(r.msg);
+    if (!creative) for (const [k, n] of r.take) spend(k, n);
+    for (const [k, n] of r.give) give(k, n);
+    if (r.rep > 0) addRep(repKeyFor(player.x, player.z), Math.ceil(r.rep / 2));
+    gainXp(10);
+    say(r.msg + (r.joined ? " — you joined the " + r.joined.name + "!" : r.rankUp ? " — new rank in the " + r.rankUp.name + "!" : ""));
+    saveDirty = true;
+    emit();
+  }
+  /** Time served: teleport into a cell, skip the hours, and (big
+   *  bounties) move valuables into the evidence chest. */
+  function serveJail(v: Structure, hours: number, confiscate: boolean) {
+    const c = civicOf(v, seed);
+    worldTime = (worldTime + hours / 24) % 1;
+    let took = 0;
+    if (c.jail) {
+      if (confiscate) {
+        const [ex, ey, ez] = c.jail.evidence;
+        const bin = ensureChest(ex + "," + ey + "," + ez);
+        for (const id of [COIN, ID.Gold, ID.Diamond, ID.Ingot, ID.Crystal]) {
+          const n = inv[id] ?? 0;
+          const slotI = bin.ids.findIndex((b) => !b);
+          if (n <= 0 || slotI < 0) continue;
+          bin.ids[slotI] = id;
+          bin.ns[slotI] = n;
+          inv[id] = 0;
+          took++;
+        }
+      }
+      const [x, y, z] = c.jail.cells[Math.floor(Math.random() * c.jail.cells.length)];
+      player.x = x + 0.5;
+      player.y = y;
+      player.z = z + 0.5;
+      player.vy = 0;
+    }
+    say("You served " + hours + " h in the cachot. Bounty cleared." + (took ? " Your valuables sit in the evidence chest." : ""), 6000);
+    saveDirty = true;
+    emit();
+  }
+  function societyTalk(mob: Mob): boolean {
+    const v = villageAround(mob.homeX ?? mob.x, mob.homeZ ?? mob.z);
+    const sneak = isSneaking();
+    const name = mob.socName ?? "Villager";
+    if (mob.soc === "guard" && v) {
+      const key = socKey(v);
+      if (society.st(key).bounty <= 0) {
+        say(name + ": Move along, citizen. (" + repWord(society.st(key).rep) + ")");
+        return true;
+      }
+      const verdict = society.arrest(key, sneak ? "jail" : "pay", creative ? 9999 : (inv[COIN] ?? 0));
+      if (verdict.coinsPaid > 0) {
+        if (!creative) spend(COIN, verdict.coinsPaid);
+        say("Fine paid: " + verdict.coinsPaid + " emeralds. Bounty cleared.");
+        saveDirty = true;
+      } else serveJail(v, verdict.jailHours, verdict.confiscate);
+      return true;
+    }
+    if (mob.soc === "chief" && v) {
+      const key = socKey(v);
+      if (sneak && society.active.some((a) => a.q.track.tag === "crime:pickpocket")) {
+        const seen = playerSeen();
+        reportCrime(key, "pickpocket", seen);
+        if (!seen) give(ID.Gold, 2);
+        return true;
+      }
+      if (society.st(key).rep <= -50) {
+        say(name + ": Out of my hall, criminal.");
+        return true;
+      }
+      const q = society.next(chiefQuests(v.gx, v.gz, v.zone, seed, society.epoch("chief:" + key)));
+      say(name + " — " + (q ? society.accept(q) : "Finish what I asked first (quest board → Contracts)."), 6000);
+      saveDirty = true;
+      return true;
+    }
+    if (mob.soc?.startsWith("guild:") && v) {
+      const g = GUILDS.find((x) => "guild:" + x.id === mob.soc);
+      if (!g) return false;
+      const key = socKey(v);
+      if (!society.member(g)) {
+        const entry = guildEntryQuest(g, key, v.zone, seed);
+        say(g.name + " — prove yourself to join. " + society.accept(entry), 6000);
+      } else {
+        const q = society.next(guildQuests(g, key, v.zone, seed, society.epoch(society.epochKey("guild", key, g))));
+        say(g.ranks[society.rank(g)] + " — " + (q ? society.accept(q) : "No work right now; finish your contracts."), 6000);
+      }
+      saveDirty = true;
+      return true;
+    }
+    if (mob.soc === "fence" && sneak) {
+      // whispering to the fence: bandit jobs, and the Thieves' Guild once known
+      const camp = structureOwning(world, Math.floor(mob.homeX ?? mob.x), Math.floor(mob.y), Math.floor(mob.homeZ ?? mob.z));
+      if (!camp) return false;
+      const key = socKey(camp);
+      const thieves = GUILDS.find((g) => g.id === "thieves")!;
+      const q =
+        society.st("*").banditRep >= 10 && !society.member(thieves)
+          ? guildEntryQuest(thieves, key, camp.zone, seed)
+          : society.next(banditQuests(camp.gx, camp.gz, camp.zone, seed, society.epoch("bandit:" + key)));
+      say("Fence (whispers) — " + (q ? society.accept(q) : "Nothing for you yet."), 6000);
+      saveDirty = true;
+      return true;
+    }
+    return false; // fence (trade), upgrades vendor: the normal trade panel
+  }
+  function societyTick() {
+    if (flat || realm !== 0) return;
+    for (const s of structuresNear(world, player.x, player.z, 1)) {
+      if (Math.hypot(s.x + s.w / 2 - player.x, s.z + s.d / 2 - player.z) > 80) continue;
+      if (s.kind === "bandit") {
+        const f = banditFolk(s)!;
+        spawnSoc(f.fence.x, f.fence.z, "fence", "Fence", "fence", 0x3b3b3b);
+        if (!banditCampsSpawned.has(socKey(s))) {
+          banditCampsSpawned.add(socKey(s));
+          for (const b of f.bandits) {
+            const m = spawnKind("pillager", b.x, b.z);
+            m.soc = "bandit";
+            m.socName = "Bandit";
+          }
+        }
+        continue;
+      }
+      if (s.kind !== "village") continue;
+      const c = civicOf(s, seed);
+      if (c.chief) spawnSoc(c.chief.x, c.chief.z, "chief", chiefOf(s.gx, s.gz, s.zone, seed).name, "clerk", 0xc9a227);
+      const mx = s.x + s.w / 2;
+      const mz = s.z + s.d / 2;
+      spawnSoc(mx + 3.5, mz + 0.5, "guard", "Guard", "smith", 0x7a1f1f);
+      spawnSoc(mx - 3.5, mz - 0.5, "guard", "Guard", "smith", 0x7a1f1f);
+      for (const h of c.halls) spawnSoc(h.at.x, h.at.z, "guild:" + h.guild.id, h.guild.name + " master", "mage", hexOf(h.guild.hall.banner));
+      const g = garageOf(s, seed);
+      if (g) spawnSoc(g.counter.x - 1.5, g.counter.z - 3.5, "upgrades", "Upgrades vendor", "outfitter", 0x2f6fb0);
+    }
+    const v = villageAround(player.x, player.z);
+    if (!v) return;
+    const key = socKey(v);
+    // resisting: strike a guard and the watch turns on you
+    const guards = mobs.filter((m) => !m.dead && m.soc === "guard" && Math.hypot(m.x - player.x, m.z - player.z) < 60);
+    if (guardStruck && guards.length) {
+      guardStruck = false;
+      society.arrest(key, "resist", 0);
+      for (const m of guards) {
+        const foe = spawnKind("vindicator", m.x, m.z);
+        foe.soc = "guard-hostile";
+        foe.socName = "Guard";
+        scene.remove(m.mesh);
+        mobs.splice(mobs.indexOf(m), 1);
+      }
+      say("You resisted arrest — the guards attack!", 4000);
+      saveDirty = true;
+      return;
+    }
+    const st = society.st(key);
+    if (st.bounty >= BOUNTY_ARREST && performance.now() - haltSaidAt > 12000 && guards.some((m) => Math.hypot(m.x - player.x, m.z - player.z) < 7)) {
+      haltSaidAt = performance.now();
+      say("Halt! Bounty " + st.bounty + " emeralds. Talk to a guard to pay — sneak + talk to serve time — or strike to resist.", 7000);
+    }
+  }
+
   function ensureRoamingFolk() {
     if (flat) return;
     for (let i = mobs.length - 1; i >= 0; i--) {
@@ -10783,6 +11074,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         mobs.splice(i, 1);
       }
     }
+    liveStructureVillages();
+    societyTick();
     const site = world.nearestHamlet(player.x, player.z, 2);
     if (!site) return;
     if (Math.hypot(site.x + 15 - player.x, site.z + 14 - player.z) > 72) return;
@@ -11382,6 +11675,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       say("Tamed");
       return;
     }
+    if (mob.kind === "villager" && mob.soc && societyTalk(mob)) return;
     if (mob.kind === "villager") {
       traderRole = (mob.role as TraderRole) || "grocer";
       traderKeySet = repKeyFor(mob.homeX ?? mob.x, mob.homeZ ?? mob.z);
@@ -11476,6 +11770,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     gainXp(MOB_XP[mob.kind] ?? 2);
     if (mob.kind === "walker" || mob.kind === "creeper" || mob.kind === "skelly" || mob.kind === "husk" || mob.kind === "stray" || mob.kind === "pillager" || mob.kind === "vindicator" || mob.kind === "evoker" || mob.kind === "vex" || mob.kind === "ravager") bumpQuest("kill", "host");
     if (mob.kind === "spider") bumpQuest("kill", "spider");
+    societyKill(mob);
     if (mob.kind === "frog") bumpQuest("kill", "frog");
     if (mob.kind === "fox") bumpQuest("kill", "fox");
     if (mob.kind === "crab") bumpQuest("kill", "crab");
@@ -12647,6 +12942,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     for (const [id, count] of Object.entries(inv)) if (count > 0) invList.push([Number(id), count]);
     return {
       v: 1,
+      ids: 16,
       seed,
       seedText,
       flat,
@@ -12738,6 +13034,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       tradeXp: { ...tradeXp },
       tradeStock: Object.fromEntries(Object.entries(tradeStock).map(([k, v]) => [k, v.slice()])),
       reputation: { ...reputation },
+      society: society.toJSON(),
       folk: folkSpots.map((f) => ({ x: f.x, z: f.z, role: f.role })),
       village: villageAt,
       quests: quests.map((q) => ({ id: q.id, n: q.n, done: q.done })),
@@ -13124,7 +13421,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
 
     if (!blockFirst && mob) {
-      hud.targetName = mob.kind === "villager" && !mob.species && !mob.bossOf ? traderOf(mob.role).name : displayName({ ...mob, elder: mob.kind === "guardian" && !mob.bossOf && (mob.maxHp ?? 0) >= 30 });
+      hud.targetName = mob.socName ? mob.socName : mob.kind === "villager" && !mob.species && !mob.bossOf ? traderOf(mob.role).name : displayName({ ...mob, elder: mob.kind === "guardian" && !mob.bossOf && (mob.maxHp ?? 0) >= 30 });
       if (sample.first && sample.place && !prevPlace) interactMob(mob);
       // Player hits are gated by the mob's own hurt cooldown (hitCd), not by its
       // attack cooldown: sharing one timer meant a mob biting you every second
@@ -13177,6 +13474,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         if (mob.kind === "villager" || mob.kind === "golem") {
           mob.byPlayerT = 6;
           addRep(repKeyFor(mob.homeX ?? mob.x, mob.homeZ ?? mob.z), mob.kind === "villager" ? -3 : -2);
+          if (mob.soc === "guard") guardStruck = true;
         }
         if (mob.kind === "enderman" || mob.kind === "bee") mob.mad = true;
         if ((blade.tool === "sword" || heldWeaponId === ID.Trident) && enchLvl(heldWeaponId, "fire") > 0) mob.burn = Math.max(mob.burn ?? 0, 2 + enchLvl(heldWeaponId, "fire"));
@@ -14880,6 +15178,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     getPrefabs: () => hud.prefabs,
     buyPrefabQa: (name: string) => api.buyPrefab(name),
     getVillageAt: () => villageAt,
+    // biome-structures QA hooks (inert in play): locate a structure of a kind/zone.
+    findStructureQa: (kind: string, zone?: string) => {
+      const st = findStructure(world, kind as StructKind, (zone || undefined) as Parameters<typeof findStructure>[2]);
+      return st ? { ...st, label: structureLabel(st) } : null;
+    },
     getCatalogue: () => loadCatalogue().map((m) => ({ name: m.name, parts: m.parts.length })),
     catalogueSaveQa: (name: string) => catalogueSaveCurrent(name),
     catalogueLoadQa: (name: string) => catalogueLoadModel(name),
@@ -15776,6 +16079,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         bin.ids[i] = cursor;
         bin.ns[i] = n + 1;
       } else if (n > 0) {
+        societyCrimeAt(focus.x, focus.y, focus.z, "steal");
         // Minecraft: a tap takes the whole stack
         addInv(id, n);
         bin.ns[i] = 0;
@@ -16248,6 +16552,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       emit();
     },
     claim(id) {
+      if (id.startsWith("soc:")) return societyClaim(id);
       const q = QUESTS.find((entry) => entry.id === id);
       const prog = quests.find((entry) => entry.id === id);
       if (!q || !prog) return;
@@ -18892,7 +19197,7 @@ export function decorateVillagerRole(group: THREE.Group, role?: TraderRole) {
   kit.scale.setScalar(head !== group ? head.scale.x : 1);
   group.add(kit);
   const goldM = sheen(0xf5c518), woodM = sheen(0x7c522b), ironM = sheen(0xa7aeb4), leather = sheen(0x6b4426), darkM = sheen(0x231c16);
-  const apronC: Record<TraderRole, number> = { grocer: 0x2f7d38, smith: 0x3b2618, mason: 0x8a6a4a, herder: 0xe8dcc8, clerk: 0x1f4e9e, mage: 0x3a1468, ranger: 0x1d5526, mechanic: 0x4a4f58 };
+  const apronC: Record<TraderRole, number> = { grocer: 0x2f7d38, smith: 0x3b2618, mason: 0x8a6a4a, herder: 0xe8dcc8, clerk: 0x1f4e9e, mage: 0x3a1468, ranger: 0x1d5526, mechanic: 0x4a4f58, outfitter: 0x2f6fb0, fence: 0x2b2b2b };
   put(kit, geoRBox(0.3, 0.4, 0.025, 0.01), sheen(apronC[role]), 0, 0.66, -0.128, 0, true); // apron
   put(kit, geoRBox(0.06, 0.06, 0.03, 0.01), leather, 0, 0.6, -0.145, 0, true); // apron pocket
   const strap = put(kit, geoRBox(0.04, 0.5, 0.25, 0.01), leather, 0, 0.72, 0, 0, true);
