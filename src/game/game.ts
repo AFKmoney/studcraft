@@ -12,7 +12,7 @@ import { STUD_H, STUD_OFFSETS, STUD_R, buildChunk, type Surface } from "./mesher
 import * as FS from "./fireState";
 import * as TS from "./tuftState";
 import * as CH from "./chipState";
-import { NEIGHBORS, RECIPES, SMELT, fuelTime, matchGrid, teksCastCost } from "./recipes";
+import { NEIGHBORS, RECIPES, SMELT, SMELT_N, fuelTime, matchGrid, teksCastCost } from "./recipes";
 import { DISCOVER, MOB_XP, ORE_HEAR, ORE_XP, nextPerk, rankTitle, xpNeed } from "./ranks";
 import { manaMaxFor, skillById, spellsFor } from "./skills";
 import { QUESTS, CHAINS, chainStepOf, questActive, traderOf, tradeLevelFor, TIER_NAMES, TIER_XP, type TraderRole } from "./quests";
@@ -13753,7 +13753,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           f.inN -= 1;
           if (f.inN <= 0) f.in = 0;
           f.out = product;
-          f.outN += 1;
+          f.outN += SMELT_N[f.in] ?? 1; // §11: recycling a Teks part yields several pellets
           // P5b (Muse): the Foundry's second yield — smelting pellets
           // (the only road to a PlasticIngot) also distils FUEL at
           // 0.25/pellet (the FUEL numbers in p5bProto.ts), paid out as

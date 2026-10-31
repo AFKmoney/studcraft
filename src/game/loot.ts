@@ -1,6 +1,7 @@
-import { ID } from "./blocks";
-import { hash2, hash3 } from "./noise";
+import { ID } from "./blocks.ts";
+import { hash2, hash3 } from "./noise.ts";
 import type { SiteKind } from "./sites";
+import { DEBRIS_ADVANCED, DEBRIS_RARE } from "./debris.ts";
 
 type Stack = [number, number];
 
@@ -276,6 +277,20 @@ export function stockChest(bin: { ids: number[]; ns: number[] }, x: number, y: n
                   : kind === "dungeon"
                     ? DUNGEON_BOSS_MATS[Math.floor(hash3(x, y + 99, z, seed + 777) * DUNGEON_BOSS_MATS.length) % DUNGEON_BOSS_MATS.length]
                     : ID.Diamond;
+      bin.ns[slot] = 1;
+    }
+  }
+  // §11: monuments are the JACKPOTS of the debris economy — most
+  // monument chests also hold one advanced Teks part (the find half
+  // of the double path; every one is castable at the Foundry, so
+  // finding is a shortcut, never a monopoly). 20% of jackpots are
+  // rare-tier parts.
+  const MONUMENT = kind === "wreck" || kind === "ruin" || kind === "mine" || kind === "shrine" || kind === "tomb" || kind === "reef" || isMajor;
+  if (MONUMENT && hash3(x, y, z, seed + 777) > 0.45) {
+    const slot = bin.ids.findIndex((id) => !id);
+    if (slot >= 0) {
+      const pool = hash3(x, y, z, seed + 778) > 0.8 ? DEBRIS_RARE : DEBRIS_ADVANCED;
+      bin.ids[slot] = pool[Math.floor(hash3(x, y, z, seed + 779) * pool.length) % pool.length];
       bin.ns[slot] = 1;
     }
   }

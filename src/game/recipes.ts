@@ -1,4 +1,4 @@
-import { ID, def } from "./blocks.ts";
+import { ID, TEKS, def } from "./blocks.ts";
 import { SPECS, type Spec } from "./teks.ts";
 
 export type Recipe = {
@@ -1610,6 +1610,21 @@ export const SMELT: Record<number, number> = {
   // of casting lives in the mould recipes above, not in the melt.
   [ID.Pellets]: ID.PlasticIngot,
 };
+
+/** Output count per smelted item (default 1 when absent). §11
+ *  recycling is the one multi-yield row family: a Teks part smelts
+ *  back to several pellets. */
+export const SMELT_N: Record<number, number> = {};
+
+// §11 recycling (the melt half of the debris economy): EVERY Teks
+// part is a valid Foundry input and smelts back to pellets at ~50%
+// of its casting cost in ingots — the ingot half returns, the
+// copper in electrics is the recycler's fee. Unused finds are
+// therefore never dead weight: melt them and cast what you need.
+for (const id of TEKS) {
+  SMELT[id] = ID.Pellets;
+  SMELT_N[id] = Math.max(1, Math.round(teksCastCost(id).ingots * 0.5));
+}
 
 export function fuelTime(id: number): number {
   if (id === ID.LavaBucket) return 60;
