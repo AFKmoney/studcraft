@@ -194,6 +194,13 @@ Pas de redstone. Le cœur tourne : graphe de rotation local et borné.
 
 ### P5d · Capteurs + automatisation
 
+**EN COURS (claim Muse, 2026-10-30 ~21h PDT — ordre de Philippe).** Design (dans la loi B7 : aucun fil, aucun niveau de signal — un capteur CONTRÔLE, l'énergie vient toujours du hub) :
+- **Capteur de proximité (ID 472)** : pièce Teks, regarde le long de son +X local; portée réglable au geste « use » (25 cm / 50 cm / 1 m / 2 m = 1/2/4/8 blocs); lecture = quelque chose de solide dans la portée (blocs ou pièces, échantillonné à 0,25 bloc).
+- **Capteur de couleur (ID 473)** : lit la famille de couleur de ce qui est juste devant lui; cible réglable au geste « use » (N'importe quoi, Rouge, Jaune, Vert, Bleu, Blanc, Sombre); classification par teinte/luminosité du hex de la cible (fonction pure testée).
+- **Logique** : cadence 0,25 s — (a) VOISINS DIRECTS : comme un interrupteur B7, le capteur pose `on` = sa lecture sur les pièces qui le touchent; (b) RELAIS HUB : si un hub de sa composante écoute le même canal que le capteur (bind sneak+use, comme les moteurs), tous les moteurs/vérins de ce canal dans la composante suivent la lecture — les machines réagissent toutes seules, sans fil.
+- **Inclinaison dans le hub** : le véhicule publie pitch/roll (hauteurs de roues); au-delà de ~40° le hub coupe les moteurs (protection retournement) + message, cooldown 6 s.
+- Config persistée : `Part.cfg` (portée/cible packée), 8e élément optionnel du tuple de sauvegarde Teks; lecture runtime `Part.sense` (non persistée). Icônes 472/473 par le pipeline B12; recettes de fonderie + catalogue automatiques (SPECS/registre).
+
 - [ ] Capteurs (distance 1–200 cm, couleur, inclinaison dans le hub) + logique simple sur hub : les machines réagissent toutes seules
 
 ## 8. Lane RPG
