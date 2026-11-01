@@ -3506,8 +3506,23 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const xAxis = new THREE.Vector3().crossVectors(fpsBore, zMouth).normalize();
     fpsClaw.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xAxis, fpsBore, zMouth));
   }
-  const clawOuter = new THREE.Mesh(geoClaw(0.074, 0.084), fpsSkinMat);
-  fpsClaw.add(clawOuter);
+  // Studsman fist (2026-11-01, legal §23: never the C-clamp hand). In this
+  // frame y runs along the bore (the held tool passes through the grip) and
+  // z points out of the mouth: a closed block fist wrapped around the bore,
+  // knuckle ridge on top, thumb across the front.
+  {
+    const fist = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.12, 0.15), fpsSkinMat);
+    fist.position.set(0, 0, 0.01);
+    fpsClaw.add(fist);
+    for (let k = 0; k < 4; k++) {
+      const kn = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.11, 0.03), fpsSkinMat);
+      kn.position.set(-0.054 + k * 0.036, 0, 0.085);
+      fpsClaw.add(kn);
+    }
+    const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.11), fpsSkinMat);
+    thumb.position.set(0.085, 0.035, 0.01);
+    fpsClaw.add(thumb);
+  }
   fpsArmGroup.add(fpsClaw);
   fpsArmGroup.traverse((o) => {
     const m = o as THREE.Mesh;
@@ -19966,30 +19981,28 @@ function makeFig(shirt: number, pants: number, hairCol: number, face: FigFace, h
   const makeFigureLeg = (lx: number) => {
     const pivot = new THREE.Group();
     pivot.position.set(lx, 0.42, 0);
-    // Rounded upper hip barrel
-    const barrel = put(pivot, geoCyl(0.088, 0.155, 12), pantsM, 0, 0, 0, 0, true);
-    barrel.rotation.z = Math.PI / 2;
+    // Studsman (2026-11-01, legal §23): a plain block hip — no figurine barrel
+    put(pivot, geoBox(0.165, 0.1, 0.19), pantsM, 0, -0.02, 0, 0, true);
     // Main leg shaft
     put(pivot, geoBox(0.155, 0.31, 0.185), pantsM, 0, -0.18, 0);
     // Protruding front foot toe-block
     put(pivot, geoBox(0.158, 0.085, 0.225), pantsM, 0, -0.375, -0.02);
-    // Two authentic anti-stud socket holes on the back of the leg (+Z)
-    put(pivot, geoCyl(0.038, 0.016, 8), black, 0, -0.13, 0.09, Math.PI / 2, true);
-    put(pivot, geoCyl(0.038, 0.016, 8), black, 0, -0.27, 0.09, Math.PI / 2, true);
+    put(pivot, geoBox(0.162, 0.014, 0.19), beltM, 0, -0.2, 0, 0, true); // knee seam
     g.add(pivot);
     return pivot;
   };
   const legL = makeFigureLeg(-0.115);
   const legR = makeFigureLeg(0.115);
 
-  // 3. Tapered Trapezoidal STUDS Torso (y: 0.52 .. 0.94 rests flush on hip plate 0.5225)
-  const torso = put(g, geoTrap(0.35, 0.43, 0.42, 0.23), shirtM, 0, 0.73, 0);
+  // 3. Studsman torso (2026-11-01, legal §23 — never the trapezoid of the
+  // classic figurine): a straight 2×1 brick torso with two shoulder studs.
+  const torso = put(g, geoBox(0.38, 0.42, 0.23), shirtM, 0, 0.73, 0);
+  for (const sx of [-0.1, 0.1]) put(g, geoCyl(0.05, 0.035, 12), shirtM, sx, 0.957, 0.0, 0, true); // shoulder studs
   torso.userData.skin = "body";
   put(g, geoBox(0.16, 0.05, 0.018), white, 0, 0.89, -0.116, 0, true); // Collar undershirt V
   put(g, geoBox(0.022, 0.28, 0.016), black, 0, 0.71, -0.116, 0, true); // Tunic placket seam
   put(g, geoBox(0.085, 0.075, 0.016), beltM, -0.105, 0.77, -0.116, 0, true); // Chest pocket print
-  put(g, geoCyl(0.092, 0.07, 12), headM, 0, 0.96, 0, 0, true); // Neck post
-  put(g, geoCyl(0.105, 0.018, 12), black, 0, 0.945, 0, 0, true); // Crisp neck collar shadow ring
+  put(g, geoBox(0.13, 0.06, 0.12), headM, 0, 0.965, 0, 0, true); // square neck block
 
   // 4. Arms v3.1 (Philippe: "les bras fusionnés au corps"): each arm is its own pivot group,
   // hung 4 cm clear of the tapered torso, on a dark ball-joint shoulder that reads as a separate
@@ -20008,12 +20021,14 @@ function makeFig(shirt: number, pants: number, hairCol: number, face: FigFace, h
     put(pivot, geoCyl(0.048, 0.16, 10, 0.052), sleeveM, side * 0.042, -0.25, -0.015, 0.18);
     // Wrist pin
     put(pivot, geoCyl(0.034, 0.055, 8), headM, side * 0.042, -0.34, -0.035, 0.22, true);
-    // Open 270° C-Clamp STUDS Hand oriented to grip forward
+    // Studsman fist (2026-11-01, legal §23: never the C-clamp hand) —
+    // a closed block fist with a thumb, gripping forward.
     const clawGrp = new THREE.Group();
     clawGrp.position.set(side * 0.042, -0.39, -0.055);
-    clawGrp.rotation.x = Math.PI / 2 + 0.22;
-    clawGrp.rotation.z = Math.PI / 2;
-    put(clawGrp, geoClaw(0.056, 0.066), headM, 0, 0, 0, 0, true);
+    clawGrp.rotation.x = 0.22;
+    put(clawGrp, geoBox(0.1, 0.1, 0.11), headM, 0, 0, 0, 0, true);
+    put(clawGrp, geoBox(0.035, 0.05, 0.06), headM, -side * 0.06, 0.015, -0.02, 0, true); // thumb
+    put(clawGrp, geoBox(0.102, 0.012, 0.112), black, 0, 0.02, 0, 0, true); // finger seam
     pivot.add(clawGrp);
     g.add(pivot);
     return pivot;
@@ -20027,50 +20042,51 @@ function makeFig(shirt: number, pants: number, hairCol: number, face: FigFace, h
   g.add(head);
   g.userData.head = head;
 
-  put(head, geoCyl(0.154, 0.035, 16, 0.122), headM, 0, -0.005, 0, 0, true); // Bottom chin bevel
-  put(head, geoCyl(0.154, 0.23, 18), headM, 0, 0.125, 0); // Main cylindrical head
-  put(head, geoCyl(0.124, 0.035, 16, 0.154), headM, 0, 0.255, 0, 0, true); // Top brow bevel
-  hollowStud(head, headM, black, 0, 0.272, 0, 0.088, 0.062); // Pierced safety stud
+  // Studsman head (2026-11-01, legal §23 — never the cylindrical head with a
+  // top stud): a rounded brick block, bevelled on every edge, no stud.
+  put(head, geoBox(0.29, 0.24, 0.28), headM, 0, 0.13, 0);
+  put(head, geoBox(0.25, 0.02, 0.24), headM, 0, 0.258, 0, 0, true); // top bevel
+  put(head, geoBox(0.25, 0.02, 0.24), headM, 0, 0.002, 0, 0, true); // chin bevel
   // Molded hairpiece / cap with sideburns & back nape
   put(head, geoBox(0.32, 0.09, 0.24), hairM, 0, 0.24, 0.02);
   put(head, geoBox(0.31, 0.16, 0.08), hairM, 0, 0.14, 0.125, 0, true);
 
   // 6. Pad-Printed Glossy Ink Face Details (attached to articulated head)
   if (face === "skull") {
-    put(head, geoBox(0.068, 0.068, 0.02), black, -0.058, 0.15, -0.152, 0, true);
-    put(head, geoBox(0.068, 0.068, 0.02), black, 0.058, 0.15, -0.152, 0, true);
-    put(head, geoBox(0.032, 0.042, 0.02), black, 0, 0.09, -0.154, 0, true);
-    put(head, geoBox(0.11, 0.028, 0.02), black, 0, 0.04, -0.152, 0, true);
+    put(head, geoBox(0.068, 0.068, 0.02), black, -0.058, 0.15, -0.143, 0, true);
+    put(head, geoBox(0.068, 0.068, 0.02), black, 0.058, 0.15, -0.143, 0, true);
+    put(head, geoBox(0.032, 0.042, 0.02), black, 0, 0.09, -0.145, 0, true);
+    put(head, geoBox(0.11, 0.028, 0.02), black, 0, 0.04, -0.143, 0, true);
     put(g, geoBox(0.26, 0.025, 0.02), black, 0, 0.70, -0.122, 0, true);
     put(g, geoBox(0.26, 0.025, 0.02), black, 0, 0.79, -0.122, 0, true);
   } else if (face === "snout") {
-    put(head, geoCyl(0.068, 0.095, 10), skin(0xf2a2c0), 0, 0.08, -0.175, Math.PI / 2, true);
-    put(head, geoBox(0.024, 0.032, 0.02), black, -0.025, 0.08, -0.222, 0, true);
-    put(head, geoBox(0.024, 0.032, 0.02), black, 0.025, 0.08, -0.222, 0, true);
-    put(head, geoBox(0.048, 0.048, 0.02), black, -0.06, 0.17, -0.152, 0, true);
-    put(head, geoBox(0.048, 0.048, 0.02), black, 0.06, 0.17, -0.152, 0, true);
-    put(head, geoBox(0.018, 0.018, 0.022), white, -0.066, 0.18, -0.154, 0, true);
-    put(head, geoBox(0.018, 0.018, 0.022), white, 0.052, 0.18, -0.154, 0, true);
+    put(head, geoCyl(0.068, 0.095, 10), skin(0xf2a2c0), 0, 0.08, -0.166, Math.PI / 2, true);
+    put(head, geoBox(0.024, 0.032, 0.02), black, -0.025, 0.08, -0.213, 0, true);
+    put(head, geoBox(0.024, 0.032, 0.02), black, 0.025, 0.08, -0.213, 0, true);
+    put(head, geoBox(0.048, 0.048, 0.02), black, -0.06, 0.17, -0.143, 0, true);
+    put(head, geoBox(0.048, 0.048, 0.02), black, 0.06, 0.17, -0.143, 0, true);
+    put(head, geoBox(0.018, 0.018, 0.022), white, -0.066, 0.18, -0.145, 0, true);
+    put(head, geoBox(0.018, 0.018, 0.022), white, 0.052, 0.18, -0.145, 0, true);
   } else if (face === "nose") {
-    put(head, geoBox(0.048, 0.048, 0.02), black, -0.058, 0.16, -0.152, 0, true);
-    put(head, geoBox(0.048, 0.048, 0.02), black, 0.058, 0.16, -0.152, 0, true);
-    put(head, geoBox(0.018, 0.018, 0.022), white, -0.064, 0.17, -0.154, 0, true);
-    put(head, geoBox(0.018, 0.018, 0.022), white, 0.052, 0.17, -0.154, 0, true);
-    put(head, geoBox(0.14, 0.024, 0.022), hairM, 0, 0.205, -0.154, 0, true); // Unibrow
-    put(head, geoBox(0.08, 0.026, 0.02), black, 0, 0.045, -0.152, 0, true);
-    put(head, geoCyl(0.05, 0.14, 10), skin(0xc47a2a), 0, 0.08, -0.19, Math.PI / 2, true);
+    put(head, geoBox(0.048, 0.048, 0.02), black, -0.058, 0.16, -0.143, 0, true);
+    put(head, geoBox(0.048, 0.048, 0.02), black, 0.058, 0.16, -0.143, 0, true);
+    put(head, geoBox(0.018, 0.018, 0.022), white, -0.064, 0.17, -0.145, 0, true);
+    put(head, geoBox(0.018, 0.018, 0.022), white, 0.052, 0.17, -0.145, 0, true);
+    put(head, geoBox(0.14, 0.024, 0.022), hairM, 0, 0.205, -0.145, 0, true); // Unibrow
+    put(head, geoBox(0.08, 0.026, 0.02), black, 0, 0.045, -0.143, 0, true);
+    put(head, geoCyl(0.05, 0.14, 10), skin(0xc47a2a), 0, 0.08, -0.181, Math.PI / 2, true);
   } else {
     // Classic STUDS Figure Eyes + White Specular Catchlights + Smile/Brow
-    put(head, geoBox(0.046, 0.048, 0.02), black, -0.056, 0.155, -0.152, 0, true);
-    put(head, geoBox(0.046, 0.048, 0.02), black, 0.056, 0.155, -0.152, 0, true);
-    put(head, geoBox(0.016, 0.016, 0.022), white, -0.062, 0.165, -0.154, 0, true);
-    put(head, geoBox(0.016, 0.016, 0.022), white, 0.050, 0.165, -0.154, 0, true);
-    put(head, geoBox(0.095, 0.024, 0.02), black, 0, 0.06, -0.152, 0, true);
-    put(head, geoBox(0.024, 0.024, 0.02), black, -0.052, 0.072, -0.148, 0, true);
-    put(head, geoBox(0.024, 0.024, 0.02), black, 0.052, 0.072, -0.148, 0, true);
+    put(head, geoBox(0.046, 0.048, 0.02), black, -0.056, 0.155, -0.143, 0, true);
+    put(head, geoBox(0.046, 0.048, 0.02), black, 0.056, 0.155, -0.143, 0, true);
+    put(head, geoBox(0.016, 0.016, 0.022), white, -0.062, 0.165, -0.145, 0, true);
+    put(head, geoBox(0.016, 0.016, 0.022), white, 0.050, 0.165, -0.145, 0, true);
+    put(head, geoBox(0.095, 0.024, 0.02), black, 0, 0.06, -0.143, 0, true);
+    put(head, geoBox(0.024, 0.024, 0.02), black, -0.052, 0.072, -0.141, 0, true);
+    put(head, geoBox(0.024, 0.024, 0.02), black, 0.052, 0.072, -0.141, 0, true);
     if (face === "mad") {
-      put(head, geoBox(0.068, 0.022, 0.022), black, -0.058, 0.205, -0.155, 0, true);
-      put(head, geoBox(0.068, 0.022, 0.022), black, 0.058, 0.205, -0.155, 0, true);
+      put(head, geoBox(0.068, 0.022, 0.022), black, -0.058, 0.205, -0.146, 0, true);
+      put(head, geoBox(0.068, 0.022, 0.022), black, 0.058, 0.205, -0.146, 0, true);
     }
   }
   g.userData.look = { shirtM, sleeveM, pantsM, headM, hairM };
