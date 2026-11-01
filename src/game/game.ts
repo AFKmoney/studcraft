@@ -15861,7 +15861,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       camera.position.set(player.x, eye + bobY, player.z);
       thirdAim.ok = false;
       fig.group.visible = false;
-      viewBrick.visible = phase === "play";
+      viewBrick.visible = phase === "play" && !hud.hidden; // F1 hides the hand too, like Minecraft
     }
     shake = Math.max(0, shake - dt * 1.4);
     if (shake > 0) {
