@@ -925,9 +925,9 @@ function SettingsPanel({ game, onBack }: { game: GameApi; onBack: () => void }) 
             <Row title="Look stick dead zone" detail="Raise it if the camera creeps on its own; lower it for finer aim.">
               <Slider label="Right stick dead zone" value={s.deadR} min={0.02} max={0.4} step={0.01} onChange={(v) => game.setDead("right", v)} format={(v) => Math.round(v * 100) + "%"} />
             </Row>
-            <Row title="Adaptive triggers (DualSense)" detail={game.dsState() === "unavailable" ? "Needs Chrome or Edge on PC with a PlayStation DualSense — the browser picker opens when you turn it on. Not available on phones or in the app." : "R2 stiffens as the block cracks while you mine; L2 gets a bow wall. Turning it on opens the browser's controller picker."}>
+            <Row title="Adaptive triggers (DualSense)" detail={game.dsState() === "unavailable" ? "Needs the desktop app, or Chrome/Edge on PC, with a PlayStation DualSense (USB or Bluetooth). Not available on phones." : "On by default. L2: bow tension, crossbow latch, gun trigger break with recoil on every shot (buzz on automatics). In a vehicle: R2 accelerator (or cannon / laser / rockets when armed), L2 brake. R2 stiffens while mining. Triggers relax on pause or when the window loses focus. In a browser, turning it on opens the controller picker."}>
               {game.dsState() === "unavailable" ? (
-                <span className="sc-chip">PC + Chrome/Edge only</span>
+                <span className="sc-chip">Desktop app or Chrome/Edge</span>
               ) : (
                 <>
                   <Toggle label="Adaptive triggers" on={s.adaptive} onChange={(v) => game.setAdaptive(v)} />

@@ -295,3 +295,16 @@ Corrigé :
 
 Testé OK : prison (prime, amende, prison 24 h + confiscation), argent, fonderie normale, butin de 10 mobs, laser/roquette (dégâts + explosion), shader SNR (mode réaliste : tout est siren sauf ciel/particules/FX), migration Uint16 d'une vieille sauvegarde v1 (blocs id ≤ 255, inventaire, position).
 Reste : mode plastique sans sortie visible pendant le test (ratio accumulé ; pellets non acceptés, voulu) ; canon/canon doré parfois 0 dégât au tir en roulant (recul) ; enclume et agriculture vérifiées par revue de code et tests unitaires seulement.
+
+## t106u — Gâchettes adaptatives DualSense dans l'exe Electron
+
+État avant : un support WebHID partiel existait (src/game/dualsense.ts, v4.18), mais il était désactivé par défaut, sans autorisation HID dans Electron (aucun sélecteur → jamais connecté dans l'exe), avec un rapport USB trop court (47 octets au lieu de 62) et une trame Bluetooth 0x31 erronée (pas d'octet tag 0x10, mauvaise taille, CRC mal placé, mode « simple » BT jamais quitté).
+
+Fait :
+- desktop/hid.cjs (+ test) : setPermissionCheckHandler / setDevicePermissionHandler / select-hid-device n'autorisent que 054c:0ce6 et 054c:0df2, depuis l'origine app://game ; réinitialisation des gâchettes à la fermeture de la fenêtre et en perdant le focus. Ajouté à « files » du package desktop.
+- dualsense.ts réécrit : constructeurs purs de rapports (USB 0x02 62 octets, BT 0x31 77 octets avec seq/tag et CRC32 seedé 0xA2 0x31), détection USB/BT par le descripteur, lecture du rapport de fonction 0x05 en BT, modes par zones 0x21 / 0x25 / 0x26, reconnexion automatique (connect/focus).
+- triggerFx.ts (pur) : arc = tension croissante, arbalète = verrou qui casse (relâché pendant le réarmement), armes à feu = point de rupture + recul plein à chaque tir, vibration à la cadence en mode auto, rien en rechargement ; véhicule = accélérateur R2 (non armé) plus dur avec la vitesse, frein L2 ; canon / canon doré = mur + coup à chaque tir, laser = vibration, roquettes.
+- Contrôles : en véhicule, L2 analogique = frein/marche arrière, R2 analogique = accélérateur si aucune arme montée.
+- Option Settings activée par défaut ; reset en pause, perte de focus, onglet caché, pagehide/beforeunload.
+- Tests : dualsense.test.ts (CRC, encodage, rapports USB/BT, sélection d'effets), desktop/hid.test.cjs. Sonde Playwright avec un faux navigator.hid : rapports 0x31 de 77 octets, effets arc/arbalète/armes, remise à zéro en pause.
+Non testé sur une vraie manette (pas d'accès au PC de Philippe).
