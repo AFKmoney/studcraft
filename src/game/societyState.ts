@@ -140,9 +140,15 @@ export class Society {
       if (this.rank(g) > before) rankUp = g;
     }
     // a giver's next set opens once this epoch's contracts are all done
-    const ep = q.id.split(":")[2];
-    const gk = q.giver.kind + ":" + key + (g ? ":" + g.id : "");
-    if ([0, 1, 2].every((slot) => this.done.has(`${q.giver.kind}:${key}:${ep}:${slot}`))) this.epochs[gk] = Number(ep) + 1;
+    // B21 lot 4: the set prefix comes from the quest's own id (guild ids
+    // carry "@guild"), and a guild's epoch always lives under the key
+    // game.ts reads (epochKey("guild", …)) — an outlaw guild's giver kind
+    // is "bandit", so its next set never opened.
+    const parts = q.id.split(":");
+    const ep = parts[parts.length - 2];
+    const prefix = parts.slice(0, -2).join(":");
+    const gk = g ? this.epochKey("guild", key, g) : q.giver.kind + ":" + key;
+    if ([0, 1, 2].every((slot) => this.done.has(`${prefix}:${ep}:${slot}`))) this.epochs[gk] = Number(ep) + 1;
     return { ok: true, msg: "Contract done: " + q.text.title, take, give, rep: q.giver.kind === "bandit" ? 0 : q.reward.rep, joined, rankUp };
   }
   epochKey(kind: string, key: string, g?: Guild): string {

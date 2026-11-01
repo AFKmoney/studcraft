@@ -272,3 +272,12 @@ Plan (phases, une PR par phase, merge quand tsc + node --test + vite build sont 
   - Vérifié en headless sur un plateau plat : B/S → le godet mord à ~7 blocs devant la machine, 4 blocs de terre ramassés (capacité 4), C/W ressort la charge, D tourne la tourelle. Test : catalogue.test « Rig Digger: B lowers the boom… ».
 - **Vue 1re personne Starter Buggy** : tableau de bord et volant noirs remplacés par un tableau bas et fin gris clair + petit volant gris ; œil du cockpit-cage avancé et relevé (eye 5.0 / −0.3). **FOV par cockpit branché** (`cockpitFov` : FOV du cockpit décalé de la préférence joueur, 3e personne inchangée). Test vehView.test.
 - Hook QA : `getBucket().pos`, `getDriveView().fov`. tsc 0, 333 tests verts, vite build OK. Captures : /workspace/studcraft-fix2-shots/p12-*.png, p2-buggy-fp-before/after.png.
+
+## B21 lot 4 — QA société (headless Playwright)
+- Quête de chasse : 4 kills → n=4, réclamation = 3 émeraudes. OK.
+- Bug corrigé : les contrats de guilde avaient des ids `guild:<hall>:<epoch>:<slot>` sans la guilde ; dans une desertCity à deux halls, accepter le contrat d'une guilde affichait « Already taken » chez l'autre et une réclamation complétait les deux (et les guildes hors-la-loi entraient en collision avec les contrats du boss bandit). Les ids portent maintenant `@<guilde>`.
+- Bug corrigé : une guilde hors-la-loi ne passait jamais à l'époque suivante (clé `bandit:` au lieu de `guild:` lue par game.ts).
+- Bug corrigé : la quête d'entrée de guilde pouvait être une chasse au boss ; elle prend désormais la première mission non-boss.
+- Hooks QA : `sayLogQa`, `claimQuestQa`.
+- Migration des sauvegardes 8 bits → Uint16 : couverte par chunk16.test.ts, code relu, OK.
+- Non testé dans ce lot : prison/réputation/argent, fonderie, enclume, agriculture, animaux, butin, shader SNR, z-fighting, armes de véhicule.

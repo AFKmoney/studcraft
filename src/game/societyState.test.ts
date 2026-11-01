@@ -122,3 +122,34 @@ test("':llm' quest ids: next() skips the taken base quest and claim() works", as
   assert.ok(s.done.has(q.id));
   assert.notEqual(s.next(list)?.id, q.id);
 });
+
+test("B21 lot 4: two guild halls in one city never share contract ids; entry is never a boss hunt", async () => {
+  const { GUILDS, guildQuests } = await import("./society.ts");
+  const [a, b] = guildsIn(2, 2, "desertCity", SEED);
+  const qa = guildQuests(a, "2,2", "desertCity", SEED, 0);
+  const qb = guildQuests(b, "2,2", "desertCity", SEED, 0);
+  for (const q of qa) assert.ok(!qb.some((x) => x.id === q.id), "ids differ between halls");
+  const s = new Society();
+  assert.match(s.accept(qa[0]), /^New contract/);
+  assert.match(s.accept(qb[0]), /^New contract/, "taking one hall's job does not block the other's");
+  for (const g of GUILDS) {
+    const qs = guildQuests(g, "4,4", "plains", SEED, 0);
+    if (qs.some((q) => q.type !== "boss")) assert.notEqual(guildEntryQuest(g, "4,4", "plains", SEED).type, "boss");
+  }
+});
+
+test("B21 lot 4: finishing a guild's three contracts opens its next set (outlaw guilds too)", async () => {
+  const { GUILDS, guildQuests } = await import("./society.ts");
+  for (const g of [GUILDS.find((x) => !x.outlaw)!, GUILDS.find((x) => x.outlaw)!]) {
+    const s = new Society();
+    s.guilds[g.id] = 0;
+    for (const q of guildQuests(g, "3,3", "plains", SEED, 0)) {
+      s.accept(q);
+      const a = s.active.find((x) => x.q.id === q.id)!;
+      a.n = q.track.need;
+      const r = s.claim("soc:" + q.id, (id) => (id === q.track.what ? q.track.need : 0));
+      assert.ok(r.ok, g.id + " claim");
+    }
+    assert.equal(s.epoch(s.epochKey("guild", "3,3", g)), 1, g.id + " next set opens");
+  }
+});

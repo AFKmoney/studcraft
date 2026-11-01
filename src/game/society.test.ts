@@ -43,7 +43,7 @@ test("15 guilds with halls, ranks, perks and their own missions", () => {
       assert.deepEqual(Soc.validateQuest(q), []);
       assert.ok(g.missions.includes(q.type));
     }
-    assert.deepEqual(Soc.guildEntryQuest(g, "5,5", "mountain", SEED), qs[0]);
+    assert.deepEqual(Soc.guildEntryQuest(g, "5,5", "mountain", SEED), qs.find((q) => q.type !== "boss") ?? qs[0]);
   }
   assert.equal(Soc.guildRank(0), 0);
   assert.equal(Soc.guildRank(35), 2);
