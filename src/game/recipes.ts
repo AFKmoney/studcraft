@@ -1556,6 +1556,32 @@ export const RECIPES: Recipe[] = [
     h: 2,
     cat: "gear",
   }),
+  // ---- t79u farming / food / decoration (Grok Bot) ----
+  r("sugar", "Sugar", "1 cane → 1", [[ID.Cane, 1]], ID.Sugar, 1, { shape: [ID.Cane], w: 1, h: 1, cat: "food" }),
+  r("cake", "Cake", "3 grain + 1 milk + 1 egg + 2 sugar", [[ID.Wheat, 3], [ID.Milk, 1], [ID.Egg, 1], [ID.Sugar, 2]], ID.Cake, 1, { cat: "food" }),
+  r("fertilizer", "Fertilizer", "1 bone → 2", [[ID.Bone, 1]], ID.Fertilizer, 2, { cat: "food" }),
+  r("composter", "Composter", "6 planks", [[P, 6]], ID.Composter0, 1, { cat: "build" }),
+  r("flowerpot", "Flower pot", "1 hard brick + 1 bloom", [[ID.Hard, 1], [ID.FlowerRed, 1]], ID.FlowerPot, 1, { cat: "build" }),
+  r("planter", "Planter box", "3 planks + 1 dirt + 1 sapling", [[P, 3], [ID.Dirt, 1], [ID.Sapling, 1]], ID.Planter, 1, { cat: "build" }),
+  r("table", "Table", "3 planks + 4 sticks", [[P, 3], [S, 4]], ID.Table, 1, { cat: "build" }),
+  r("chair", "Chair", "2 planks + 4 sticks", [[P, 2], [S, 4]], ID.Chair, 1, { cat: "build" }),
+  r("stool", "Stool", "1 wood → 2", [[ID.Log, 1]], ID.Stool, 2, { cat: "build" }),
+  r("shelf", "Wall shelf", "2 planks", [[P, 2]], ID.Shelf, 1, { cat: "build" }),
+  r("rug-red", "Red rug", "2 red bricks", [[ID.Red, 2]], ID.RugRed, 3, { cat: "build" }),
+  r("rug-blue", "Blue rug", "2 blue bricks", [[ID.Blue, 2]], ID.RugBlue, 3, { cat: "build" }),
+  r("rug-green", "Green rug", "2 green bricks", [[ID.Green, 2]], ID.RugGreen, 3, { cat: "build" }),
+  r("paperlamp", "Paper lamp", "1 white brick + 1 torch", [[ID.White, 1], [ID.Torch, 1]], ID.PaperLamp, 1, { cat: "build" }),
+  r("trapdoor", "Trapdoor", "3 planks → 2", [[P, 3]], ID.Trapdoor, 2, { cat: "build" }),
+  r("smallcrate", "Small crate", "4 planks", [[P, 4]], ID.SmallCrate, 1, { cat: "build" }),
+  r("lamppost", "Lamp post", "1 ingot + 1 lantern", [[I, 1], [ID.Lantern, 1]], ID.LampPost, 1, { cat: "build" }),
+  r("candle", "Candle", "1 wax → 2", [[ID.Wax, 1]], ID.Candle, 2, { cat: "build" }),
+  r("vase", "Vase", "1 azure brick", [[ID.Azure, 1]], ID.Vase, 1, { cat: "build" }),
+  r("settle", "Bench seat", "3 planks + 2 sticks", [[P, 3], [S, 2]], ID.Settle, 1, { cat: "build" }),
+  r("painting-sea", "Sea painting", "1 painting + 1 blue brick", [[ID.Painting, 1], [ID.Blue, 1]], ID.PaintingSea, 1, { cat: "build" }),
+  r("painting-sun", "Sun painting", "1 painting + 1 yellow brick", [[ID.Painting, 1], [ID.Yellow, 1]], ID.PaintingSun, 1, { cat: "build" }),
+  r("pennant", "Pennant", "1 stick + 1 blue brick", [[S, 1], [ID.Blue, 1]], ID.Pennant, 1, { cat: "build" }),
+  r("hanging", "Hanging plant", "1 hard brick + 2 leaf bricks", [[ID.Hard, 1], [ID.Leaves, 2]], ID.HangingPlant, 1, { cat: "build" }),
+  r("picket", "Picket fence", "1 white brick + 2 sticks → 3", [[ID.White, 1], [S, 2]], ID.Picket, 3, { cat: "build" }),
 ];
 
 // ── Teks casting (Muse, 2026-10-30 — audit §21 A3) ─────────────────
@@ -1625,6 +1651,7 @@ export const SMELT: Record<number, number> = {
   [ID.PrismOre]: ID.Prism,
   [ID.Potato]: ID.BakedPotato,
   [ID.Fish]: ID.CookedFish,
+  [ID.Wheat]: ID.Bread, // t79u: the kiln bakes grain
   // P6 step 2 (Muse): the Kiln is the foundry — pellets melt down 1:1
   // into casting ingots (5 s cook each, like every SMELT row); the cost
   // of casting lives in the mould recipes above, not in the melt.

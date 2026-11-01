@@ -503,6 +503,39 @@ export const ID = {
   JungleStone: 492,
   MudBrick: 493,
   RedRock: 494,
+  // t79u farming / food / decoration (Grok Bot). Decor bricks borrow an
+  // existing brick's atlas tiles (skinOf) and get a sculpted shape (deco),
+  // so 20+ pieces cost no atlas rows.
+  Fertilizer: 500,
+  Sugar: 501,
+  Cake: 502,
+  BerryYoung: 503,
+  Composter0: 504,
+  Composter1: 505,
+  Composter2: 506,
+  Composter3: 507,
+  FlowerPot: 510,
+  Planter: 511,
+  Table: 512,
+  Chair: 513,
+  Stool: 514,
+  Shelf: 515,
+  RugRed: 516,
+  RugBlue: 517,
+  RugGreen: 518,
+  PaperLamp: 519,
+  Trapdoor: 520,
+  TrapdoorOpen: 521,
+  SmallCrate: 522,
+  LampPost: 523,
+  Candle: 524,
+  Vase: 525,
+  Settle: 526,
+  PaintingSea: 527,
+  PaintingSun: 528,
+  Pennant: 529,
+  HangingPlant: 530,
+  Picket: 531,
   // P6 step 4 / P7 tool moulds (Muse): plastic tools cast at the
   // Foundry — the mould is the shape, the ingot is the stock. Tier 2
   // (stone class), 120 uses: moulded plastic, honestly mid-table.
@@ -582,6 +615,10 @@ export type BlockDef = {
   sign: boolean;
   flat: boolean;
   dir: number;
+  /** t79u: sculpted decor shape key for the mesher ("" = none). */
+  deco: string;
+  /** t79u: borrow this brick's atlas tiles (0 = own tiles). */
+  skinOf: number;
 };
 
 function b(
@@ -641,6 +678,8 @@ function b(
     sign: false,
     flat: false,
     dir: 0,
+    deco: "",
+    skinOf: 0,
     ...extra,
   };
 }
@@ -1520,6 +1559,41 @@ put(b(ID.Axle4, "Axle 4L", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0
 put(b(ID.Axle6, "Axle 6L", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
 put(b(ID.Axle8, "Axle 8L", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
 
+// ---- t79u farming / food / decoration ----
+item(ID.Fertilizer, "Fertilizer", "#6b5a2a");
+item(ID.Sugar, "Sugar", "#f4f1ea");
+item(ID.Cake, "Cake", "#f2d0b0", { food: 10 });
+put(b(ID.BerryYoung, "Young berry bush", "#3aaa4c", "#6ecf4a", "#2f7d3a", "#1d5526", { solid: false, plant: true, crop: true, hard: 0.05, drop: -1 }));
+for (const [cid, lvl] of [[ID.Composter0, 0], [ID.Composter1, 1], [ID.Composter2, 2], [ID.Composter3, 3]] as const)
+  put(b(cid, lvl === 3 ? "Composter (ready)" : "Composter", "#8d5a34", "#a56b3c", "#6b3e22", "#4e2c18", { hard: 0.6, solid: true, deco: "composter" + lvl, skinOf: ID.Planks, drop: ID.Composter0, placeable: lvl === 0 }));
+const deco = (id: number, name: string, skinOf: number, shape: string, extra: Partial<BlockDef> = {}) =>
+  put(b(id, name, "#c4924a", "#c4924a", "#c4924a", "#c4924a", { hard: 0.4, solid: false, deco: shape, skinOf, ...extra }));
+deco(ID.FlowerPot, "Flower pot", ID.Hard, "pot");
+deco(ID.Planter, "Planter box", ID.Planks, "planter", { solid: true });
+deco(ID.Table, "Table", ID.Planks, "table");
+deco(ID.Chair, "Chair", ID.Planks, "chair");
+deco(ID.Stool, "Stool", ID.Log, "stool");
+deco(ID.Shelf, "Wall shelf", ID.Planks, "shelf");
+deco(ID.RugRed, "Red rug", ID.Red, "rug", { hard: 0.1 });
+deco(ID.RugBlue, "Blue rug", ID.Blue, "rug", { hard: 0.1 });
+deco(ID.RugGreen, "Green rug", ID.Green, "rug", { hard: 0.1 });
+deco(ID.PaperLamp, "Paper lamp", ID.White, "paperlamp", { light: 0.8 });
+deco(ID.Trapdoor, "Trapdoor", ID.Planks, "trapdoor", { solid: true });
+deco(ID.TrapdoorOpen, "Open trapdoor", ID.Planks, "trapdoorOpen", { placeable: false, drop: ID.Trapdoor });
+deco(ID.SmallCrate, "Small crate", ID.Chest, "crate", { solid: true });
+deco(ID.LampPost, "Lamp post", ID.IronBlock, "lamppost", { light: 1 });
+deco(ID.Candle, "Candle", ID.White, "candle", { light: 0.5, hard: 0.05 });
+deco(ID.Vase, "Vase", ID.Azure, "vase");
+deco(ID.Settle, "Bench seat", ID.Planks, "settle");
+put(b(ID.PaintingSea, "Sea painting", "#2f86d6", "#2f86d6", "#2f86d6", "#2f86d6", { hard: 0.4, solid: false, flat: true }));
+put(b(ID.PaintingSun, "Sun painting", "#f5c518", "#f5c518", "#f5c518", "#f5c518", { hard: 0.4, solid: false, flat: true }));
+deco(ID.Pennant, "Pennant", ID.Blue, "pennant");
+deco(ID.HangingPlant, "Hanging plant", ID.Leaves, "hanging");
+deco(ID.Picket, "Picket fence", ID.White, "picket", { solid: true });
+
+/** t79u: decor pieces (for the creative menu and the audit tests). */
+export const DECOR: number[] = [ID.FlowerPot, ID.Planter, ID.Table, ID.Chair, ID.Stool, ID.Shelf, ID.RugRed, ID.RugBlue, ID.RugGreen, ID.PaperLamp, ID.Trapdoor, ID.SmallCrate, ID.LampPost, ID.Candle, ID.Vase, ID.Settle, ID.PaintingSea, ID.PaintingSun, ID.Pennant, ID.HangingPlant, ID.Picket, ID.Composter0];
+
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];
 }
@@ -1541,12 +1615,14 @@ function assignTiles() {
   tilesReady = true;
   const teks = new Set<number>(TEKS);
   let slot = 0;
-  for (let id = 1; id < BLOCKS.length; id++) if (!teks.has(id) && drawnBlock(BLOCKS[id])) TILE_OF[id] = ++slot;
+  for (let id = 1; id < BLOCKS.length; id++) if (!teks.has(id) && !BLOCKS[id]?.skinOf && drawnBlock(BLOCKS[id])) TILE_OF[id] = ++slot;
   for (let id = 1; id < BLOCKS.length; id++) if (teks.has(id) && drawnBlock(BLOCKS[id])) TILE_OF[id] = ++slot;
 }
 
 export function faceTile(id: number, face: 0 | 1 | 2 | 3): number {
   if (!tilesReady) assignTiles();
+  const sk = BLOCKS[id]?.skinOf;
+  if (sk) id = sk;
   return (TILE_OF[id] || 0) * 4 + face;
 }
 

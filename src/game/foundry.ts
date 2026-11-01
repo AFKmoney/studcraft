@@ -184,6 +184,18 @@ export const MATERIALS: Record<number, MatRow> = {
   [ID.SlabPlanks]: { kind: "fuel", fuel: 0.8 },
   [ID.Stick]: { kind: "fuel", fuel: 0.8 },
   [ID.Leaves]: { kind: "fuel", fuel: 0.4 },
+  // t79u: plant matter is never plastic — dry stalks burn, fresh produce goes to the composter
+  [ID.Wheat]: { kind: "fuel", fuel: 0.5 }, [ID.Hay]: { kind: "fuel", fuel: 4 },
+  [ID.Cane]: { kind: "fuel", fuel: 0.5 }, [ID.Sapling]: { kind: "fuel", fuel: 0.5 },
+  [ID.Seeds]: { kind: "reject", why: "Plant matter isn't plastic — compost it" },
+  [ID.Carrot]: { kind: "reject", why: "Plant matter isn't plastic — compost it" },
+  [ID.Potato]: { kind: "reject", why: "Plant matter isn't plastic — compost it" },
+  [ID.Beetroot]: { kind: "reject", why: "Plant matter isn't plastic — compost it" },
+  [ID.Pumpkin]: { kind: "reject", why: "Plant matter isn't plastic — compost it" },
+  [ID.Melon]: { kind: "reject", why: "Plant matter isn't plastic — compost it" },
+  [ID.Berry]: { kind: "reject", why: "Plant matter isn't plastic — compost it" },
+  [ID.Cactus]: { kind: "reject", why: "Plant matter isn't plastic — compost it" },
+  [ID.TallGrass]: { kind: "reject", why: "Plant matter isn't plastic — compost it" },
   // quality plastic also burns
   [ID.PlasticIngot]: { kind: "fuel", fuel: 6 },
   [ID.TemperedIngot]: { kind: "fuel", fuel: 10 },

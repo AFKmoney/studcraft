@@ -41,6 +41,7 @@ scene.environmentIntensity = 0.45;
 
 const atlases = buildAtlas();
 const atlas = atlases.color;
+// snr-exempt: offline lab icon renderer
 const opaqueMat = new THREE.MeshStandardMaterial({
   map: atlas,
   roughness: 1,
@@ -53,6 +54,7 @@ const opaqueMat = new THREE.MeshStandardMaterial({
   vertexColors: true,
   envMapIntensity: 0.55,
 });
+// snr-exempt: offline lab icon renderer
 const glassMat = new THREE.MeshStandardMaterial({
   map: atlas,
   roughness: 0.08,
@@ -63,6 +65,7 @@ const glassMat = new THREE.MeshStandardMaterial({
   envMapIntensity: 0.7,
   vertexColors: true,
 });
+// snr-exempt: offline lab icon renderer
 const waterMat = new THREE.MeshStandardMaterial({
   map: atlas,
   roughness: 0.08,
@@ -74,6 +77,7 @@ const waterMat = new THREE.MeshStandardMaterial({
   envMapIntensity: 1,
   vertexColors: true,
 });
+// snr-exempt: offline lab icon renderer
 const plantMat = new THREE.MeshStandardMaterial({
   map: atlas,
   roughness: 0.86,

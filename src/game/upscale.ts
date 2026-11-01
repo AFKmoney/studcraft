@@ -253,6 +253,7 @@ export class Upscaler {
     const ext = renderer.extensions;
     this.hdr = ext.has("EXT_color_buffer_float") || ext.has("EXT_color_buffer_half_float");
     const mk = (frag: string, uniforms: Record<string, THREE.IUniform>) =>
+      // snr-exempt: post-process upscale pass itself
       new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: frag, uniforms, depthTest: false, depthWrite: false, toneMapped: false });
     this.resolveMat = mk(RESOLVE, { tSrc: { value: null }, uInSize: { value: new THREE.Vector2(1, 1) }, uExposure: { value: 1 }, uAces: { value: false } });
     this.easuMat = mk(EASU, { tSrc: { value: null }, uInSize: { value: new THREE.Vector2() }, uOutSize: { value: new THREE.Vector2() } });

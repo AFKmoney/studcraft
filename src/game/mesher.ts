@@ -299,12 +299,78 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
   const scratchShade = [1, 1, 1, 1];
   const scratchTint = [1, 1, 1];
 
+  /** t79u: sculpted decor pieces (borrowed tiles, plain boxes/tubes). */
+  function decoShape(k: string, x: number, y: number, z: number, tile: number, top: number) {
+    const B = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, t = tile) => addBox(opaque, x + x0, y + y0, z + z0, x + x1, y + y1, z + z1, t);
+    const wood = faceTile(ID.Planks, 1), leaf = faceTile(ID.Leaves, 0), iron = faceTile(ID.IronBlock, 1), glow = faceTile(ID.Lantern, 0), dirt = faceTile(ID.Dirt, 0);
+    const legs = (h: number, i = 0.1, w = 0.1) => { B(i, 0, i, i + w, h, i + w); B(1 - i - w, 0, i, 1 - i, h, i + w); B(i, 0, 1 - i - w, i + w, h, 1 - i); B(1 - i - w, 0, 1 - i - w, 1 - i, h, 1 - i); };
+    if (k.startsWith("composter")) {
+      const lvl = +k.slice(9);
+      B(0.04, 0, 0.04, 0.96, 0.12, 0.96);
+      B(0.04, 0.12, 0.04, 0.96, 0.95, 0.16); B(0.04, 0.12, 0.84, 0.96, 0.95, 0.96);
+      B(0.04, 0.12, 0.16, 0.16, 0.95, 0.84); B(0.84, 0.12, 0.16, 0.96, 0.95, 0.84);
+      if (lvl > 0) B(0.16, 0.12, 0.16, 0.84, 0.12 + 0.26 * lvl, 0.84, lvl === 3 ? faceTile(ID.Grass, 0) : dirt);
+    } else if (k === "pot") {
+      B(0.3, 0, 0.3, 0.7, 0.34, 0.7); B(0.26, 0.3, 0.26, 0.74, 0.38, 0.74);
+      B(0.34, 0.36, 0.34, 0.66, 0.4, 0.66, dirt);
+      addTube(opaque, x + 0.5, y + 0.38, z + 0.5, x + 0.5, y + 0.7, z + 0.5, 0.025, leaf);
+      B(0.4, 0.68, 0.4, 0.6, 0.84, 0.6, faceTile(ID.FlowerRed, 0));
+    } else if (k === "planter") {
+      B(0, 0, 0, 1, 0.55, 1); B(0.08, 0.55, 0.08, 0.92, 0.62, 0.92, dirt);
+      for (const [a, c] of [[0.25, 0.3], [0.65, 0.4], [0.4, 0.7]]) B(a, 0.62, c, a + 0.14, 0.86, c + 0.14, leaf);
+    } else if (k === "table") {
+      legs(0.84); B(0, 0.84, 0, 1, 0.96, 1, top);
+    } else if (k === "chair") {
+      legs(0.46, 0.14, 0.09); B(0.12, 0.46, 0.12, 0.88, 0.56, 0.88, top);
+      B(0.12, 0.56, 0.78, 0.88, 1.0, 0.88); B(0.12, 0.92, 0.76, 0.88, 1.02, 0.9);
+    } else if (k === "stool") {
+      addTube(opaque, x + 0.5, y, z + 0.5, x + 0.5, y + 0.5, z + 0.5, 0.08, tile);
+      B(0.22, 0.5, 0.22, 0.78, 0.62, 0.78, top);
+    } else if (k === "shelf") {
+      B(0.02, 0.3, 0.7, 0.98, 0.38, 1); B(0.02, 0.7, 0.7, 0.98, 0.78, 1);
+      B(0.1, 0.38, 0.78, 0.24, 0.6, 0.92, faceTile(ID.Red, 0)); B(0.3, 0.38, 0.8, 0.4, 0.56, 0.92, faceTile(ID.Blue, 0));
+      B(0.6, 0.78, 0.78, 0.8, 0.92, 0.94, faceTile(ID.Yellow, 0));
+    } else if (k === "rug") {
+      B(0.02, 0, 0.02, 0.98, 0.05, 0.98, top); B(0.12, 0.05, 0.12, 0.88, 0.065, 0.88, faceTile(ID.White, 0));
+      B(0.18, 0.05, 0.18, 0.82, 0.07, 0.82, top);
+    } else if (k === "paperlamp") {
+      addTube(opaque, x + 0.5, y + 0.86, z + 0.5, x + 0.5, y + 1, z + 0.5, 0.02, iron);
+      B(0.28, 0.3, 0.28, 0.72, 0.86, 0.72); B(0.32, 0.22, 0.32, 0.68, 0.94, 0.68, glow);
+    } else if (k === "trapdoor") {
+      B(0, 0.82, 0, 1, 1, 1, top); B(0.1, 0.8, 0.45, 0.9, 0.82, 0.55, iron);
+    } else if (k === "trapdoorOpen") {
+      B(0, 0, 0.82, 1, 1, 1);
+    } else if (k === "crate") {
+      B(0.12, 0, 0.12, 0.88, 0.72, 0.88);
+      B(0.1, 0.0, 0.1, 0.9, 0.08, 0.9, wood); B(0.1, 0.64, 0.1, 0.9, 0.74, 0.9, wood);
+    } else if (k === "lamppost") {
+      B(0.3, 0, 0.3, 0.7, 0.12, 0.7); addTube(opaque, x + 0.5, y + 0.1, z + 0.5, x + 0.5, y + 0.8, z + 0.5, 0.06, tile);
+      B(0.32, 0.8, 0.32, 0.68, 1.0, 0.68, glow); B(0.28, 0.96, 0.28, 0.72, 1.02, 0.72);
+    } else if (k === "candle") {
+      B(0.36, 0, 0.36, 0.64, 0.05, 0.64, iron); B(0.43, 0.05, 0.43, 0.57, 0.42, 0.57); B(0.47, 0.42, 0.47, 0.53, 0.52, 0.53, glow);
+    } else if (k === "vase") {
+      B(0.34, 0, 0.34, 0.66, 0.08, 0.66); B(0.26, 0.08, 0.26, 0.74, 0.44, 0.74); B(0.36, 0.44, 0.36, 0.64, 0.62, 0.64); B(0.32, 0.62, 0.32, 0.68, 0.68, 0.68);
+    } else if (k === "settle") {
+      legs(0.42, 0.06, 0.12); B(0, 0.42, 0.1, 1, 0.52, 0.9, top);
+    } else if (k === "pennant") {
+      addTube(opaque, x + 0.5, y, z + 0.5, x + 0.5, y + 1, z + 0.5, 0.035, wood);
+      B(0.54, 0.62, 0.48, 0.96, 0.94, 0.52); B(0.54, 0.7, 0.47, 0.8, 0.86, 0.53, faceTile(ID.Yellow, 0));
+    } else if (k === "hanging") {
+      addTube(opaque, x + 0.5, y + 0.6, z + 0.5, x + 0.5, y + 1, z + 0.5, 0.015, iron);
+      B(0.32, 0.42, 0.32, 0.68, 0.62, 0.68, faceTile(ID.Hard, 1)); B(0.22, 0.2, 0.22, 0.78, 0.5, 0.78, leaf); B(0.4, 0.02, 0.4, 0.6, 0.24, 0.6, leaf);
+    } else if (k === "picket") {
+      B(0, 0.3, 0.44, 1, 0.38, 0.56); B(0, 0.62, 0.44, 1, 0.7, 0.56);
+      for (const a of [0.06, 0.38, 0.7]) { B(a, 0, 0.42, a + 0.22, 0.86, 0.58); B(a + 0.04, 0.86, 0.43, a + 0.18, 0.94, 0.57); }
+    } else B(0.2, 0, 0.2, 0.8, 0.6, 0.8);
+  }
+
   function isPartialStuds(id: number, block: ReturnType<typeof def>) {
     return (
       block.slab ||
       block.stairs ||
       block.sign ||
       block.flat ||
+      !!block.deco ||
       block.door ||
       block.gate ||
       block.cactus ||
@@ -922,6 +988,7 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
         else if (id === ID.Lava && world.get(x, y + 1, z) === 0) emitters.push(fkey(x, y, z));
         const self = def(id);
         if (
+          self.deco ||
           self.torch ||
           self.door ||
           self.ladder ||
@@ -949,7 +1016,9 @@ export function buildChunk(world: World, cx: number, cz: number, fancy: boolean,
           const tile = faceTile(id, 1);
           const top = faceTile(id, 0);
           const bot = faceTile(id, 2);
-          if (id === ID.Melted) {
+          if (self.deco) {
+            decoShape(self.deco, x, y, z, tile, top);
+          } else if (id === ID.Melted) {
             // v4.17: a puddle is part of the molten field (contoured below)
             addSource(x, y, z);
           } else if (self.slab) {
