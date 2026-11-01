@@ -159,13 +159,25 @@ export class Director {
   private ready = new Map<string, Gen>();
   private busy = new Set<string>();
   llm: Llm | null = null;
+  private queue: Promise<unknown> = Promise.resolve();
+  /** B21: prefetches run ONE AT A TIME. The model serves a single
+   *  generation and rejects a second one while busy, so two givers
+   *  prefetching together (chief + guild) burned the second one's
+   *  both tries instantly and parked a procedural quest instead. */
   prefetch(key: string, make: () => Promise<Gen>) {
     if (this.ready.has(key) || this.busy.has(key)) return;
     this.busy.add(key);
-    make()
-      .then((g) => this.ready.set(key, g))
+    this.queue = this.queue
+      .then(() => make())
+      .then((g) => {
+        this.ready.set(key, g);
+      })
       .catch(() => {})
       .finally(() => this.busy.delete(key));
+  }
+  /** QA / HUD: what is queued and what is ready (with its source). */
+  status(): { busy: string[]; ready: { key: string; source: Gen["source"]; title: string }[] } {
+    return { busy: [...this.busy], ready: [...this.ready].map(([key, g]) => ({ key, source: g.source, title: g.quest.text.title })) };
   }
   /** Take the pre-generated quest if any (and roll the arc), else null. */
   take(key: string): Gen | null {
