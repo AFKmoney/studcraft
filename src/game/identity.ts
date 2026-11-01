@@ -13,7 +13,7 @@ import { ID, def } from "./blocks.ts";
 export type PathId = "founder" | "mechanic" | "scavenger" | "breaker";
 
 export const PATHS: { id: PathId; name: string; bonus: string }[] = [
-  { id: "founder", name: "The Founder", bonus: "Foundry cooks 20% faster · recycling pays 75% instead of 50%" },
+  { id: "founder", name: "The Founder", bonus: "Foundry cooks 20% faster" },
   { id: "mechanic", name: "The Mechanic", bonus: "Machine upgrades cost 25% less matter" },
   { id: "scavenger", name: "The Scavenger", bonus: "Monument chests always hold a Teks part — and named relics turn up twice as often" },
   { id: "breaker", name: "The Breaker", bonus: "Breaks blocks 25% faster · mining knocks 3 chips loose instead of 2" },

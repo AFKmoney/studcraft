@@ -1688,15 +1688,56 @@ export const SMELT: Record<number, number> = {
  *  recycling is the one multi-yield row family: a Teks part smelts
  *  back to several pellets. */
 export const SMELT_N: Record<number, number> = {};
+/** Copper a melted Teks part gives back beside the kiln (B25-A4):
+ *  the conductor its casting recipe charged, returned in full. */
+export const SMELT_COPPER: Record<number, number> = {};
+
+/** The REAL casting matter of one Teks part, read from its casting
+ *  recipe (generated `cast-tech-*` or hand-written B21): plastic
+ *  ingots (tempered counts as the ingot it was quenched from) plus
+ *  copper, with nested parts (a seat inside a cage, an axle inside a
+ *  cannon) counted recursively. Falls back to the volume oracle
+ *  (`teksCastCost`) when no Teks recipe exists. B25-A4: the melt
+ *  return is priced from THIS, never from the volume oracle alone —
+ *  the oracle diverges from the B21 hand recipes (D5), and pricing
+ *  the seat (4 ingots by recipe, 8 by volume) off the oracle would
+ *  turn its melt loop into a matter fountain. */
+const castMatterCache = new Map<number, { ingots: number; copper: number }>();
+export function castMatter(id: number, depth = 0): { ingots: number; copper: number } {
+  const hit = castMatterCache.get(id);
+  if (hit) return hit;
+  const rec = depth <= 4 ? RECIPES.find((r) => r.out === id && r.cat === "teks") : undefined;
+  if (!rec) return { ingots: teksCastCost(id).ingots, copper: teksCastCost(id).copper };
+  let ingots = 0;
+  let copper = 0;
+  for (const [nid, n] of rec.need) {
+    if (nid === ID.PlasticIngot || nid === ID.TemperedIngot) ingots += n;
+    else if (nid === ID.Copper) copper += n;
+    else if ((TEKS as readonly number[]).includes(nid)) {
+      const sub = castMatter(nid, depth + 1);
+      ingots += sub.ingots * n;
+      copper += sub.copper * n;
+    }
+  }
+  const out = { ingots: Math.max(1, ingots), copper };
+  castMatterCache.set(id, out);
+  return out;
+}
 
 // §11 recycling (the melt half of the debris economy): EVERY Teks
-// part is a valid Foundry input and smelts back to pellets at ~50%
-// of its casting cost in ingots — the ingot half returns, the
-// copper in electrics is the recycler's fee. Unused finds are
-// therefore never dead weight: melt them and cast what you need.
+// part is a valid Foundry input and smelts back to pellets at 100%
+// of its real casting cost in ingots (B25-A4 — Guide §1/§5/§27:
+// « la refonte rend 100 % de la matière », toujours, pour tout le
+// monde; the old ~50% "recycler's fee" is gone), and its casting
+// copper returns too (SMELT_COPPER, dropped beside the kiln by
+// tickFurnaces). Unused finds are therefore never dead weight:
+// melt them and cast what you need — the loop conserves exactly,
+// it never profits.
 for (const id of TEKS) {
   SMELT[id] = ID.Pellets;
-  SMELT_N[id] = Math.max(1, Math.round(teksCastCost(id).ingots * 0.5));
+  const m = castMatter(id);
+  SMELT_N[id] = m.ingots;
+  if (m.copper > 0) SMELT_COPPER[id] = m.copper;
 }
 
 // Grok Bot foundry pass: rare drops melt into pellets AND charge the

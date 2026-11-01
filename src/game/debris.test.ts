@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { DEBRIS_ADVANCED, DEBRIS_BASIC, DEBRIS_PARTS, DEBRIS_RARE, arteryMul, debrisAt, debrisStuds, debrisZone } from "./debris.ts";
 import { ID } from "./blocks.ts";
-import { SMELT, SMELT_N, teksCastCost } from "./recipes.ts";
+import { SMELT, SMELT_COPPER, SMELT_N, castMatter } from "./recipes.ts";
 import { stockChest } from "./loot.ts";
 
 const BASIC = new Set<number>(DEBRIS_BASIC);
@@ -79,12 +79,16 @@ describe("§11 debris sites — topology", () => {
 });
 
 describe("§11 debris economy — recycling and monument jackpots", () => {
-  it("every Teks part smelts back to ~50% of its casting cost in pellets", () => {
+  it("B25-A4: every Teks part smelts back to 100% of its real casting cost in pellets (Guide §5/§27)", () => {
     for (const id of [...DEBRIS_BASIC, ...DEBRIS_ADVANCED, ...DEBRIS_RARE]) {
       assert.equal(SMELT[id], ID.Pellets, "part not recyclable: " + id);
-      const want = Math.max(1, Math.round(teksCastCost(id).ingots * 0.5));
-      assert.equal(SMELT_N[id], want, "recycle yield off for " + id);
-      assert.ok(SMELT_N[id] <= teksCastCost(id).ingots, "recycling never profits");
+      const want = castMatter(id);
+      assert.equal(SMELT_N[id], want.ingots, "recycle yield off for " + id);
+      assert.equal(SMELT_COPPER[id] ?? 0, want.copper, "copper return off for " + id);
+      // Exactly the recipe's plastic — the loop conserves, it never
+      // profits (the seat is the trap: 4 ingots by recipe, 8 by the
+      // volume oracle; pricing the melt off the oracle would fountain).
+      assert.equal(SMELT_N[ID.CockpitSeat], 4);
     }
   });
 

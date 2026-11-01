@@ -84,14 +84,30 @@ describe("foundry balance", () => {
     meltInto(p, 0, 3, { regrind: true });
     assert.equal(p.purity, 75);
   });
-  it("TEKS cast costs are 1..24 ingots and recycling returns at most ~half", async () => {
+  it("TEKS cast costs are 1..24 ingots and B25-A4 recycling returns exactly 100% of the real casting matter", async () => {
     const { TEKS } = await import("./blocks.ts");
-    const { teksCastCost } = await import("./recipes.ts");
+    const { teksCastCost, castMatter, SMELT_COPPER } = await import("./recipes.ts");
     for (const id of TEKS) {
       const c = teksCastCost(id).ingots;
       assert.ok(c >= 1 && c <= 24);
-      assert.ok(SMELT_N[id] <= Math.ceil(c / 2));
+      const m = castMatter(id);
+      assert.equal(SMELT_N[id], m.ingots, "melt return != cast plastic for " + id);
+      assert.equal(SMELT_COPPER[id] ?? 0, m.copper, "copper return off for " + id);
     }
+    // The volume-oracle trap (D5 divergence): the seat casts for
+    // 4 ingots by recipe but 8 by volume — its melt pays the recipe.
+    assert.equal(SMELT_N[ID.CockpitSeat], 4);
+    assert.equal(teksCastCost(ID.CockpitSeat).ingots, 8);
+  });
+  it("B25-A4: no Founder pellet multiplier survives in game.ts and the Founder bonus no longer promises a recycling rate", async () => {
+    const { readFileSync } = await import("node:fs");
+    const game = readFileSync(new URL("./game.ts", import.meta.url), "utf8");
+    assert.equal(game.includes('pathId === "founder" && baseOut > 0'), false);
+    assert.ok(game.includes("SMELT_COPPER[inId]"), "copper return wired in tickFurnaces");
+    const { PATHS } = await import("./identity.ts");
+    const founder = PATHS.find((p) => p.id === "founder");
+    assert.ok(founder && !/75|50\s?%/.test(founder.bonus), founder?.bonus);
+    assert.match(founder!.bonus, /20% faster/);
   });
 });
 

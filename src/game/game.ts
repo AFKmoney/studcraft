@@ -17,7 +17,7 @@ import { STUD_H, STUD_OFFSETS, STUD_R, buildChunk, type Surface } from "./mesher
 import * as FS from "./fireState";
 import * as TS from "./tuftState";
 import * as CH from "./chipState";
-import { NEIGHBORS, PLASTIC, RECIPES, SMELT, SMELT_N, bucketFill, bucketPour, fuelReturn, fuelTime, matchGrid, teksCastCost } from "./recipes";
+import { NEIGHBORS, PLASTIC, RECIPES, SMELT, SMELT_COPPER, SMELT_N, bucketFill, bucketPour, fuelReturn, fuelTime, matchGrid, teksCastCost } from "./recipes";
 import { Director, generateQuest, newStory, storyFrom, type WorldView } from "./llm/story";
 import { PREFETCH_TIMEOUT_MS } from "./llm/prompt";
 import { NpcModel } from "./llm/runtime";
@@ -15899,7 +15899,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           const inId = f.in; // capture BEFORE the decrement zeroes it (the yield keys on the input)
           f.inN -= 1;
           if (f.inN <= 0) f.in = 0;
-          // §11 recycling yield; R4 Founder path raises it to ~75%.
+          // §11 recycling yield (B25-A4): a Teks part returns 100%
+          // of its casting plastic for everyone — Guide §5/§27. The
+          // old R4 Founder ×1.5 pellet multiplier is gone: on a 100%
+          // base it would CREATE matter, and the Founder path keeps
+          // its real edge in the 20% faster cook (foundryCookMul).
           const yieldN = SMELT_N[inId] ?? 1;
           let distilMul = 1;
           // v6: plain materials melt at their table ratio (many commons → 1 pellet)
@@ -15919,7 +15923,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
             const baseOut = ratioRow ? ratioN : yieldN;
             if (baseOut > 0) f.out = product;
             else if (!f.outN) f.out = 0;
-            f.outN += product === ID.Pellets && pathId === "founder" && baseOut > 0 ? Math.ceil(baseOut * 1.5) : baseOut;
+            f.outN += baseOut;
+          }
+          // B25-A4: a melted Teks part also gives its casting copper
+          // back, dropped beside the kiln like the lava-bucket return
+          // — « toute sa matière », not just the plastic (Guide §1).
+          if (!ratioRow && product === ID.Pellets && (SMELT_COPPER[inId] ?? 0) > 0) {
+            dropItem(ID.Copper, SMELT_COPPER[inId], f.x + 0.5, f.y + 1.25, f.z + 0.5);
           }
           // P5b (Muse): the Foundry's second yield — smelting pellets
           // (the only road to a PlasticIngot) also distils FUEL at
