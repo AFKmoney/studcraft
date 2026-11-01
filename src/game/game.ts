@@ -335,6 +335,8 @@ export type GameApi = {
 declare global {
   interface Window {
     __controlsTest?: {
+      getLlm?: () => { state: string; transport: string; progress: number; why: string; model: string; isolated: boolean };
+      llmGenerate?: (prompt: string, grammar: string) => Promise<{ text: string; ms: number }>;
       getYaw: () => number;
       getSpeed: () => number;
       getPos: () => { x: number; y: number; z: number };
@@ -925,7 +927,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     npcModelTimer = setTimeout(() => {
       npcModelTimer = null;
       const nav = navigator as Navigator & { deviceMemory?: number };
-      void npcModel.start({ deviceMemory: nav.deviceMemory, hasWasm: typeof WebAssembly !== "undefined", hasWorker: typeof Worker !== "undefined", software: gpu.software, renderer: gpu.renderer });
+      void npcModel.start({ deviceMemory: nav.deviceMemory, hasWasm: typeof WebAssembly !== "undefined", hasWorker: typeof Worker !== "undefined", software: gpu.software, renderer: gpu.renderer, isolated: typeof crossOriginIsolated !== "undefined" && crossOriginIsolated, cores: nav.hardwareConcurrency });
     }, delayMs);
   }
   startNpcModel(20000);
@@ -15706,6 +15708,15 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // freezes the draw/fire/reload pose at t s after the shot (null = live).
     xbShoot: () => { shootHeld(); return elapsed - xbShotAt < 0.5; },
     xbHold: (t: number | null) => { xbQaSince = t; return true; },
+    // Bonsai QA hooks: model state, and one raw constrained generation.
+    getLlm: () => ({ state: npcModel.state, transport: npcModel.transport, progress: npcModel.progress, why: npcModel.why, model: npcModel.model, isolated: typeof crossOriginIsolated !== "undefined" && crossOriginIsolated }),
+    llmGenerate: async (prompt: string, grammar: string) => {
+      const f = npcModel.llm();
+      if (!f) throw new Error("NPC model not ready: " + npcModel.state);
+      const t0 = performance.now();
+      const text = await f(prompt, grammar, { temperature: 0.4, maxTokens: 160 });
+      return { text, ms: performance.now() - t0 };
+    },
     getYaw: () => player.yaw,
     getSpeed: () => Math.hypot(player.vx, player.vz),
     getPos: () => ({ x: player.x, y: player.y, z: player.z }),
