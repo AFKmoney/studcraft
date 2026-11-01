@@ -12,8 +12,14 @@ const { Sidecar } = require("./sidecar.cjs");
 
 const res = app.isPackaged ? process.resourcesPath : path.join(__dirname, "resources");
 const exe = process.platform === "win32" ? "llama-server.exe" : "llama-server";
+// llama/ = GPU build (Vulkan on Windows), llama-cpu/ = CPU build used as a
+// hardware fallback when the GPU build cannot start. STUDCRAFT_CPU=1 forces CPU.
+const forceCpu = process.env.STUDCRAFT_CPU === "1";
 const sidecar = new Sidecar({
-  bin: path.join(res, "llama", exe),
+  bin: path.join(res, forceCpu ? "llama-cpu" : "llama", exe),
+  gpuLayers: forceCpu ? 0 : 99,
+  backend: forceCpu ? "cpu" : "gpu",
+  fallback: forceCpu ? undefined : { bin: path.join(res, "llama-cpu", exe), gpuLayers: 0 },
   model: path.join(res, "models", "Bonsai-1.7B-Q1_0.gguf"),
   log: (s) => console.log("[bonsai] " + s),
 });
