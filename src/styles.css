@@ -4039,3 +4039,9 @@ kbd {
 .sc-trophy.gold.earned .sc-trophy-ic { color: var(--sc-gold); }
 .sc-trophy.earned { opacity: 1; border-color: rgba(245, 197, 24, 0.3); }
 .sc-trophy.earned em { color: var(--sc-gold); font-weight: 700; }
+.sc-look { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.07); }
+.sc-look-row { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 10px; }
+.sc-look-row > span { font: 600 13px var(--font-sans); color: var(--sc-muted); }
+.sc-look-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+.sc-swatch { width: 28px; height: 28px; border-radius: 8px; border: 2px solid rgba(0, 0, 0, 0.35); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.18); padding: 0; }
+.sc-swatch.on { outline: 3px solid var(--sc-gold); outline-offset: 1px; }

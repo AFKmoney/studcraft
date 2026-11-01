@@ -92,6 +92,7 @@ export type Hud = {
   /** R4: committed path id ("" = unchosen) + relic display names by gear id. */
   path: string;
   stats: Stats;
+  look: Look;
   trophies: ReturnType<typeof trophyRows>;
   named: Record<number, string>;
   nextPerk: string;
@@ -227,6 +228,7 @@ export type GameApi = {
     upscale: Upscale;
     sharpness: number;
     fov: number;
+    look: Look;
     showFps: boolean;
     npcLlm: boolean;
     music: number;
@@ -329,6 +331,7 @@ export type GameApi = {
   setStuds: (on: boolean) => void;
   setRealistic: (on: boolean) => void;
   setThird: (on: boolean) => void;
+  setLook: (part: keyof Look, hex: number) => void;
   setUpscale: (u: Upscale) => void;
   setSharpness: (n: number) => void;
   setFov: (n: number) => void;
@@ -538,6 +541,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     third: savedSettings?.third ?? false,
     upscale: (savedSettings?.upscale as Upscale | undefined) ?? "auto",
     sharpness: savedSettings?.sharpness ?? 0.5,
+    look: lookFrom(savedSettings?.look),
     fov: savedSettings?.fov ?? 72,
     showFps: savedSettings?.showFps ?? false,
     npcLlm: savedSettings?.npcLlm ?? true,
@@ -572,6 +576,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     rank: "Bricklet",
     path: "",
     stats: {},
+    look: { ...DEFAULT_LOOK },
     trophies: [],
     named: {},
     nextPerk: "Steady hands",
@@ -1834,8 +1839,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   bolt.userData.keepShadow = false;
   scene.add(bolt);
 
-  const fpsSleeveMat = skin(0xe23b2f);
-  const fpsSkinMat = skin(0xf3d37a);
+  const fpsSleeveMat = skin(settings.look.shirt);
+  const fpsSkinMat = skin(settings.look.skin);
   const viewBrick = new THREE.Group();
   viewBrick.userData.keepShadow = false;
 
@@ -3763,7 +3768,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   viewBrick.position.set(0.20, -0.16, -0.27);
   camera.add(viewBrick);
 
-  const fig = makeFigure();
+  const fig = makeFigure(settings.look);
   // Minecraft proportions: the player character is exactly 1.8 blocks tall
   // (the raw figure measures 1.29 — Philippe, 2026-10-28).
   {
@@ -4541,6 +4546,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       upscale: settings.upscale,
       sharpness: settings.sharpness,
       fov: settings.fov,
+      look: { ...settings.look },
       showFps: settings.showFps,
       npcLlm: settings.npcLlm,
       music: settings.music,
@@ -4567,6 +4573,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (best > (stats.reputation ?? 0)) stat("reputation", best, true);
     }
     hud.stats = { ...stats };
+    hud.look = settings.look;
     hud.trophies = phase === "inventory" || hud.trophies.length === 0 ? trophyRows(stats, trophies) : hud.trophies;
     hud.hotbar = hotbar.map((id) => ({ id, count: creative ? -1 : (inv[id] ?? 0) }));
     hud.offhand = offhand;
@@ -18294,6 +18301,25 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       persistSettings();
       emit();
     },
+    setLook(part, hex) {
+      const old = settings.look[part];
+      if (old === hex) return;
+      const shade = (c: number) => new THREE.Color(c).multiplyScalar(0.78).getHex();
+      // Recolour by value (robust to the realistic/Lambert material swap):
+      // the part itself, and for the shirt its darker sleeves too.
+      const pairs: [number, number][] = [[old, hex]];
+      if (part === "shirt") pairs.push([shade(old), shade(hex)]);
+      fig.group.traverse((o) => {
+        const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+        if (!m || !m.color) return;
+        for (const [a, b] of pairs) if (m.color.getHex() === a) { m.color.setHex(b); break; }
+      });
+      if (part === "shirt") fpsSleeveMat.color.setHex(hex);
+      if (part === "skin") fpsSkinMat.color.setHex(hex);
+      settings.look = { ...settings.look, [part]: hex };
+      persistSettings();
+      emit();
+    },
     setThird(on) {
       settings.third = on;
       persistSettings();
@@ -19365,8 +19391,22 @@ function makeDemoule(kind: string): StudsBody {
   return { group: g, legs: [legL, legR, armR, armL], bodyMat: plastic };
 }
 
-function makeFigure() {
-  const fig = makeFig(0xe23b2f, 0x1f5fbf, 0x241c16, "smile");
+// Character customisation (2026-11-01): the player's minifig colours.
+export type Look = { shirt: number; pants: number; hair: number; skin: number };
+export const DEFAULT_LOOK: Look = { shirt: 0xe23b2f, pants: 0x1f5fbf, hair: 0x241c16, skin: 0xf3d37a };
+export const LOOK_SWATCHES: Record<keyof Look, number[]> = {
+  shirt: [0xe23b2f, 0x1f5fbf, 0x2e8a3e, 0xf5c518, 0xf4f4f4, 0x27282b, 0x8a4fc8, 0xfe8a18, 0x6c6e68, 0xe991b5, 0x3ec8ff, 0x7c522b],
+  pants: [0x1f5fbf, 0x27282b, 0x6c6e68, 0x7c522b, 0x2e8a3e, 0xe23b2f, 0xf4f4f4, 0xe4cd9e, 0x1b2a4a, 0x8a4fc8],
+  hair: [0x241c16, 0x5b3a1e, 0xe4b94a, 0xc8302a, 0x9aa1a8, 0xf4f4f4, 0x27282b, 0xe991b5, 0x3ec8ff, 0x2e8a3e],
+  skin: [0xf3d37a, 0xf5d6b4, 0xe0b48c, 0xc68b59, 0x8d5524, 0x5a3825, 0xa0a5a9, 0x6fd0ff],
+};
+export function lookFrom(d: unknown): Look {
+  const o = (d ?? {}) as Partial<Record<keyof Look, unknown>>;
+  const pick = (k: keyof Look) => (typeof o[k] === "number" && Number.isFinite(o[k] as number) ? (o[k] as number) & 0xffffff : DEFAULT_LOOK[k]);
+  return { shirt: pick("shirt"), pants: pick("pants"), hair: pick("hair"), skin: pick("skin") };
+}
+function makeFigure(look: Look = DEFAULT_LOOK) {
+  const fig = makeFig(look.shirt, look.pants, look.hair, "smile", look.skin);
   return { group: fig.group, legL: fig.legs[0], legR: fig.legs[1], armL: fig.legs[3], armR: fig.legs[2] };
 }
 
@@ -19902,6 +19942,7 @@ function makeFig(shirt: number, pants: number, hairCol: number, face: FigFace, h
       put(head, geoBox(0.068, 0.022, 0.022), black, 0.058, 0.205, -0.155, 0, true);
     }
   }
+  g.userData.look = { shirtM, sleeveM, pantsM, headM, hairM };
   return { group: g, legs: [legL, legR, armR, armL], bodyMat: shirtM };
 }
 

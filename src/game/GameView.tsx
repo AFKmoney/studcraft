@@ -1,6 +1,7 @@
 import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode, Fragment } from "react";
 import { CATALOG, COLORS, ID, TEKS, def } from "./blocks";
 import type { EnterKind, GameApi, Phase, Quality, Upscale } from "./game";
+import { LOOK_SWATCHES, type Look } from "./game";
 import { RECIPES, type Recipe } from "./recipes";
 import { CODEX, PERKS } from "./ranks";
 import { PATHS, PATH_CHANGE_COST } from "./identity";
@@ -1907,7 +1908,7 @@ function Inventory({ game }: { game: GameApi }) {
             {page === "ranks" && <Ranks hud={hud} game={game} />}
             {page === "quests" && <QuestList hud={hud} onClaim={(id) => game.claim(id)} />}
             {page === "skills" && <SkillTree hud={hud} onUnlock={(id) => game.unlock(id)} />}
-            {page === "journal" && <Journal hud={hud} />}
+            {page === "journal" && <Journal hud={hud} game={game} />}
           </div>
           {(page === "bin" || page === "craft") && <InvHotbar game={game} />}
         </div>
@@ -2843,7 +2844,7 @@ const STAT_ROWS: [keyof GameApi["hud"]["stats"], string][] = [
   ["teks", "Teks parts assembled"], ["vehicles", "Vehicles owned"], ["drive", "Blocks driven"], ["shots", "Rounds fired"],
   ["fished", "Catches"], ["days", "Days survived"], ["deaths", "Deaths"], ["reputation", "Best village standing"],
 ];
-function Journal({ hud }: { hud: GameApi["hud"] }) {
+function Journal({ hud, game }: { hud: GameApi["hud"]; game: GameApi }) {
   const earned = hud.trophies.filter((t) => t.earned).length;
   const pct = Math.min(100, (hud.xp / Math.max(1, hud.xpNeed)) * 100);
   const [filter, setFilter] = useState<"all" | "earned" | "next">("next");
@@ -2862,6 +2863,28 @@ function Journal({ hud }: { hud: GameApi["hud"] }) {
             {hud.xp} / {hud.xpNeed} studs · {earned} / {hud.trophies.length} trophies{hud.path ? " · path: " + hud.path : ""}
           </small>
         </div>
+      </div>
+      <p className="sc-label">Your minifig</p>
+      <div className="sc-look">
+        {(["shirt", "pants", "hair", "skin"] as (keyof Look)[]).map((part) => (
+          <div key={part} className="sc-look-row">
+            <span>{part === "shirt" ? "Torso" : part === "pants" ? "Legs" : part === "hair" ? "Hair" : "Head"}</span>
+            <div className="sc-look-swatches" role="radiogroup" aria-label={part}>
+              {LOOK_SWATCHES[part].map((c) => (
+                <button
+                  key={c}
+                  role="radio"
+                  aria-checked={hud.look[part] === c}
+                  aria-label={part + " #" + c.toString(16).padStart(6, "0")}
+                  className={"sc-swatch" + (hud.look[part] === c ? " on" : "")}
+                  style={{ background: "#" + c.toString(16).padStart(6, "0") }}
+                  onClick={() => game.setLook(part, c)}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+        <small className="sc-muted">Press F5 (or the camera button) for third person to admire the fit.</small>
       </div>
       <p className="sc-label">Deeds</p>
       <ul className="sc-journal-stats">
