@@ -22,6 +22,8 @@ import { Director, generateQuest, newStory, storyFrom, type WorldView } from "./
 import { PREFETCH_TIMEOUT_MS } from "./llm/prompt";
 import { NpcModel } from "./llm/runtime";
 import { GenPool, poolSize, type WorkerLike } from "./genPool";
+import { CROSSBOW_HOLD } from "./heldPose";
+import { driverOccluders, seatEye } from "./vehView";
 import { armorMaxDur, combineDur, repairCost, wearArmor } from "./foundry";
 import { plasticCost, salvageOf } from "./recipes";
 import { AFFIX_INFO, MATERIALS, RARE_MELT, TIERS, cookRate, meltInto, meltRatioStep, rejectReason, poolGlow, pour, stepHeat, tierIndex, type Pool } from "./foundry";
@@ -2337,6 +2339,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       // Stock
       addBoxPart(group, 0.18, 0.032, 0.028, -0.04, 0, 0, woodMat);
       addBoxPart(group, 0.06, 0.028, 0.032, -0.12, -0.01, 0, woodMat);
+      // B18: Lego-style pistol grip UNDER the stock — the minifig hand holds it.
+      addBoxPart(group, 0.024, 0.06, 0.026, -0.07, -0.045, 0, woodMat);
       // Prod — B17: the bow limb spans Z, PERPENDICULAR to the
       // stock. It used to run along X, collinear with the stock:
       // the whole model was one thin line (0.31 × 0.05 × 0.03), so
@@ -3492,6 +3496,18 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       const mouthT = ARM_OUT.clone().negate();
       placeArm(grip, shaft, mouthT, ARM_SCALE * 0.82);
+    } else if (id === ID.Crossbow) {
+      // B18 (Philippe): held like a Lego crossbow — level, straight
+      // ahead, prod across the view, hand on the grip under the stock.
+      const H = CROSSBOW_HOLD;
+      M = new THREE.Matrix4()
+        .makeTranslation(H.grip.x, H.grip.y, H.grip.z)
+        .multiply(new THREE.Matrix4().makeScale(H.scale, H.scale, H.scale))
+        .multiply(new THREE.Matrix4().makeRotationY(H.rotY))
+        .multiply(new THREE.Matrix4().makeTranslation(-H.gripLocal.x, -H.gripLocal.y, -H.gripLocal.z));
+      const grip = new THREE.Vector3(H.gripLocal.x, H.gripLocal.y + 0.02, H.gripLocal.z).applyMatrix4(M);
+      // clip bore vertical (the grip), mouth facing away from the arm
+      placeArm(grip, new THREE.Vector3(0, 1, 0), ARM_OUT.clone().negate(), ARM_SCALE * 0.82);
     } else if (isTool) {
       // Tester retest 2026-10-31: TWO framing bugs lived here, both
       // measured with the real matrix chain in a three.js probe.
@@ -6832,39 +6848,24 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   function computeSeatEye(v: Vehicle): { x: number; y: number; z: number } | null {
     const hub = v.parts.find((p) => p.role === "hub");
     if (!hub) return null;
-    const c = hub.centreLocal;
-    const clearance = (eye: { x: number; y: number; z: number }): number => {
-      let d = Infinity;
-      for (const p of v.parts) {
-        if (!p.box) continue;
-        const dx = Math.max(p.box.min.x - eye.x, 0, eye.x - p.box.max.x);
-        const dy = Math.max(p.box.min.y - eye.y, 0, eye.y - p.box.max.y);
-        const dz = Math.max(p.box.min.z - eye.z, 0, eye.z - p.box.max.z);
-        d = Math.min(d, Math.hypot(dx, dy, dz));
-      }
-      return d;
-    };
-    const inWorld = (eye: { x: number; y: number; z: number }): boolean => {
+    return seatEye(v, (eye) => {
       const w = partWorldPoint(v, hub, eye);
       const bx = Math.floor(w.x), by = Math.floor(w.y), bz = Math.floor(w.z);
       for (const [ox, oy, oz] of [[0, 0, 0], [0, 1, 0], [0, -1, 0]] as const)
         if (def(world.get(bx + ox, by + oy, bz + oz)).solid) return false;
       return true;
-    };
-    let best: { x: number; y: number; z: number } | null = null;
-    let bestD = -1;
-    for (const rear of [1.2, 2, 2.8, 3.6]) {
-      for (const up of [1.2, 1.8, 2.4, 3]) {
-        for (const xoff of [0, 1, -1]) {
-          const eye = { x: c.x + xoff, y: c.y + up, z: c.z + rear };
-          if (!inWorld(eye)) continue;
-          const d = clearance(eye);
-          if (d > bestD) { bestD = d; best = eye; }
-          if (d >= 0.45) return eye;
-        }
-      }
+    });
+  }
+  /** B18: parts hugging the driver's eye, hidden in the first-person driving view. */
+  let vehHidden = new Set<number>();
+  function applyDriverView() {
+    if (!vehEnt) return;
+    const fp = !settings.third;
+    for (const m of vehEnt.meshes) {
+      const show = !(fp && vehHidden.has(m.vp.uid));
+      m.mesh.visible = show;
+      if (m.rodMesh) m.rodMesh.visible = show;
     }
-    return best;
   }
 
   /** "Use" on a hub whose assembly is a complete vehicle: drive it.
@@ -6938,6 +6939,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     };
     hud.driving = true;
     vehSeatEye = computeSeatEye(vehicle);
+    vehHidden = vehSeatEye ? driverOccluders(vehicle, vehSeatEye) : new Set();
+    applyDriverView();
     placeVehGroup();
     say("Driving — W/S throttle, A/D steer, Shift park · Fuel " + vehicle.fuel.toFixed(1) + "/" + FUEL.tankCapacity + " · Battery " + Math.round(vehicle.battery * 100) + "%");
     audio.place();
@@ -6979,6 +6982,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     scene.remove(ent.group);
     vehEnt = null;
     vehSeatEye = null;
+    vehHidden = new Set();
     hud.driving = false;
     syncTechMeshes();
     player.x = ent.v.pos.x + 1.6;
@@ -14225,6 +14229,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         const hubLvl = HUB_LVL[(teksLvl.get(vehEnt.hubKey) ?? 1) - 1];
         stepVeh(v, dt, { throttle: tilted ? 0 : sample.fwd, steer: sample.str, channel: v.hubChannel, battMul: hubLvl.battMul, genMul: hubLvl.genMul }, (x, z) => groundY(x, z));
         placeVehGroup();
+        applyDriverView();
         // P5c-3: channel cycling while driving (KeyC / the CH button),
         // bucket digging (the bucket digs where it MOVES through
         // blocks) and dumping (Use, unless refuelling).
@@ -14826,7 +14831,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         placeHeldMinecraft(held, built1.group, heldIsTool);
 
         const built3 = buildStudsItem3D(held);
-        if (built3.isTool) {
+        if (held === ID.Crossbow) {
+          built3.group.scale.setScalar(1.35);
+          built3.group.rotation.set(CROSSBOW_HOLD.tpRot.x, CROSSBOW_HOLD.tpRot.y, CROSSBOW_HOLD.tpRot.z);
+        } else if (built3.isTool) {
           built3.group.scale.setScalar(1.35);
           built3.group.rotation.set(Math.PI / 2, Math.PI / 2, 0);
         } else {
@@ -14842,8 +14850,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         figHeldGroup.add(built3.group);
       }
     }
-    heldBrickGroup.visible = !!held;
-    figHeldGroup.visible = !!held;
+    // B18: nothing in hand while seated in a vehicle (restored on exit).
+    heldBrickGroup.visible = !!held && !vehEnt;
+    figHeldGroup.visible = !!held && !vehEnt;
     // Animate internal 3D STUDS flames on held Furnace, Campfire, Torch, Lantern, Brew Stand, or Beacon
     for (let fi = 0; fi < heldFlames.length; fi++) {
       const fl = heldFlames[fi];

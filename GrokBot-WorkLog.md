@@ -171,3 +171,10 @@ Journal de travail de studs game tester (Grok Bot) sur StudCraft. Heures en heur
 - **Durabilité des armures** : usure par id (`armorWear`, sauvegardée). Chaque coup reçu use chaque pièce portée de ceil(dégâts / 2). La pièce casse à 0 et est retirée. Max = maxUse s'il existe, sinon 60 + armure × 400. Le bouton « Réparer l'armure portée » de l'enclume répare avec du plastique de qualité adaptée (même `repairCost`). Retirer et remettre une pièce garde l'usure ; une pièce neuve repart à 0.
 - **Fonte au four** : en mode Plastique, le bouton « Melt held item » fond l'objet tenu (outil ou armure) selon les mêmes règles que l'enclume : 50 % du coût plastique × durabilité restante, objets en gemmes et en bois refusés.
 - Tests : `armor.test.ts` (4 tests).
+
+## B18 — Arbalète tenue façon Lego + caméra de conduite (2026-10-31)
+- Arbalète (283) : poignée pistolet sous la crosse, tenue à l'horizontale, pointée vers l'avant, arc horizontal (CROSSBOW_HOLD dans heldPose.ts, testé). Rotation 3e personne ajustée (tpRot).
+- Rig Digger : vehView.ts (seatEye, viewBlocked, driverOccluders). En 1re personne, on masque les pièces qui bouchent la vue du conducteur. Obstruction avant → après : fwd 54 %→<25 %, droite 85 %→<25 % (test sur les 4 directions).
+- L'objet tenu est masqué quand on est assis dans un véhicule.
+- Captures : studcraft-qa/shots/b18-crossbow-fp.png, b18-crossbow-tp.png, b18-drive-{fwd,left,right,rear}.png, b18-drive-montage.png.
+- Reste à faire : prise de l'arbalète en 3e personne non vérifiée visuellement (la caméra est derrière le perso).
