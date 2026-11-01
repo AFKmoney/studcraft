@@ -110,6 +110,7 @@ export function builtinModels(): VehicleModel[] {
       name: "Starter Buggy",
       author: "Studs Garage",
       savedAt: 0,
+      blurb: "Roll cage + plastic cannon, the all-rounder",
       parts: [
         P(378, [0, -5, -4]), P(378, [0, -5, 4]), P(378, [10, -5, -4]), P(378, [10, -5, 4]),
         P(356, [6, -7, -4]), P(356, [-6, -7, -4]), P(356, [6, -7, 4]), P(356, [-6, -7, 4]),
@@ -131,6 +132,7 @@ export function builtinModels(): VehicleModel[] {
       name: "Rig Digger",
       author: "Studs Garage",
       savedAt: 0,
+      blurb: "Excavator: 4 servos, bucket digs real blocks",
       parts: [
         P(378, [0, -5, -4]), P(378, [0, -5, 4]), P(378, [10, -5, -4]), P(378, [10, -5, 4]),
         P(356, [6, -7, -4]), P(356, [-6, -7, -4]), P(356, [6, -7, 4]), P(356, [-6, -7, 4]),
@@ -168,6 +170,80 @@ export function builtinModels(): VehicleModel[] {
         // offset cab), on the base group so it never swings with the arm.
         P(648, [0, 0, -12], 22),
       ],
+    },
+    // 2026-11-01 (Claude): ten more showroom models, each generated and
+    // kept only if it passes the exact load law below (catalogue.test.ts:
+    // flat-ground placement, one AABB component under the hub, converts
+    // with nothing missing) AND drives forward on flat ground.
+    {
+      name: "Scout Kart",
+      author: "Studs Garage",
+      savedAt: 0,
+      blurb: "Light and cheap: open seat, no guns — the first ride",
+      parts: [P(378, [0, -5, -4]), P(378, [0, -5, 4]), P(378, [10, -5, -4]), P(378, [10, -5, 4]), P(356, [6, -7, -4]), P(356, [-6, -7, -4]), P(356, [6, -7, 4]), P(356, [-6, -7, 4]), P(446, [0, 0, 0]), P(447, [0, 7, -4]), P(452, [12, -1, 0]), P(645, [0, 11, 0], 22)],
+    },
+    {
+      name: "Gold Gunner",
+      author: "Studs Garage",
+      savedAt: 0,
+      blurb: "Roll cage + gold cannon, heavy shells",
+      parts: [P(378, [0, -5, -4]), P(378, [0, -5, 4]), P(378, [10, -5, -4]), P(378, [10, -5, 4]), P(356, [6, -7, -4]), P(356, [-6, -7, -4]), P(356, [6, -7, 4]), P(356, [-6, -7, 4]), P(446, [0, 0, 0]), P(447, [0, 7, -4]), P(452, [12, -1, 0]), P(647, [0, 11, 0], 22), P(641, [-4, 1, 7], 4)],
+    },
+    {
+      name: "Laser Runner",
+      author: "Studs Garage",
+      savedAt: 0,
+      blurb: "Open seat with a laser up front",
+      parts: [P(378, [0, -5, -4]), P(378, [0, -5, 4]), P(378, [10, -5, -4]), P(378, [10, -5, 4]), P(356, [6, -7, -4]), P(356, [-6, -7, -4]), P(356, [6, -7, 4]), P(356, [-6, -7, 4]), P(446, [0, 0, 0]), P(447, [0, 7, -4]), P(452, [12, -1, 0]), P(645, [0, 11, 0], 22), P(642, [0, 5, 3], 22)],
+    },
+    {
+      name: "Rocket Rover",
+      author: "Studs Garage",
+      savedAt: 0,
+      blurb: "Roll cage carrying a rocket pod",
+      parts: [P(378, [0, -5, -4]), P(378, [0, -5, 4]), P(378, [10, -5, -4]), P(378, [10, -5, 4]), P(356, [6, -7, -4]), P(356, [-6, -7, -4]), P(356, [6, -7, 4]), P(356, [-6, -7, 4]), P(446, [0, 0, 0]), P(447, [0, 7, -4]), P(452, [12, -1, 0]), P(647, [0, 11, 0], 22), P(643, [-4, 1, 7], 4)],
+    },
+    {
+      name: "Turret Truck",
+      author: "Studs Garage",
+      savedAt: 0,
+      blurb: "Closed cab with a rear turret mount",
+      parts: [P(378, [0, -5, -4]), P(378, [0, -5, 4]), P(378, [10, -5, -4]), P(378, [10, -5, 4]), P(356, [6, -7, -4]), P(356, [-6, -7, -4]), P(356, [6, -7, 4]), P(356, [-6, -7, 4]), P(446, [0, 0, 0]), P(447, [0, 7, -4]), P(452, [12, -1, 0]), P(646, [0, 11, 0], 22), P(644, [0, 5, 10], 22)],
+    },
+    {
+      name: "Hauler Cab",
+      author: "Studs Garage",
+      savedAt: 0,
+      blurb: "Closed cab work truck, room on the deck",
+      parts: [P(378, [0, -5, -4]), P(378, [0, -5, 4]), P(378, [10, -5, -4]), P(378, [10, -5, 4]), P(356, [6, -7, -4]), P(356, [-6, -7, -4]), P(356, [6, -7, 4]), P(356, [-6, -7, 4]), P(446, [0, 0, 0]), P(447, [0, 7, -4]), P(452, [12, -1, 0]), P(646, [0, 11, 0], 22)],
+    },
+    {
+      name: "Mech Strider",
+      author: "Studs Garage",
+      savedAt: 0,
+      blurb: "Mech cabin with a plastic cannon",
+      parts: [P(378, [0, -5, -4]), P(378, [0, -5, 4]), P(378, [10, -5, -4]), P(378, [10, -5, 4]), P(356, [6, -7, -4]), P(356, [-6, -7, -4]), P(356, [6, -7, 4]), P(356, [-6, -7, 4]), P(446, [0, 0, 0]), P(447, [0, 7, -4]), P(452, [12, -1, 0]), P(648, [0, 11, 0], 22), P(640, [0, 5, 3], 22)],
+    },
+    {
+      name: "Twin Motor Racer",
+      author: "Studs Garage",
+      savedAt: 0,
+      blurb: "Two M motors on one hub — the fast one",
+      parts: [P(378, [0, -5, -4]), P(378, [0, -5, 4]), P(378, [10, -5, -4]), P(378, [10, -5, 4]), P(356, [6, -7, -4]), P(356, [-6, -7, -4]), P(356, [6, -7, 4]), P(356, [-6, -7, 4]), P(446, [0, 0, 0]), P(447, [0, 7, -4]), P(452, [12, -1, 0]), P(447, [0, 7, 4]), P(645, [0, 11, 0], 22)],
+    },
+    {
+      name: "Sensor Patrol",
+      author: "Studs Garage",
+      savedAt: 0,
+      blurb: "Distance sensor stops it before walls; laser armed",
+      parts: [P(378, [0, -5, -4]), P(378, [0, -5, 4]), P(378, [10, -5, -4]), P(378, [10, -5, 4]), P(356, [6, -7, -4]), P(356, [-6, -7, -4]), P(356, [6, -7, 4]), P(356, [-6, -7, 4]), P(446, [0, 0, 0]), P(447, [0, 7, -4]), P(452, [12, -1, 0]), P(472, [0, 7, 4]), P(647, [0, 11, 0], 22), P(642, [-4, 1, 7], 4)],
+    },
+    {
+      name: "Heavy Lifter XL",
+      author: "Studs Garage",
+      savedAt: 0,
+      blurb: "XL motor: slow, strong, climbs anything",
+      parts: [P(378, [0, -5, -4]), P(378, [0, -5, 4]), P(378, [10, -5, -4]), P(378, [10, -5, 4]), P(356, [6, -7, -4]), P(356, [-6, -7, -4]), P(356, [6, -7, 4]), P(356, [-6, -7, 4]), P(446, [0, 0, 0]), P(452, [12, -1, 0]), P(449, [0, 9, -4]), P(647, [-4, 15, -4], 22)],
     },
   ];
 }
