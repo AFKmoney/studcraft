@@ -72,7 +72,7 @@ function rotY(yaw: number, p: Vec3): Vec3 {
   return { x: c * p.x + s * p.z, y: p.y, z: -s * p.x + c * p.z };
 }
 
-export type PartRole = "wheel" | "motor" | "hub" | "battery" | "remote" | "chassis";
+export type PartRole = "wheel" | "motor" | "hub" | "battery" | "remote" | "chassis" | "weapon" | "turret" | "cockpit";
 
 export type VJoint = {
   /** The joint part's uid. */
@@ -182,6 +182,10 @@ export function roleOf(id: number): PartRole {
   if (id === ID.TechHub) return "hub";
   if (id === ID.Battery) return "battery";
   if (id === ID.Remote) return "remote";
+  // B21: armoury + cockpits (vehArms.ts / cockpits.ts own the behaviour)
+  if (id === ID.VehCannon || id === ID.VehGoldCannon || id === ID.VehLaser || id === ID.VehRocketPod) return "weapon";
+  if (id === ID.VehTurretMount) return "turret";
+  if (id === ID.CockpitSeat || id === ID.CockpitCab || id === ID.CockpitCage || id === ID.CockpitMech) return "cockpit";
   if (spec(id)?.drive === "motor") return "motor";
   return "chassis";
 }

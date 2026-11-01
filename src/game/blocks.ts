@@ -602,6 +602,20 @@ export const ID = {
   Bullet: 601,
   Cartridge: 602,
   PowerCell: 603,
+  // B21 vehicle armoury + cockpits (Grok vehicles lane, range 640-659
+  // reserved 2026-10-31 so the minifig lane's 604+ never collides).
+  VehCannon: 640,
+  VehGoldCannon: 641,
+  VehLaser: 642,
+  VehRocketPod: 643,
+  VehTurretMount: 644,
+  CockpitSeat: 645,
+  CockpitCab: 646,
+  CockpitCage: 647,
+  CockpitMech: 648,
+  Cannonball: 649,
+  GoldShell: 650,
+  VehRocket: 651,
   // P6 step 4 / P7 tool moulds (Muse): plastic tools cast at the
   // Foundry — the mould is the shape, the ingot is the stock. Tier 2
   // (stone class), 120 uses: moulded plastic, honestly mid-table.
@@ -1100,6 +1114,10 @@ item(ID.Pellets, "Plastic pellets", "#e8dcc0");
 item(ID.PlasticIngot, "Plastic ingot", "#d9c58f");
 item(ID.Fuel, "Fuel", "#d98a2b");
 item(ID.TemperedIngot, "Tempered ingot", "#a8d8e8");
+// B21 vehicle ammunition
+item(ID.Cannonball, "Plastic cannonball", "#8e959c");
+item(ID.GoldShell, "Gold explosive shell", "#f0c43a");
+item(ID.VehRocket, "Vehicle rocket", "#c91a09");
 gear(ID.PlasticPick, "Plastic pick", "#d9c58f", "pick", 2, 120);
 gear(ID.PlasticSword, "Plastic blade", "#d9c58f", "sword", 2, 120);
 gear(ID.PlasticAxe, "Plastic axe", "#d9c58f", "axe", 2, 120);
@@ -1604,6 +1622,16 @@ put(b(ID.MotorXL, "Motor XL", "#27282b", "#27282b", "#27282b", "#27282b", { hard
 put(b(ID.Servo, "Servo", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
 put(b(ID.Remote, "Remote control", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
 put(b(ID.Battery, "Battery box", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
+// B21 vehicle armoury + cockpits (Teks parts: geometry is the spec in teks.ts)
+put(b(ID.VehCannon, "Plastic cannon", "#6c6e68", "#6c6e68", "#6c6e68", "#6c6e68", { hard: 0.4 }));
+put(b(ID.VehGoldCannon, "Gold cannon", "#f0c43a", "#f0c43a", "#f0c43a", "#f0c43a", { hard: 0.4 }));
+put(b(ID.VehLaser, "Emerald laser", "#00a26a", "#00a26a", "#00a26a", "#00a26a", { hard: 0.4 }));
+put(b(ID.VehRocketPod, "Rocket pod", "#c91a09", "#c91a09", "#c91a09", "#c91a09", { hard: 0.4 }));
+put(b(ID.VehTurretMount, "Turret mount", "#3d454e", "#3d454e", "#3d454e", "#3d454e", { hard: 0.4 }));
+put(b(ID.CockpitSeat, "Open seat cockpit", "#27282b", "#27282b", "#27282b", "#27282b", { hard: 0.4 }));
+put(b(ID.CockpitCab, "Glass cab cockpit", "#f4f4f4", "#f4f4f4", "#f4f4f4", "#f4f4f4", { hard: 0.4 }));
+put(b(ID.CockpitCage, "Buggy roll-cage cockpit", "#c91a09", "#c91a09", "#c91a09", "#c91a09", { hard: 0.4 }));
+put(b(ID.CockpitMech, "Mech digger cabin", "#f2cd37", "#f2cd37", "#f2cd37", "#f2cd37", { hard: 0.4 }));
 // Remaining CAT-02
 put(b(ID.Liftarm9, "Liftarm 1×9", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9", { hard: 0.4 }));
 put(b(ID.Liftarm11, "Liftarm 1×11", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9", { hard: 0.4 }));
@@ -1903,6 +1931,15 @@ export const TEKS = [
   ID.Axle4,
   ID.Axle6,
   ID.Axle8,
+  ID.VehCannon,
+  ID.VehGoldCannon,
+  ID.VehLaser,
+  ID.VehRocketPod,
+  ID.VehTurretMount,
+  ID.CockpitSeat,
+  ID.CockpitCab,
+  ID.CockpitCage,
+  ID.CockpitMech,
   ] as const;
 
 export const COLORS = [ID.Red,
