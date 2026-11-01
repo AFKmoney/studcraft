@@ -541,7 +541,7 @@ const TIPS = [
   "Shift + click moves a whole stack into the hotbar.",
   "Hamlets restock twice a day. Keep your name clean there.",
   "A beacon on a full iron pyramid keeps you fast.",
-  "Creepers hate cats. Cats don't care.",
+  "Fire melts plastic — build your forge in stone.",
   "Third-person view: F5. Hide the HUD: F1.",
 ];
 
@@ -562,7 +562,7 @@ function MainMenu({ game }: { game: GameApi }) {
       {screen === "home" && (
         <Screen className="sc-home">
           <Logo />
-          <p className="sc-tagline">An infinite world of studs, seeds and stubborn creepers.</p>
+          <p className="sc-tagline">An endless world of studs, gears and molten plastic.</p>
           <nav className="sc-menu-col" aria-label="Main menu">
             {last && (
               <MenuButton variant="primary" icon={<PlayIcon size={22} />} onClick={() => game.enter("continue", last.id)} hint={modeOf(last) + " · seed " + last.seedText + " · " + timeAgo(last.updated)} autoFocus>
