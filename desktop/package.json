@@ -1,0 +1,31 @@
+{
+  "name": "studcraft-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "StudCraft desktop shell (Electron) with native Bonsai 1.7B Q1_0 NPC model",
+  "main": "main.cjs",
+  "scripts": {
+    "fetch-runtime": "node scripts/fetch-runtime.mjs",
+    "build-game": "cd .. && npx vite build --config vite.standalone.config.ts",
+    "smoke": "node scripts/smoke.mjs",
+    "start": "electron .",
+    "dist": "npm run build-game && npm run fetch-runtime && electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.studcraft.game",
+    "productName": "StudCraft",
+    "files": ["main.cjs", "preload.cjs", "sidecar.cjs"],
+    "extraResources": [
+      { "from": "../dist-game", "to": "game", "filter": ["**/*", "!models/**", "!wllama/**"] },
+      { "from": "resources/llama", "to": "llama" },
+      { "from": "resources/models", "to": "models" }
+    ],
+    "win": { "target": "dir" },
+    "linux": { "target": "dir" },
+    "mac": { "target": "dir" }
+  }
+}
