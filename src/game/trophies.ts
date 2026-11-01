@@ -32,7 +32,7 @@ const TIERS: Tier[] = ["bronze", "silver", "gold"];
 const XP: Record<Tier, number> = { bronze: 25, silver: 120, gold: 500 };
 
 export const TROPHIES: Trophy[] = LINES.flatMap(([stat, line, desc, goals, names]) =>
-  goals.map((goal, i) => ({ id: stat + ":" + i, name: names[i], desc: desc.replace("{n}", goal.toLocaleString("en-US")) + " (" + line + ")", stat, goal, tier: TIERS[i], xp: XP[TIERS[i]] })),
+  goals.map((goal, i) => ({ id: stat + ":" + i, name: names[i], desc: (goal === 1 ? desc.replace(/\{n\} (\w+)/, (_m, w: string) => "1 " + (w.endsWith("sses") ? w.slice(0, -2) : w.replace(/s$/, ""))) : desc.replace("{n}", goal.toLocaleString("en-US"))) + " (" + line + ")", stat, goal, tier: TIERS[i], xp: XP[TIERS[i]] })),
 );
 
 export type Stats = Partial<Record<Stat, number>>;
