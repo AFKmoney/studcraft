@@ -3,7 +3,7 @@
 // procedural fallback, and background pre-generation.
 import { ID } from "../blocks.ts";
 import { ZONES, type ZoneId } from "../biomes.ts";
-import { makeQuest, mobTag, validateQuest, type Quest, type QuestType } from "../society.ts";
+import { GUILDS, makeQuest, mobTag, validateQuest, type Quest, type QuestType } from "../society.ts";
 import { buildPrompt, grammarFor, arcSentence, sanitize, REWARDS, LLM_TIMEOUT_MS, MAX_TOKENS, TEMPERATURE, type Allowed, type Context, type Fact } from "./prompt.ts";
 
 export type StoryState = { arc: string; npcs: string[]; outcomes: { id: string; ok: boolean }[] };
@@ -119,14 +119,23 @@ export function applyLlm(l: LlmQuest, giver: Quest["giver"], zone: ZoneId, seed:
   const base = makeQuest(giver, zone, seed, slot, epoch, [l.type]);
   const track = { ...base.track };
   if (l.type === "kill" || l.type === "boss") track.tag = l.target;
-  if (l.type === "fetch") track.what = Number(l.target.slice(5)) || track.what;
+  // Diplomacy too (audit 2026-10-31): the validated target is the errand —
+  // leaving `what` at the procedural default made the generated text name
+  // one item while the claim collected emeralds.
+  if (l.type === "fetch" || l.type === "diplomacy") track.what = Number(l.target.slice(5)) || track.what;
   if (l.type === "find") {
     track.tag = l.target;
     track.what = l.target === "find:shrine" ? ID.SanctumStud : ID.MechaCore;
   }
   const mul = (l.reward === "rich" ? 1.5 : l.reward === "small" ? 0.75 : 1) * (wealth > 200 ? 1.25 : 1);
   const reward = { ...base.reward, coins: Math.max(1, Math.round(base.reward.coins * mul)) };
-  return { ...base, id: base.id + ":llm", track, reward, text: { title: l.title, detail: l.description + (l.dialogue ? ' "' + l.dialogue + '"' : "") } };
+  // Guild givers carry the guild in the id (B21 lot 4 grammar) — building
+  // the id from makeQuest alone dropped the "@guild" segment, so in a
+  // two-hall city an LLM quest claimed for one guild marked the other's
+  // done (audit 2026-10-31). The giver's NAME is the guild's name.
+  const g = GUILDS.find((x) => x.name === giver.name);
+  const id = g ? `${giver.kind}:${giver.key}@${g.id}:${epoch}:${slot}:llm` : base.id + ":llm";
+  return { ...base, id, track, reward, text: { title: l.title, detail: l.description + (l.dialogue ? ' "' + l.dialogue + '"' : "") } };
 }
 
 export type Llm = (prompt: string, grammar: string, opts: { temperature: number; maxTokens: number }) => Promise<string>;

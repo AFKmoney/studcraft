@@ -250,3 +250,21 @@ test("Rig Digger: B lowers the boom into flat ground, C scoops out, D is the tur
   for (let i = 0; i < 40; i++) stepVehicle(v, 0.016, { throttle: 1, steer: 0, channel: "C" }, ground);
   assert.ok(partWorldPoint(v, bucket, bucket.centreLocal).y > before + 1, "W on C curls the load up and out");
 });
+
+test("modelFromParts carries joint channels (audit 2026-10-31)", () => {
+  const m = modelFromParts(
+    [
+      { id: HUB, o: 0, q: [0, 0, 0] },
+      { id: 471, o: 1, q: [4, 0, 0], ch: "D" as const },
+      { id: 472, o: 1, q: [8, 0, 0] },
+    ],
+    "Rig",
+    "Local",
+    HUB,
+    0,
+  );
+  assert.equal(m.parts[1].ch, "D", "a saved servo keeps its role channel");
+  assert.ok(!("ch" in m.parts[2]), "no phantom channel key on unbound parts");
+  const back = decodeModel(encodeModel(m));
+  assert.equal(back?.parts[1].ch, "D", "share codes carry channels too");
+});

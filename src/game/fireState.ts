@@ -70,6 +70,12 @@ export function meltOrder(dx: number, dy: number, dz: number): number[] {
 /** Melted puddle cell -> the block id it melted from (its tile/colors). */
 export const puddleSrc = new Map<string, number>();
 
+/** Melted puddle cell -> the pellet mass pooled in it (audit 2026-10-31:
+ *  molten plastic FUSES into one mass visually, but its matter must stay
+ *  recoverable — every block that melts into a puddle adds its pellet
+ *  yield here, and mining the puddle pays the whole pool back). */
+export const puddleMass = new Map<string, number>();
+
 export function meltAt(x: number, y: number, z: number): number {
   const e = heatMap.get(fkey(x, y, z));
   return e ? e.m : 0;
@@ -81,4 +87,5 @@ export function clearFireState() {
   emitters.clear();
   heatMap.clear();
   puddleSrc.clear();
+  puddleMass.clear();
 }

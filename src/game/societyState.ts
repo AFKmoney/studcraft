@@ -51,7 +51,11 @@ export class Society {
     if (!o || o.v !== 1) return s;
     s.active = (o.active ?? []).filter((a) => a && validateQuest(a.q).length === 0 && Number.isInteger(a.n)).slice(0, MAX_ACTIVE);
     s.done = new Set((o.done ?? []).filter((v) => typeof v === "string"));
-    for (const [k, v] of Object.entries(o.standing ?? {})) if (v && Number.isFinite(v.rep) && Number.isFinite(v.bounty)) s.standing[k] = { rep: v.rep, bounty: Math.max(0, v.bounty), banditRep: v.banditRep ?? 0 };
+    // Audit 2026-10-31: rep is re-clamped to [REP_MIN, REP_MAX] on load (a
+    // hand-edited or legacy save could carry it out of range), and a NaN
+    // banditRep must not survive — `?? 0` passes NaN through, and a NaN
+    // outlaw axis silently freezes the fence (every `>= 10` test is false).
+    for (const [k, v] of Object.entries(o.standing ?? {})) if (v && Number.isFinite(v.rep) && Number.isFinite(v.bounty)) s.standing[k] = { rep: Math.max(-100, Math.min(100, v.rep)), bounty: Math.max(0, v.bounty), banditRep: Number.isFinite(v.banditRep) ? v.banditRep : 0 };
     for (const [k, v] of Object.entries(o.guilds ?? {})) if (GUILDS.some((g) => g.id === k) && Number.isFinite(v)) s.guilds[k] = v;
     for (const [k, v] of Object.entries(o.epochs ?? {})) if (Number.isInteger(v)) s.epochs[k] = v;
     for (const k of (o.placed ?? []).slice(-PLACED_CAP)) if (typeof k === "string" && /^-?\d+,-?\d+,-?\d+$/.test(k)) s.placed.add(k);
@@ -109,10 +113,10 @@ export class Society {
   /** Claim a board row: what to take, what to give, and the message.
    *  `villageKey` receives the rep (chiefs/guilds); bandit jobs raise
    *  the outlaw axis instead. */
-  claim(rowId: string, have: (id: number) => number): { ok: boolean; msg: string; take: [number, number][]; give: [number, number][]; rep: number; joined?: Guild; rankUp?: Guild } {
+  claim(rowId: string, have: (id: number) => number): { ok: boolean; msg: string; take: [number, number][]; give: [number, number][]; rep: number; giverKey?: string | null; joined?: Guild; rankUp?: Guild } {
     const id = baseQuestId(rowId.replace(/^soc:/, ""));
     const i = this.active.findIndex((a) => baseQuestId(a.q.id) === id);
-    const none = { ok: false, take: [] as [number, number][], give: [] as [number, number][], rep: 0 };
+    const none = { ok: false, take: [] as [number, number][], give: [] as [number, number][], rep: 0, giverKey: null as string | null };
     if (i < 0) return { ...none, msg: "No such contract" };
     const a = this.active[i];
     if (!this.ready(a, have)) return { ...none, msg: a.q.text.detail };
@@ -144,12 +148,18 @@ export class Society {
     // carry "@guild"), and a guild's epoch always lives under the key
     // game.ts reads (epochKey("guild", …)) — an outlaw guild's giver kind
     // is "bandit", so its next set never opened.
-    const parts = q.id.split(":");
+    // Audit 2026-10-31: parse the BASE id — an LLM-dressed quest carries a
+    // trailing ":llm", which shifted the segments and made the epoch test
+    // read the slot as the epoch (LLM claims never opened the next set).
+    const parts = baseQuestId(q.id).split(":");
     const ep = parts[parts.length - 2];
     const prefix = parts.slice(0, -2).join(":");
     const gk = g ? this.epochKey("guild", key, g) : q.giver.kind + ":" + key;
     if ([0, 1, 2].every((slot) => this.done.has(`${prefix}:${ep}:${slot}`))) this.epochs[gk] = Number(ep) + 1;
-    return { ok: true, msg: "Contract done: " + q.text.title, take, give, rep: q.giver.kind === "bandit" ? 0 : q.reward.rep, joined, rankUp };
+    // giverKey: the village this contract belongs to, so the caller can
+    // credit legacy reputation THERE — not wherever the player happens to
+    // be standing when they claim from the board (audit 2026-10-31).
+    return { ok: true, msg: "Contract done: " + q.text.title, take, give, rep: q.giver.kind === "bandit" ? 0 : q.reward.rep, giverKey: q.giver.kind === "bandit" ? null : key, joined, rankUp };
   }
   epochKey(kind: string, key: string, g?: Guild): string {
     return kind + ":" + key + (g ? ":" + g.id : "");

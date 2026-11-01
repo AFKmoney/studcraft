@@ -153,3 +153,30 @@ test("B21 lot 4: finishing a guild's three contracts opens its next set (outlaw 
     assert.equal(s.epoch(s.epochKey("guild", "3,3", g)), 1, g.id + " next set opens");
   }
 });
+
+test("audit 2026-10-31: an LLM-dressed guild set (legal and outlaw) opens the next epoch", async () => {
+  const { GUILDS, guildQuests } = await import("./society.ts");
+  for (const g of [GUILDS.find((x) => x.id === "techno")!, GUILDS.find((x) => x.id === "thieves")!]) {
+    const s = new Society();
+    s.guilds[g.id] = 0;
+    for (const q of guildQuests(g, "3,3", "plains", SEED, 0)) {
+      const dressed = { ...q, id: q.id + ":llm" };
+      assert.match(s.accept(dressed), /New contract/);
+      const a = s.active.find((x) => x.q.id === dressed.id)!;
+      a.n = q.track.need;
+      const r = s.claim("soc:" + dressed.id, (id) => (id === q.track.what ? q.track.need : 0));
+      assert.ok(r.ok, g.id + " dressed claim: " + r.msg);
+      if (g.outlaw) assert.equal(r.giverKey, null, "bandit claims carry no village key");
+      else assert.equal(r.giverKey, "3,3", "the claim reports its own village");
+    }
+    assert.equal(s.epoch(s.epochKey("guild", "3,3", g)), 1, g.id + " next set opens after dressed claims");
+  }
+});
+
+test("audit 2026-10-31: from() re-clamps rep and refuses a NaN banditRep", () => {
+  const s = Society.from({ v: 1, standing: { "1,1": { rep: 150, bounty: 5, banditRep: Number.NaN }, "*": { rep: -150, bounty: 0, banditRep: 12 } } });
+  assert.equal(s.st("1,1").rep, 100);
+  assert.equal(s.st("1,1").banditRep, 0, "NaN must not freeze the fence for the whole save");
+  assert.equal(s.st("*").rep, -100);
+  assert.equal(s.st("*").banditRep, 12);
+});

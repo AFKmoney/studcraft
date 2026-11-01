@@ -632,7 +632,6 @@ export const RECIPES: Recipe[] = [
     cat: "magic",
   }),
   r("packed-ice", "Packed ice", "4 frost shards", [[ID.Frost, 4]], ID.IceSheet, 1, { cat: "build" }),
-  r("loaf", "Camp loaf", "3 grain", [[ID.Wheat, 3]], ID.Bread, 1, { cat: "food" }),
   r("ashcookie", "Ash cookie", "2 grain + 1 cinder", [[ID.Wheat, 2], [ID.Cinder, 1]], ID.Cookie, 4, { cat: "food" }),
   r("slices", "Pumpkin slices", "1 pumpkin → 4", [[ID.Pumpkin, 1]], ID.Slice, 4, { shape: [ID.Pumpkin], w: 1, h: 1, cat: "food" }),
   r("melon-cut", "Melon slices", "1 melon → 6", [[ID.Melon, 1]], ID.MelonCut, 6, { shape: [ID.Melon], w: 1, h: 1, cat: "food" }),

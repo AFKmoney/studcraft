@@ -45,7 +45,7 @@ import { buildAtlas } from "./textures";
 import { CS, HEIGHT, SEA, World, decorate, folkLayout, inNether, penSheep, paintEndCrystals, END_PILLARS, type Decor, type FolkSpot } from "./world";
 import { DEBRIS_ADVANCED, debrisAt } from "./debris";
 import { stockChest } from "./loot";
-import { banditFolk, civicOf, patrolOf, findStructure, garageOf, structureFolk, structuresNear, structureLabel, structureOwning, stockStructureChest, type StructKind, type Structure } from "./structures";
+import { banditFolk, civicOf, patrolOf, findStructure, garageOf, structureAt, structureFolk, structuresNear, structureLabel, structureOwning, stockStructureChest, type StructKind, type Structure } from "./structures";
 import { BOUNTY_ARREST, banditQuests, chiefOf, chiefQuests, COIN, CRIME, guildEntryQuest, guildQuests, GUILDS, guildsIn, makeQuest, type Quest, mobTag, seenBy, type CrimeKind, type Observer } from "./society";
 import { Society, baseQuestId } from "./societyState";
 import { classifyRenderer, presetFor, readGl, SOFTWARE_HINT } from "./gpu";
@@ -60,7 +60,7 @@ import { mobLabel } from "./mobNames";
 import { mobBaseDrops, rollBonusDrops } from "./mobDrops";
 import { BOSS_BY_ID, SPECIES_BY_ID, ZONES, bossRoll, type BossRule, type BossState, type SpeciesSpec, type ZoneMob } from "./biomes";
 import { displayName } from "./mobNames";
-import { batteryAt, remoteChAt, setRemoteChannel, springsJustSpent, stepMech, toggleValve, windSpring } from "./mechLink";
+import { remoteChAt, setRemoteChannel, springsJustSpent, stepMech, toggleValve, windSpring } from "./mechLink";
 
 // t79u farming ids (farming.ts is id-agnostic). Beetroot is its own seed.
 const FARM: FarmIds = { ...(ID as unknown as FarmIds), BeetSeeds: ID.Beetroot };
@@ -5098,6 +5098,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       FS.heatMap.set(FS.fkey(x, y, z), { h, m, stage: Math.floor(m * FS.MELT_STAGES) });
     }
     for (const [x, y, z, src] of data.fire?.puddles ?? []) FS.puddleSrc.set(FS.fkey(x, y, z), src);
+    for (const [x, y, z, n] of data.fire?.puddleMass ?? []) FS.puddleMass.set(FS.fkey(x, y, z), n);
     for (const [x, y, z] of data.fire?.cells ?? []) {
       const k = FS.fkey(x, y, z);
       FS.fireCells.add(k);
@@ -5142,6 +5143,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // P5b restore: channel bindings + hub fuel/battery reserves,
     // keyed by lattice position (see the P5b block at toggleTechPart).
     motorChannelByQ.clear();
+    sensorDriven.clear();
     for (const [k, ch] of data.vehBind ?? []) motorChannelByQ.set(k, ch as Channel);
     hubChannelByQ.clear();
     for (const [k, ch] of data.vehHubCh ?? []) hubChannelByQ.set(k, ch as Channel);
@@ -5153,9 +5155,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     for (const [k, n] of data.teksLvl ?? []) teksLvl.set(k, n);
     // Section 22 P-A restore: holograms of unfinished models.
     blueprints.length = 0;
-    for (const [id, o, qx, qy, qz] of data.blueprints ?? []) {
+    for (const [id, o, qx, qy, qz, chRaw] of data.blueprints ?? []) {
       if (!TEKS_SET.has(id)) continue;
-      blueprints.push({ id, o, q: [qx, qy, qz] });
+      blueprints.push({ id, o, q: [qx, qy, qz], ...(chRaw ? { ch: chRaw as Channel } : {}) });
     }
     syncHoloMeshes();
     techRevSeen = tech.rev;
@@ -5709,7 +5711,23 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const canDrop = mayYield(creative, block.need, tier);
     // Yields fall in both modes. Creative used to swallow every drop.
     const yieldAt = (dropId: number) => dropItem(dropId, 1, x + 0.5, y + 0.55, z + 0.5);
-    if (canDrop) for (let p = 0, py = plasticYield(id) + (plasticYield(id) > 0 && hasAffix(hotbar[slot], "lucky") ? 1 : 0); p < py; p++) yieldAt(ID.Pellets); // R4 Lucky affix
+    if (canDrop && id === ID.Melted) {
+      // A puddle is pooled matter, not an item: pay back every pellet that
+      // melted into it (default 2 for puddles saved before masses existed).
+      const pk = FS.fkey(x, y, z);
+      const mass = FS.puddleMass.get(pk) ?? 2;
+      FS.puddleMass.delete(pk);
+      FS.puddleSrc.delete(pk);
+      for (let p = 0; p < mass; p++) yieldAt(ID.Pellets);
+    }
+    // Matter law (audit 2026-10-31): pellets are the yield of plastic that is
+    // DESTROYED, not of plastic that drops itself. Paying both the block AND
+    // its pellet yield made every plastic block an infinite pellet fountain
+    // (place → mine → block + pellets, forever). Self-dropping plastic now
+    // pays only the block; pellets flow when the block drops something else
+    // or nothing (drop -1).
+    const selfDrop = !block.drop || block.drop === id;
+    if (canDrop && !selfDrop) for (let p = 0, py = plasticYield(id) + (plasticYield(id) > 0 && hasAffix(hotbar[slot], "lucky") ? 1 : 0); p < py; p++) yieldAt(ID.Pellets); // R4 Lucky affix
     if (canDrop && id === ID.Leaves) {
       // The Leaf brick itself (tester retest 2026-10-31: it had NO
       // source at all — drop = −1 and this branch paid only fruit —
@@ -6262,7 +6280,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // hologram is never solid and never drivable. Translucent blue
   // ghosts of the real geometry; the use gesture on one completes it
   // (completeBlueprint). Persisted in the world save (blueprints).
-  type Blueprint = { id: number; o: number; q: [number, number, number] };
+  type Blueprint = { id: number; o: number; q: [number, number, number]; ch?: Channel };
   const blueprints: Blueprint[] = [];
   // snr-exempt: translucent hologram blueprint
   const holoMat = new THREE.MeshLambertMaterial({ vertexColors: true, color: 0x86c9ff, transparent: true, opacity: 0.35, depthWrite: false });
@@ -6713,7 +6731,15 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       say("Aim at a Teks build (or drive it) to save it");
       return false;
     }
-    const model = modelFromParts(src, name, "Local", ID.TechHub, Date.now());
+    // Audit 2026-10-31: persist each joint's live channel in the model —
+    // modelFromParts used to drop it, so a player-saved model reloaded
+    // with its servos bound by appearance order, not by role.
+    const withCh = src.map((p) => {
+      const msp = techSpec(p.id);
+      const ch = p.id === ID.Servo || msp?.drive === "screw" ? motorChannelByQ.get(qKey(p.q)) : undefined;
+      return ch ? { ...p, ch } : p;
+    });
+    const model = modelFromParts(withCh, name, "Local", ID.TechHub, Date.now());
     storeCatalogue(upsertModel(loadCatalogue(), model));
     // B21: the garage validates the build — saved either way (work in progress), with its status.
     const vr = validateBuild(model.parts.map((p) => p.id), (a) => (creative ? Infinity : inv[a] ?? 0));
@@ -6782,29 +6808,40 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const anchorQ = groundedAnchor(model).q;
     let placed = 0;
     let holo = 0;
-    let jointN = 0;
-    for (const mp of model.parts) {
+    // P5c-3: a loaded model's joints arrive pre-bound (B, C, then D) so an
+    // articulated machine works out of the catalogue; the player can
+    // re-bind any of them by hand.
+    // Audit 2026-10-31: joint ranks belong to the MODEL — every joint
+    // counts toward the rank, placed or hologram. Counting only placed
+    // joints shifted every later channel when the first servo was a
+    // hologram, and the hologram itself carried no channel at all, so a
+    // servo completed later answered on A — the drive channel.
+    const rankOf = new Map<number, number>();
+    let jointTotal = 0;
+    model.parts.forEach((mp, i) => {
+      const msp = techSpec(mp.id);
+      if (mp.id === ID.Servo || msp?.drive === "screw") rankOf.set(i, jointTotal++);
+    });
+    const boundCh = (mp: (typeof model.parts)[number], i: number): Channel | undefined => {
+      const rank = rankOf.get(i);
+      return rank === undefined ? undefined : (mp.ch ?? (["B", "C", "D"] as Channel[])[Math.min(rank, 2)]);
+    };
+    for (const [i, mp] of model.parts.entries()) {
       const q: [number, number, number] = [anchorQ[0] + mp.dq[0], anchorQ[1] + mp.dq[1], anchorQ[2] + mp.dq[2]];
       const fits = tech.test(mp.id, mp.o, q, techSolidAt) >= 0 && !techHitsPlayer(mp.id, mp.o, q);
       const owned = creative || (inv[mp.id] ?? 0) > 0;
+      const ch = boundCh(mp, i);
       if (fits && owned) {
         tech.add(mp.id, mp.o, q);
         if (!creative) spend(mp.id, 1);
         placed++;
-        // P5c-3: a loaded model's joints arrive pre-bound in order
-        // (B, C, then D) so an articulated machine works out of the
-        // catalogue; the player can re-bind any of them by hand.
-        const msp = techSpec(mp.id);
-        if (mp.id === ID.Servo || msp?.drive === "screw") {
-          motorChannelByQ.set(qKey(q), mp.ch ?? (["B", "C", "D"] as Channel[])[Math.min(jointN, 2)]);
-          jointN++;
-        }
+        if (ch) motorChannelByQ.set(qKey(q), ch);
       } else {
-        blueprints.push({ id: mp.id, o: mp.o, q });
+        blueprints.push({ id: mp.id, o: mp.o, q, ...(ch ? { ch } : {}) });
         holo++;
       }
     }
-    if (jointN > 0)
+    if (jointTotal > 0)
       say(
         model.parts.some((p) => p.ch)
           ? "Arm pre-bound: B boom (S digs in), C stick + bucket (W scoops out), D turret — cycle with C or the CH button"
@@ -6833,6 +6870,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     blueprints.splice(i, 1);
     tech.add(bp.id, bp.o, bp.q);
+    // The hologram carried its model's channel (audit 2026-10-31): a joint
+    // completed from a hologram binds it now, instead of falling back to
+    // the drive channel A.
+    if (bp.ch) {
+      const msp = techSpec(bp.id);
+      if (bp.id === ID.Servo || msp?.drive === "screw") motorChannelByQ.set(qKey(bp.q), bp.ch);
+    }
     if (!creative) spend(bp.id, 1);
     syncHoloMeshes();
     audio.place();
@@ -6852,6 +6896,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   const nextChannel = (c: Channel): Channel => CHANNELS[(CHANNELS.indexOf(c) + 1) % CHANNELS.length];
   const qKey = (q: readonly number[]) => q[0] + "," + q[1] + "," + q[2];
   const motorChannelByQ = new Map<string, Channel>();
+  /** Sensor uid -> the part uids THAT sensor switched on (audit
+   *  2026-10-31): a sensor's falling edge may only release what its own
+   *  rising edge took — never a state the player set by hand. Session
+   *  scope (part uids are session-assigned); after a reload a held part
+   *  simply stays on under manual control, per the B17 rule. */
+  const sensorDriven = new Map<number, Set<number>>();
   const hubChannelByQ = new Map<string, Channel>();
   const vehFuelByQ = new Map<string, number>();
   const vehBattByQ = new Map<string, number>();
@@ -7073,7 +7123,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     if (m.kind === "villager" || m.kind === "golem") {
       if (m.kind === "villager" && (m.byPlayerT ?? 0) <= 0 && !m.soc?.startsWith("guard") && !creative && realm === 0) {
         const v = villageAround(m.homeX ?? m.x, m.homeZ ?? m.z);
-        if (v) reportCrime(socKey(v), "assault", playerSeen());
+        // The victim always knows (audit 2026-10-31): playerSeen()'s view
+        // cone gave detection 0 for the victim at melee range, so striking
+        // a villager from behind cost no bounty at all. Stealth CRIMES
+        // (steal/pickpocket/burgle/sabotage) keep the cone system.
+        if (v) reportCrime(socKey(v), "assault", true);
       }
       m.byPlayerT = 6;
       addRep(repKeyFor(m.homeX ?? m.x, m.homeZ ?? m.z), m.kind === "villager" ? -3 : -2);
@@ -7899,8 +7953,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const tier = held.tool === "pick" ? held.tier : 0;
       const canDrop = !block.need || tier >= block.need;
       const yieldAt = (dropId: number) => dropItem(dropId, 1, bx + 0.5, b.sy + 0.55, bz + 0.5);
-      // P6: a broken brick yields foundry pellets too (same table as voxel).
-      if (canDrop) for (let p = 0, py = plasticYield(b.id) + (plasticYield(b.id) > 0 && hasAffix(hotbar[slot], "lucky") ? 1 : 0); p < py; p++) yieldAt(ID.Pellets); // R4 Lucky affix
+      // P6 (corrected, audit 2026-10-31): pellets are the yield of DESTROYED
+      // plastic only — a brick that drops itself pays no pellet bonus (the
+      // old "pellets too" double-dip was an infinite fountain: place → mine
+      // → brick + pellets, forever). Same rule as the voxel path.
+      const selfDropB = !block.drop || block.drop === b.id;
+      if (canDrop && !selfDropB) for (let p = 0, py = plasticYield(b.id) + (plasticYield(b.id) > 0 && hasAffix(hotbar[slot], "lucky") ? 1 : 0); p < py; p++) yieldAt(ID.Pellets); // R4 Lucky affix
       if (canDrop && block.drop !== -1) yieldAt(enchLvl(hotbar[slot], "silk") > 0 ? b.id : block.drop || b.id);
       if (canDrop && block.drop !== -1 && (ORE_XP[b.id] ?? 0) > 0 && enchLvl(hotbar[slot], "silk") === 0) {
         const fort = held.tool === "pick" ? enchLvl(hotbar[slot], "fortune") : 0;
@@ -8828,9 +8886,23 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           while (py > 1 && y - py < 10 && world.get(x, py - 1, z) === ID.Air) py--;
           const sup = world.get(x, py - 1, z);
           world.set(x, y, z, ID.Air);
+          // Matter law (audit 2026-10-31): the puddle is one fused mass
+          // VISUALLY, but every block that melts into it adds its pellet
+          // mass to the pool — mining the puddle pays the pool back. A
+          // melt that lands on an existing puddle pools there too, and a
+          // melt with no valid support drops its pellets instead of
+          // vanishing silently.
+          const yieldMass = plasticYield(srcId);
           if (sup !== ID.Melted && def(sup).solid && world.get(x, py, z) === ID.Air) {
             world.set(x, py, z, ID.Melted);
-            FS.puddleSrc.set(FS.fkey(x, py, z), srcId);
+            const pk = FS.fkey(x, py, z);
+            FS.puddleSrc.set(pk, srcId);
+            FS.puddleMass.set(pk, (FS.puddleMass.get(pk) ?? 0) + yieldMass);
+          } else if (sup === ID.Melted) {
+            const pk = FS.fkey(x, py - 1, z);
+            FS.puddleMass.set(pk, (FS.puddleMass.get(pk) ?? 2) + yieldMass);
+          } else if (yieldMass > 0) {
+            for (let p = 0; p < yieldMass; p++) dropItem(ID.Pellets, 1, x + 0.5, py + 0.55, z + 0.5);
           }
           if (py !== y) markDirtyAt(x, z);
           // whatever only hung on this block now falls (Teardown physics)
@@ -9150,10 +9222,24 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const edge = (p.sense ?? 0) !== (reading ? 1 : 0);
       p.sense = reading ? 1 : 0;
       if (!edge) continue;
+      const driven = sensorDriven.get(p.uid) ?? new Set<number>();
+      if (reading) sensorDriven.set(p.uid, driven);
       const drive = (q: TechPart) => {
-        if (q.on !== reading) {
-          q.on = reading;
-          saveDirty = true;
+        if (reading) {
+          // Rising edge: take only what is off — a part already on by
+          // hand is not this sensor's to release later.
+          if (!q.on) {
+            q.on = true;
+            driven.add(q.uid);
+            saveDirty = true;
+          }
+        } else if (driven.has(q.uid)) {
+          // Falling edge: release only what this sensor took.
+          driven.delete(q.uid);
+          if (q.on) {
+            q.on = false;
+            saveDirty = true;
+          }
         }
       };
       const seen = new Set<number>();
@@ -9335,8 +9421,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return true;
     }
     if (hit.id === ID.Battery) {
-      const e = Math.round(batteryAt(hit.x, hit.y, hit.z));
-      say("Battery " + e + "%");
+      // Brick-layer batteries are inexhaustible circuit sources (the real
+      // charge levels live in the Teks layer). The old message read a
+      // batteryEnergy map nothing ever wrote — a permanent fake "100%".
+      say("Battery — always on (brick circuit source)");
       return true;
     }
     if (block.work === "bed") {
@@ -11756,15 +11844,28 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     director.outcome(baseQuestId(id.replace(/^soc:/, "")), true);
     if (!creative) for (const [k, n] of r.take) spend(k, n);
     for (const [k, n] of r.give) give(k, n);
-    if (r.rep > 0) addRep(repKeyFor(player.x, player.z), Math.ceil(r.rep / 2));
+    // Audit 2026-10-31: the legacy rep goes to the QUEST's village, keyed
+    // the way readers compute it at that village — the old code keyed it
+    // by the player's position at claim time, so claiming from the board
+    // far away credited a positional key nobody ever reads.
+    if (r.rep > 0 && r.giverKey) {
+      const [gx, gz] = r.giverKey.split(",").map(Number);
+      const v = Number.isFinite(gx) && Number.isFinite(gz) ? structureAt(world, gx, gz) : null;
+      addRep(v ? repKeyFor(v.x + v.w / 2, v.z + v.d / 2) : repKeyFor(player.x, player.z), Math.ceil(r.rep / 2));
+    }
     gainXp(Math.round(10 * (1 + society.perk("xp")))); // guild perk
     say(r.msg + (r.joined ? " — you joined the " + r.joined.name + "!" : r.rankUp ? " — new rank in the " + r.rankUp.name + "!" : ""));
     saveDirty = true;
     emit();
   }
+  /** Jail sentences served this session — a WorldView fact for the story
+   *  director (audit 2026-10-31: the prompt was fed a constant 0). Session
+   *  scope only; not persisted. */
+  let timesJailed = 0;
   /** Time served: teleport into a cell, skip the hours, and (big
    *  bounties) move valuables into the evidence chest. */
   function serveJail(v: Structure, hours: number, confiscate: boolean) {
+    timesJailed++;
     const c = civicOf(v, seed);
     worldTime = (worldTime + hours / 24) % 1;
     let took = 0;
@@ -11804,20 +11905,39 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const st = society.st(key);
     const view: WorldView = {
       zone: v.zone,
-      timeWord: "day",
+      // Real facts (audit 2026-10-31): the prompt was fed "day", "jailed 0"
+      // and "some boss somewhere is up" as constants — the director's
+      // rules (boss type, tone) then fired on a world that isn't this one.
+      timeWord: worldTime < 0.26 ? "dawn" : worldTime < 0.5 ? "day" : worldTime < 0.76 ? "dusk" : "night",
       structures: structuresNear(world, v.x, v.z, 1).filter((s) => s !== v).map((s) => s.kind).slice(0, 4),
-      bossUp: mobs.some((m) => !m.dead && !!m.bossOf),
+      bossUp: mobs.some((m) => !m.dead && m.bossOf === ZONES[v.zone].boss.id),
       npc: { name: giver.name, role: kind, guild: kind === "guild" ? gk.split(":")[1] : "", mood: st.rep < 0 ? "wary" : "warm", met: society.done.size },
       player: {
-        level: hud.level ?? 0, coins: inv[COIN] ?? 0, rep: st.rep, bounty: st.bounty, jailed: 0, crimes: Math.round(st.bounty / 5),
+        level: hud.level ?? 0, coins: inv[COIN] ?? 0, rep: st.rep, bounty: st.bounty, jailed: timesJailed, crimes: Math.round(st.bounty / 5),
         guilds: GUILDS.filter((g) => society.member(g)).map((g) => g.id),
         rare: Object.keys(RARE_MELT).map(Number).filter((id) => (inv[id] ?? 0) > 0).map((id) => def(id).name),
         done: society.done.size, failed: 0,
       },
       guildsHere: guildsIn(v.gx, v.gz, v.zone, seed).map((g) => g.id),
     };
-    const fallback = () => proc() ?? makeQuest(giver, v.zone, seed, 9, society.done.size, ["fetch"]);
-    director.prefetch(gk, () => generateQuest(director.llm, view, director.story, giver, kind, fallback, { seed, slot: 7, epoch: society.done.size }, PREFETCH_TIMEOUT_MS));
+    // Audit 2026-10-31: the LLM dresses the SAME quest the procedural path
+    // would serve next — same epoch, same slot — so its id lives inside
+    // the epoch grammar (claim counting, set completion, dedup). The old
+    // map (slot 7, epoch = done.size) put LLM quests in a parallel
+    // universe: they never counted toward the set of 3, and each claim
+    // minted a fresh payable id from the same giver, forever.
+    const target = proc();
+    if (!target) return;
+    const tParts = baseQuestId(target.id).split(":");
+    const tSlot = Number(tParts[tParts.length - 1]) || 0;
+    const tEpoch = Number(tParts[tParts.length - 2]) || 0;
+    let mapSeed = seed;
+    if (kind === "guild") {
+      const g = GUILDS.find((x) => x.name === giver.name);
+      if (g) mapSeed = seed + GUILDS.indexOf(g) * 101; // guildQuests' own seed rule
+    }
+    const fallback = () => target;
+    director.prefetch(gk, () => generateQuest(director.llm, view, director.story, giver, kind, fallback, { seed: mapSeed, slot: tSlot, epoch: tEpoch }, PREFETCH_TIMEOUT_MS));
   }
   function societyTalk(mob: Mob): boolean {
     const v = villageAround(mob.homeX ?? mob.x, mob.homeZ ?? mob.z);
@@ -11873,15 +11993,28 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return true;
     }
     if (mob.soc === "fence" && sneak) {
-      // whispering to the fence: bandit jobs, and the Thieves' Guild once known
+      // whispering to the fence: bandit jobs, and the outlaw guilds once known
       const camp = structureOwning(world, Math.floor(mob.homeX ?? mob.x), Math.floor(mob.y), Math.floor(mob.homeZ ?? mob.z));
       if (!camp) return false;
       const key = socKey(camp);
-      const thieves = GUILDS.find((g) => g.id === "thieves")!;
-      const q =
-        society.st("*").banditRep >= 10 && !society.member(thieves)
-          ? guildEntryQuest(thieves, key, camp.zone, seed)
-          : society.next(banditQuests(camp.gx, camp.gz, camp.zone, seed, society.epoch("bandit:" + key)));
+      const outlaws = GUILDS.filter((g) => g.outlaw);
+      let q: Quest | null;
+      if (society.st("*").banditRep >= 10) {
+        // Audit 2026-10-31: BOTH outlaw guilds are reachable here (the
+        // Silent Knives were dead content — no giver ever served them),
+        // and once the player has joined one, the fence serves that
+        // guild's OWN quest sets: their giver name credits guild XP and
+        // rank at claim. The generic bandit list ("Boss …") never
+        // credited the Thieves, so their progression died at the entry
+        // quest and their epoch key was written but never read.
+        const joinable = outlaws.find((g) => !society.member(g));
+        const mine = outlaws.filter((g) => society.member(g));
+        q = joinable
+          ? guildEntryQuest(joinable, key, camp.zone, seed)
+          : society.next(mine.flatMap((g) => guildQuests(g, key, camp.zone, seed, society.epoch(society.epochKey("guild", key, g)))));
+      } else {
+        q = society.next(banditQuests(camp.gx, camp.gz, camp.zone, seed, society.epoch("bandit:" + key)));
+      }
       say("Fence (whispers) — " + (q ? society.accept(q) : "Nothing for you yet."), 6000);
       saveDirty = true;
       return true;
@@ -11948,6 +12081,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         const foe = spawnKind("vindicator", m.x, m.z);
         foe.soc = "guard-hostile";
         foe.socName = "Guard";
+        // Keep the post anchor (audit 2026-10-31): without socAt, spawnSoc
+        // found the post empty next tick and summoned a SECOND, peaceful
+        // guard alongside the hostile replacement.
+        foe.socAt = m.socAt;
+        foe.homeX = m.homeX;
+        foe.homeZ = m.homeZ;
         scene.remove(m.mesh);
         mobs.splice(mobs.indexOf(m), 1);
       }
@@ -13959,6 +14098,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           const [x, y, z] = key.split(",").map(Number);
           return [x, y, z, src] as [number, number, number, number];
         }),
+        puddleMass: [...FS.puddleMass.entries()].map(([key, n]) => {
+          const [x, y, z] = key.split(",").map(Number);
+          return [x, y, z, n] as [number, number, number, number];
+        }),
         cells: [...FS.fireCells].map((key) => key.split(",").map(Number) as [number, number, number]),
         burning: [...FS.burningMap.entries()].map(([key, t]) => {
           const [x, y, z] = key.split(",").map(Number);
@@ -13979,7 +14122,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         else if (p.ext) row.push(Math.round(p.ext * 1000) / 1000);
         return row;
       }).concat(vehRows),
-      blueprints: blueprints.map((b) => [b.id, b.o, b.q[0], b.q[1], b.q[2]] as [number, number, number, number, number]),
+      blueprints: blueprints.map((b) => [b.id, b.o, b.q[0], b.q[1], b.q[2], b.ch ?? ""] as [number, number, number, number, number, string]),
       vehBind: [...bindMap.entries()],
       vehHubCh: [...hubChMap.entries()],
       vehFuel: [...fuelMap.entries()],
@@ -14457,7 +14600,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           // only nudged the trade rep and the guards never cared.
           if (mob.kind === "villager" && (mob.byPlayerT ?? 0) <= 0 && !mob.soc?.startsWith("guard") && !creative && realm === 0) {
             const v = villageAround(mob.homeX ?? mob.x, mob.homeZ ?? mob.z);
-            if (v) reportCrime(socKey(v), "assault", playerSeen());
+            if (v) reportCrime(socKey(v), "assault", true); // the victim always knows — see vehHitMob
           }
           mob.byPlayerT = 6;
           addRep(repKeyFor(mob.homeX ?? mob.x, mob.homeZ ?? mob.z), mob.kind === "villager" ? -3 : -2);

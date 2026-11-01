@@ -79,6 +79,8 @@ export type SaveV1 = {
   fire?: {
     heat: [number, number, number, number, number][];
     puddles: [number, number, number, number][];
+    /** Audit 2026-10-31: pellet mass pooled per puddle cell [x,y,z,pellets] (optional — older saves lack it; mining then pays the base 2). */
+    puddleMass?: [number, number, number, number][];
     cells: [number, number, number][];
     burning: [number, number, number, number][];
   };
@@ -88,7 +90,7 @@ export type SaveV1 = {
   bricks?: [number, number, number, number][]; // P0 stud grid: [id, sx, sy, sz] — stud coords (sx = 2 × block x), y stays cell-aligned
   welds?: [number, number, number, number, number, number][]; // P2: welded brick pairs [sx1, sy1, sz1, sx2, sy2, sz2] (stud coords of both bricks)
   teks?: number[][]; // Teks 1:1 layer: [id, o, qx, qy, qz, on, ext?] — o = orientation index (0..23), q = half-module lattice coords (world blocks = q / 4), on = 0/1, ext = P5c rod extension 0..1 (present only when > 0)
-  blueprints?: [number, number, number, number, number][]; // Section 22 P-A: holograms of unfinished catalogue models: [id, o, qx, qy, qz]
+  blueprints?: [number, number, number, number, number, string?][]; // Section 22 P-A: holograms of unfinished catalogue models: [id, o, qx, qy, qz, ch?] — ch (the model's joint channel) added 2026-10-31; older saves omit it
   /** @deprecated Pre-rename field name (before the 2026-10-30 Teks rename): old saves carry their parts layer here. Read-only fallback in game.ts; never written. */
   technic?: [number, number, number, number, number, number][];
   // P5b (Muse, 2026-10-30): vehicle bindings/state, keyed by the part's

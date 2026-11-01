@@ -864,6 +864,7 @@ export function buildAtlas(): BrickAtlases {
   const ctx = canvas.getContext("2d", { alpha: true });
   if (!ctx) throw new Error("Could not build brick textures");
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  let atlasOverflowWarned = false;
   for (const block of BLOCKS) {
     if (!paintsOwnTile(block)) continue;
     for (const face of [0, 1, 2, 3] as const) {
@@ -871,7 +872,12 @@ export function buildAtlas(): BrickAtlases {
       if (!tile) continue;
       const col = tile % ATLAS_COLS;
       const row = Math.floor(tile / ATLAS_COLS);
-      if (row >= ATLAS_ROWS) continue;
+      if (row >= ATLAS_ROWS) {
+        // Never silent again (the 2026-10-31 atlas bug class): an
+        // overflowing tile is invisible in game — say it in the console.
+        if (!atlasOverflowWarned) { atlasOverflowWarned = true; console.warn(`[atlas] tile ${tile} for block ${block.id} exceeds atlas capacity (${ATLAS_COLS}x${ATLAS_ROWS}) — not painted`); }
+        continue;
+      }
       paintSpecial(ctx, block, col * TILE, row * TILE, face);
     }
   }
@@ -930,17 +936,27 @@ export function buildAtlas(): BrickAtlases {
     gtx.fillRect(0, 0, glowCanvas.width, glowCanvas.height);
     const done = new Set<number>();
     for (const block of BLOCKS) {
-      if (!paintsOwnTile(block)) continue;
+      // NOTE (audit 2026-10-31): no paintsOwnTile guard here — a skinOf
+      // ALIAS with light > 0 (Paper lamp, Lamp post, Candle, Light sabre,
+      // Magic wand) must still emit: faceTile() resolves the alias to its
+      // target's tile, and the copy below lights that tile. The old guard
+      // skipped every alias before the light test, so those lamps never
+      // glowed. The `done` set keeps a lit target from being copied twice.
+      // BUT the undefined check the guard also provided stays: BLOCKS is
+      // sparse (registry id gaps), and dereferencing a hole kills boot.
+      if (block == null) continue;
       if (block.id === ID.Furnace) {
         const tile = faceTile(ID.Furnace, 1);
         if (tile && !done.has(tile)) {
           done.add(tile);
           const gx = (tile % ATLAS_COLS) * GT;
           const gy = Math.floor(tile / ATLAS_COLS) * GT;
-          gtx.fillStyle = "#ff6a14";
-          gtx.fillRect(gx + GT * 0.28, gy + GT * 0.42, GT * 0.44, GT * 0.38);
-          gtx.fillStyle = "#ffe048";
-          gtx.fillRect(gx + GT * 0.35, gy + GT * 0.48, GT * 0.30, GT * 0.28);
+          if (gy + GT <= glowCanvas.height) {
+            gtx.fillStyle = "#ff6a14";
+            gtx.fillRect(gx + GT * 0.28, gy + GT * 0.42, GT * 0.44, GT * 0.38);
+            gtx.fillStyle = "#ffe048";
+            gtx.fillRect(gx + GT * 0.35, gy + GT * 0.48, GT * 0.30, GT * 0.28);
+          }
         }
         continue;
       }
@@ -983,7 +999,7 @@ export function buildAtlas(): BrickAtlases {
       doneMaps.add(tile);
       const col = tile % ATLAS_COLS;
       const row = Math.floor(tile / ATLAS_COLS);
-      if (row >= ATLAS_ROWS) continue;
+      if (row >= ATLAS_ROWS) { console.warn(`[atlas] tile ${tile} for block ${block.id} exceeds atlas capacity — maps not painted`); continue; }
       const ox = col * T;
       const oy = row * T;
       const isGlossy =

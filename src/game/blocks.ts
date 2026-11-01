@@ -1525,7 +1525,7 @@ item(ID.Spark, "Spark", "#ffc46b");
 // Melted is the glossy puddle a plastic block collapses into (tile comes from the
 // source block via fireState.puddleSrc — the gray here is only a fallback).
 put(b(ID.Fire, "Fire", "#ff7a1a", "#ffd23e", "#ff7a1a", "#e83e0c", { hard: 0, solid: false, placeable: false, light: 1 }));
-put(b(ID.Melted, "Melted plastic", "#8a8f98", "#9aa0a8", "#83888f", "#757a82", { hard: 0.5, placeable: false }));
+put(b(ID.Melted, "Melted plastic", "#8a8f98", "#9aa0a8", "#83888f", "#757a82", { hard: 0.5, placeable: false, drop: -1 })); // drop -1: never an item — mining a puddle pays its pooled pellet mass (fireState.puddleMass)
 put(b(ID.Axle, "Axle", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9", { hard: 0.4 }));
 put(b(ID.Gear8, "Gear 8T", "#6c6e68", "#6c6e68", "#6c6e68", "#6c6e68", { hard: 0.4 }));
 put(b(ID.Gear16, "Gear 16T", "#a0a5a9", "#a0a5a9", "#a0a5a9", "#a0a5a9", { hard: 0.4 }));
@@ -1712,7 +1712,10 @@ export const TILE = 128;
 // Atlas slots: world bricks first (id order, so every existing slot keeps
 // its place), Teks parts last — they render through the Teks layer, so a
 // slot past the atlas end only costs them a blank fallback tile.
-const TILE_OF = new Uint16Array(1024);
+// Sized 8192 (audit 2026-10-31): at 1024 with the max id already at 651, a
+// future id ≥ 1024 would have been silently written out of bounds (a
+// TypedArray no-op) and rendered with scratch tiles — never silent again.
+const TILE_OF = new Uint16Array(8192);
 let tilesReady = false;
 function drawnBlock(block: BlockDef | undefined): boolean {
   if (!block) return false;

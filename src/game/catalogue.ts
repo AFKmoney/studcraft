@@ -26,7 +26,7 @@ export const CATALOGUE_KEY = "studs.catalogue.v1";
  *  corner of the bounding box. `hubId` is ID.TechHub in game terms,
  *  passed in so this module stays free of the block registry. */
 export function modelFromParts(
-  parts: { id: number; o: number; q: readonly number[] }[],
+  parts: { id: number; o: number; q: readonly number[]; ch?: ModelPart["ch"] }[],
   name: string,
   author: string,
   hubId: number,
@@ -50,6 +50,10 @@ export function modelFromParts(
       id: p.id,
       o: p.o,
       dq: [p.q[0] - a[0], p.q[1] - a[1], p.q[2] - a[2]] as [number, number, number],
+      // Carry the live channel binding (audit 2026-10-31): without it a
+      // re-saved Digger came back with its joints bound B/C/D by mere
+      // appearance order instead of their roles (turret D, boom B…).
+      ...(p.ch ? { ch: p.ch } : {}),
     })),
   };
 }

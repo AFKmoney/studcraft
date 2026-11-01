@@ -219,3 +219,17 @@ test("runtime: wasm load ok → ready; crash → auto-retry; busy → reject at 
   await low.start({ deviceMemory: 1, hasWasm: true, hasWorker: true }, { native: null });
   assert.equal(low.state, "unsupported");
 });
+
+test("audit 2026-10-31: applyLlm keeps the @guild segment and honours the diplomacy target", async () => {
+  const { applyLlm } = await import("./llm/story.ts");
+  const { GUILDS } = await import("./society.ts");
+  const techno = GUILDS.find((g) => g.id === "techno")!;
+  const gGiver: Quest["giver"] = { kind: "guild", key: "3,3", name: techno.name };
+  const l = { type: "fetch" as const, target: "item:24", location: "village", reward: "fair" as const, guild: "techno", giver: techno.name, title: "T", description: "D", dialogue: "", arc: "" };
+  const q = applyLlm(l, gGiver, zone, 7, 1, 0, 0);
+  assert.equal(q.id, "guild:3,3@techno:0:1:llm", "two halls in one city must not share an LLM quest id");
+  assert.equal(q.track.what, 24);
+  const d = applyLlm({ ...l, type: "diplomacy" as const }, giver, zone, 7, 0, 0, 0);
+  assert.equal(d.track.what, 24, "the claim must collect the item the text names");
+  assert.equal(d.id, "chief:0,0:0:0:llm");
+});

@@ -157,11 +157,9 @@ export function clearTurrets() {
 
 const AIR_CAP = 4;
 const tankAir = new Map<string, number>();
-const batteryEnergy = new Map<string, number>(); // key -> remaining energy (starts at 100)
 const remoteChannel = new Map<string, number>(); // key -> channel 1-4 (default 1)
-export function batteryAt(x: number, y: number, z: number) {
-  return batteryEnergy.get(skey(x, y, z)) ?? 100;
-}
+// (batteryEnergy/batteryAt removed, audit 2026-10-31: the map was never
+// written, so every brick battery reported a fake permanent 100%.)
 export function setRemoteChannel(x: number, y: number, z: number, ch: number) {
   remoteChannel.set(skey(x, y, z), Math.max(1, Math.min(4, ch)));
 }

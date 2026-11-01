@@ -27,10 +27,17 @@ test("aliases (skinOf) never paint and share their target's tiles", () => {
   }
 });
 
-test("buildAtlas loops skip aliases", () => {
+test("buildAtlas PAINT loops skip aliases (the glow loop is the one exception)", () => {
   const src = readFileSync(new URL("./textures.ts", import.meta.url), "utf8");
   assert.ok(!/if \(!block\) continue;/.test(src), "a buildAtlas loop paints aliases again");
-  assert.ok((src.match(/paintsOwnTile\(block\)/g) ?? []).length >= 5);
+  assert.ok((src.match(/paintsOwnTile\(block\)/g) ?? []).length >= 4);
+  // Audit 2026-10-31: the glow loop must NOT skip aliases — a lit alias
+  // (Paper lamp, Lamp post, Candle…) emits through its target's tile.
+  // Painting loops keep the guard; the glow loop deliberately has none.
+  const glow = src.slice(src.indexOf("Glow atlas"), src.indexOf("High-resolution"));
+  assert.ok(glow.length > 0 && !glow.includes("if (!paintsOwnTile(block)) continue;"), "the glow loop skips lit aliases again — lamps stop glowing");
+  assert.ok(glow.includes("if (block == null) continue;"), "the glow loop dereferences sparse-registry holes again — buildAtlas throws and the game never boots (proven by rig, 2026-10-31)");
+  assert.ok(glow.includes("block.light"), "the glow loop lost its light test");
 });
 
 test("every drawn block's tiles fit inside the atlas (no unpainted overflow)", async () => {
