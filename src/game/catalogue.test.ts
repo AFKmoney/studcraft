@@ -251,6 +251,44 @@ test("Rig Digger: B lowers the boom into flat ground, C scoops out, D is the tur
   assert.ok(partWorldPoint(v, bucket, bucket.centreLocal).y > before + 1, "W on C curls the load up and out");
 });
 
+test("B26-D5: vendor prefab price is the REAL recipe cost (castMatter), never the volume oracle", async () => {
+  const { castMatter, teksCastCost, SMELT_N, SMELT_COPPER } = await import("./recipes.ts");
+  const { ID } = await import("./blocks.ts");
+  // The divergences that made the oracle price wrong (hand-written
+  // B21 recipes vs volume): seat, turret mount, rocket pod, laser.
+  assert.deepEqual(castMatter(ID.CockpitSeat), { ingots: 4, copper: 0 });
+  assert.equal(teksCastCost(ID.CockpitSeat).ingots, 8);
+  assert.deepEqual(castMatter(ID.VehTurretMount), { ingots: 15, copper: 0 });
+  assert.equal(teksCastCost(ID.VehTurretMount).ingots, 6);
+  assert.deepEqual(castMatter(ID.VehRocketPod), { ingots: 6, copper: 2 });
+  assert.deepEqual(castMatter(ID.VehLaser), { ingots: 4, copper: 2 });
+  assert.deepEqual(castMatter(ID.CockpitCage), { ingots: 12, copper: 0 });
+  assert.deepEqual(castMatter(ID.CockpitMech), { ingots: 12, copper: 0 });
+  // For every sold (built-in) model: price (sum of castMatter, what
+  // prefabPrice now charges) == melt return (SMELT_N + SMELT_COPPER,
+  // what B25-A4 pays back) — buy → melt can never profit.
+  for (const m of builtinModels()) {
+    let ingots = 0, copper = 0, meltI = 0, meltC = 0;
+    for (const p of m.parts) {
+      const c = castMatter(p.id);
+      ingots += c.ingots; copper += c.copper;
+      meltI += SMELT_N[p.id] ?? 0; meltC += SMELT_COPPER[p.id] ?? 0;
+    }
+    assert.equal(ingots, meltI, m.name + ": vendor ingots != melt return");
+    assert.equal(copper, meltC, m.name + ": vendor copper != melt return");
+  }
+  const buggy = builtinModels().find((m) => m.name === "Starter Buggy")!;
+  const digger = builtinModels().find((m) => m.name === "Rig Digger")!;
+  const sum = (m: typeof buggy) => m.parts.reduce((a, p) => { const c = castMatter(p.id); return { ingots: a.ingots + c.ingots, copper: a.copper + c.copper }; }, { ingots: 0, copper: 0 });
+  assert.deepEqual(sum(buggy), { ingots: 86, copper: 10 });
+  assert.deepEqual(sum(digger), { ingots: 134, copper: 18 });
+  // Wiring guard: game.ts prefabPrice prices from castMatter.
+  const { readFileSync } = await import("node:fs");
+  const game = readFileSync(new URL("./game.ts", import.meta.url), "utf8");
+  assert.ok(game.includes("const c = castMatter(p.id);"), "prefabPrice wired to castMatter");
+  assert.equal(game.includes("teksCastCost(p.id)"), false, "oracle pricing gone from prefabPrice");
+});
+
 test("modelFromParts carries joint channels (audit 2026-10-31)", () => {
   const m = modelFromParts(
     [

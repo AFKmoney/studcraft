@@ -1603,9 +1603,12 @@ ACCESSORIES.forEach((a, i) => {
 // no motor. Cast from the Crafting book (Teks tab) with ingots the
 // Kiln smelted from pellets.
 /** The Survival casting cost of one Teks part (plastic ingots +
- *  copper for electrics) — single source of truth: the generated
- *  casting recipes below AND the mechanic vendor's prefab prices
- *  (section 22 P-C) both price from here. */
+ *  copper for electrics) by VOLUME — the source of the generated
+ *  casting recipes below. The mechanic vendor's prefab prices
+ *  (section 22 P-C) and the §11 melt return price from `castMatter`
+ *  instead (B25-A4 / B26-D5): the real recipe cost, which equals
+ *  this oracle for generated parts and the hand-written cost for
+ *  B21 parts, where the two diverge (seat 4 vs 8, turret 15 vs 6). */
 export function teksCastCost(id: number): { ingots: number; copper: number } {
   const s = SPECS.get(id);
   if (!s) return { ingots: 1, copper: 0 };

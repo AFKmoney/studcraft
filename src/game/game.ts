@@ -17,7 +17,7 @@ import { STUD_H, STUD_OFFSETS, STUD_R, buildChunk, type Surface } from "./mesher
 import * as FS from "./fireState";
 import * as TS from "./tuftState";
 import * as CH from "./chipState";
-import { NEIGHBORS, PLASTIC, RECIPES, SMELT, SMELT_COPPER, SMELT_N, bucketFill, bucketPour, fuelReturn, fuelTime, matchGrid, teksCastCost } from "./recipes";
+import { NEIGHBORS, PLASTIC, RECIPES, SMELT, SMELT_COPPER, SMELT_N, bucketFill, bucketPour, castMatter, fuelReturn, fuelTime, matchGrid } from "./recipes";
 import { Director, generateQuest, newStory, storyFrom, type WorldView } from "./llm/story";
 import { PREFETCH_TIMEOUT_MS } from "./llm/prompt";
 import { NpcModel } from "./llm/runtime";
@@ -6751,12 +6751,22 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   }
 
   /** Section 22 P-C: a prefab's price is the matter it is made of —
-   *  the real casting cost of every part (recipes.teksCastCost). */
+   *  the REAL recipe cost of every part (recipes.castMatter, the same
+   *  source the §11 melt pays back since B25-A4; it falls back to the
+   *  volume oracle only when a part has no Teks recipe). B26-D5: the
+   *  vendor used to price off the volume oracle (teksCastCost), which
+   *  diverges from the hand-written B21 recipes — seat 8 vs 4, turret
+   *  mount 6 vs 15: after B25 made the melt pay the REAL cost, a
+   *  turret model bought at the oracle price and melted was a matter
+   *  fountain (+9 ingots a cycle). Price == melt return == craft
+   *  cost, so no loop profits. Ingredients outside the two price
+   *  currencies (a B21 part's gold / emerald / glass / iron) are not
+   *  charged — see the A5 brief in the 2026-11-01 night checklist. */
   function prefabPrice(model: VehicleModel): { ingots: number; copper: number } {
     let ingots = 0;
     let copper = 0;
     for (const p of model.parts) {
-      const c = teksCastCost(p.id);
+      const c = castMatter(p.id);
       ingots += c.ingots;
       copper += c.copper;
     }
