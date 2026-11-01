@@ -4996,3 +4996,7 @@ tsc 0 erreur · tests **361/361** (base B22 = 359, +2 blocs GPU) · build vite s
 ### Fermeture
 
 Verdict de Philippe sur son PC, sur pages.dev une fois le nouveau head déployé (voir et sentir la différence : rayon, ombres, pas d'avertissement CPU, ligne « Graphics adapter » qui nomme sa Radeon).
+
+## 2026-11-01 ~00:50 MST — NUIT B24-A2 CLAIM (Muse, quart de nuit)
+
+**CLAIM (avant code)** : A2 — bonus de fonderie créateurs de matière. Périmètre : `src/game/foundry.ts`, `src/game/foundry.test.ts`, `src/game/GameView.tsx` (texte d'aide seulement). Doctrine : Guide officiel §1 (« Rien n'apparaît de nulle part, rien ne disparaît », lois « qui ne souffrent aucune exception ») + §5 (« la refonte rend 100 % de la matière »). Alignement visé : suppression du bonus de palier +15/30/50 % et de l'affixe « yield » +1 lingot/coulée dans `pour()` — la coulée conserve le compte (sortie = entrée); la pureté et les affixes restants (tempered/swift/distil) sont des bonus de QUALITÉ/vitesse, pas de quantité. Aucun autre item de la nuit touché dans ce lot. Portes avant push : tsc 0, tests tout vert, build standalone OK. Fermeture = verdict de Philippe (Pages/PC), pas l'agent.
