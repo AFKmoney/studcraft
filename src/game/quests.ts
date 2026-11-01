@@ -1,3 +1,4 @@
+import { accId } from "./accessories";
 import { ID } from "./blocks";
 
 export type Offer = { pay: number; pn: number; out: number; on: number; tier?: number; stock?: number };
@@ -178,6 +179,15 @@ export const TRADERS: Record<TraderRole, { name: string; blurb: string; offers: 
       { pay: ID.Emerald, pn: 5, out: ID.TemperedIngot, on: 1, tier: 2 },
       { pay: ID.Emerald, pn: 6, out: ID.Battery, on: 1, tier: 2 },
       { pay: ID.Emerald, pn: 9, out: ID.EnchBook, on: 1, tier: 3 },
+      // 2026-11-01 (Claude): the modern arsenal + rounds cast from plastic
+      { pay: ID.Emerald, pn: 2, out: accId("LightRound"), on: 12 },
+      { pay: ID.Emerald, pn: 2, out: accId("Shell"), on: 6 },
+      { pay: ID.Emerald, pn: 8, out: accId("Pistol"), on: 1 },
+      { pay: ID.Emerald, pn: 3, out: accId("RifleRound"), on: 9, tier: 2 },
+      { pay: ID.Emerald, pn: 12, out: accId("Shotgun"), on: 1, tier: 2 },
+      { pay: ID.Emerald, pn: 14, out: accId("SMG"), on: 1, tier: 2 },
+      { pay: ID.Emerald, pn: 20, out: accId("Assault"), on: 1, tier: 3 },
+      { pay: ID.Emerald, pn: 22, out: accId("Sniper"), on: 1, tier: 3 },
     ],
   },
   fence: {

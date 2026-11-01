@@ -332,7 +332,116 @@ function lightsaber(M: MatFn, hue = 0x3aff6a): Built {
   return { group: g, glow: [glow, core] };
 }
 
+// ---------- 2026-11-01 (Claude): modern arsenal ----------
+function pistol(M: MatFn): Built {
+  const g = new THREE.Group();
+  const slide = M(GUN, "blued"), frame = M(BLK, "plastic"), steel = M(0x3a3f46, "metal"), orange = M(LEGO_ORANGE, "plastic");
+  // slide with front/rear serrations + ejection port
+  mesh(slab(poly([[-0.1, -0.05], [0.045, -0.05], [0.048, -0.046], [0.048, -0.028], [-0.098, -0.028], [-0.1, -0.032]]), 0.024, 0.002), slide, g);
+  for (let i = 0; i < 6; i++) mesh(box(0.003, 0.016, 0.026), steel, g, -0.092 + i * 0.006, -0.039, 0);
+  mesh(box(0.028, 0.008, 0.002), M(0x15171a, "plastic"), g, -0.02, -0.032, 0.0125);
+  mesh(box(0.004, 0.006, 0.006), steel, g, 0.04, -0.024, 0); // front sight
+  mesh(box(0.008, 0.006, 0.014), steel, g, -0.09, -0.024, 0); // rear sight
+  // polymer frame + rail + grip (stippled bands) + trigger guard
+  mesh(slab(poly([[-0.09, -0.05], [0.04, -0.05], [0.04, -0.06], [-0.05, -0.062], [-0.06, -0.064]]), 0.022), frame, g);
+  mesh(slab(poly([[-0.095, -0.05], [-0.06, -0.06], [-0.07, -0.13], [-0.1, -0.128], [-0.104, -0.06]]), 0.024, 0.002), frame, g);
+  for (let i = 0; i < 4; i++) mesh(box(0.03, 0.004, 0.026), M(0x2a2c30, "rubber"), g, -0.085 + i * 0.002, -0.075 - i * 0.012, 0).rotation.z = -0.25;
+  triggerGuard(g, frame, -0.045, -0.064);
+  mesh(cylX(0.0055, 0.012), steel, g, 0.052, -0.04, 0); // muzzle crown
+  stud(g, orange, -0.08, -0.095, 0.013);
+  stud(g, orange, -0.08, -0.095, -0.013);
+  return { group: g, muzzle: [0.06, -0.04, 0] };
+}
+function smg(M: MatFn): Built {
+  const g = new THREE.Group();
+  const recv = M(BLK, "plastic"), steel = M(0x3a3f46, "metal"), dark = M(GUN, "blued"), orange = M(LEGO_ORANGE, "plastic");
+  mesh(slab(poly([[-0.11, -0.068], [0.06, -0.068], [0.064, -0.03], [-0.108, -0.03]]), 0.03, 0.002), recv, g);
+  mesh(latheX([[0.012, 0], [0.012, 0.05], [0.009, 0.055]], 10), steel, g, 0.06, -0.048, 0); // shroud
+  mesh(latheX([[0.006, 0], [0.006, 0.03]]), dark, g, 0.11, -0.048, 0);
+  for (let i = 0; i < 5; i++) mesh(cylZ(0.003, 0.026), recv, g, 0.068 + i * 0.009, -0.048, 0); // shroud vents
+  mesh(box(0.02, 0.09, 0.02), recv, g, -0.005, -0.11, 0).rotation.z = 0.08; // straight stick mag
+  mesh(box(0.024, 0.006, 0.024), steel, g, -0.001, -0.157, 0);
+  mesh(slab(poly([[-0.1, -0.068], [-0.075, -0.068], [-0.082, -0.12], [-0.104, -0.118]]), 0.024), recv, g);
+  triggerGuard(g, dark, -0.06, -0.07);
+  // folding wire stock
+  mesh(cylX(0.003, 0.11), steel, g, -0.165, -0.04, 0.01);
+  mesh(cylX(0.003, 0.11), steel, g, -0.165, -0.06, -0.01);
+  mesh(box(0.006, 0.05, 0.026), M(0x2a2c30, "rubber"), g, -0.22, -0.05, 0);
+  mesh(box(0.012, 0.012, 0.03), steel, g, -0.03, -0.024, 0); // top cocking knob
+  stud(g, orange, -0.06, -0.05, 0.016);
+  return { group: g, muzzle: [0.14, -0.048, 0] };
+}
+function shotgun(M: MatFn): Built {
+  const g = new THREE.Group();
+  const wood = M(WD, "wood"), blued = M(GUN, "blued"), steel = M(0x9aa1a8, "metal"), brass = M(BRASS, "gold");
+  mesh(slab(poly([[-0.08, -0.062], [0.0, -0.062], [0.0, -0.034], [-0.08, -0.034]]), 0.028, 0.002), blued, g); // receiver
+  mesh(latheX([[0.011, 0], [0.011, 0.24], [0.0125, 0.243]]), blued, g, 0.0, -0.038, 0); // barrel
+  mesh(latheX([[0.009, 0], [0.009, 0.2]]), blued, g, 0.0, -0.058, 0); // magazine tube
+  // ribbed pump fore-end
+  mesh(latheX([[0.016, 0], [0.016, 0.08]], 12), wood, g, 0.06, -0.056, 0);
+  for (let i = 0; i < 6; i++) mesh(cylX(0.0168, 0.004, 12), M(DWD, "wood"), g, 0.07 + i * 0.012, -0.056, 0);
+  mesh(new THREE.SphereGeometry(0.004, 8, 6), brass, g, 0.24, -0.026, 0); // bead sight
+  // stock: wrist + butt + recoil pad
+  mesh(slab(poly([[-0.08, -0.04], [-0.12, -0.044], [-0.27, -0.05], [-0.27, -0.11], [-0.25, -0.11], [-0.13, -0.075], [-0.1, -0.09], [-0.08, -0.068]]), 0.026, 0.003), wood, g);
+  mesh(box(0.012, 0.064, 0.03), M(0x2a2c30, "rubber"), g, -0.276, -0.08, 0);
+  triggerGuard(g, blued, -0.05, -0.066);
+  mesh(box(0.02, 0.008, 0.002), steel, g, -0.04, -0.045, 0.0145); // loading port
+  return { group: g, muzzle: [0.245, -0.038, 0] };
+}
+function assault(M: MatFn): Built {
+  const g = new THREE.Group();
+  const recv = M(GUN, "blued"), poly1 = M(BLK, "plastic"), steel = M(0x3a3f46, "metal"), tan = M(0xc8b48a, "plastic"), orange = M(LEGO_ORANGE, "plastic");
+  mesh(slab(poly([[-0.11, -0.072], [0.07, -0.072], [0.074, -0.03], [-0.105, -0.03]]), 0.028, 0.002), recv, g);
+  mesh(box(0.17, 0.006, 0.016), steel, g, -0.02, -0.026, 0);
+  for (let i = 0; i < 10; i++) mesh(box(0.008, 0.004, 0.018), steel, g, -0.1 + i * 0.017, -0.021, 0);
+  mesh(latheX([[0.019, 0], [0.019, 0.11]], 8), tan, g, 0.07, -0.05, 0).rotation.x = Math.PI / 8; // quad-rail handguard
+  mesh(latheX([[0.0065, 0], [0.0065, 0.06]]), steel, g, 0.18, -0.047, 0);
+  mesh(latheX([[0.011, 0], [0.011, 0.025], [0.007, 0.027]], 6), steel, g, 0.235, -0.047, 0); // muzzle brake
+  // holo sight
+  mesh(box(0.03, 0.022, 0.018), recv, g, -0.03, -0.012, 0);
+  mesh(box(0.002, 0.016, 0.014), M(0xff3a2a, "glow"), g, -0.016, -0.009, 0);
+  // curved mag (tan) + grip + stock
+  const mag = new THREE.Shape();
+  mag.moveTo(-0.05, -0.074); mag.lineTo(-0.018, -0.074); mag.quadraticCurveTo(-0.006, -0.12, 0.008, -0.155); mag.lineTo(-0.025, -0.162); mag.quadraticCurveTo(-0.038, -0.12, -0.05, -0.074);
+  mesh(slab(mag, 0.02, 0.0015, 10), tan, g);
+  mesh(slab(poly([[-0.1, -0.072], [-0.07, -0.072], [-0.078, -0.13], [-0.104, -0.126]]), 0.024), poly1, g);
+  triggerGuard(g, recv, -0.055, -0.074);
+  mesh(latheX([[0.009, 0], [0.009, 0.08]]), steel, g, -0.19, -0.048, 0);
+  mesh(slab(poly([[-0.21, -0.038], [-0.18, -0.038], [-0.18, -0.065], [-0.26, -0.1], [-0.272, -0.1], [-0.272, -0.034]]), 0.026), tan, g);
+  stud(g, orange, -0.075, -0.05, 0.014);
+  stud(g, orange, -0.075, -0.05, -0.014);
+  return { group: g, muzzle: [0.26, -0.047, 0], glow: [] };
+}
+function sniper(M: MatFn): Built {
+  const g = new THREE.Group();
+  const stock = M(0x3a5530, "plastic"), blued = M(GUN, "blued"), steel = M(0x3a3f46, "metal"), glass = M(0x5ac8ff, "glass"), black = M(BLK, "rubber");
+  // thumbhole stock profile
+  mesh(slab(poly([[0.1, -0.06], [0.1, -0.044], [-0.06, -0.044], [-0.12, -0.048], [-0.285, -0.042], [-0.285, -0.112], [-0.26, -0.112], [-0.2, -0.085], [-0.12, -0.08], [-0.09, -0.12], [-0.066, -0.118], [-0.07, -0.07]]), 0.03, 0.003), stock, g);
+  mesh(box(0.012, 0.072, 0.032), black, g, -0.291, -0.077, 0);
+  mesh(box(0.06, 0.012, 0.03), stock, g, -0.22, -0.036, 0); // cheek riser
+  // fluted heavy barrel + brake
+  mesh(latheX([[0.011, 0], [0.009, 0.3]]), blued, g, -0.02, -0.04, 0);
+  for (let i = 0; i < 6; i++) mesh(box(0.03, 0.002, 0.002), steel, g, 0.06 + i * 0.035, -0.03, 0.006);
+  mesh(latheX([[0.013, 0], [0.013, 0.03], [0.009, 0.032]], 8), steel, g, 0.28, -0.04, 0);
+  // bolt + knob
+  mesh(cylZ(0.003, 0.034), steel, g, -0.06, -0.036, 0.018).rotation.y = -0.3;
+  mesh(new THREE.SphereGeometry(0.007, 10, 8), black, g, -0.064, -0.038, 0.036);
+  // long scope with turrets + bipod
+  mesh(latheX([[0, 0], [0.016, 0], [0.016, 0.03], [0.01, 0.045], [0.01, 0.14], [0.018, 0.17], [0.018, 0.19], [0, 0.19]]), blued, g, -0.11, -0.003, 0);
+  mesh(cylX(0.016, 0.002), glass, g, 0.081, -0.003, 0);
+  mesh(cylZ(0.006, 0.014), steel, g, -0.02, -0.003, 0.016);
+  mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.014, 10), steel, g, -0.02, 0.012, 0);
+  for (const x of [-0.07, 0.04]) mesh(box(0.012, 0.03, 0.02), steel, g, x, -0.02, 0);
+  for (const z of [-0.012, 0.012]) mesh(box(0.004, 0.08, 0.004), steel, g, 0.08, -0.09, z).rotation.x = z > 0 ? 0.3 : -0.3;
+  return { group: g, muzzle: [0.31, -0.04, 0], glow: [glass] };
+}
+
 const BUILDERS: Record<string, (M: MatFn) => Built> = {
+  Pistol: pistol,
+  SMG: smg,
+  Shotgun: shotgun,
+  Assault: assault,
+  Sniper: sniper,
   Carbine: carbine,
   Rifle: rifle,
   Revolver: revolver,

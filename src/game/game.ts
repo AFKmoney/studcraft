@@ -25,7 +25,7 @@ import { GenPool, poolSize, type WorkerLike } from "./genPool";
 import { XB, xbPose, stringHalf, prodPoint, XB_CYCLE, type XbPose } from "./crossbowRig";
 import { cropLight, growChance, hydrated, nextStage, fruitSpot, canStack, harvestDrops, tramples, compostChance, COMPOST_FULL, isRipe, type FarmIds } from "./farming";
 import { CROSSBOW_HOLD } from "./heldPose";
-import { ACCESSORIES, ACC_BASE, type Acc } from "./accessories";
+import { ACCESSORIES, ACC_BASE, ACC_BY_KEY, type Acc } from "./accessories";
 import { buildWeapon, type Finish } from "./weaponModels";
 import { GUNS, type GunSpec, type GunState, ammoLabel, damageAt, finishReload, flashAt, newGun, recoilAt, reloadPose, startReload, tryFire } from "./firearms";
 import { itemByName } from "./recipes";
@@ -68,7 +68,7 @@ const FARM_X = { ...FARM, Leaves: ID.Leaves, Sapling: ID.Sapling, TallGrass: ID.
 // t91u: accessory / firearm lookups by item id
 const ACC_OF = (id: number): Acc | undefined => (id >= ACC_BASE && id < ACC_BASE + ACCESSORIES.length ? ACCESSORIES[id - ACC_BASE] : undefined);
 const GUN_OF = (id: number): GunSpec | undefined => { const a = ACC_OF(id); return a && a.kind === "gun" ? GUNS[a.key] : undefined; };
-const GUN_AMMO_ID = (g: GunSpec) => (g.ammo ? itemByName(g.ammo === "Cartridge" ? "Cartridge" : g.ammo === "PowerCell" ? "Power cell" : g.ammo) : 0);
+const GUN_AMMO_ID = (g: GunSpec) => (g.ammo ? itemByName(ACC_BY_KEY[g.ammo]?.name ?? g.ammo) : 0);
 const isShieldId = (id: number) => id === ID.Shield || ACC_OF(id)?.kind === "shield";
 /** pistol-grip x of a gun model (where the minifig hand closes) */
 const gunGripX = (a: Acc) => { for (const p of a.parts) if (p[0] === "b" && p[8] === -0.25) return p[4]; return CROSSBOW_HOLD.gripLocal.x; };
@@ -9969,7 +9969,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     if (!g || gunPending) return;
     const st = gunState(id);
     const take = startReload(g, st, elapsed, gunReserve(g));
-    if (take <= 0) { if (st.mag < g.mag && g.ammo) say("No " + (g.ammo === "PowerCell" ? "power cells" : g.ammo.toLowerCase() + "s")); return; }
+    if (take <= 0) { if (st.mag < g.mag && g.ammo) say("No " + (ACC_BY_KEY[g.ammo]?.name ?? g.ammo).toLowerCase() + "s"); return; }
     if (!creative) spend(GUN_AMMO_ID(g), take);
     gunPending = { id, take, at: st.reloadUntil };
     audio.place();
@@ -9982,17 +9982,21 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     if (r !== "fired") return;
     wearHeld();
     const sp = g.spread * (isSneaking() ? 0.5 : 1);
-    const yaw = player.yaw + (Math.random() - 0.5) * sp * 2;
-    const pitch = player.pitch + (Math.random() - 0.5) * sp * 2;
-    const dx = -Math.sin(yaw) * Math.cos(pitch);
-    const dy = Math.sin(pitch);
-    const dz = -Math.cos(yaw) * Math.cos(pitch);
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(g.energy ? 0.05 : 0.04, g.energy ? 0.05 : 0.04, g.energy ? 0.5 : 0.18), skin(g.energy ? 0x7af0ff : 0xd8a22e));
-    if (g.energy) { const m = mesh.material as THREE.MeshStandardMaterial; if (m.emissive) { m.emissive = new THREE.Color(0x3ad8ff); m.emissiveIntensity = 1.5; } }
-    mesh.lookAt(dx, dy, dz);
-    scene.add(mesh);
     const near = mobs.reduce((b, m) => (m.dead ? b : Math.min(b, Math.hypot(m.x - player.x, m.z - player.z))), 99);
-    shots.push({ x: player.x, y: player.y + 1.45, z: player.z, vx: dx * g.speed, vy: dy * g.speed, vz: dz * g.speed, life: 2.2, friendly: true, mesh, bullet: damageAt(g, near), grav: g.grav, pierce: g.dmg >= 14 });
+    // Shotgun: `pellets` projectiles per shot, each with its own spread.
+    for (let pi = 0, pn = g.pellets ?? 1; pi < pn; pi++) {
+      const yaw = player.yaw + (Math.random() - 0.5) * sp * 2;
+      const pitch = player.pitch + (Math.random() - 0.5) * sp * 2;
+      const dx = -Math.sin(yaw) * Math.cos(pitch);
+      const dy = Math.sin(pitch);
+      const dz = -Math.cos(yaw) * Math.cos(pitch);
+      const small = (g.pellets ?? 1) > 1;
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(g.energy ? 0.05 : small ? 0.03 : 0.04, g.energy ? 0.05 : small ? 0.03 : 0.04, g.energy ? 0.5 : small ? 0.06 : 0.18), skin(g.energy ? 0x7af0ff : 0xd8a22e));
+      if (g.energy) { const m = mesh.material as THREE.MeshStandardMaterial; if (m.emissive) { m.emissive = new THREE.Color(0x3ad8ff); m.emissiveIntensity = 1.5; } }
+      mesh.lookAt(dx, dy, dz);
+      scene.add(mesh);
+      shots.push({ x: player.x, y: player.y + 1.45, z: player.z, vx: dx * g.speed, vy: dy * g.speed, vz: dz * g.speed, life: small ? 0.9 : 2.2, friendly: true, mesh, bullet: damageAt(g, near), grav: g.grav, pierce: g.dmg >= 14 });
+    }
     // recoil climbs the aim a touch
     player.pitch = Math.min(1.5, player.pitch + g.kick * 0.035);
     audio.place();

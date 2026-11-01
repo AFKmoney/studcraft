@@ -41,7 +41,8 @@ for (const k of CATALOGUE) {
 test("guns hold their grip under the stock and their ammo is craftable", () => {
   for (const a of ACCESSORIES.filter((x: any) => x.kind === "gun")) {
     const g = GUNS[a.key];
-    if (g.ammo) assert.ok(itemByName(g.ammo === "PowerCell" ? "Power cell" : g.ammo) > 0, a.key + " ammo");
+    // same resolution as game.ts GUN_AMMO_ID: accessory key → its item name
+    if (g.ammo) assert.ok(itemByName(ACCESSORIES.find((x: any) => x.key === g.ammo)?.name ?? g.ammo) > 0, a.key + " ammo");
     assert.ok(a.muzzle![0] > 0, "muzzle forward (+X)");
   }
   const cart = RECIPES.find((r: any) => r.out === accId("Cartridge"))!;

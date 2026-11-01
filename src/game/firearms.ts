@@ -15,6 +15,7 @@ export type GunSpec = {
   kick: number; // recoil 0..1
   grav: number; // projectile gravity
   energy?: boolean; // blaster bolt instead of a bullet + smoke flash
+  pellets?: number; // shotgun: projectiles per shot (dmg is per pellet)
 };
 
 export const GUNS: Record<string, GunSpec> = {
@@ -27,6 +28,13 @@ export const GUNS: Record<string, GunSpec> = {
   BlasterM: { ammo: "PowerCell", mag: 20, reload: 1.4, interval: 0.16, auto: true, dmg: 6, speed: 50, spread: 0.018, kick: 0.25, grav: 0, energy: true },
   BlasterL: { ammo: "PowerCell", mag: 30, reload: 1.8, interval: 0.12, auto: true, dmg: 7, speed: 55, spread: 0.012, kick: 0.3, grav: 0, energy: true },
   Launcher: { ammo: "Firework rocket", mag: 1, reload: 2.5, interval: 0.6, auto: false, dmg: 16, speed: 28, spread: 0.01, kick: 1, grav: 3 },
+  // 2026-11-01 (Claude) — modern arsenal; rounds are cast from plastic
+  // pellets (Stud slug) like every other Studs part.
+  Pistol: { ammo: "LightRound", mag: 12, reload: 1.3, interval: 0.22, auto: false, dmg: 7, speed: 85, spread: 0.018, kick: 0.4, grav: 1.2 },
+  SMG: { ammo: "LightRound", mag: 30, reload: 1.7, interval: 0.075, auto: true, dmg: 4, speed: 80, spread: 0.03, kick: 0.22, grav: 1.2 },
+  Shotgun: { ammo: "Shell", mag: 6, reload: 2.6, interval: 0.8, auto: false, dmg: 3, speed: 65, spread: 0.09, kick: 0.95, grav: 2, pellets: 8 },
+  Assault: { ammo: "RifleRound", mag: 30, reload: 2.0, interval: 0.1, auto: true, dmg: 7, speed: 120, spread: 0.012, kick: 0.3, grav: 0.8 },
+  Sniper: { ammo: "RifleRound", mag: 5, reload: 2.6, interval: 1.1, auto: false, dmg: 28, speed: 220, spread: 0.001, kick: 1, grav: 0.4 },
   Wand: { ammo: "", mag: Infinity, reload: 0, interval: 0.55, auto: false, dmg: 5, speed: 30, spread: 0.01, kick: 0.15, grav: 0, energy: true },
 };
 
