@@ -1726,6 +1726,14 @@ function assignTiles() {
   for (let id = 1; id < BLOCKS.length; id++) if (teks.has(id) && drawnBlock(BLOCKS[id])) TILE_OF[id] = ++slot;
 }
 
+/** Atlas painters: a skinOf alias (Stool → Wood, Hanging plant → Leaves,
+ * rugs → wool colors…) SHARES its target's tiles, so it must never paint
+ * them with its own colors — otherwise the last alias wins and every tree
+ * renders tan (Philippe, 2026-10-31: « tous les arbres en pierre »). */
+export function paintsOwnTile(b: BlockDef | undefined | null): b is BlockDef {
+  return !!b && !b.skinOf;
+}
+
 export function faceTile(id: number, face: 0 | 1 | 2 | 3): number {
   if (!tilesReady) assignTiles();
   const sk = BLOCKS[id]?.skinOf;

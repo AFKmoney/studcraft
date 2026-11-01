@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { ATLAS_COLS, ATLAS_ROWS, BLOCKS, ID, TILE, faceTile, type BlockDef } from "./blocks";
+import { ATLAS_COLS, ATLAS_ROWS, BLOCKS, ID, TILE, faceTile, paintsOwnTile, type BlockDef } from "./blocks";
 
 function shade(hex: string, amt: number): string {
   const n = parseInt(hex.slice(1), 16);
@@ -865,7 +865,7 @@ export function buildAtlas(): BrickAtlases {
   if (!ctx) throw new Error("Could not build brick textures");
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   for (const block of BLOCKS) {
-    if (!block) continue;
+    if (!paintsOwnTile(block)) continue;
     for (const face of [0, 1, 2, 3] as const) {
       const tile = faceTile(block.id, face);
       if (!tile) continue;
@@ -882,7 +882,7 @@ export function buildAtlas(): BrickAtlases {
   {
     const skip = new Set<number>();
     for (const block of BLOCKS) {
-      if (!block || (!block.fluid && (!block.plant || block.cactus))) continue;
+      if (!paintsOwnTile(block) || (!block.fluid && (!block.plant || block.cactus))) continue;
       for (const face of [0, 1, 2, 3] as const) {
         const t = faceTile(block.id, face);
         if (t) skip.add(t);
@@ -893,7 +893,7 @@ export function buildAtlas(): BrickAtlases {
     const W = canvas.width;
     const done = new Set<number>();
     for (const block of BLOCKS) {
-      if (!block) continue;
+      if (!paintsOwnTile(block)) continue;
       for (const face of [0, 1, 2, 3] as const) {
         const tile = faceTile(block.id, face);
         if (!tile || skip.has(tile) || done.has(tile)) continue;
@@ -930,7 +930,7 @@ export function buildAtlas(): BrickAtlases {
     gtx.fillRect(0, 0, glowCanvas.width, glowCanvas.height);
     const done = new Set<number>();
     for (const block of BLOCKS) {
-      if (!block) continue;
+      if (!paintsOwnTile(block)) continue;
       if (block.id === ID.Furnace) {
         const tile = faceTile(ID.Furnace, 1);
         if (tile && !done.has(tile)) {
@@ -976,7 +976,7 @@ export function buildAtlas(): BrickAtlases {
   const normalPx = nctx.createImageData(rw, rh);
   const doneMaps = new Set<number>();
   for (const block of BLOCKS) {
-    if (!block) continue;
+    if (!paintsOwnTile(block)) continue;
     for (const face of [0, 1, 2, 3] as const) {
       const tile = faceTile(block.id, face);
       if (!tile || doneMaps.has(tile)) continue;
