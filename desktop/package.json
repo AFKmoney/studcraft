@@ -22,6 +22,7 @@
     "extraResources": [
       { "from": "../dist-game", "to": "game", "filter": ["**/*", "!models/**", "!wllama/**"] },
       { "from": "resources/llama", "to": "llama" },
+      { "from": "resources/llama-cpu", "to": "llama-cpu" },
       { "from": "resources/models", "to": "models" }
     ],
     "win": { "target": "dir" },

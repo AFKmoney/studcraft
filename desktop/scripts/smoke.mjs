@@ -10,7 +10,7 @@ const { buildPrompt, grammarFor, REWARDS } = await import("../../src/game/llm/pr
 const { parseLlm } = await import("../../src/game/llm/story.ts");
 const res = process.env.RES || path.join(here, "..", "resources");
 const exe = process.platform === "win32" ? "llama-server.exe" : "llama-server";
-const s = new Sidecar({ bin: path.join(res, "llama", exe), model: path.join(res, "models", "Bonsai-1.7B-Q1_0.gguf"), gpuLayers: Number(process.env.NGL ?? 99), log: (m) => console.log("[sidecar]", m) });
+const s = new Sidecar({ bin: path.join(res, process.env.LLAMA_DIR || "llama", exe), model: path.join(res, "models", "Bonsai-1.7B-Q1_0.gguf"), gpuLayers: Number(process.env.NGL ?? 99), log: (m) => console.log("[sidecar]", m) });
 await s.start();
 if (!s.ready) throw new Error(s.why);
 const a = { types: ["kill", "fetch", "deliver"], targets: ["mob:spider", "mob:wolf", "item:iron"], items: ["iron"], locations: ["village", "canyon"], npcs: ["Chief Oda"], guilds: ["miners"], rewards: REWARDS };

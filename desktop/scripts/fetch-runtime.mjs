@@ -55,11 +55,12 @@ async function model() {
   console.log("model OK", MODEL.file, MODEL.sha256);
 }
 
-async function llama() {
+async function llama(PLATFORM, dstName) {
   const rel = await (await fetch(`https://api.github.com/repos/PrismML-Eng/llama.cpp/releases/tags/${LLAMA_TAG}`, { headers: { "User-Agent": "studcraft-build" } })).json();
   const asset = (rel.assets || []).find((a) => a.name.includes(`-bin-${PLATFORM}.`));
   if (!asset) throw new Error("no asset for " + PLATFORM + " in " + LLAMA_TAG);
   const tmp = path.join(RES, asset.name);
+  console.log("llama asset", PLATFORM, "->", dstName);
   mkdirSync(RES, { recursive: true });
   if (!existsSync(tmp)) await download(asset.browser_download_url, tmp, asset.size);
   const want = String(asset.digest || "").replace(/^sha256:/, "");
@@ -85,7 +86,7 @@ async function llama() {
   };
   const bin = find(x);
   if (!bin) throw new Error("llama-server not found in " + asset.name);
-  const dst = path.join(RES, "llama");
+  const dst = path.join(RES, dstName);
   rmSync(dst, { recursive: true, force: true });
   cpSync(bin, dst, { recursive: true });
   rmSync(x, { recursive: true, force: true });
@@ -93,8 +94,15 @@ async function llama() {
 }
 
 if (process.argv.includes("--model-only")) await model();
-else if (process.argv.includes("--llama-only")) await llama();
+else if (process.argv.includes("--llama-only")) await runtimes();
 else {
   await model();
-  await llama();
+  await runtimes();
+}
+// GPU builds also ship the matching CPU build as a hardware fallback (llama-cpu/).
+async function runtimes() {
+  await llama(PLATFORM, "llama");
+  const cpu = { "win-vulkan-x64": "win-cpu-x64", "win-hip-radeon-x64": "win-cpu-x64", "ubuntu-vulkan-x64": "ubuntu-x64" }[PLATFORM];
+  if (cpu) await llama(cpu, "llama-cpu");
+  else rmSync(path.join(RES, "llama-cpu"), { recursive: true, force: true });
 }
