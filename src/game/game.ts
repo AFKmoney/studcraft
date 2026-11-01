@@ -15151,6 +15151,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // same place-button cadence as blocks/bricks; the block ghost never
     // shows while a Teks part is held.
     if (TEKS_SET.has(hotbar[slot])) ghost.visible = false;
+    if (hud.hidden) ghost.visible = false; // F1: clean screenshots — no placement ghost either
     if (techPlanNow) {
       const placeDown = sample.place;
       if ((sample.first && placeDown && !prevPlace) || (placeDown && placeCool <= 0 && prevPlace)) {
