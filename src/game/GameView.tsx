@@ -34,6 +34,7 @@ import {
   JumpIcon,
   LockIcon,
   MedalIcon,
+  TrophyIcon,
   MoonIcon,
   PauseIcon,
   PickIcon,
@@ -1854,7 +1855,7 @@ function HoldButton({ label, onHold, children, className, buzz }: { label: strin
 // Inventory hub (bag, crafting, ranks, quests, skills) and stations
 // ─────────────────────────────────────────────────────────────────────────────
 
-type Page = "bin" | "craft" | "ranks" | "quests" | "skills";
+type Page = "bin" | "craft" | "ranks" | "quests" | "skills" | "journal";
 
 function Inventory({ game }: { game: GameApi }) {
   const hud = game.hud;
@@ -1867,6 +1868,7 @@ function Inventory({ game }: { game: GameApi }) {
     { id: "skills", icon: <StarIcon size={20} />, label: "Skills" },
     { id: "quests", icon: <ScrollIcon size={20} />, label: "Quests" },
     { id: "ranks", icon: <MedalIcon size={20} />, label: "Ranks" },
+    { id: "journal", icon: <TrophyIcon size={20} />, label: "Journal" },
   ];
   const titles: Record<Page, string> = {
     bin: hud.panel === "bench" ? "Workbench" : "Inventory",
@@ -1874,6 +1876,7 @@ function Inventory({ game }: { game: GameApi }) {
     ranks: hud.rank,
     quests: "Quest board",
     skills: "Skill tree",
+    journal: "Adventurer's journal",
   };
   return (
     <div className="sc-menu-layer sc-inv-layer">
@@ -1904,6 +1907,7 @@ function Inventory({ game }: { game: GameApi }) {
             {page === "ranks" && <Ranks hud={hud} game={game} />}
             {page === "quests" && <QuestList hud={hud} onClaim={(id) => game.claim(id)} />}
             {page === "skills" && <SkillTree hud={hud} onUnlock={(id) => game.unlock(id)} />}
+            {page === "journal" && <Journal hud={hud} />}
           </div>
           {(page === "bin" || page === "craft") && <InvHotbar game={game} />}
         </div>
@@ -2828,6 +2832,73 @@ function SkillTree({ hud, onUnlock }: { hud: GameApi["hud"]; onUnlock: (id: stri
           </ul>
         </div>
       ))}
+    </div>
+  );
+}
+
+// Adventurer's journal (2026-11-01): character sheet + trophies.
+const STAT_ROWS: [keyof GameApi["hud"]["stats"], string][] = [
+  ["kills", "Creatures defeated"], ["bosses", "Bosses slain"], ["quests", "Quests & contracts"], ["mined", "Blocks broken"],
+  ["placed", "Bricks placed"], ["crafted", "Items crafted"], ["smelted", "Kiln pours"], ["trades", "Trades"],
+  ["teks", "Teks parts assembled"], ["vehicles", "Vehicles owned"], ["drive", "Blocks driven"], ["shots", "Rounds fired"],
+  ["fished", "Catches"], ["days", "Days survived"], ["deaths", "Deaths"], ["reputation", "Best village standing"],
+];
+function Journal({ hud }: { hud: GameApi["hud"] }) {
+  const earned = hud.trophies.filter((t) => t.earned).length;
+  const pct = Math.min(100, (hud.xp / Math.max(1, hud.xpNeed)) * 100);
+  const [filter, setFilter] = useState<"all" | "earned" | "next">("next");
+  const rows = hud.trophies.filter((t) => (filter === "earned" ? t.earned : filter === "next" ? !t.earned : true));
+  const shown = filter === "next" ? rows.filter((t, i, a) => a.findIndex((x) => x.id.split(":")[0] === t.id.split(":")[0]) === i) : rows;
+  return (
+    <div className="sc-journal">
+      <div className="sc-rank-hero">
+        <span className="sc-rank-lv">{hud.level}</span>
+        <div>
+          <strong>{hud.rank}</strong>
+          <div className="sc-progress big">
+            <span style={{ width: `${pct}%` }} />
+          </div>
+          <small>
+            {hud.xp} / {hud.xpNeed} studs · {earned} / {hud.trophies.length} trophies{hud.path ? " · path: " + hud.path : ""}
+          </small>
+        </div>
+      </div>
+      <p className="sc-label">Deeds</p>
+      <ul className="sc-journal-stats">
+        {STAT_ROWS.map(([k, label]) => (
+          <li key={k}>
+            <b>{(hud.stats[k] ?? 0).toLocaleString()}</b>
+            <span>{label}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="sc-chips" role="tablist">
+        {(["next", "earned", "all"] as const).map((f) => (
+          <button key={f} role="tab" aria-selected={filter === f} className={"sc-chip-btn" + (filter === f ? " on" : "")} onClick={() => setFilter(f)}>
+            {f === "next" ? "Next goals" : f === "earned" ? "Earned" : "All"}
+          </button>
+        ))}
+      </div>
+      <ul className="sc-trophies">
+        {shown.map((t) => (
+          <li key={t.id} className={"sc-trophy " + t.tier + (t.earned ? " earned" : "")}>
+            <span className="sc-trophy-ic">
+              <TrophyIcon size={26} />
+            </span>
+            <div>
+              <strong>{t.name}</strong>
+              <small>{t.desc}</small>
+              {!t.earned && (
+                <div className="sc-progress">
+                  <span style={{ width: `${(t.value / t.goal) * 100}%` }} />
+                </div>
+              )}
+            </div>
+            <em>{t.earned ? "✓" : `${t.value.toLocaleString()} / ${t.goal.toLocaleString()}`}</em>
+          </li>
+        ))}
+        {shown.length === 0 && <li className="sc-muted">Nothing here yet — go make some history.</li>}
+      </ul>
     </div>
   );
 }

@@ -4018,3 +4018,24 @@ kbd {
   .sc-pause-card .sc-menu-col { gap: 8px; margin-top: 4px; }
   .sc-pause-card .sc-menu-btn { min-height: 42px; font-size: 15px; }
 }
+
+/* Adventurer's journal (2026-11-01): character sheet + trophies */
+.sc-journal { display: flex; flex-direction: column; gap: 12px; }
+.sc-journal-stats { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 8px; }
+.sc-journal-stats li { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.07); }
+.sc-journal-stats b { font: 700 18px var(--font-display); color: var(--sc-gold); }
+.sc-journal-stats span { font-size: 12px; color: var(--sc-muted); }
+.sc-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.sc-chip-btn { padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.04); color: inherit; font: 600 13px var(--font-sans); }
+.sc-chip-btn.on { background: var(--sc-gold); color: #1c140e; border-color: var(--sc-gold-edge); }
+.sc-trophies { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+.sc-trophy { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.07); opacity: 0.82; }
+.sc-trophy strong { display: block; font: 700 14px var(--font-display); }
+.sc-trophy small { display: block; font-size: 12px; color: var(--sc-muted); margin-bottom: 4px; }
+.sc-trophy em { font-style: normal; font-size: 12px; color: var(--sc-muted); white-space: nowrap; }
+.sc-trophy-ic { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: rgba(0, 0, 0, 0.25); color: #6b6b6b; }
+.sc-trophy.bronze.earned .sc-trophy-ic { color: #d08a4a; }
+.sc-trophy.silver.earned .sc-trophy-ic { color: #d6dde4; }
+.sc-trophy.gold.earned .sc-trophy-ic { color: var(--sc-gold); }
+.sc-trophy.earned { opacity: 1; border-color: rgba(245, 197, 24, 0.3); }
+.sc-trophy.earned em { color: var(--sc-gold); font-weight: 700; }

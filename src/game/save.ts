@@ -108,6 +108,9 @@ export type SaveV1 = {
   teksLvl?: [string, number][];
   /** R4: the committed build-identity path ("" / absent = unchosen). */
   path?: string;
+  /** Trophies (2026-11-01): action counters + earned trophy ids. */
+  stats?: Record<string, number>;
+  trophies?: string[];
   /** R4: named relics riding on owned gear: [baseId, name, affixKeys]. */
   named?: [number, string, string[]][];
   worldDays?: number;

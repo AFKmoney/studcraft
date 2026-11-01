@@ -26,6 +26,7 @@ import { XB, xbPose, stringHalf, prodPoint, XB_CYCLE, type XbPose } from "./cros
 import { cropLight, growChance, hydrated, nextStage, fruitSpot, canStack, harvestDrops, tramples, compostChance, COMPOST_FULL, isRipe, type FarmIds } from "./farming";
 import { CROSSBOW_HOLD } from "./heldPose";
 import { ACCESSORIES, ACC_BASE, ACC_BY_KEY, type Acc } from "./accessories";
+import { bump, newlyEarned, statsFrom, trophyRows, type Stat, type Stats } from "./trophies";
 import { buildWeapon, type Finish } from "./weaponModels";
 import { GUNS, type GunSpec, type GunState, ammoLabel, damageAt, finishReload, flashAt, newGun, recoilAt, reloadPose, startReload, tryFire } from "./firearms";
 import { itemByName } from "./recipes";
@@ -90,6 +91,8 @@ export type Hud = {
   rank: string;
   /** R4: committed path id ("" = unchosen) + relic display names by gear id. */
   path: string;
+  stats: Stats;
+  trophies: ReturnType<typeof trophyRows>;
   named: Record<number, string>;
   nextPerk: string;
   found: number[];
@@ -568,6 +571,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     level: 0,
     rank: "Bricklet",
     path: "",
+    stats: {},
+    trophies: [],
     named: {},
     nextPerk: "Steady hands",
     found: [],
@@ -788,6 +793,21 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   // R4 build identity: the committed specialization ("" = not yet
   // chosen) and the named relics riding on owned gear ids.
   let pathId: PathId | "" = "";
+  // Trophies (2026-11-01): what the player DID, persisted; trophies.ts decides.
+  let stats: Stats = {};
+  let trophies = new Set<string>();
+  let driveAcc = 0;
+  function stat(s: Stat, n = 1, max = false) {
+    if (n <= 0) return;
+    bump(stats, s, n, max);
+    for (const t of newlyEarned(stats, trophies)) {
+      trophies.add(t.id);
+      say("🏆 Trophy — " + t.name + ": " + t.desc, 3600);
+      audio.rank();
+      gainXp(t.xp);
+    }
+    saveDirty = true;
+  }
   const namedGear = new Map<number, Relic>();
   const hasAffix = (id: number, key: AffixKey) => namedGear.get(id)?.affixes.includes(key) ?? false;
   const foundryCookMul = () => (pathId === "founder" ? 0.8 : 1);
@@ -4541,6 +4561,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
 
   function snapshot() {
     hud.fps = fpsShown;
+    {
+      let best = 0;
+      for (const v of Object.values(reputation)) if (v > best) best = v;
+      if (best > (stats.reputation ?? 0)) stat("reputation", best, true);
+    }
+    hud.stats = { ...stats };
+    hud.trophies = phase === "inventory" || hud.trophies.length === 0 ? trophyRows(stats, trophies) : hud.trophies;
     hud.hotbar = hotbar.map((id) => ({ id, count: creative ? -1 : (inv[id] ?? 0) }));
     hud.offhand = offhand;
     hud.slot = slot;
@@ -4860,6 +4887,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     rankLv = 0;
     found.clear();
     skills.clear();
+    stats = {};
+    trophies = new Set();
     mana = 8;
     spellIx = 0;
     oxygen = 10;
@@ -5066,6 +5095,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     skills.clear();
     for (const id of data.skills ?? []) skills.add(id);
     pathId = (PATHS.some((p) => p.id === data.path) ? data.path : "") as PathId | "";
+    stats = statsFrom(data.stats);
+    trophies = new Set((data.trophies ?? []).filter((t) => typeof t === "string"));
     namedGear.clear();
     for (const [bid, name, affs] of data.named ?? []) {
       const ok = (affs ?? []).filter((a) => a === "keen" || a === "swift" || a === "sturdy" || a === "lucky") as AffixKey[];
@@ -5563,6 +5594,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   }
 
   function die() {
+    stat("deaths");
     if (!creative && (inv[ID.Totem] ?? 0) > 0) {
       spend(ID.Totem, 1);
       health = 10;
@@ -5684,6 +5716,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     markDirtyAt(x, z);
     netSendEdit(x, y, z, ID.Air);
     scheduleGravity(x, y, z); // §12: whatever this held up may now fall
+    stat("mined");
     if (block.sign) signs.delete(x + "," + y + "," + z);
     if (id === ID.ShulkerBox) {
       // The box keeps its contents: move the bin into the carry queue;
@@ -6639,6 +6672,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return;
     }
     const p = tech.add(held, plan.o, plan.q);
+    stat("teks");
     if (!creative) spend(held, 1);
     const c = techPartAabb(p.id, p.o, p.q).c;
     burst(c[0], c[1], c[2], def(held).color, 6);
@@ -8464,6 +8498,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
     }
     addBrick(id, sx, sy, sz);
+    stat("placed");
     rebuildBrickMesh(id);
     if (!creative) spend(id, 1);
     burst(sx / 2 + 0.5, sy + 0.8, sz / 2 + 0.5, def(id).color, 6);
@@ -9462,6 +9497,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       worldTime = 0.0416;
       worldDays++;
+      stat("days", worldDays, true);
       spawnPoint = { x: player.x, y: player.y, z: player.z };
       sinceSleep = 0;
       if (hunger > 0) health = Math.min(20, health + 4);
@@ -9711,6 +9747,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     const placeId = held === ID.RedTorch ? ID.RedTorchOn : heldDef.stairs ? stairsVariant(held, facingDir()) : held;
     if (!world.set(px, py, pz, placeId)) return;
+    stat("placed");
     if (villageAround(px, pz)) society.markPlaced(px, py, pz); // PR 6: not a crime to break later
     CH.setRemoved(px, py, pz, placeId, 0); // v4.17: a freshly placed block is whole
     markDirtyAt(px, pz);
@@ -9981,6 +10018,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     if (r === "empty") { if (!held) gunReload(id); return; }
     if (r !== "fired") return;
     wearHeld();
+    stat("shots");
     const sp = g.spread * (isSneaking() ? 0.5 : 1);
     const near = mobs.reduce((b, m) => (m.dead ? b : Math.min(b, Math.hypot(m.x - player.x, m.z - player.z))), 99);
     // Shotgun: `pellets` projectiles per shot, each with its own spread.
@@ -10758,6 +10796,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (fishT > 3.2) {
         fishT = -1;
         addInv(Math.random() < 0.7 ? ID.Fish : ID.Emerald, 1);
+        stat("fished");
         if (Math.random() < 0.15) addInv(ID.String, 1);
         wearHeld();
         say("Bite");
@@ -11887,6 +11926,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     gainXp(Math.round(10 * (1 + society.perk("xp")))); // guild perk
     say(r.msg + (r.joined ? " — you joined the " + r.joined.name + "!" : r.rankUp ? " — new rank in the " + r.rankUp.name + "!" : ""));
+    stat("quests");
     saveDirty = true;
     emit();
   }
@@ -12795,6 +12835,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   function killMob(mob: Mob) {
     if (mob.dead) return;
     mob.dead = true;
+    if ((mob.byPlayerT ?? 0) > 0) {
+      stat("kills");
+      if (mob.bossOf || mob.kind === "dragon" || mob.kind === "wither") stat("bosses");
+    }
     // R4: bosses and mini-bosses can drop named relics.
     if ((mob.byPlayerT ?? 0) > 0) {
       const relicChance = mob.kind === "dragon" || mob.kind === "wither" ? 0.4 : mob.kind === "ravager" || mob.kind === "evoker" ? 0.15 : 0;
@@ -14187,6 +14231,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       quests: quests.map((q) => ({ id: q.id, n: q.n, done: q.done })),
       skills: [...skills],
       path: pathId,
+      stats: { ...stats },
+      trophies: [...trophies],
       named: [...namedGear.values()].map((r) => [r.baseId, r.name, [...r.affixes]] as [number, string, string[]]),
       mana,
       spell: spellIx,
@@ -15049,7 +15095,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         }
         const hubLvl = HUB_LVL[(teksLvl.get(vehEnt.hubKey) ?? 1) - 1];
         const prevJointAngles = v.joints.map((j) => j.angle);
+        const vx0 = v.pos.x, vz0 = v.pos.z;
         stepVeh(v, dt, { throttle: tilted ? 0 : sample.fwd, steer: sample.str, channel: v.hubChannel, battMul: hubLvl.battMul, genMul: hubLvl.genMul }, (x, z) => groundY(x, z, v.pos.y + 1.5));
+        driveAcc += Math.hypot(v.pos.x - vx0, v.pos.z - vz0);
+        if (driveAcc >= 10) { stat("drive", Math.floor(driveAcc)); driveAcc -= Math.floor(driveAcc); }
         placeVehGroup();
         applyDriverView();
         // B21: the driver's look turns with the vehicle (free look stays relative).
@@ -15224,6 +15273,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const nextTime = (worldTime + step) % 1;
     if (nextTime < worldTime) {
       worldDays++;
+      stat("days", worldDays, true);
       saveDirty = true;
     }
     worldTime = nextTime;
@@ -15948,12 +15998,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
             const p = pour(f, f.lvl ?? 1, yieldN);
             f.out = p.id;
             f.outN += p.n;
+            stat("smelted");
             distilMul = p.fuelMul;
           } else {
             const baseOut = ratioRow ? ratioN : yieldN;
             if (baseOut > 0) f.out = product;
             else if (!f.outN) f.out = 0;
             f.outN += baseOut;
+            if (baseOut > 0) stat("smelted");
           }
           // B25-A4: a melted Teks part also gives its casting copper
           // back, dropped beside the kiln like the lava-bucket return
@@ -17448,6 +17500,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       if (crafted > 0) {
         if (!recipe.special) say(crafted > 1 ? `${recipe.name} ×${crafted * recipe.n}` : recipe.name);
+        stat("crafted", crafted * recipe.n);
         if (recipe.lvl) gainXp(2 * crafted);
         audio.place();
       }
@@ -18075,6 +18128,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       tradeXp[traderRole] = (tradeXp[traderRole] ?? 0) + 1;
       if (repAtKey(key) < 30) addRep(key, 1);
       say(name + " delivered — she's yours. Mind the paint.");
+      stat("vehicles");
       saveDirty = true;
       emit();
     },
@@ -18099,6 +18153,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       tradeXp[traderRole] = (tradeXp[traderRole] ?? 0) + 1;
       if (rep < 30) addRep(key, 1);
       const after = tradeLevelFor(tradeXp[traderRole]);
+      stat("trades");
       if (after > before) say(traderOf(traderRole).name + " is now a " + TIER_NAMES[after] + "! New offers unlocked.");
       else say("Traded");
       saveDirty = true;
@@ -18155,6 +18210,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         } else if (!creative && !q.keep) spend(q.what, q.need);
       } else if (prog.n < q.need) return say(q.detail);
       prog.done = true;
+      stat("quests");
       prog.n = q.need;
       addRep(repKeyFor(player.x, player.z), 5);
       const before = rankLv;

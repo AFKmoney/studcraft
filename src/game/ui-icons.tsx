@@ -212,6 +212,14 @@ export const MedalIcon = (p: P) => (
     <path d="m12 11.6 1.1 2.2 2.4.3-1.8 1.7.5 2.4-2.2-1.2-2.2 1.2.5-2.4-1.8-1.7 2.4-.3z" fill="var(--icon-hole, #1c140e)" />
   </Svg>
 );
+export const TrophyIcon = (p: P) => (
+  <Svg {...p}>
+    <path d="M7 3.5h10v5.2a5 5 0 0 1-10 0z" fill="currentColor" />
+    <path d="M7 5.2H4.2v1.6A3.4 3.4 0 0 0 7.6 10.2M17 5.2h2.8v1.6a3.4 3.4 0 0 1-3.4 3.4" {...stroke} strokeWidth={1.7} />
+    <path d="M10.6 13.4h2.8v3.4h-2.8z" fill="currentColor" />
+    <rect x="7.4" y="16.8" width="9.2" height="3.4" rx="1.2" fill="currentColor" />
+  </Svg>
+);
 export const HammerIcon = (p: P) => (
   <Svg {...p}>
     <path d="M13.2 3.6 20.4 10.8l-2.6 2.6-2.4-2.4-1.5 1.5L7 19.4a2.2 2.2 0 0 1-3.1-3.1l6.9-6.9 1.5-1.5-1.7-1.7z" fill="currentColor" />
