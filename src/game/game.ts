@@ -372,6 +372,7 @@ declare global {
       setSteer?: (v: number) => void;
       setLook?: (yaw: number, pitch: number) => void;
       setDig?: (mine: boolean, place: boolean) => void;
+      getFallersQa?: () => { n: number; scanAcc: number; ys: number[] };
       getBlock?: (x: number, y: number, z: number) => number;
       put?: (x: number, y: number, z: number, id: number) => boolean;
       ignite?: (x: number, y: number, z: number) => boolean;
@@ -10585,6 +10586,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     mob.mesh.position.set(mob.x, sy, mob.z);
   }
 
+  let fallScanAcc = 0;
   function tickExtras(dt: number) {
     sinceSleep += dt;
     speedT = Math.max(0, speedT - dt);
@@ -10761,7 +10763,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const gx = Math.floor(player.x);
     const gy = Math.floor(player.y);
     const gz = Math.floor(player.z);
-    if ((elapsed * 4) % 1 < dt * 4) {
+    // Fixed 4 Hz cadence via an accumulator: the old `(elapsed*4)%1 < dt*4`
+    // test could never fire below 20 FPS (dt clamped to 0.05 → float drift),
+    // so sand/gravel floated forever on slow devices (BUG-3, measured).
+    fallScanAcc += dt;
+    if (fallScanAcc >= 0.25) {
+      fallScanAcc %= 0.25;
       // Gravity spawner: unsupported `fall` blocks (sand, gravel, soul)
       // become real falling entities — see updateFallers. The old code
       // teleported them one cell per tick; this only spawns now.
@@ -16749,6 +16756,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       mousePlace = place;
     },
     getBlock: (x: number, y: number, z: number) => world.get(Math.floor(x), Math.floor(y), Math.floor(z)),
+    getFallersQa: () => ({ n: fallers.length, scanAcc: fallScanAcc, ys: fallers.slice(0, 8).map((f) => +f.y.toFixed(2)) }),
     // v4.15 fire QA hooks
     put: (x: number, y: number, z: number, id: number) => {
       const ok = world.set(Math.floor(x), Math.floor(y), Math.floor(z), id);
