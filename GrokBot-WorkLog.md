@@ -245,3 +245,15 @@ Plan (phases, une PR par phase, merge quand tsc + node --test + vite build sont 
 - Gardes : heaume + cuirasse + hallebarde + bouclier triangulaire ; chef : bicorne + cape + calice ; receleur : bicorne + cape + sabre ; marchand-équipementier : casquette + sac + valise (ces deux rôles tombaient avant sur la tenue de mécanicien).
 - 13 guildes habillées (techno, guerriers, marchands, envoyés, voleurs, rôdeurs, mécanos, alchimistes, mineurs, explorateurs, bâtisseurs, forgerons, assassins) ; les sorciers gardent leur tenue de mage.
 - Crochet QA `spawnOutfit`. Tests : outfits.test.ts (3) — 315 au vert. Captures b21-minifig-outfits-1..4.png.
+
+### B21 véhicules — Phase B + C (2026-10-31, Grok Bot)
+- **Phase B (game.ts)** : l'œil du pilote vient du cockpit (`cockpitEye`, repli `computeSeatEye`) ; le cockpit n'est jamais masqué comme occultant (`driverOccluders`) ; vitres du cockpit = boîtes procédurales en `skin()` transparent (SNR, audit OK) qui suivent la matrice du cockpit.
+- Touche **V** en conduite : bascule 1re / 3e personne (F5 marche toujours).
+- **Tir en conduite** : clic gauche (bouton ✸ tactile, gâchette RT) = tir de toutes les armes ; tourelle → visée souris, sinon verrouillé vers l'avant. Munitions prises dans l'inventaire (∞ en créatif), énergie = batterie du véhicule.
+  - canon plastique : boulet balistique, écaille 5 pièces du bloc touché ; canon en or / roquettes : explosion (`explode`, sans blesser le pilote) + dégâts de zone aux mobs ; laser émeraude : rayon instantané, brûle mobs et blocs (temps selon dureté), chaleur/surchauffe.
+  - Crime/réputation : `societyCrimeAt(..., "break")` par impact, `addRep` négatif sur villageois/golems (mêmes règles que les balles).
+  - Effets : flash + fumée à la bouche, recul, secousse, étincelles d'impact, rayon vert.
+- Tableau de bord HUD : vitesse, énergie, arme(s) + munitions/chaleur.
+- **Phase C** : validation du garage à l'entrée (cockpit + hub requis, sinon message) et à la sauvegarde catalogue (sauvegardé quand même, avec l'état « Build OK / not ready »).
+- Hooks QA : `vehFireQa`, `getVehArmsQa`. Tests : +3 (muzzles/pod, cockpit non masqué, câblage game.ts) → 325/325. tsc 0, vite build OK.
+- Captures (SwiftShader) : /workspace/studcraft-qa/shots/b21-veh-*.png.

@@ -1380,6 +1380,14 @@ function Hud({ game, touchUI }: { game: GameApi; touchUI: boolean }) {
         )}
       </div>
       {hud.targetName && <div className="sc-target">{hud.targetName}</div>}
+      {hud.driving && hud.vehDash && (
+        <div
+          className="sc-veh-dash"
+          style={{ position: "absolute", left: "50%", bottom: 92, transform: "translateX(-50%)", padding: "4px 12px", borderRadius: 8, background: "rgba(10,14,20,0.62)", color: "#d9f7e6", font: "600 13px/1.4 ui-monospace, monospace", pointerEvents: "none", whiteSpace: "nowrap" }}
+        >
+          {hud.vehDash} · V view
+        </div>
+      )}
       {!touchUI && !hud.locked && !hud.padActive && (
         <button
           className="sc-capture"
@@ -1761,6 +1769,9 @@ function TouchControls({ game }: { game: GameApi }) {
           </HoldButton>
           <HoldButton className="steerr" label="Steer right" onHold={(v) => (game.touch.moveX = v ? 1 : 0)} buzz={buzz}>
             ▶
+          </HoldButton>
+          <HoldButton className="mine" label="Fire vehicle weapons" onHold={(v) => (game.touch.mine = v)} buzz={buzz}>
+            ✸
           </HoldButton>
           {hud.bucketCap > 0 && (
             <button

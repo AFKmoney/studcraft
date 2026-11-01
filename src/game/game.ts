@@ -30,6 +30,9 @@ import { buildWeapon, type Finish } from "./weaponModels";
 import { GUNS, type GunSpec, type GunState, ammoLabel, damageAt, finishReload, flashAt, newGun, recoilAt, reloadPose, startReload, tryFire } from "./firearms";
 import { itemByName } from "./recipes";
 import { driverOccluders, liftToFit, seatEye, vehChaseDistance, viewBlocked } from "./vehView";
+import { WEAPONS, TURRET_ID, aimDir, coolWeapon, fireWeapon, laserBurnTime, mobDamage, muzzleOf, newWeaponState, weaponLabel, type WeaponState } from "./vehArms";
+import { COCKPITS, cockpitEye, cockpitForward, cockpitPart, dashGauges, partLocalToVehicle } from "./cockpits";
+import { buildSummary, validateBuild } from "./vehBuild";
 import { armorMaxDur, combineDur, repairCost, wearArmor } from "./foundry";
 import { plasticCost, salvageOf } from "./recipes";
 import { AFFIX_INFO, MATERIALS, RARE_MELT, TIERS, cookRate, meltInto, meltRatioStep, rejectReason, poolGlow, pour, stepHeat, tierIndex, type Pool } from "./foundry";
@@ -130,6 +133,8 @@ export type Hud = {
   /** P5c-3: dig bucket load / capacity while driving a digger (0 when none). */
   bucketLoad: number;
   bucketCap: number;
+  /** B21: driving dashboard (speed, energy, weapons) — "" when not driving. */
+  vehDash: string;
   /** Build mode (Tab / fly camera) is on: the touch UI shows fly + rotation controls. */
   buildMode: boolean;
   signEdit: { x: number; y: number; z: number; text: string } | null;
@@ -348,6 +353,8 @@ declare global {
     __controlsTest?: {
       enterVehicleQa?: () => boolean;
       leaveVehicleQa?: () => boolean;
+      vehFireQa?: (on: boolean) => void;
+      getVehArmsQa?: () => unknown;
       talkQa?: (soc: string) => boolean;
       contractsQa?: () => unknown[];
       storyQa?: () => unknown;
@@ -585,6 +592,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     driving: false,
     bucketLoad: 0,
     bucketCap: 0,
+    vehDash: "",
     buildMode: false,
     signEdit: null as { x: number; y: number; z: number; text: string } | null,
     seed: 0,
@@ -4374,6 +4382,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     pierce?: boolean;
     hitSet?: Set<Mob>;
     splash?: number;
+    /** B21: a vehicle weapon shell (its weapon part id). */
+    veh?: number;
     /** t91u: exact bullet damage + its own gravity */
     bullet?: number;
     grav?: number;
@@ -6679,7 +6689,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     const model = modelFromParts(src, name, "Local", ID.TechHub, Date.now());
     storeCatalogue(upsertModel(loadCatalogue(), model));
-    say("Saved to catalogue: " + name + " (" + model.parts.length + " parts)");
+    // B21: the garage validates the build — saved either way (work in progress), with its status.
+    const vr = validateBuild(model.parts.map((p) => p.id), (a) => (creative ? Infinity : inv[a] ?? 0));
+    say("Saved to catalogue: " + name + " (" + model.parts.length + " parts) · " + buildSummary(vr));
     audio.place();
     return true;
   }
@@ -6905,11 +6917,21 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     bucket: { vp: VPart; load: Map<number, number>; cap: number } | null;
     lastBucketPos: { x: number; y: number; z: number } | null;
     digSayCd: number;
+    /** B21: weapons aboard (state + their part), turret present. */
+    arms: { st: WeaponState; vp: VPart }[];
+    turret: boolean;
+    /** B21: laser beam mesh + the block it is burning. */
+    beam: THREE.Mesh | null;
+    burn: { key: string; t: number };
   };
   let vehEnt: VehEnt | null = null;
   /** B17: the driver's eye point in the vehicle frame, searched
    *  at entry by computeSeatEye (null = fall back to the hub). */
   let vehSeatEye: { x: number; y: number; z: number } | null = null;
+  /** B21: fire held this step while driving an armed vehicle. */
+  let vehFireHeld = false;
+  let vehFireQaOn = false;
+  let vehDashCd = 0;
   /** uid of the Teks part under the crosshair this frame (-1 = none):
    * the touch Channel button replays the use gesture on it. */
   let aimTechUid = -1;
@@ -6981,6 +7003,173 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   const _vehJ = new THREE.Matrix4();
   const _vehSlide = new THREE.Matrix4();
 
+  // ---- B21: vehicle weapons (Nuts & Bolts / Trailmakers) -------------
+  // Cockpit glass: the shared SNR plastic skin, transparent.
+  const paneMat = skin(0xbfe6ff, { transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide });
+  const beamMat = skin(0x3dff8a, { transparent: true, opacity: 0.75, depthWrite: false });
+  const shellMat: Record<string, THREE.Material> = {
+    cannon: skin(0xd8d0c0),
+    goldCannon: skin(0xf2c230),
+    rocketPod: skin(0xd04030),
+  };
+  const shellGeo = new THREE.SphereGeometry(0.16, 10, 8);
+  /** Ammo in the pack for a weapon (∞ in creative, energy weapons ∞). */
+  function vehAmmoHave(st: WeaponState): number {
+    const w = WEAPONS[st.id];
+    if (!w || !w.ammo || creative) return Infinity;
+    return inv[w.ammo] ?? 0;
+  }
+  /** World point + world direction of a weapon's muzzle this frame. */
+  function vehMuzzle(ent: VehEnt, a: { st: WeaponState; vp: VPart }) {
+    const v = ent.v;
+    const m = muzzleOf(a.st);
+    const pl = partLocalToVehicle(a.vp, m);
+    const f = cockpitForward(a.vp);
+    const p0 = partWorldPoint(v, a.vp, pl);
+    const p1 = partWorldPoint(v, a.vp, { x: pl.x + f.x, y: pl.y + f.y, z: pl.z + f.z });
+    const vehYaw = Math.atan2(-(p1.x - p0.x), -(p1.z - p0.z));
+    const d = aimDir(vehYaw, ent.turret, player.yaw, player.pitch);
+    return { p: p0, d };
+  }
+  /** Village reputation / crime for a vehicle hit on a mob. */
+  function vehHitMob(m: Mob, dmg: number) {
+    if (dmg <= 0 || m.dead) return;
+    m.hp -= dmg;
+    if (m.kind === "villager" || m.kind === "golem") {
+      m.byPlayerT = 6;
+      addRep(repKeyFor(m.homeX ?? m.x, m.homeZ ?? m.z), m.kind === "villager" ? -3 : -2);
+      if (m.soc === "guard") guardStruck = true;
+    }
+    if (m.kind === "enderman" || m.kind === "bee") m.mad = true;
+    if (m.hp <= 0) killMob(m);
+  }
+  /** A cannonball / shell / rocket lands: chip, or blast + splash. */
+  function vehShellImpact(s: Shot, block: [number, number, number] | null) {
+    const w = WEAPONS[s.veh!];
+    if (!w) return;
+    const bx = Math.floor(s.x), by = Math.floor(s.y), bz = Math.floor(s.z);
+    if (w.blockHit === "blast") {
+      societyCrimeAt(bx, by, bz, "break"); // one crime per volley
+      explode(bx, by, bz, Math.round(w.blast), true);
+      for (const m of mobs) {
+        if (m.dead || m.kind === "boat" || m.kind === "cart") continue;
+        const d = Math.hypot(m.x - s.x, m.y + 0.6 - s.y, m.z - s.z);
+        if (d < w.blast + 0.75) vehHitMob(m, mobDamage(w, Math.max(0.8, d)));
+      }
+    } else if (block) {
+      const [x, y, z] = block;
+      societyCrimeAt(x, y, z, "break");
+      const pieces = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].sort(() => Math.random() - 0.5).slice(0, 5);
+      if (chipPieces(x, y, z, pieces, () => [s.vx * 0.15 + (Math.random() - 0.5) * 3, 3 + Math.random() * 2, s.vz * 0.15 + (Math.random() - 0.5) * 3], { n: 6 })) {
+        world.set(x, y, z, ID.Air);
+      }
+      dirty.add(Math.floor(x / CS) + "," + Math.floor(z / CS));
+      burst(s.x, s.y, s.z, "#d8d0c0", 10);
+      audio.break();
+      saveDirty = true;
+    } else burst(s.x, s.y, s.z, "#d8d0c0", 6);
+  }
+  /** One physics step of fire control while driving (fire = held). */
+  function vehFireTick(ent: VehEnt, dt: number, fire: boolean) {
+    const now = performance.now() / 1000;
+    let lasing = false;
+    for (const a of ent.arms) {
+      coolWeapon(a.st, dt);
+      if (!fire) continue;
+      const w = WEAPONS[a.st.id];
+      const mz = vehMuzzle(ent, a);
+      const have = vehAmmoHave(a.st);
+      const r = fireWeapon(a.st, now, dt, have, ent.v.battery);
+      if (r.gate !== "fired") {
+        if (r.gate === "empty" && now - a.st.lastShot > 1.5) {
+          a.st.lastShot = now;
+          say(w.name + " — out of ammo");
+        }
+        continue;
+      }
+      if (r.ammo && !creative) spend(w.ammo, r.ammo);
+      ent.v.battery = Math.max(0, ent.v.battery - r.energy);
+      if (w.kind === "laser") {
+        lasing = true;
+        vehLaser(ent, mz.p, mz.d, w, dt);
+        continue;
+      }
+      ent.v.vel -= w.recoil;
+      const mesh = new THREE.Mesh(shellGeo, shellMat[w.kind] ?? shellMat.cannon);
+      if (w.kind === "goldCannon") mesh.scale.setScalar(1.35);
+      if (w.kind === "rocketPod") mesh.scale.set(0.7, 0.7, 0.7);
+      mesh.position.set(mz.p.x, mz.p.y, mz.p.z);
+      scene.add(mesh);
+      shots.push({ x: mz.p.x, y: mz.p.y, z: mz.p.z, vx: mz.d.x * w.speed, vy: mz.d.y * w.speed, vz: mz.d.z * w.speed, life: 4, friendly: true, mesh, bullet: w.dmg, grav: w.grav, veh: w.id });
+      // muzzle flash + smoke (procedural particles)
+      burst(mz.p.x, mz.p.y, mz.p.z, w.kind === "goldCannon" ? "#ffcf40" : "#ffd27a", w.kind === "goldCannon" ? 14 : 8);
+      burst(mz.p.x, mz.p.y, mz.p.z, "#9a9a9a", 5);
+      shake = Math.max(shake, w.kind === "goldCannon" ? 0.3 : 0.12);
+      audio.hit();
+    }
+    if (ent.beam) ent.beam.visible = lasing;
+  }
+  /** Emerald laser: an instant beam raymarched from the muzzle; burns
+   *  mobs (dmg per 0.1 s) and heats the first block until it gives. */
+  function vehLaser(ent: VehEnt, p: { x: number; y: number; z: number }, d: { x: number; y: number; z: number }, w: (typeof WEAPONS)[number], dt: number) {
+    const range = w.range ?? 20;
+    let len = range;
+    let hitBlock: [number, number, number] | null = null;
+    let hitMob: Mob | null = null;
+    for (let t = 0.2; t < range; t += 0.2) {
+      const x = p.x + d.x * t, y = p.y + d.y * t, z = p.z + d.z * t;
+      for (const m of mobs) {
+        if (m.dead || m.kind === "boat" || m.kind === "cart") continue;
+        if (Math.hypot(m.x - x, m.z - z) < 0.55 && y > m.y && y < m.y + 1.8) { hitMob = m; break; }
+      }
+      if (hitMob) { len = t; break; }
+      const bx = Math.floor(x), by = Math.floor(y), bz = Math.floor(z);
+      if (def(world.get(bx, by, bz)).solid) { hitBlock = [bx, by, bz]; len = t; break; }
+    }
+    if (!ent.beam) {
+      ent.beam = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 1), beamMat);
+      scene.add(ent.beam);
+    }
+    const b = ent.beam;
+    b.visible = true;
+    b.position.set(p.x + (d.x * len) / 2, p.y + (d.y * len) / 2, p.z + (d.z * len) / 2);
+    b.scale.set(1, 1, len);
+    b.lookAt(p.x + d.x * len, p.y + d.y * len, p.z + d.z * len);
+    const ex = p.x + d.x * len, ey = p.y + d.y * len, ez = p.z + d.z * len;
+    if (Math.random() < 0.5) burst(ex, ey, ez, "#3dff8a", 2);
+    if (hitMob) {
+      vehHitMob(hitMob, mobDamage(w, 0, dt));
+      hitMob.burn = Math.max(hitMob.burn ?? 0, 2);
+    }
+    if (hitBlock) {
+      const [x, y, z] = hitBlock;
+      const key = x + "," + y + "," + z;
+      if (ent.burn.key !== key) ent.burn = { key, t: 0 };
+      ent.burn.t += dt;
+      const id = world.get(x, y, z);
+      const hard = def(id).hard;
+      if (id !== ID.Bedrock && hard !== Infinity && ent.burn.t >= laserBurnTime(hard)) {
+        societyCrimeAt(x, y, z, "break");
+        world.set(x, y, z, ID.Air);
+        dirty.add(Math.floor(x / CS) + "," + Math.floor(z / CS));
+        burst(x + 0.5, y + 0.5, z + 0.5, "#ff8a3d", 10);
+        audio.break();
+        ent.burn = { key: "", t: 0 };
+        saveDirty = true;
+      }
+    } else ent.burn = { key: "", t: 0 };
+  }
+  /** Dashboard readout (HUD + log): speed, ammo, energy, weapons. */
+  function vehDashText(ent: VehEnt): string {
+    const now = performance.now() / 1000;
+    const first = ent.arms[0];
+    const ammo = first ? vehAmmoHave(first.st) : Infinity;
+    const g = dashGauges(ent.v, ammo);
+    const parts = ["SPD " + Math.round(Math.abs(ent.v.vel) * 3.6) + " km/h", "NRG " + Math.round(g.energy * 100) + "%"];
+    for (const a of ent.arms) parts.push(weaponLabel(a.st, vehAmmoHave(a.st), now));
+    return parts.join(" · ");
+  }
+
   /** B17: the driver's eye point in the vehicle frame, searched
    *  at entry. Behind the hub (+z is the rear) and above it, the
    *  first candidate that clears every part's frame AABB by
@@ -7044,6 +7233,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       say("Not a vehicle yet — missing: " + missing.join(", "));
       return false;
     }
+    // B21: the garage law — a cockpit and a power source (hub) aboard.
+    {
+      const rep = validateBuild(asm.map((p) => p.id), (a) => (creative ? Infinity : inv[a] ?? 0));
+      if (!rep.ok) {
+        say(buildSummary(rep));
+        return false;
+      }
+    }
     if (hubPart.on === false) {
       toggleTechPart(hubPart);
       say("Hub on — use it again to drive");
@@ -7073,6 +7270,24 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       return { vp, mesh, base, rodMesh };
     });
+    // B21: cockpit window panes — thin procedural boxes in the
+    // cockpit's own module space, shaded by the shared SNR skin()
+    // (transparent), riding the cockpit's matrix like any part.
+    const cpVp = cockpitPart(vehicle);
+    if (cpVp) {
+      for (const pane of COCKPITS[cpVp.id].panes) {
+        const w = Math.max(0.06, Math.abs(pane.b[0] - pane.a[0])), h = Math.max(0.06, Math.abs(pane.b[1] - pane.a[1])), d = Math.max(0.06, Math.abs(pane.b[2] - pane.a[2]));
+        const g = new THREE.BoxGeometry(w, h, d);
+        g.translate((pane.a[0] + pane.b[0]) / 2, (pane.a[1] + pane.b[1]) / 2, (pane.a[2] + pane.b[2]) / 2);
+        const pm = new THREE.Mesh(g, paneMat);
+        pm.matrixAutoUpdate = false;
+        pm.renderOrder = 2;
+        const base = meshes.find((m) => m.vp === cpVp)!.base;
+        pm.matrix.copy(base);
+        group.add(pm);
+        meshes.push({ vp: cpVp, mesh: pm, base, rodMesh: null });
+      }
+    }
     scene.add(group);
     const bucketVp = vehicle.parts.find((p) => p.id === ID.DigBucket);
     vehEnt = {
@@ -7084,9 +7299,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       bucket: bucketVp ? { vp: bucketVp, load: new Map<number, number>(), cap: 4 } : null,
       lastBucketPos: null,
       digSayCd: 0,
+      arms: vehicle.parts.filter((p) => p.id in WEAPONS).map((vp) => ({ st: newWeaponState(vp.uid, vp.id), vp })),
+      turret: vehicle.parts.some((p) => p.id === TURRET_ID),
+      beam: null,
+      burn: { key: "", t: 0 },
     };
     hud.driving = true;
-    vehSeatEye = computeSeatEye(vehicle);
+    vehSeatEye = cockpitEye(vehicle) ?? computeSeatEye(vehicle);
     vehHidden = vehSeatEye ? driverOccluders(vehicle, vehSeatEye) : new Set();
     applyDriverView();
     placeVehGroup();
@@ -7146,10 +7365,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
     }
     scene.remove(ent.group);
+    if (ent.beam) scene.remove(ent.beam);
     vehEnt = null;
     vehSeatEye = null;
     vehHidden = new Set();
     hud.driving = false;
+    hud.vehDash = "";
     syncTechMeshes();
     player.x = ent.v.pos.x + 1.6;
     player.z = ent.v.pos.z;
@@ -10619,6 +10840,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         dead = true;
       }
       if (dead && s.splash) applySplash(s.splash, s.x, s.y, s.z);
+      if (dead && s.veh) vehShellImpact(s, def(hitBlockId).solid ? [bx, by, bz] : null);
       if (dead) scene.remove(s.mesh);
       else shots[w++] = s;
     }
@@ -12504,7 +12726,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     return fell;
   }
 
-  function explode(x: number, y: number, z: number, rad = 3) {
+  function explode(x: number, y: number, z: number, rad = 3, noSelf = false) {
     const r = rad;
     const ex = x + 0.5, ey = y + 0.5, ez = z + 0.5;
     const budget = { n: 90 };
@@ -12546,7 +12768,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const c1z = Math.floor((z + r) / CS);
     for (let cz = c0z; cz <= c1z; cz++) for (let cx = c0x; cx <= c1x; cx++) dirty.add(cx + "," + cz);
     const d = Math.hypot(player.x - x, player.y + 1 - y, player.z - z);
-    if (d < 5.5 && phase === "play") {
+    if (d < 5.5 && phase === "play" && !noSelf) {
       const k = (1 - d / 5.5) * 9;
       hurt(Math.round((1 - d / 5.5) * 10));
       player.vx += ((player.x - x) / (d || 1)) * k;
@@ -14586,6 +14808,23 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           keys.delete("KeyC");
           cycleDriveChannel();
         }
+        // B21: first / third person toggle (V), fire control, dashboard.
+        if (keys.has("KeyV")) {
+          keys.delete("KeyV");
+          settings.third = !settings.third;
+          applyDriverView();
+          emit();
+        }
+        vehFireTick(vehEnt, dt, vehFireHeld);
+        vehDashCd -= dt;
+        if (vehDashCd <= 0) {
+          vehDashCd = 0.25;
+          const t = vehDashText(vehEnt);
+          if (t !== hud.vehDash) {
+            hud.vehDash = t;
+            emit();
+          }
+        }
         if (vehEnt.bucket) {
           vehEnt.digSayCd = Math.max(0, vehEnt.digSayCd - dt);
           const bp = partWorldPoint(v, vehEnt.bucket.vp, vehEnt.bucket.vp.centreLocal);
@@ -15662,6 +15901,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     while (acc > 0 && guard++ < 5) {
       const step = Math.min(acc, 1 / 60);
       const sample = poll(first);
+      // B21: an armed vehicle turns the attack button into fire control.
+      vehFireHeld = !!vehEnt && vehEnt.arms.length > 0 && (sample.mine || vehFireQaOn);
+      if (vehFireHeld) sample.mine = false;
       physics(step, sample);
       first = false;
       acc -= step;
@@ -16057,6 +16299,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return !!vehEnt;
     },
     leaveVehicleQa: () => leaveVehicle(),
+    // B21 armoury QA hooks (inert in play): hold the fire control, read the dashboard.
+    vehFireQa: (on: boolean) => {
+      vehFireQaOn = on;
+    },
+    getVehArmsQa: () => (vehEnt ? { dash: vehDashText(vehEnt), arms: vehEnt.arms.map((a) => ({ id: a.st.id, heat: a.st.heat })), turret: vehEnt.turret, third: settings.third } : null),
     // B21 society QA hooks (inert in play): talk to the nearest NPC of a
     // society role through the real path; contracts; the story director.
     talkQa: (soc: string) => {

@@ -5,7 +5,7 @@ import { ID, TEKS, def } from "./blocks.ts";
 import { RECIPES } from "./recipes.ts";
 import { readFileSync } from "node:fs";
 import { SPECS, TechWorld } from "./teks.ts";
-import { WEAPONS, HEAT_RESUME, POD_TUBES, aimDir, ballistic, coolWeapon, crimeOf, fireWeapon, laserBurnTime, mobDamage, newWeaponState } from "./vehArms.ts";
+import { WEAPONS, MUZZLES, muzzleOf, HEAT_RESUME, POD_TUBES, aimDir, ballistic, coolWeapon, crimeOf, fireWeapon, laserBurnTime, mobDamage, newWeaponState } from "./vehArms.ts";
 import { COCKPITS, cockpitEye, cockpitForward, cockpitPart, dashGauges } from "./cockpits.ts";
 import { validateBuild, validateModel, buildSummary } from "./vehBuild.ts";
 import { builtinModels, decodeModel, encodeModel, modelFromParts } from "./catalogue.ts";
@@ -146,4 +146,37 @@ test("save round-trip: an armed build survives encode/decode and still validates
   assert.deepEqual(back, m);
   assert.equal(validateModel(back).ok, true);
   assert.ok(back.parts.some((p) => p.id === ID.VehCannon) && back.parts.some((p) => p.id === ID.CockpitCage));
+});
+
+test("phase B: muzzles sit at the barrel tips, the pod cycles its 4 tubes", () => {
+  for (const id of Object.keys(WEAPONS).map(Number)) {
+    assert.ok(MUZZLES[id]?.length, "muzzle for " + id);
+    for (const m of MUZZLES[id]) assert.ok(m[2] < -2, "muzzle ahead of the mount");
+  }
+  const st = newWeaponState(1, ID.VehRocketPod);
+  const seen = new Set<string>();
+  let t = 0;
+  for (let i = 0; i < 4; i++) {
+    seen.add(muzzleOf(st).join(","));
+    assert.equal(fireWeapon(st, (t += 1), 0.016, 10, 1).gate, "fired");
+  }
+  assert.equal(seen.size, 4);
+});
+
+test("phase B: the cockpit is never hidden as an occluder of the driver's own view", async () => {
+  const { driverOccluders } = await import("./vehView.ts");
+  for (const name of ["Starter Buggy", "Rig Digger"]) {
+    const { parts } = placeModel(name);
+    const { vehicle } = vehicleFromAssembly(parts, { hubChannel: "A", battery: 1, fuel: 0 });
+    const cp = cockpitPart(vehicle)!;
+    assert.ok(!driverOccluders(vehicle, cockpitEye(vehicle)!).has(cp.uid), name);
+  }
+});
+
+test("phase B: game.ts wires cockpit eye, build law, fire control and the V view toggle", () => {
+  const src = readFileSync(new URL("./game.ts", import.meta.url), "utf8");
+  assert.match(src, /vehSeatEye = cockpitEye\(vehicle\) \?\? computeSeatEye\(vehicle\)/);
+  assert.match(src, /validateBuild\(asm\.map/);
+  assert.match(src, /vehFireTick\(vehEnt, dt, vehFireHeld\)/);
+  assert.match(src, /keys\.has\("KeyV"\)/);
 });

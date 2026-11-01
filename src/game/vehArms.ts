@@ -136,3 +136,17 @@ export function weaponLabel(st: WeaponState, ammoHave: number, now: number): str
   if (w.kind === "rocketPod" && now < st.reloadUntil) return w.name + " · reloading";
   return w.name + " · " + (Number.isFinite(ammoHave) ? ammoHave : "∞");
 }
+
+/** Muzzle points, PART-LOCAL modules (−Z forward), per weapon part.
+ *  The rocket pod lists its 4 tubes (fired in turn). */
+export const MUZZLES: Record<number, [number, number, number][]> = {
+  [ID.VehCannon]: [[0, 1.4, -6.1]],
+  [ID.VehGoldCannon]: [[0, 1.7, -6.9]],
+  [ID.VehLaser]: [[0, 1.25, -4.8]],
+  [ID.VehRocketPod]: [[-0.75, 1.65, -2.7], [0.75, 1.65, -2.7], [-0.75, 3.05, -2.7], [0.75, 3.05, -2.7]],
+};
+/** Which muzzle a shot leaves from (rocket pods cycle their tubes). */
+export const muzzleOf = (st: WeaponState): [number, number, number] => {
+  const m = MUZZLES[st.id] ?? [[0, 1, -2]];
+  return m[(POD_TUBES - st.tubes + m.length) % m.length] ?? m[0];
+};
