@@ -5053,3 +5053,17 @@ Claim `7d8140f2`. Alignement sur la loi de conservation (Guide §1) + §22 P-C (
 - **Alignement** : les deux cases A1 du master plan passent [x] avec la preuve ci-dessus et la mention « en attente verdict Philippe » (règle du plan : cocher = mesuré; son œil sur Pages ferme). La mesure perf des studs 12 segments reste due sous qa97 (§15, ouverte).
 - **Repérés au même balayage, NON touchés (un item par run)** : §21 A2 ligne parente encore [ ] alors que ses sous-lignes B5/B7 sont [x] et que `tickRedstone` est retiré (commentaire « Redstone: RETIRED », game.ts); §21 A5 (eau) encore [ ] alors que Water ET Magma portent `drop: -1` dans blocks.ts. À aligner aux prochains runs de balayage, même méthode.
 - **Fermeture** : verdict de Philippe sur Pages/PC — « prêt pour son verdict », pas « fini » sur parole d'agent.
+
+## 2026-11-01 ~10:40 MST — Claude (retour : scrute du repo, QA navigateur, correctifs au fil de l'eau)
+
+Rig local : build standalone hors-ligne (esbuild + Tailwind CLI, three r186 + exemples jsm récupérés de GitHub — npm est bloqué dans cette session), Chromium headless SwiftShader (~0,3 FPS : les mesures de mouvement temps réel n'y valent rien, les hooks `__controlsTest` oui). Portes : tsc 0 (hors artefacts d'environnement), tests **364/364**.
+
+- **BUG-3 sable flottant — CORRIGÉ + MESURÉ** (`eb54dff`) : le scan des fallers utilisait `(elapsed*4)%1 < dt*4`; sous 20 FPS dt est bridé à 0,05 → la dérive flottante l'empêchait de jamais tirer. Accumulateur 4 Hz. Rig : sable posé 4 au-dessus du vide → retombe sur l'herbe. Hook `getFallersQa`.
+- **Icônes 640–646 manquantes (404 en jeu)** — rendues depuis teksGeo (même cadrage studio) (`eb54dff`).
+- **Four figé à 0 % panneau ouvert** (§21 « progression du kiln invisible ») — CORRIGÉ (`507f345`) : ouvrir un panneau met `phase = "inventory"`, la tick monde (dont `tickFurnaces`) est play-only. Les fours tournent maintenant aussi en phase inventaire. Rig : cook restait 0 panneau ouvert.
+- **Garage** (`507f345`) : +20 pièces de véhicule au comptoir du Mécanicien (paliers 1/2/3). `vehicle.ts` : Road (jante + pneu) compte comme roue; `wheelRadius` lisait l'axe au lieu du rayon dans les profils lathe.
+- **12 véhicules au garage** (`546d440`) : +10 modèles intégrés (Scout Kart, Gold Gunner, Laser Runner, Rocket Rover, Turret Truck, Hauler Cab, Mech Strider, Twin Motor Racer, Sensor Patrol, Heavy Lifter XL) + ligne vitrine. Chacun généré par recherche de placement et gardé seulement s'il passe la loi de chargement exacte de `catalogue.test.ts` ET roule sur terrain plat (stepVehicle).
+- **Véhicules livrés dans le joueur** — CORRIGÉ (`7bd091c`) : `groundedAnchor` posait à 3,5 blocs; tout véhicule > ~3 blocs chevauchait le joueur → hologrammes (rig : Racer 6 posés / 7 holo). Ancrage = 1,5 + étendue horizontale du modèle. Rig après fix : Starter Buggy 13/13, Twin Motor Racer 13/13, montée à bord OK.
+- **Vérifié sain au rig** : quêtes (`questAudit` 0 échec, 38 actives), Teks (16T↔16T −1), craft, minage + drops, coffre, explosion, feu, orage (pluie active), mobs, inventaire Créatif/Survie, mobile.
+- **Pas des bogues** (erreurs de mon banc) : garde muet hors village (societyTalk exige un village), `ignite` vise la case d'air, mob « zombie » = `walker`.
+- **Reste / à mesurer** : LLM Bonsai en jeu (le banc avait `npcLlm:false`), contrats de faction en village, verdict A54 de Philippe sur tout ce qui précède.
