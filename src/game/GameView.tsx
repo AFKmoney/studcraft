@@ -8,6 +8,9 @@ import { ItemIcon } from "./icons";
 import { SKILLS } from "./skills";
 import type { WorldSlot } from "./save";
 import { BTN, PadEdges, activePad, stick } from "./gamepad";
+
+/** Vehicle dashboard height above the screen bottom: clear of hotbar + XP bar + armor/hearts/hunger rows (was 92 → sat on the hearts). */
+export const VEH_DASH_BOTTOM = 150;
 import {
   BackIcon,
   BagIcon,
@@ -1340,7 +1343,6 @@ function Hud({ game, touchUI }: { game: GameApi; touchUI: boolean }) {
       {hud.gpuWarn && <div className="sc-toast" role="alert" style={{ top: 8, bottom: "auto", maxWidth: 560 }}>⚠ {hud.gpuWarn}</div>}
       <div className="sc-hud-tr">
         {s.showFps && <div className="sc-fps">{hud.fps} FPS · {hud.gpu}</div>}
-        {s.npcLlm && hud.llm && <div className="sc-llm" style={{ position: "absolute", right: 8, bottom: 8, fontSize: 11, opacity: 0.75, pointerEvents: "none", color: "#fff", textShadow: "0 1px 2px #000" }}>{hud.llm}</div>}
         {hud.questTrack && !hud.creative && (
           <div className={"sc-quest" + (hud.questAlert ? " ready" : "")}>
             <ScrollIcon size={16} />
@@ -1380,10 +1382,12 @@ function Hud({ game, touchUI }: { game: GameApi; touchUI: boolean }) {
         )}
       </div>
       {hud.targetName && <div className="sc-target">{hud.targetName}</div>}
+      {/* NPC-AI status: screen corner, NOT inside .sc-hud-tr (there it sat on the quest pill) */}
+      {s.npcLlm && hud.llm && <div className="sc-llm" style={{ position: "absolute", right: 8, bottom: 8, fontSize: 11, opacity: 0.75, pointerEvents: "none", color: "#fff", textShadow: "0 1px 2px #000" }}>{hud.llm}</div>}
       {hud.driving && hud.vehDash && (
         <div
           className="sc-veh-dash"
-          style={{ position: "absolute", left: "50%", bottom: 92, transform: "translateX(-50%)", padding: "4px 12px", borderRadius: 8, background: "rgba(10,14,20,0.62)", color: "#d9f7e6", font: "600 13px/1.4 ui-monospace, monospace", pointerEvents: "none", whiteSpace: "nowrap" }}
+          style={{ position: "absolute", left: "50%", bottom: VEH_DASH_BOTTOM, transform: "translateX(-50%)", padding: "4px 12px", borderRadius: 8, background: "rgba(10,14,20,0.62)", color: "#d9f7e6", font: "600 13px/1.4 ui-monospace, monospace", pointerEvents: "none", whiteSpace: "nowrap" }}
         >
           {hud.vehDash} · V view
         </div>
