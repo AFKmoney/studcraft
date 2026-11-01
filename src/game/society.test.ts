@@ -99,3 +99,19 @@ test("guard detection: cone, range, sneaking, light and line of sight", () => {
 test("money is the existing emerald currency", () => {
   assert.ok(Soc.canPay(5, 5) && !Soc.canPay(4, 5) && !Soc.canPay(5, -1));
 });
+
+import { chiefQuests as _cq, guildQuests as _gq, GUILDS as _G } from "./society.ts";
+import { BLOCKS as _B } from "./blocks.ts";
+test("B21: fetch contracts name the item to bring; guild jobs don't read like the chief's", () => {
+  let fetches = 0;
+  for (let e = 0; e < 6; e++) for (const zone of ["plains", "desert", "arctic", "jungle"] as const) {
+    for (const q of [..._cq(0, 2, zone, 1234567, e), ..._gq(_G[0], "0,2", zone, 1234567, e)]) {
+      if (q.type !== "fetch") continue;
+      fetches++;
+      const name = _B[q.track.what].name.toLowerCase();
+      assert.ok(q.text.detail.includes(name), q.text.detail + " should name " + name);
+      if (q.giver.kind !== "chief") assert.notEqual(q.text.title, "Supplies for the village");
+    }
+  }
+  assert.ok(fetches > 0);
+});

@@ -5,7 +5,7 @@
 // decisions. Quests use one structured, JSON-safe schema with a
 // validator, so an optional LLM can later write dialogue on top of
 // `text` without touching the rules.
-import { ID } from "./blocks.ts";
+import { BLOCKS, ID } from "./blocks.ts";
 import { ZONES, ZONE_IDS, type ZoneId } from "./biomes.ts";
 import { hash2 } from "./noise.ts";
 
@@ -137,8 +137,12 @@ export function makeQuest(giver: Quest["giver"], zone: ZoneId, seed: number, slo
     const what = pick(r, FETCH[zone]);
     const need = type === "diplomacy" ? between(r, 2, 4) : between(r, 6, 12) * tier;
     track = { kind: "have", tag: "fetch", what: type === "diplomacy" ? ID.Emerald : what, need };
-    title = type === "diplomacy" ? "Peace offering" : "Supplies for the village";
-    detail = type === "diplomacy" ? `Carry ${need} emeralds as a peace token between rivals.` : `Bring ${need} of the requested stock.`;
+    // B21: the fetch text never said WHAT to bring ("Bring 9 of the
+    // requested stock."), and a guild's entry job read exactly like the
+    // chief's ("Supplies for the village").
+    const item = (BLOCKS[what]?.name ?? "goods").toLowerCase();
+    title = type === "diplomacy" ? "Peace offering" : giver.kind === "chief" ? "Supplies for the village" : "Supplies for the " + giver.name;
+    detail = type === "diplomacy" ? `Carry ${need} emeralds as a peace token between rivals.` : `Bring ${need} ${item}.`;
   } else {
     // crime jobs (bandits / thieves): tracked by the crime events game.ts reports
     const tag = type === "steal" ? "crime:steal" : type === "sabotage" ? "crime:sabotage" : type === "pickpocket" ? "crime:pickpocket" : "crime:burgle";

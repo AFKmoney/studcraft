@@ -257,3 +257,4 @@ Plan (phases, une PR par phase, merge quand tsc + node --test + vite build sont 
 - **Phase C** : validation du garage à l'entrée (cockpit + hub requis, sinon message) et à la sauvegarde catalogue (sauvegardé quand même, avec l'état « Build OK / not ready »).
 - Hooks QA : `vehFireQa`, `getVehArmsQa`. Tests : +3 (muzzles/pod, cockpit non masqué, câblage game.ts) → 325/325. tsc 0, vite build OK.
 - Captures (SwiftShader) : /workspace/studcraft-qa/shots/b21-veh-*.png.
+- B21 lot 2 : contrats de récolte nommant l'objet et titres propres aux guildes ; ancrage des modèles sur le vrai sol (surfaceBelow) au lieu de la hauteur du générateur ; les servos gardent leur angle au relâchement. Ouvert : le godet du Rig Digger n'atteint pas le sol.
