@@ -9,8 +9,9 @@ export const MAX_TOKENS = 160;
 export const ARC_WORDS = 20;
 export const TOP_FACTS = 4;
 export const LLM_TIMEOUT_MS = 12000;
-/** Background pre-generation on CPU (wllama wasm) is slow: allow 75 s. */
-export const PREFETCH_TIMEOUT_MS = 75000;
+/** Background pre-generation on CPU (wllama wasm, Q1_0 scalar kernels:
+ *  ~6 t/s prompt, ~4 t/s gen on 4 threads) is slow: allow 200 s. */
+export const PREFETCH_TIMEOUT_MS = 200000;
 
 /** ~3.2 chars/token (Qwen3 BPE on short English + ids): conservative. */
 export function estimateTokens(s: string): number {

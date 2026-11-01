@@ -1,0 +1,63 @@
+{
+ "model": "prism-ml/Bonsai-1.7B-gguf Bonsai-1.7B-Q1_0.gguf",
+ "license": "Apache-2.0",
+ "size": 248302272,
+ "sha256": "3d7c6c90dd98717a203adb22d5eacd2581850e40aa5327e144b97766cae5f7e3",
+ "chunks": [
+  {
+   "file": "bonsai-1.7b-q1_0.part00",
+   "size": 24000000,
+   "sha256": "99e4804f8469796a581080fe2f4963d2374112275a3094e392c09604a9f9690d"
+  },
+  {
+   "file": "bonsai-1.7b-q1_0.part01",
+   "size": 24000000,
+   "sha256": "8f4b8667c2bb37cc41c5a70356a40d7957c2126d83021b80dca0869dcc79f83c"
+  },
+  {
+   "file": "bonsai-1.7b-q1_0.part02",
+   "size": 24000000,
+   "sha256": "5504ea4a379f463f963168759299130e143e3b046e35911017ba164078816b10"
+  },
+  {
+   "file": "bonsai-1.7b-q1_0.part03",
+   "size": 24000000,
+   "sha256": "74e524fa2f89e6be733cc1c54cb5ba4cdb9dd1c0bd6cdc9fbdb23afd07e6b54a"
+  },
+  {
+   "file": "bonsai-1.7b-q1_0.part04",
+   "size": 24000000,
+   "sha256": "fbf5bf38bbee2068ec88de676100bb130e6fb20abee02bbc659e189698350607"
+  },
+  {
+   "file": "bonsai-1.7b-q1_0.part05",
+   "size": 24000000,
+   "sha256": "d1e32017c707db093dfff4c5c08dd514a5cbd38b1868a014c28edcc19d975600"
+  },
+  {
+   "file": "bonsai-1.7b-q1_0.part06",
+   "size": 24000000,
+   "sha256": "25edc3161f2ae468ab2ae07ae7d5860a170b547f9501f07fc5f2e8a573d5f6a7"
+  },
+  {
+   "file": "bonsai-1.7b-q1_0.part07",
+   "size": 24000000,
+   "sha256": "380fadc32769e12370f829e909b97a68d505d2db024cfbde53d51b818359e507"
+  },
+  {
+   "file": "bonsai-1.7b-q1_0.part08",
+   "size": 24000000,
+   "sha256": "0ab867b4def2a9f461e96e5ab09dd51e4068822551a5395e7425d9220304aa51"
+  },
+  {
+   "file": "bonsai-1.7b-q1_0.part09",
+   "size": 24000000,
+   "sha256": "aea5ed094f644d39976f3149ada7476ff8fab08ea8f4e582c70f64a69c028e53"
+  },
+  {
+   "file": "bonsai-1.7b-q1_0.part10",
+   "size": 8302272,
+   "sha256": "70d75cccbb319dda20dd6715c70e4a47a0a0244af81723002acc40a39cabbc3a"
+  }
+ ]
+}
