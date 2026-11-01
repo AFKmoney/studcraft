@@ -51,3 +51,21 @@ test("B21: parking lifts the build off a slope instead of refusing", async () =>
   assert.deepEqual(out.map((p) => p.q[1]), [3, -4]);
   assert.equal(liftToFit(poses, () => false), null);
 });
+
+test("B21 t100u: buggy cage eye clears the dash; FOV comes from the cockpit", async () => {
+  const { COCKPITS, cockpitFov } = await import("./cockpits.ts");
+  const { ID } = await import("./blocks.ts");
+  const cage = COCKPITS[ID.CockpitCage];
+  // Dash top (2.0 modules) and wheel rim (1.9 + 0.45) sit ~2 modules ahead
+  // of the seat: seen from the eye they must stay in the bottom fifth of
+  // the vertical field when looking level.
+  const half = (cage.fov / 2) * (Math.PI / 180);
+  for (const [y, z] of [[2.0, -2.1], [2.35, -2.4]]) {
+    const down = Math.atan2(cage.eye[1] - y, cage.eye[2] - z);
+    assert.ok(Math.tan(down) > Math.tan(half) * 0.6, "dash/wheel stays low in view");
+  }
+  assert.equal(cockpitFov(ID.CockpitCage, 72), cage.fov);
+  assert.equal(cockpitFov(ID.CockpitMech, 72), COCKPITS[ID.CockpitMech].fov);
+  assert.equal(cockpitFov(ID.CockpitCage, 90), cage.fov + 18);
+  assert.equal(cockpitFov(null, 72), 72);
+});

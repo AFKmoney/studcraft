@@ -265,3 +265,10 @@ Plan (phases, une PR par phase, merge quand tsc + node --test + vite build sont 
 - Smoke (prompt + grammaire réels du jeu) : Vulkan 3/3 quêtes valides, tg ≈ 20–21 t/s ; CPU 3/3, tg ≈ 20–24 t/s ; redémarrage après kill OK.
 - llama-bench : Vulkan pp128 131 t/s / tg64 22.8 t/s ; CPU (6 threads) pp128 45 t/s / tg64 25.8 t/s.
 - `electron-builder --win dir` → `win-unpacked` 740 Mo, modèle sha256 vérifié dans `resources/models`. L'exe démarre, lance llama-server Vulkan (`-ngl 99`), écran titre affiché.
+### B21 lot 3 — Rig Digger qui creuse + vue cockpit de la Starter Buggy (2026-10-31, Grok Bot)
+- **Bug #12 (Rig Digger)** : cause = canaux liés dans l'ordre des pièces, donc la tourelle (axe vertical) tombait sur B et le premier canal essayé faisait pivoter la flèche sur le côté ; en plus, le godet traversait le terrain comme un fantôme jusque sous la machine.
+  - `ModelPart.ch` (optionnel) : le Rig Digger lie ses articulations par rôle — **B = flèche** (S l'enfonce dans le sol), **C = balancier + godet** (W ressort la charge), **D = tourelle**. Message de chargement explicite.
+  - Le sol que le godet ne peut pas prendre (godet plein, trop dur) **arrête le bras** ; un mouvement qui le remonte reste toujours permis.
+  - Vérifié en headless sur un plateau plat : B/S → le godet mord à ~7 blocs devant la machine, 4 blocs de terre ramassés (capacité 4), C/W ressort la charge, D tourne la tourelle. Test : catalogue.test « Rig Digger: B lowers the boom… ».
+- **Vue 1re personne Starter Buggy** : tableau de bord et volant noirs remplacés par un tableau bas et fin gris clair + petit volant gris ; œil du cockpit-cage avancé et relevé (eye 5.0 / −0.3). **FOV par cockpit branché** (`cockpitFov` : FOV du cockpit décalé de la préférence joueur, 3e personne inchangée). Test vehView.test.
+- Hook QA : `getBucket().pos`, `getDriveView().fov`. tsc 0, 333 tests verts, vite build OK. Captures : /workspace/studcraft-fix2-shots/p12-*.png, p2-buggy-fp-before/after.png.

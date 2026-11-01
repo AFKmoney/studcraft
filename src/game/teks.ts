@@ -692,20 +692,21 @@ put(armBase(ID.VehTurretMount, "b21-turret", DGM)
   .box([0.9, 1.1, -0.4], [1.4, 2.2, 0.4], DGM)
   .done());
 // Open seat: bucket seat, backrest, steering column + wheel, mini dash.
-function seatInto(bb: B, col: number, z = 0.6) {
+function seatInto(bb: B, col: number, z = 0.6, wheelR = 0.7, wheelCol: number = BLK, wheelY = 2.4) {
   bb.box([-1.3, 0.5, z - 1.0], [1.3, 1.1, z + 1.2], col);
   bb.box([-1.3, 1.1, z + 0.9], [1.3, 3.6, z + 1.3], col);
   bb.box([-1.5, 1.1, z - 1.0], [-1.2, 1.9, z + 1.2], col, false);
   bb.box([1.2, 1.1, z - 1.0], [1.5, 1.9, z + 1.2], col, false);
-  bb.cyl(2, [0, 2.2, z - 2.2], 0.12, 1.6, DGM);
-  bb.op({ k: "tube", ax: 2, c: [0, 2.4, z - 3.0], r: 0.7, len: 0.15, hole: "N", col: BLK });
+  bb.cyl(2, [0, wheelY - 0.2, z - 2.2], 0.12, 1.6, DGM);
+  bb.op({ k: "tube", ax: 2, c: [0, wheelY, z - 3.0], r: wheelR, len: 0.15, hole: "N", col: wheelCol });
   return bb;
 }
-function dashInto(bb: B, z: number, w = 1.8) {
-  bb.box([-w, 1.6, z - 0.4], [w, 2.5, z + 0.3], BLK, false);
-  bb.box([-w + 0.25, 2.1, z - 0.42], [-w + 1.05, 2.4, z - 0.41], LED, false); // speed gauge face
-  bb.box([-0.4, 2.1, z - 0.42], [0.4, 2.4, z - 0.41], 0xf2cd37, false); // ammo gauge face
-  bb.box([w - 1.05, 2.1, z - 0.42], [w - 0.25, 2.4, z - 0.41], EMR, false); // energy gauge face
+function dashInto(bb: B, z: number, w = 1.8, col: number = BLK, top = 2.5) {
+  const g0 = top - 0.4, g1 = top - 0.1;
+  bb.box([-w, 1.6, z - 0.4], [w, top, z + 0.3], col, false);
+  bb.box([-w + 0.25, g0, z - 0.42], [-w + 1.05, g1, z - 0.41], LED, false); // speed gauge face
+  bb.box([-0.4, g0, z - 0.42], [0.4, g1, z - 0.41], 0xf2cd37, false); // ammo gauge face
+  bb.box([w - 1.05, g0, z - 0.42], [w - 0.25, g1, z - 0.41], EMR, false); // energy gauge face
 }
 put((() => { const bb = seatInto(armBase(ID.CockpitSeat, "b21-seat", BLK, 2, 3), BLK); dashInto(bb, -2.4, 1.4); return bb; })().done());
 // Enclosed cab: floor, seat, four corner pillars, roof, glass panes (thin, see-through).
@@ -718,8 +719,12 @@ put((() => {
 })().done());
 // Buggy roll cage: tubular hoops over a low seat.
 put((() => {
-  const bb = seatInto(armBase(ID.CockpitCage, "b21-cage", RED, 3, 3), BLK);
-  dashInto(bb, -2.4, 1.6);
+  // B21 (Philippe t100u): the black dash and the big black wheel filled
+  // the lower half of the first-person view. The cage now has a slim,
+  // low, light-grey dash and a small grey wheel; the eye sits higher
+  // and further forward (cockpits.ts) so the road shows over them.
+  const bb = seatInto(armBase(ID.CockpitCage, "b21-cage", RED, 3, 3), BLK, 0.6, 0.45, LBG, 1.9);
+  dashInto(bb, -2.4, 1.2, LBG, 2.0);
   for (const z of [-2.7, 2.7]) {
     bb.cyl(1, [-2.6, 3.2, z], 0.16, 5.4, RED);
     bb.cyl(1, [2.6, 3.2, z], 0.16, 5.4, RED);

@@ -13,7 +13,7 @@ import {
   upsertModel,
 } from "./catalogue.ts";
 import { TechWorld, bbox } from "./teks.ts";
-import { stepVehicle, vehicleFromAssembly } from "./vehicle.ts";
+import { partWorldPoint, stepVehicle, vehicleFromAssembly } from "./vehicle.ts";
 
 const HUB = 446;
 const fakeStorage = () => {
@@ -219,4 +219,34 @@ test("share code round-trips and rejects junk", () => {
   assert.equal(decodeModel("not a code"), null);
   assert.equal(decodeModel("STUDS-MODEL:%%%"), null);
   assert.equal(decodeModel(""), null);
+});
+
+test("Rig Digger: B lowers the boom into flat ground, C scoops out, D is the turret (B21 #12)", () => {
+  const model = builtinModels().find((m) => m.name === "Rig Digger")!;
+  const tech = new TechWorld();
+  const bindings = new Map<number, "A" | "B" | "C" | "D">();
+  for (const mp of model.parts) {
+    const p = tech.add(mp.id, mp.o, [200 + mp.dq[0], 40 + mp.dq[1], 200 + mp.dq[2]]);
+    if (mp.ch) bindings.set(p.uid, mp.ch);
+  }
+  const { vehicle: v } = vehicleFromAssembly([...tech.parts.values()], { hubChannel: "A", battery: 1, fuel: 5, bindings });
+  const turret = v.joints.find((j) => Math.abs(j.axis.y) > 0.9)!;
+  assert.equal(turret.channel, "D", "the vertical-axis turret must not be on B");
+  for (const j of v.joints) if (j !== turret) assert.notEqual(j.channel, "D");
+  const H = 8;
+  const ground = () => H;
+  const bucket = v.parts.find((p) => p.id === 471)!;
+  const hub = v.parts.find((p) => p.id === 446)!;
+  stepVehicle(v, 0.016, { throttle: 0, steer: 0, channel: "A" }, ground);
+  // Hold S on B until the bucket first bites the ground (the game then
+  // stops the arm there: solid ground it cannot dig blocks the joint).
+  let i = 0;
+  while (i++ < 120 && partWorldPoint(v, bucket, bucket.centreLocal).y - H > 0) stepVehicle(v, 0.016, { throttle: -1, steer: 0, channel: "B" }, ground);
+  assert.ok(i < 120, "holding S on B puts the bucket into the ground");
+  const b = partWorldPoint(v, bucket, bucket.centreLocal);
+  const h = partWorldPoint(v, hub, hub.centreLocal);
+  assert.ok(Math.hypot(b.x - h.x, b.z - h.z) > 4, "it bites in front of the machine, not under it");
+  const before = b.y;
+  for (let i = 0; i < 40; i++) stepVehicle(v, 0.016, { throttle: 1, steer: 0, channel: "C" }, ground);
+  assert.ok(partWorldPoint(v, bucket, bucket.centreLocal).y > before + 1, "W on C curls the load up and out");
 });
