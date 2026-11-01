@@ -17,6 +17,23 @@ export function classifyRenderer(renderer: string, vendor = ""): GpuInfo {
   return { renderer: renderer || "unknown", vendor: vendor || "", tier, software };
 }
 
+/**
+ * Final verdict for a created context. The renderer string is the source of
+ * truth in ALL paths: when the browser refuses a failIfMajorPerformanceCaveat
+ * context and game.ts retries without the flag, the fallback context on a
+ * multi-GPU Windows machine is very often the REAL discrete GPU (the browser
+ * hands back its default adapter, not a software rasteriser) — so the caveat
+ * flag must never override a string that names actual hardware. The flag may
+ * only speak when the string is empty (nothing better to go on: the browser
+ * refused every non-caveat context, so stamp software); with a string
+ * present, classifyRenderer's own verdict stands, caveat or not.
+ */
+export function classifyContext(renderer: string, vendor: string, perfCaveat: boolean): GpuInfo {
+  const info = classifyRenderer(renderer, vendor);
+  if (renderer) return info;
+  return perfCaveat ? { ...info, software: true, tier: "software" as const } : info;
+}
+
 export type Preset = { quality: "performance" | "balanced" | "high" | "auto"; radius: number; shadows: boolean };
 export function presetFor(tier: GpuTier, narrow = false): Preset {
   if (tier === "software") return { quality: "performance", radius: 4, shadows: false };

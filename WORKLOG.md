@@ -4969,3 +4969,30 @@ Batterie TestMark complète sur le build corrigé (harness maison, Playwright/Sw
 
 - Le pipeline Pages est toujours bloqué à l'upload des assets (le modèle Bonsai en 11 morceaux ≈ 248 Mo sur 289 Mo de dist) : décision en attente — upload par lots avec reprises, ou modèle hors build Pages. La voie PC/Steam reste prioritaire.
 - Fermeture du lot = verdict de Philippe sur son PC (le build corrigé), comme toujours.
+
+## B23 — GPU : la vraie carte s'active toute seule (Muse, 2026-11-01)
+
+**CLAIM (avant code, ordre de Philippe)** : « que le pages.dev roule sur mon GPU AMD, que ça détecte la machine sur laquelle la page roule et que le GPU s'active seul ». Lot pris par Muse. Périmètre : `game.ts` (création du renderer), `gpu.ts` (classification), tests. **Aucun déploiement dans ce lot** — le déploiement de `096934fc` roule dans la session parent; ce commit partira après.
+
+### Le bug (vérifié dans le code)
+
+Le renderer est créé avec `powerPreference: "high-performance"` + `failIfMajorPerformanceCaveat: true`. Si le navigateur refuse ce contexte, `game.ts` réessaie sans le drapeau — mais forçait ensuite le verdict à `{software: true, tier: "software"}` **peu importe le contexte réellement obtenu**. Sur une machine Windows multi-GPU, le contexte de repli est très souvent la VRAIE carte dédiée (ex. AMD Radeon) : le jeu la tamponnait « software » → rayon de vue plafonné à 4, qualité forcée « performance », ombres coupées, avertissement CPU (SOFTWARE_HINT) affiché — et le LLM recevait `software: true` (0 couche GPU). La chaîne renderer de `readGl` (WEBGL_debug_renderer_info) était lue mais jetée dans ce chemin.
+
+### Le fix
+
+- **`gpu.ts` — nouveau `classifyContext(renderer, vendor, perfCaveat)`** (pur, testé) : la chaîne renderer fait foi dans TOUS les chemins. Le drapeau `perfCaveat` ne parle que si la chaîne est vide (le navigateur a refusé tout contexte non-caveat et ne donne aucun nom → tampon « software » conservé); avec une chaîne présente, le verdict de `classifyRenderer` tient, caveat ou non. `game.ts` l'utilise aux deux tentatives, `powerPreference: "high-performance"` gardé partout, structure en deux tentatives inchangée.
+- **Comportement résultant** : un repli qui tombe sur « ANGLE (AMD, AMD Radeon RX 6600 …) » donne maintenant tier **high** — rayon/qualité/ombres du preset high, aucun avertissement CPU, couches GPU pour le LLM. SwiftShader/llvmpipe restent « software » par leur chaîne elle-même.
+
+### Audits
+
+- **`classifyRenderer` contre les chaînes ANGLE réelles** : RX 6600 (avec id hex) → high, RX 9070 XT → high, Radeon(TM) Graphics intégré (0x00001681) → mid, Intel UHD 770 → low, SwiftShader Vulkan → software. **Les cinq passaient déjà** — aucun changement aux regex; les cas sont maintenant figés en tests dans `gpu.test.ts`, plus le test de régression du chemin caveat (le bug lui-même, au niveau pur).
+- **LLM (`llm/runtime.ts`, `gpuLayers`)** : vérifié sur chaînes AMD ANGLE (dédiée + intégrée) et style WebGPU (« amd rdna-3 … ») — couches GPU accordées partout, **aucun patch requis**; le seul empoisonnement venait du `software: true` forcé par game.ts, corrigé à la source. Assertions AMD ajoutées au test existant de `lava.test.ts`.
+- **Visibilité joueur** : déjà en place, rien à ajouter — Settings → Graphics a une rangée « Graphics adapter » (`GameView.tsx`) qui affiche `hud.gpu` (tier · renderer · WebGPU) et le SOFTWARE_HINT en détail quand c'est logiciel; le même avertissement part en toast en jeu et la ligne GPU suit le compteur FPS si activé.
+
+### Portes (arbre final)
+
+tsc 0 erreur · tests **361/361** (base B22 = 359, +2 blocs GPU) · build vite standalone OK.
+
+### Fermeture
+
+Verdict de Philippe sur son PC, sur pages.dev une fois le nouveau head déployé (voir et sentir la différence : rayon, ombres, pas d'avertissement CPU, ligne « Graphics adapter » qui nomme sa Radeon).

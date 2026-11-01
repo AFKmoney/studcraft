@@ -27,5 +27,9 @@ test("software GPU adapters get 0 GPU layers; CPU pre-generation timeout is 120â
   assert.equal(gpuLayers({ renderer: "llvmpipe (LLVM 15.0.7, 256 bits)" }), 0);
   assert.equal(gpuLayers({ software: true, renderer: "whatever" }), 0);
   assert.ok(gpuLayers({ renderer: "ANGLE (NVIDIA GeForce RTX 3060)" }) > 0);
+  // AMD ANGLE strings (discrete + integrated) are hardware: full GPU layers.
+  assert.ok(gpuLayers({ renderer: "ANGLE (AMD, AMD Radeon RX 6600 (0x000073FF) Direct3D11 vs_5_0 ps_5_0, D3D11)" }) > 0);
+  assert.ok(gpuLayers({ renderer: "ANGLE (AMD, AMD Radeon RX 9070 XT Direct3D11 vs_5_0 ps_5_0, D3D11)" }) > 0);
+  assert.ok(gpuLayers({ renderer: "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001681) Direct3D11 vs_5_0 ps_5_0, D3D11)" }) > 0);
   assert.ok(PREFETCH_TIMEOUT_MS >= 120000 && PREFETCH_TIMEOUT_MS <= 240000);
 });

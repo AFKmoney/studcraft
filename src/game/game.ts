@@ -48,7 +48,7 @@ import { stockChest } from "./loot";
 import { banditFolk, civicOf, patrolOf, findStructure, garageOf, structureAt, structureFolk, structuresNear, structureLabel, structureOwning, stockStructureChest, type StructKind, type Structure } from "./structures";
 import { BOUNTY_ARREST, banditQuests, chiefOf, chiefQuests, COIN, CRIME, guildEntryQuest, guildQuests, GUILDS, guildsIn, makeQuest, type Quest, mobTag, seenBy, type CrimeKind, type Observer } from "./society";
 import { Society, baseQuestId } from "./societyState";
-import { classifyRenderer, presetFor, readGl, SOFTWARE_HINT } from "./gpu";
+import { classifyContext, presetFor, readGl, SOFTWARE_HINT } from "./gpu";
 import { mayYield, spillSlots } from "./yields";
 import { Upscaler, upscaleScale } from "./upscale";
 import { BTN, PadEdges, activePad, padBusy, padLabel, rumble, stick } from "./gamepad";
@@ -1054,8 +1054,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   };
 
   // GPU first: ask for the high-performance adapter and refuse a "major
-  // performance caveat" (software) context; if that fails, take whatever
-  // the browser gives and flag it as software below.
+  // performance caveat" (software) context. If that fails, take whatever
+  // the browser gives — its renderer string still decides the tier below
+  // (on multi-GPU machines the fallback is usually the real discrete GPU;
+  // only an empty string lets the caveat flag call it software).
   let perfCaveat = false;
   let renderer: THREE.WebGLRenderer;
   try {
@@ -1071,7 +1073,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
       return { renderer: "", vendor: "" };
     }
   })();
-  const gpu = perfCaveat ? { ...classifyRenderer(gpuRaw.renderer, gpuRaw.vendor), software: true, tier: "software" as const } : classifyRenderer(gpuRaw.renderer, gpuRaw.vendor);
+  const gpu = classifyContext(gpuRaw.renderer, gpuRaw.vendor, perfCaveat);
   console.info("[gpu]", gpu.tier, gpu.renderer, gpu.vendor);
   {
     // presets from the tier, only where the player hasn't chosen
