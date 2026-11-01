@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { ID, TEKS, def, type BlockDef } from "./blocks";
 import { CUBE_ICONS } from "./cubeIcons";
 import { teksIcon } from "./teksIcons";
+import { ACCESSORIES, ACC_BASE, type Acc } from "./accessories";
 
 // IDs that have bespoke multi-part 3D STUDS set-piece illustrations (workstations,
 // mechanisms, lighting, storage, special blocks) so they never fall back to an old
@@ -169,7 +170,26 @@ export function ItemIcon({ id, muted = false }: { id: number; muted?: boolean })
   );
 }
 
+/** t91u: accessory icon = side projection of its procedural parts, fit to the 32 box. */
+function AccIcon({ a }: { a: Acc }) {
+  const hex = (n: number) => "#" + n.toString(16).padStart(6, "0");
+  const items = a.parts.map((p) => (p[0] === "b" ? { w: p[1], h: p[2], x: p[4], y: p[5], c: p[7], r: p[8] ?? 0 } : { w: (p[8] ?? p[1]) + p[1], h: p[2], x: p[3], y: p[4], c: p[6] ?? 0x8a8f96, r: p[7] ?? 0 }));
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (const q of items) { const e = Math.max(q.w, q.h) / 2; x0 = Math.min(x0, q.x - e); x1 = Math.max(x1, q.x + e); y0 = Math.min(y0, q.y - e); y1 = Math.max(y1, q.y + e); }
+  const k = 26 / Math.max(x1 - x0, y1 - y0, 1e-3);
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  return (
+    <g>
+      {items.map((q, i) => (
+        <rect key={i} x={-q.w * k / 2} y={-q.h * k / 2} width={q.w * k} height={q.h * k} rx={Math.min(q.w, q.h) * k * 0.3} fill={hex(q.c)} stroke="#0006" strokeWidth={0.4}
+          transform={`translate(${16 + (q.x - cx) * k} ${16 - (q.y - cy) * k}) rotate(${(-q.r * 180) / Math.PI})`} />
+      ))}
+    </g>
+  );
+}
+
 function glyph(block: BlockDef, fill: string, muted = false): ReactNode {
+  if (block.id >= ACC_BASE && block.id < ACC_BASE + ACCESSORIES.length) return <AccIcon a={ACCESSORIES[block.id - ACC_BASE]} />;
   const id = block.id;
   // 1. Bespoke STUDS Workstations & Functional Blocks
   if (id === ID.Furnace || block.work === "furnace") return <StudsFurnace muted={muted} />;
