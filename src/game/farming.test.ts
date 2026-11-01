@@ -36,7 +36,7 @@ test("growth is gated by light and doubled by hydration", () => {
   assert.ok(wet > dry && dry > 0);
 });
 test("crop stages advance to ripe and stop", () => {
-  let c = ID.Crop;
+  let c: number = ID.Crop;
   for (let k = 0; k < 5; k++) c = F.nextStage(I, c);
   assert.equal(c, ID.CropRipe);
   assert.ok(F.isRipe(I, c));
