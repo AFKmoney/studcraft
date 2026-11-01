@@ -108,6 +108,11 @@ export function builtinModels(): VehicleModel[] {
         P(446, [0, 0, 0]),
         P(447, [0, 7, -4]),
         P(452, [12, -1, 0]),
+        // B21: a roll-cage cockpit on the motor (first-person seat) and
+        // a plastic cannon on the hub deck — positions found by the
+        // placement law (TechWorld.test + AABB touch), facing forward.
+        P(647, [0, 11, 0], 22),
+        P(640, [0, 5, 3], 22),
       ],
     },
     {
@@ -145,6 +150,9 @@ export function builtinModels(): VehicleModel[] {
         // the flagship rig demonstrates the sensor layer too. Bind it
         // to the drive channel with sneak+use to arm obstacle stop.
         P(472, [0, 7, 4]),
+        // B21: the mech cabin bolted beside the hub (an excavator's
+        // offset cab), on the base group so it never swings with the arm.
+        P(648, [0, 0, -12], 22),
       ],
     },
   ];

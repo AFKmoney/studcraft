@@ -635,6 +635,115 @@ put(eBox(ID.Remote, "88010", BLK, [-3, -0.75, -2], [3, 0.75, 2], GUN, undefined,
 // Pull-back "spring" motor 6×2×1⅓ (axle out through the sides)
 put(eBox(ID.Spring, "75822", BLK, [-3, -0.8, -1], [3, 0.8, 1], DBG, undefined, (bb) => bb.hole([2, 0, 0], 2, 2, "A")).done());
 
+// ---------- B21 VEHICLE ARMOURY + COCKPITS (procedural, no assets) ----------
+// Every armoury / cockpit part stands on a 4×4 module base plate with
+// four vertical pin holes, so it pins onto any beam deck. Barrels and
+// the driver's view face local −Z (the vehicle's forward).
+const YLW = COL.YEL, GLD = 0xf0c43a;
+// Glass panes are NOT spec ops: cockpits.ts lists them and game.ts
+// renders them with the shared SNR glass material (see-through).
+function armBase(id: number, part: string, col: number, w = 2, d = 2) {
+  const bb = new B(id, part, col, 1).box([-w, -0.5, -d], [w, 0.5, d], col);
+  for (const x of [-1, 1]) for (const z of [-1, 1]) bb.hole([x * (w - 1), 0, z * (d - 1)], 1, 1, "P");
+  return bb;
+}
+// Plastic cannon: breech block, a 6-module barrel with muzzle ring.
+put(armBase(ID.VehCannon, "b21-cannon", DBG)
+  .box([-1.2, 0.5, -1.2], [1.2, 2.3, 1.6], DBG)
+  .cyl(2, [0, 1.4, -3.4], 0.62, 4.4, GUN, true)
+  .tube(2, [0, 1.4, -5.8], 0.85, 0.6, "N", DGM)
+  .cyl(0, [0, 1.4, 0.2], 0.5, 3.2, DGM)
+  .done());
+// Gold cannon: heavier breech, twin reinforcing hoops, flared muzzle brake.
+put(armBase(ID.VehGoldCannon, "b21-goldcannon", GLD, 2, 3)
+  .box([-1.6, 0.5, -1.6], [1.6, 2.8, 2.6], DBG)
+  .cyl(2, [0, 1.7, -3.9], 0.9, 4.6, GLD, true)
+  .tube(2, [0, 1.7, -2.4], 1.08, 0.5, "N", GLD)
+  .tube(2, [0, 1.7, -4.2], 1.08, 0.5, "N", GLD)
+  .box([-1.3, 1.0, -6.9], [1.3, 2.4, -6.1], DGM)
+  .cyl(0, [0, 1.7, 0.4], 0.7, 3.6, GLD)
+  .done());
+// Emerald laser: capacitor body, emerald focusing crystal, emitter fins.
+put(armBase(ID.VehLaser, "b21-laser", EMR)
+  .box([-1.1, 0.5, -1.4], [1.1, 2.0, 1.6], WHT)
+  .cyl(2, [0, 1.25, -2.6], 0.45, 2.6, GUN, true)
+  .done());
+{
+  const s = S.get(ID.VehLaser)!;
+  s.ops.push({ k: "sphere", c: [0, 1.25, -4.2], r: 0.62, col: EMR });
+  for (const a of [0, 1, 2, 3]) {
+    const ang = (a * Math.PI) / 2 + Math.PI / 4;
+    const cx = Math.cos(ang) * 0.75, cy = 1.25 + Math.sin(ang) * 0.75;
+    s.ops.push({ k: "box", a: [cx - 0.12, cy - 0.12, -3.6], b: [cx + 0.12, cy + 0.12, -2.0], col: WHT });
+  }
+  s.ops.push({ k: "box", a: [-0.9, 2.0, -0.6], b: [0.9, 2.15, 1.2], col: LED });
+}
+// Rocket pod: a 2×2 tube rack on a cradle.
+{
+  const bb = armBase(ID.VehRocketPod, "b21-rocketpod", RED).box([-0.4, 0.5, -0.6], [0.4, 1.0, 0.6], DBG);
+  for (const x of [-0.75, 0.75]) for (const y of [1.65, 3.05]) bb.tube(2, [x, y, -0.6], 0.62, 4.2, "N", RED, undefined).op({ k: "dot", c: [x, y, -2.72], ax: 2, r: 0.42, col: 0x141414 });
+  bb.box([-1.5, 1.0, 0.8], [1.5, 3.7, 1.6], DBG);
+  put(bb.done());
+}
+// Turret mount: a turntable ring with a yoke on top (weapons ride it).
+put(armBase(ID.VehTurretMount, "b21-turret", DGM)
+  .cyl(1, [0, 0.8, 0], 1.8, 0.6, GUN, true, 24)
+  .box([-1.4, 1.1, -0.4], [-0.9, 2.2, 0.4], DGM)
+  .box([0.9, 1.1, -0.4], [1.4, 2.2, 0.4], DGM)
+  .done());
+// Open seat: bucket seat, backrest, steering column + wheel, mini dash.
+function seatInto(bb: B, col: number, z = 0.6) {
+  bb.box([-1.3, 0.5, z - 1.0], [1.3, 1.1, z + 1.2], col);
+  bb.box([-1.3, 1.1, z + 0.9], [1.3, 3.6, z + 1.3], col);
+  bb.box([-1.5, 1.1, z - 1.0], [-1.2, 1.9, z + 1.2], col, false);
+  bb.box([1.2, 1.1, z - 1.0], [1.5, 1.9, z + 1.2], col, false);
+  bb.cyl(2, [0, 2.2, z - 2.2], 0.12, 1.6, DGM);
+  bb.op({ k: "tube", ax: 2, c: [0, 2.4, z - 3.0], r: 0.7, len: 0.15, hole: "N", col: BLK });
+  return bb;
+}
+function dashInto(bb: B, z: number, w = 1.8) {
+  bb.box([-w, 1.6, z - 0.4], [w, 2.5, z + 0.3], BLK, false);
+  bb.box([-w + 0.25, 2.1, z - 0.42], [-w + 1.05, 2.4, z - 0.41], LED, false); // speed gauge face
+  bb.box([-0.4, 2.1, z - 0.42], [0.4, 2.4, z - 0.41], 0xf2cd37, false); // ammo gauge face
+  bb.box([w - 1.05, 2.1, z - 0.42], [w - 0.25, 2.4, z - 0.41], EMR, false); // energy gauge face
+}
+put((() => { const bb = seatInto(armBase(ID.CockpitSeat, "b21-seat", BLK, 2, 3), BLK); dashInto(bb, -2.4, 1.4); return bb; })().done());
+// Enclosed cab: floor, seat, four corner pillars, roof, glass panes (thin, see-through).
+put((() => {
+  const bb = seatInto(armBase(ID.CockpitCab, "b21-cab", WHT, 3, 4), DBG);
+  dashInto(bb, -3.0, 2.4);
+  for (const x of [-2.85, 2.6]) for (const z of [-3.85, 3.6]) bb.box([x, 0.5, z], [x + 0.25, 6.2, z + 0.25], WHT, false);
+  bb.box([-3, 6.2, -4], [3, 6.6, 4], WHT, false);
+  return bb;
+})().done());
+// Buggy roll cage: tubular hoops over a low seat.
+put((() => {
+  const bb = seatInto(armBase(ID.CockpitCage, "b21-cage", RED, 3, 3), BLK);
+  dashInto(bb, -2.4, 1.6);
+  for (const z of [-2.7, 2.7]) {
+    bb.cyl(1, [-2.6, 3.2, z], 0.16, 5.4, RED);
+    bb.cyl(1, [2.6, 3.2, z], 0.16, 5.4, RED);
+    bb.cyl(0, [0, 5.9, z], 0.16, 5.4, RED);
+  }
+  bb.cyl(2, [-2.6, 5.9, 0], 0.16, 5.4, RED);
+  bb.cyl(2, [2.6, 5.9, 0], 0.16, 5.4, RED);
+  return bb;
+})().done());
+// Mech / digger cabin: armoured box, slit visor glass, side levers.
+put((() => {
+  const bb = seatInto(armBase(ID.CockpitMech, "b21-mech", YLW, 3, 4), DBG);
+  dashInto(bb, -3.0, 2.4);
+  bb.box([-3, 0.5, 3.5], [3, 6.4, 4], YLW, false); // back wall
+  bb.box([-3, 0.5, -4], [-2.6, 6.4, 4], YLW, false);
+  bb.box([2.6, 0.5, -4], [3, 6.4, 4], YLW, false);
+  bb.box([-3, 0.5, -4], [3, 2.4, -3.6], YLW, false); // nose wall below the visor
+  bb.box([-3, 5.4, -4], [3, 6.4, -3.6], YLW, false); // brow
+  bb.box([-0.2, 2.4, -3.9], [0.2, 5.4, -3.7], DBG, false); // centre mullion
+  bb.box([-3.2, 6.4, -4.2], [3.2, 6.8, 4.2], DBG, false);
+  for (const x of [-1.6, 1.6]) bb.cyl(1, [x, 2.2, -1.6], 0.1, 1.4, DGM);
+  return bb;
+})().done());
+
 // ---------- fill the rest (none expected) ----------
 export const SPECS = S;
 export function spec(id: number): Spec | undefined {

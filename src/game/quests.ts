@@ -133,6 +133,12 @@ export const TRADERS: Record<TraderRole, { name: string; blurb: string; offers: 
       { pay: ID.Emerald, pn: 6, out: ID.Battery, on: 1, tier: 2 },
       { pay: ID.Emerald, pn: 8, out: ID.MotorM, on: 1, tier: 2 },
       { pay: ID.Emerald, pn: 10, out: ID.TechHub, on: 1, tier: 3 },
+      // B21 garage: cockpits and the basic armoury
+      { pay: ID.Emerald, pn: 4, out: ID.CockpitSeat, on: 1 },
+      { pay: ID.Emerald, pn: 2, out: ID.Cannonball, on: 8 },
+      { pay: ID.Emerald, pn: 9, out: ID.VehCannon, on: 1, tier: 2 },
+      { pay: ID.Emerald, pn: 8, out: ID.CockpitCage, on: 1, tier: 2 },
+      { pay: ID.Emerald, pn: 12, out: ID.CockpitCab, on: 1, tier: 3 },
     ],
   },
   outfitter: {
@@ -143,6 +149,11 @@ export const TRADERS: Record<TraderRole, { name: string; blurb: string; offers: 
       { pay: ID.Emerald, pn: 2, out: ID.PlasticIngot, on: 2 },
       { pay: ID.Emerald, pn: 2, out: ID.Copper, on: 3 },
       { pay: ID.Emerald, pn: 3, out: ID.Gear16, on: 1 },
+      // B21 vehicle upgrades: heavy ammo, the laser, the turret
+      { pay: ID.Emerald, pn: 4, out: ID.GoldShell, on: 2, tier: 2 },
+      { pay: ID.Emerald, pn: 3, out: ID.VehRocket, on: 4, tier: 2 },
+      { pay: ID.Emerald, pn: 10, out: ID.VehTurretMount, on: 1, tier: 2 },
+      { pay: ID.Emerald, pn: 18, out: ID.VehLaser, on: 1, tier: 3 },
       { pay: ID.Emerald, pn: 5, out: ID.TemperedIngot, on: 1, tier: 2 },
       { pay: ID.Emerald, pn: 6, out: ID.Battery, on: 1, tier: 2 },
       { pay: ID.Emerald, pn: 9, out: ID.EnchBook, on: 1, tier: 3 },

@@ -1622,7 +1622,25 @@ function specVolumeBlocks(s: Spec): number {
   for (const d of s.discs) v += Math.PI * d.r * d.r * d.len;
   return v / 8; // spec units are modules; 1 block = 2 modules per side
 }
+// B21 (t92u): the vehicle armoury + cockpits have hand-written recipes
+// (plastic / gold / emerald / glass tiers), not a plain plastic cast.
+export const B21_PARTS = new Set<number>([ID.VehCannon, ID.VehGoldCannon, ID.VehLaser, ID.VehRocketPod, ID.VehTurretMount, ID.CockpitSeat, ID.CockpitCab, ID.CockpitCage, ID.CockpitMech]);
+RECIPES.push(
+  r("b21-cannon", "Plastic cannon", "8 plastic ingots + 1 axle 6 — fires plastic cannonballs", [[ID.PlasticIngot, 8], [ID.Axle6, 1]], ID.VehCannon, 1, { cat: "teks" }),
+  r("b21-cannonball", "Plastic cannonballs", "1 plastic ingot → 4", [[ID.PlasticIngot, 1]], ID.Cannonball, 4, { cat: "teks" }),
+  r("b21-goldcannon", "Gold cannon", "1 plastic cannon + 6 gold + 4 tempered ingots — heavy explosive shells", [[ID.VehCannon, 1], [ID.Gold, 6], [ID.TemperedIngot, 4]], ID.VehGoldCannon, 1, { cat: "teks" }),
+  r("b21-goldshell", "Gold explosive shells", "1 gold + 1 powder → 2", [[ID.Gold, 1], [ID.Powder, 1]], ID.GoldShell, 2, { cat: "teks" }),
+  r("b21-laser", "Emerald laser", "4 emeralds + 4 plastic ingots + 2 copper — battery-fed beam", [[ID.Emerald, 4], [ID.PlasticIngot, 4], [ID.Copper, 2]], ID.VehLaser, 1, { cat: "teks" }),
+  r("b21-rocketpod", "Rocket pod", "6 plastic ingots + 2 copper", [[ID.PlasticIngot, 6], [ID.Copper, 2]], ID.VehRocketPod, 1, { cat: "teks" }),
+  r("b21-rocket", "Vehicle rockets", "1 plastic ingot + 1 powder → 4", [[ID.PlasticIngot, 1], [ID.Powder, 1]], ID.VehRocket, 4, { cat: "teks" }),
+  r("b21-turret", "Turret mount", "1 turntable + 4 plastic ingots", [[ID.Turret, 1], [ID.PlasticIngot, 4]], ID.VehTurretMount, 1, { cat: "teks" }),
+  r("b21-seat", "Open seat cockpit", "4 plastic ingots", [[ID.PlasticIngot, 4]], ID.CockpitSeat, 1, { cat: "teks" }),
+  r("b21-cage", "Buggy roll-cage cockpit", "1 open seat + 6 plastic ingots + 2 axle 6", [[ID.CockpitSeat, 1], [ID.PlasticIngot, 6], [ID.Axle6, 2]], ID.CockpitCage, 1, { cat: "teks" }),
+  r("b21-cab", "Glass cab cockpit", "1 open seat + 6 tempered ingots + 4 glass", [[ID.CockpitSeat, 1], [ID.TemperedIngot, 6], [ID.Glass, 4]], ID.CockpitCab, 1, { cat: "teks" }),
+  r("b21-mech", "Mech digger cabin", "1 open seat + 8 tempered ingots + 2 glass + 2 iron", [[ID.CockpitSeat, 1], [ID.TemperedIngot, 8], [ID.Glass, 2], [ID.Ingot, 2]], ID.CockpitMech, 1, { cat: "teks" }),
+);
 for (const s of SPECS.values()) {
+  if (B21_PARTS.has(s.id)) continue;
   const { ingots, copper } = teksCastCost(s.id);
   const need: [number, number][] = [[ID.PlasticIngot, ingots]];
   let extra = "";

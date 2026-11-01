@@ -4,7 +4,7 @@ import { BLOCKS, CATALOG, CATALOG_EXCLUDED, ID, TEKS } from "./blocks.ts";
 
 describe("inventory", () => {
   it("lists every teks part in its own bin", () => {
-    assert.equal(TEKS.length, 102); // 99 + the P5c digging bucket + the 2 P5d sensors
+    assert.equal(TEKS.length, 111); // 99 + the P5c digging bucket + the 2 P5d sensors + 9 B21 armoury/cockpits
     const listed: number[] = CATALOG;
     for (const id of TEKS) assert.equal(listed.includes(id), true);
     assert.equal(listed.includes(ID.CrankOn), false);
