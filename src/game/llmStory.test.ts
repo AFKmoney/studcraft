@@ -81,27 +81,123 @@ test("director pre-generates, rolls the arc, story persists", async () => {
   assert.deepEqual(storyFrom(JSON.parse(JSON.stringify(d.story))), d.story);
 });
 
-import { NpcModel, canRun, MODELS } from "./llm/runtime.ts";
-test("runtime: low memory / no wasm → unsupported; load failure → failed; success → ready", async () => {
-  assert.equal(canRun({ deviceMemory: 2, hasWasm: true, hasWorker: true }).ok, false);
+import { NpcModel, canRun, threadsFor, checkManifest, fetchModel, memStore, sha256Hex, MODEL_NAME, type Manifest } from "./llm/runtime.ts";
+import { readFileSync } from "node:fs";
+
+test("runtime: Bonsai only; gates; threads only when isolated; real manifest is valid", () => {
+  const src = readFileSync(new URL("./llm/runtime.ts", import.meta.url), "utf8");
+  assert.ok(!/qwen|huggingface\.co|llama-?3|phi-?\d|gemma/i.test(src), "no other model / no HF fetch");
+  assert.equal(canRun({ deviceMemory: 1, hasWasm: true, hasWorker: true }).ok, false);
   assert.equal(canRun({ hasWasm: false, hasWorker: true }).ok, false);
-  assert.equal(canRun({ deviceMemory: 8, hasWasm: true, hasWorker: true }).ok, true);
+  assert.equal(canRun({ deviceMemory: 4, hasWasm: true, hasWorker: true }).ok, true);
+  assert.equal(threadsFor({ isolated: false, cores: 16 }), 1);
+  assert.equal(threadsFor({ isolated: true, cores: 8 }), 4);
+  assert.equal(threadsFor({ isolated: true, cores: 6 }), 3);
+  assert.equal(threadsFor({ isolated: true, cores: 2 }), 1);
+  const m = JSON.parse(readFileSync(new URL("../../public/models/bonsai/manifest.json", import.meta.url), "utf8")) as Manifest;
+  assert.deepEqual(checkManifest(m), []);
+  assert.equal(m.size, 248302272);
+  for (const c of m.chunks) assert.ok(c.size <= 24 * 1024 * 1024);
+  assert.ok(checkManifest({ ...m, size: 1 }).length > 0);
+});
+
+async function fakeServer(files: Record<string, Uint8Array>, opts: { cutOnce?: string } = {}) {
+  const calls: string[] = [];
+  let cut = opts.cutOnce;
+  const fetcher = (async (u: string, init?: { headers?: Record<string, string> }) => {
+    const name = String(u).replace(/^.*\//, "");
+    const range = init?.headers?.Range;
+    calls.push(name + (range ? " " + range : ""));
+    const f = files[name];
+    if (!f) return new Response("nope", { status: 404 });
+    const from = range ? Number(/bytes=(\d+)-/.exec(range)![1]) : 0;
+    let body = f.subarray(from);
+    if (cut === name) {
+      cut = undefined; // first time: stream half then error (connection drop)
+      const half = body.subarray(0, body.length >> 1);
+      let n = 0;
+      const rs = new ReadableStream({ pull(c) { if (n++ === 0) c.enqueue(half); else c.error(new Error("drop")); } });
+      return new Response(rs, { status: range ? 206 : 200 });
+    }
+    return new Response(body.slice(), { status: range ? 206 : 200 });
+  }) as unknown as typeof fetch;
+  return { fetcher, calls };
+}
+async function fakeModel(nChunks: number, corruptIdx = -1) {
+  const files: Record<string, Uint8Array> = {};
+  const chunks = [];
+  let size = 0;
+  for (let i = 0; i < nChunks; i++) {
+    const b = new Uint8Array(1000 + i).map((_, j) => (j * 7 + i) & 255);
+    const file = "m.part0" + i;
+    chunks.push({ file, size: b.length, sha256: await sha256Hex(b) });
+    files[file] = i === corruptIdx ? b.map((x) => x ^ 1) : b;
+    size += b.length;
+  }
+  files["manifest.json"] = new TextEncoder().encode(JSON.stringify({ model: "t", size, sha256: "0".repeat(64), chunks }));
+  return { files, size };
+}
+
+test("model fetch: parallel chunks reassembled in order, resume after a drop, sha256 rejects corruption, cache reused", async () => {
+  const { files, size } = await fakeModel(5);
+  const srv = await fakeServer(files, { cutOnce: "m.part02" });
+  const store = memStore();
+  let last = 0;
+  const { blob } = await fetchModel("/x/", (f) => (last = f), srv.fetcher, store);
+  assert.equal(blob.size, size);
+  assert.equal(last, 1);
+  const all = new Uint8Array(await blob.arrayBuffer());
+  let at = 0;
+  for (let i = 0; i < 5; i++) {
+    const f = files["m.part0" + i];
+    assert.deepEqual(all.subarray(at, at + f.length), f);
+    at += f.length;
+  }
+  assert.ok(srv.calls.some((c) => /^m\.part02 bytes=\d+-$/.test(c)), "resumed with Range: " + srv.calls.join(","));
+  const again = await fakeServer(files);
+  await fetchModel("/x/", () => {}, again.fetcher, store);
+  assert.deepEqual(again.calls, ["manifest.json"], "all chunks from cache");
+  const bad = await fakeModel(3, 1);
+  const s2 = await fakeServer(bad.files);
+  await assert.rejects(fetchModel("/x/", () => {}, s2.fetcher, memStore()), /sha256 mismatch/);
+});
+
+test("runtime: wasm load ok → ready; crash → auto-retry; busy → reject at once; IPC transport preferred", async () => {
+  const { files } = await fakeModel(2);
+  const srv = await fakeServer(files);
+  let crash = true;
+  const Wllama = class {
+    async loadModel(b: Blob[]) { assert.equal(b.length, 1); }
+    async createCompletion() {
+      if (crash) { crash = false; throw new Error("RuntimeError: memory access out of bounds"); }
+      return { choices: [{ text: "{}" }] };
+    }
+    async exit() {}
+  };
   const m = new NpcModel();
-  await m.start({ deviceMemory: 2, hasWasm: true, hasWorker: true });
-  assert.equal(m.state, "unsupported");
-  assert.equal(m.llm(), null);
-  const bad = new NpcModel();
-  await bad.start({ hasWasm: true, hasWorker: true }, async () => ({ Wllama: class { async loadModelFromUrl() { throw new Error("unknown type"); } async createCompletion() { return ""; } } }));
-  assert.equal(bad.state, "failed");
-  const tried: string[] = [];
-  const ok = new NpcModel();
-  await ok.start({ hasWasm: true, hasWorker: true }, async () => ({
-    Wllama: class {
-      async loadModelFromUrl(u: string, o: { progressCallback: (p: { loaded: number; total: number }) => void }) { tried.push(u); o.progressCallback({ loaded: 1, total: 2 }); }
-      async createCompletion() { return { choices: [{ text: "{}" }] }; }
-    },
-  }));
-  assert.equal(ok.state, "ready");
-  assert.equal(ok.model, MODELS[0].name);
-  assert.equal(await ok.llm()!("p", "g", { temperature: 0.4, maxTokens: 10 }), "{}");
+  const env = { hasWasm: true, hasWorker: true, isolated: false };
+  await m.start(env, { native: null, fetcher: srv.fetcher, store: memStore(), importer: async () => ({ Wllama }) });
+  assert.equal(m.state, "ready");
+  assert.equal(m.model, MODEL_NAME);
+  assert.equal(m.transport, "wasm");
+  await assert.rejects(m.llm()!("p", "g", { temperature: 0.4, maxTokens: 10 }), /out of bounds/);
+  assert.equal(m.state, "retrying");
+  assert.equal(m.llm(), null, "procedural meanwhile");
+  m.stop();
+  // IPC
+  let slow: (s: string) => void = () => {};
+  const ipc = new NpcModel();
+  await ipc.start(env, { native: { status: async () => ({ ready: true }), generate: () => new Promise<string>((r) => (slow = r)) } });
+  assert.equal(ipc.state, "ready");
+  assert.equal(ipc.transport, "ipc");
+  const f = ipc.llm()!;
+  const p1 = f("p", "g", { temperature: 0.4, maxTokens: 10 });
+  await assert.rejects(f("p", "g", { temperature: 0.4, maxTokens: 10 }), /busy/);
+  slow("{}");
+  assert.equal(await p1, "{}");
+  assert.equal(await (async () => { const p = f("p", "g", { temperature: 0.4, maxTokens: 10 }); slow("{\"a\":1}"); return p; })(), "{\"a\":1}");
+  ipc.stop();
+  const low = new NpcModel();
+  await low.start({ deviceMemory: 1, hasWasm: true, hasWorker: true }, { native: null });
+  assert.equal(low.state, "unsupported");
 });
