@@ -1,9 +1,15 @@
 // Plastic Foundry — the main game loop's pure, data-driven core
 // (Grok Bot, 2026-10-31, branch grokbot/plastic-foundry).
 // Philippe: « le plastic foundry est le main game loop » + « fondre des
-// objets rares donne des bonus ». Everything here is pure math, no
-// three.js, so node --test covers it. game.ts owns the Furn object and
-// calls these helpers from tickFurnaces / furnaceTap / the HUD.
+// objets rares donne des bonus ». The bonuses are QUALITY and SPEED
+// (purity, tempered pours, faster cook, fuel distillation) — never
+// QUANTITY: Guide §1, a law with no exceptions, « Rien n'apparaît de
+// nulle part, rien ne disparaît ». A pour returns exactly what was
+// melted (B24-A2, nuit 2026-11-01: the old +15/30/50 % tier bonus and
+// the « yield » +1 affix created matter from nowhere and are gone).
+// Everything here is pure math, no three.js, so node --test covers it.
+// game.ts owns the Furn object and calls these helpers from
+// tickFurnaces / furnaceTap / the HUD.
 //
 // The loop:
 //  1. HEAT  — burning fuel raises the kiln's heat (0..1); without fuel it
@@ -13,22 +19,23 @@
 //     (0..100). Plain pellets drift purity toward the level's cap;
 //     rare drops (boss relics, prisms, cores) inject a big purity spike
 //     and an AFFIX charge on the batch.
-//  3. MOLD  — purity → quality tier. Higher tiers pour bonus ingots
-//     (deterministic accumulator, so it is fair and testable) and the
-//     active affix shapes the pour (extra yield, tempered ingots, faster
-//     cook, double fuel distillation).
+//  3. MOLD  — purity → quality tier (a label for the batch's quality,
+//     never a quantity multiplier) and the active affix shapes the
+//     pour (tempered ingots, faster cook, fuel distillation) — the
+//     count poured always equals the count melted.
 //  4. UPGRADE — Foundry level raises the purity cap, heat rate and
 //     unlocks the tiers above it: a Lv1 kiln can never pour Masterwork.
 import { ID } from "./blocks.ts";
 
-export type Tier = { name: string; min: number; bonus: number; color: string };
-/** Quality tiers by purity. `bonus` = extra ingots per ingot poured
- *  (fractional, paid through the accumulator). */
+export type Tier = { name: string; min: number; color: string };
+/** Quality tiers by purity. A tier names the batch's QUALITY only —
+ *  it never multiplies the pour (Guide §1: matter is never created;
+ *  the pre-B24 +15/30/50 % quantity bonus is removed). */
 export const TIERS: Tier[] = [
-  { name: "Raw", min: 0, bonus: 0, color: "#9aa0a6" },
-  { name: "Fine", min: 35, bonus: 0.15, color: "#5ec46a" },
-  { name: "Superior", min: 60, bonus: 0.3, color: "#4aa3ff" },
-  { name: "Masterwork", min: 85, bonus: 0.5, color: "#ffb02e" },
+  { name: "Raw", min: 0, color: "#9aa0a6" },
+  { name: "Fine", min: 35, color: "#5ec46a" },
+  { name: "Superior", min: 60, color: "#4aa3ff" },
+  { name: "Masterwork", min: 85, color: "#ffb02e" },
 ];
 
 /** Per Foundry level: purity cap of plain melt, heat-up rate /s, the
@@ -39,9 +46,8 @@ export const LEVEL_FOUNDRY = [
   { cap: 90, heatUp: 0.6, maxTier: 3 },
 ];
 
-export type Affix = "yield" | "tempered" | "swift" | "distil";
+export type Affix = "tempered" | "swift" | "distil";
 export const AFFIX_INFO: Record<Affix, { name: string; desc: string }> = {
-  yield: { name: "Abundant", desc: "+1 ingot per pour" },
   tempered: { name: "Tempered", desc: "pours tempered ingots" },
   swift: { name: "Swift", desc: "cook ×2 faster" },
   distil: { name: "Volatile", desc: "fuel distillation ×3" },
@@ -51,7 +57,9 @@ export const AFFIX_INFO: Record<Affix, { name: string; desc: string }> = {
  *  Data-driven: add a row to add a rare. */
 export const RARE_MELT: Record<number, { purity: number; affix: Affix; charges: number; pellets: number }> = {
   [ID.GuardianSpike]: { purity: 30, affix: "tempered", charges: 6, pellets: 3 },
-  [ID.PharaohGold]: { purity: 35, affix: "yield", charges: 8, pellets: 4 },
+  // B24-A2: PharaohGold carried the removed "yield" affix; as a large
+  // rare (cf. GuardianSpike) it now charges tempered pours instead.
+  [ID.PharaohGold]: { purity: 35, affix: "tempered", charges: 8, pellets: 4 },
   [ID.WitchVenom]: { purity: 25, affix: "distil", charges: 8, pellets: 2 },
   [ID.IllagerBadge]: { purity: 25, affix: "swift", charges: 10, pellets: 2 },
   // v5 remap (integration): 305 is now the "Prism sentinel core" (boss
@@ -60,7 +68,9 @@ export const RARE_MELT: Record<number, { purity: number; affix: Affix; charges: 
   [ID.VoidCore]: { purity: 50, affix: "tempered", charges: 12, pellets: 6 },
   [ID.VoidGlass]: { purity: 30, affix: "swift", charges: 6, pellets: 3 },
   [ID.EnderPearl]: { purity: 10, affix: "swift", charges: 2, pellets: 1 },
-  [ID.Prism]: { purity: 20, affix: "yield", charges: 4, pellets: 1 },
+  // B24-A2: Prism carried the removed "yield" affix; as a small rare
+  // (cf. Sapphire) it now charges swift cooks instead.
+  [ID.Prism]: { purity: 20, affix: "swift", charges: 4, pellets: 1 },
   [ID.Sapphire]: { purity: 12, affix: "swift", charges: 4, pellets: 1 },
   [ID.Amber]: { purity: 8, affix: "distil", charges: 3, pellets: 1 },
 };
@@ -68,7 +78,6 @@ export const RARE_MELT: Record<number, { purity: number; affix: Affix; charges: 
 export type Pool = {
   heat?: number;
   purity?: number;
-  bonusAcc?: number;
   affix?: Affix | "";
   charges?: number;
 };
@@ -117,16 +126,17 @@ export function meltInto(p: Pool, inId: number, lvl: number, opts?: { regrind?: 
   p.purity = pur < L.cap ? Math.min(L.cap, pur + 4) : Math.max(L.cap, pur - 1.5);
 }
 
-/** Pour the ingots for one melted pellet. Returns what to emit. */
+/** Pour the ingots for one melted pellet. Returns what to emit.
+ *  CONSERVATION (Guide §1, B24-A2): `n` is ALWAYS `baseN` — purity,
+ *  tier and affixes change the pour's quality, speed or fuel, never
+ *  its count. A legacy "yield" affix in an old save simply burns its
+ *  charges with no effect and clears. */
 export function pour(p: Pool, lvl: number, baseN: number): { id: number; n: number; fuelMul: number; tier: number } {
   const tier = tierIndex(p.purity ?? 0, lvl);
-  let n = baseN;
-  p.bonusAcc = (p.bonusAcc ?? 0) + TIERS[tier].bonus * baseN;
-  while (p.bonusAcc >= 1) { p.bonusAcc -= 1; n += 1; }
+  const n = baseN;
   let id: number = ID.PlasticIngot;
   let fuelMul = 1;
   if ((p.charges ?? 0) > 0) {
-    if (p.affix === "yield") n += 1;
     if (p.affix === "tempered") id = ID.TemperedIngot;
     if (p.affix === "distil") fuelMul = 3;
     p.charges = (p.charges ?? 0) - 1;

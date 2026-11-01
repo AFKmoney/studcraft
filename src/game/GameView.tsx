@@ -2536,7 +2536,7 @@ function StationScreen({ game }: { game: GameApi }) {
                     <p className="sc-muted">Max level — this Foundry runs at full song.</p>
                   )}
                 </div>
-                <p className="sc-hint">Plastic pellets smelt into ingots here — higher purity tiers (Fine/Superior/Masterwork) pour bonus ingots, rare melts charge an affix — and every pellet smelted also distils Fuel, dropped beside the kiln. Ingots cast bricks and Teks parts from the Crafting book. Tap an item below: ores and food go to Input, fuel to Fuel. Tap a kiln slot to take its stack back.</p>
+                <p className="sc-hint">Plastic pellets smelt into ingots here — purity tiers (Fine/Superior/Masterwork) name the batch's quality, a pour always returns exactly what was melted, and rare melts charge an affix — and every pellet smelted also distils Fuel, dropped beside the kiln. Ingots cast bricks and Teks parts from the Crafting book. Tap an item below: ores and food go to Input, fuel to Fuel. Tap a kiln slot to take its stack back.</p>
                 <BinGrid game={game} onPick={(id) => game.furnaceQuick(id)} />
               </>
             )}

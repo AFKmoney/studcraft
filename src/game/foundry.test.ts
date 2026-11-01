@@ -42,24 +42,32 @@ describe("plastic foundry", () => {
     meltInto(p, ID.Prism, 1);
     meltInto(p, ID.Prism, 1);
     assert.equal(p.charges, 8);
-    meltInto(p, ID.Sapphire, 1);
-    assert.equal(p.affix, "swift");
-    assert.equal(p.charges, 4);
+    meltInto(p, ID.Amber, 1);
+    assert.equal(p.affix, "distil");
+    assert.equal(p.charges, 3);
   });
-  it("masterwork pours +50% ingots over time, Raw pours exactly 1:1", () => {
-    const m: Pool = { purity: 90 };
-    let n = 0;
-    for (let i = 0; i < 10; i++) n += pour(m, 3, 1).n;
-    assert.equal(n, 15);
+  it("B24-A2 conservation: every tier pours exactly 1:1 (Guide §1 — no matter from nowhere)", () => {
+    for (const purity of [0, 40, 70, 90, 100]) {
+      const p: Pool = { purity };
+      let n = 0;
+      for (let i = 0; i < 10; i++) n += pour(p, 3, 1).n;
+      assert.equal(n, 10, "purity " + purity);
+    }
     const r: Pool = { purity: 0 };
-    n = 0;
+    let n = 0;
     for (let i = 0; i < 10; i++) n += pour(r, 1, 1).n;
     assert.equal(n, 10);
   });
+  it("B24-A2: no tier carries a quantity bonus and no rare charges the removed yield affix", () => {
+    for (const t of TIERS) assert.equal((t as unknown as { bonus?: number }).bonus, undefined, t.name);
+    for (const v of Object.values(RARE_MELT)) assert.notEqual(v.affix as string, "yield");
+  });
   it("charges run out and the affix clears", () => {
-    const p: Pool = { affix: "yield", charges: 1 };
-    assert.equal(pour(p, 1, 1).n, 2);
+    const p: Pool = { affix: "tempered", charges: 1 };
+    assert.equal(pour(p, 1, 1).id, ID.TemperedIngot);
+    assert.equal(pour(p, 1, 1).n, 1);
     assert.equal(p.affix, "");
+    assert.equal(pour(p, 1, 1).id, ID.PlasticIngot);
     assert.equal(pour(p, 1, 1).n, 1);
   });
   it("every rare is a Kiln input that melts to pellets (matter returns)", () => {
