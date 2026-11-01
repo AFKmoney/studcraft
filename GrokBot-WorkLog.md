@@ -258,3 +258,11 @@ Plan (phases, une PR par phase, merge quand tsc + node --test + vite build sont 
 - Hooks QA : `vehFireQa`, `getVehArmsQa`. Tests : +3 (muzzles/pod, cockpit non masqué, câblage game.ts) → 325/325. tsc 0, vite build OK.
 - Captures (SwiftShader) : /workspace/studcraft-qa/shots/b21-veh-*.png.
 - B21 lot 2 : contrats de récolte nommant l'objet et titres propres aux guildes ; ancrage des modèles sur le vrai sol (surfaceBelow) au lieu de la hauteur du générateur ; les servos gardent leur angle au relâchement. Ouvert : le godet du Rig Digger n'atteint pas le sol.
+
+### B21 lot 3 — Rig Digger qui creuse + vue cockpit de la Starter Buggy (2026-10-31, Grok Bot)
+- **Bug #12 (Rig Digger)** : cause = canaux liés dans l'ordre des pièces, donc la tourelle (axe vertical) tombait sur B et le premier canal essayé faisait pivoter la flèche sur le côté ; en plus, le godet traversait le terrain comme un fantôme jusque sous la machine.
+  - `ModelPart.ch` (optionnel) : le Rig Digger lie ses articulations par rôle — **B = flèche** (S l'enfonce dans le sol), **C = balancier + godet** (W ressort la charge), **D = tourelle**. Message de chargement explicite.
+  - Le sol que le godet ne peut pas prendre (godet plein, trop dur) **arrête le bras** ; un mouvement qui le remonte reste toujours permis.
+  - Vérifié en headless sur un plateau plat : B/S → le godet mord à ~7 blocs devant la machine, 4 blocs de terre ramassés (capacité 4), C/W ressort la charge, D tourne la tourelle. Test : catalogue.test « Rig Digger: B lowers the boom… ».
+- **Vue 1re personne Starter Buggy** : tableau de bord et volant noirs remplacés par un tableau bas et fin gris clair + petit volant gris ; œil du cockpit-cage avancé et relevé (eye 5.0 / −0.3). **FOV par cockpit branché** (`cockpitFov` : FOV du cockpit décalé de la préférence joueur, 3e personne inchangée). Test vehView.test.
+- Hook QA : `getBucket().pos`, `getDriveView().fov`. tsc 0, 333 tests verts, vite build OK. Captures : /workspace/studcraft-fix2-shots/p12-*.png, p2-buggy-fp-before/after.png.

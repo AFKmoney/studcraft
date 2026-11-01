@@ -18,7 +18,9 @@ export type CockpitSpec = {
   /** Window panes (rendered with the shared SNR glass). */
   panes: Pane[];
   enclosed: boolean;
-  /** Field of view the cockpit gives (deg) — the cab is a touch narrower. */
+  /** Field of view the cockpit gives (deg) — the cab is a touch narrower.
+   *  Applied in first person as an offset from the default 72° (so a
+   *  player who widened their FOV keeps the difference). */
   fov: number;
 };
 
@@ -32,7 +34,7 @@ export const COCKPITS: Record<number, CockpitSpec> = {
       { a: [2.85, 2.6, -3.6], b: [2.95, 6.2, 3.6] },
     ],
   },
-  [ID.CockpitCage]: { id: ID.CockpitCage, name: "Buggy roll cage", eye: [0, 4.2, 0.8], dash: [0, 2.05, -2.4], panes: [], enclosed: false, fov: 80 },
+  [ID.CockpitCage]: { id: ID.CockpitCage, name: "Buggy roll cage", eye: [0, 5.0, -0.3], dash: [0, 1.8, -2.4], panes: [], enclosed: false, fov: 80 },
   [ID.CockpitMech]: {
     id: ID.CockpitMech, name: "Mech cabin", eye: [0, 4.0, 0.4], dash: [0, 2.05, -3.0], enclosed: true, fov: 70,
     panes: [{ a: [-2.6, 2.4, -3.9], b: [2.6, 5.4, -3.8] }],
@@ -74,3 +76,11 @@ export function dashGauges(v: Pick<Vehicle, "vel" | "battery">, ammo: number, am
 }
 
 export { ORIENTS };
+
+/** First-person FOV while seated: the cockpit's FOV shifted by the
+ *  player's own FOV preference (default 72°), clamped to 55..110. */
+export function cockpitFov(id: number | null | undefined, userFov: number): number {
+  const spec = id != null ? COCKPITS[id] : undefined;
+  if (!spec) return userFov;
+  return Math.max(55, Math.min(110, spec.fov + (userFov - 72)));
+}

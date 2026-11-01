@@ -31,7 +31,7 @@ import { GUNS, type GunSpec, type GunState, ammoLabel, damageAt, finishReload, f
 import { itemByName } from "./recipes";
 import { driverOccluders, liftToFit, seatEye, vehChaseDistance, viewBlocked } from "./vehView";
 import { WEAPONS, TURRET_ID, aimDir, coolWeapon, fireWeapon, laserBurnTime, mobDamage, muzzleOf, newWeaponState, weaponLabel, type WeaponState } from "./vehArms";
-import { COCKPITS, cockpitEye, cockpitForward, cockpitPart, dashGauges, partLocalToVehicle } from "./cockpits";
+import { COCKPITS, cockpitEye, cockpitFov, cockpitForward, cockpitPart, dashGauges, partLocalToVehicle } from "./cockpits";
 import { buildSummary, validateBuild } from "./vehBuild";
 import { armorMaxDur, combineDur, repairCost, wearArmor } from "./foundry";
 import { plasticCost, salvageOf } from "./recipes";
@@ -471,7 +471,7 @@ declare global {
       stepTeks?: (dt: number) => { parts: number; jammed: boolean; omegas: Record<string, number>; angles: Record<string, number> };
       getVehicle?: () => { pos: { x: number; y: number; z: number }; vel: number; yaw: number; fuel: number; battery: number; load: number; parts: number } | null;
       getJoints?: () => { uid: number; kind: string; channel: string; group: number; angle: number; ext: number }[];
-      getBucket?: () => { load: [number, number][]; cap: number; total: number } | null;
+      getBucket?: () => { load: [number, number][]; cap: number; total: number; pos?: { x: number; y: number; z: number } } | null;
       cycleChannelQa?: () => void;
       getBuildMode?: () => { on: boolean; fly: boolean; techHeld: boolean; wantO: number | null };
       spinTech?: () => number;
@@ -6771,7 +6771,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         // catalogue; the player can re-bind any of them by hand.
         const msp = techSpec(mp.id);
         if (mp.id === ID.Servo || msp?.drive === "screw") {
-          motorChannelByQ.set(qKey(q), (["B", "C", "D"] as Channel[])[Math.min(jointN, 2)]);
+          motorChannelByQ.set(qKey(q), mp.ch ?? (["B", "C", "D"] as Channel[])[Math.min(jointN, 2)]);
           jointN++;
         }
       } else {
@@ -6779,7 +6779,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         holo++;
       }
     }
-    if (jointN > 0) say("Joints pre-bound to channels B / C / D — cycle with C or the CH button while driving");
+    if (jointN > 0)
+      say(
+        model.parts.some((p) => p.ch)
+          ? "Arm pre-bound: B boom (S digs in), C stick + bucket (W scoops out), D turret — cycle with C or the CH button"
+          : "Joints pre-bound to channels B / C / D — cycle with C or the CH button while driving",
+      );
     syncHoloMeshes();
     saveDirty = true;
     if (holo === 0) say("Model loaded: " + name + " — " + placed + " parts placed");
@@ -14805,6 +14810,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           tiltWarnCd = 6;
         }
         const hubLvl = HUB_LVL[(teksLvl.get(vehEnt.hubKey) ?? 1) - 1];
+        const prevJointAngles = v.joints.map((j) => j.angle);
         stepVeh(v, dt, { throttle: tilted ? 0 : sample.fwd, steer: sample.str, channel: v.hubChannel, battMul: hubLvl.battMul, genMul: hubLvl.genMul }, (x, z) => groundY(x, z));
         placeVehGroup();
         applyDriverView();
@@ -14840,7 +14846,18 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           const bp = partWorldPoint(v, vehEnt.bucket.vp, vehEnt.bucket.vp.centreLocal);
           const last = vehEnt.lastBucketPos;
           if (last && Math.hypot(bp.x - last.x, bp.y - last.y, bp.z - last.z) > 0.05) digAt(vehEnt, bp);
-          vehEnt.lastBucketPos = bp;
+          // B21 #12: ground the bucket could not take (bucket full, too
+          // hard) STOPS the arm — it used to sweep on through the
+          // terrain like a ghost and swing under the machine.
+          const inId = world.get(Math.floor(bp.x), Math.floor(bp.y), Math.floor(bp.z));
+          // (Only a move that pushes it DEEPER is refused, so an arm
+          // buried by falling sand can always pull back out.)
+          if (last && bp.y < last.y - 1e-3 && inId !== ID.Air && def(inId).solid && !def(inId).sign) {
+            v.joints.forEach((j, i) => {
+              j.angle = prevJointAngles[i] ?? j.angle;
+            });
+            placeVehGroup();
+          } else vehEnt.lastBucketPos = bp;
           let bl = 0;
           for (const n of vehEnt.bucket.load.values()) bl += n;
           hud.bucketLoad = bl;
@@ -15281,7 +15298,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       camera.rotation.y = player.yaw;
       camera.rotation.x = player.pitch;
     }
-    const baseFov = settings.fov;
+    // B21 (t100u): each cockpit gives its own first-person FOV.
+    const baseFov = vehEnt && !settings.third ? cockpitFov(cockpitPart(vehEnt.v)?.id, settings.fov) : settings.fov;
     if (accZoom && ACC_OF(hotbar[slot])?.use !== "zoom") accZoom = false; // t91u binoculars / camera
     camera.fov = THREE.MathUtils.lerp(camera.fov, accZoom ? baseFov * 0.3 : isSprinting() && phase === "play" && !flying ? baseFov + 8 : baseFov, 0.1);
     camera.updateProjectionMatrix();
@@ -16297,7 +16315,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     getJoints: () => (vehEnt ? vehEnt.v.joints.map((j) => ({ uid: j.uid, kind: j.kind, channel: j.channel, group: j.group, angle: j.angle, ext: j.ext })) : []),
     getBucket: () =>
       vehEnt?.bucket
-        ? { load: [...vehEnt.bucket.load.entries()] as [number, number][], cap: vehEnt.bucket.cap, total: [...vehEnt.bucket.load.values()].reduce((s, n) => s + n, 0) }
+        ? {
+            load: [...vehEnt.bucket.load.entries()] as [number, number][],
+            cap: vehEnt.bucket.cap,
+            total: [...vehEnt.bucket.load.values()].reduce((s, n) => s + n, 0),
+            pos: partWorldPoint(vehEnt.v, vehEnt.bucket.vp, vehEnt.bucket.vp.centreLocal),
+          }
         : null,
     cycleChannelQa: () => cycleDriveChannel(),
     // B21 QA hooks (inert in play): enter the nearest complete vehicle
@@ -16333,7 +16356,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const fwd = hub && eye ? partWorldPoint(v, hub, { x: eye.x, y: eye.y, z: eye.z - 1 }) : null;
       const ew = hub && eye ? partWorldPoint(v, hub, eye) : null;
       const blocked = eye ? viewBlocked(v, eye, { x: 0, y: 0, z: -1 }, vehHidden) : 1;
-      return { eye, hidden: vehHidden.size, parts: v.parts.length, blocked, cam: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, eyeW: ew, fwdYaw: ew && fwd ? Math.atan2(-(fwd.x - ew.x), -(fwd.z - ew.z)) : null, playerYaw: player.yaw, vehYaw: v.yaw };
+      return { eye, hidden: vehHidden.size, parts: v.parts.length, blocked, cam: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, eyeW: ew, fwdYaw: ew && fwd ? Math.atan2(-(fwd.x - ew.x), -(fwd.z - ew.z)) : null, playerYaw: player.yaw, vehYaw: v.yaw, fov: camera.fov };
     },
     // All-devices QA witness (inert in play): build-mode state for the
     // touch/pad rig — toggled via the DOM Build button, rotated via
@@ -17726,7 +17749,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         // P5c-3: prefab joints arrive pre-bound B / C / D, like the catalogue.
         const msp = techSpec(mp.id);
         if (mp.id === ID.Servo || msp?.drive === "screw") {
-          motorChannelByQ.set(qKey(q), (["B", "C", "D"] as Channel[])[Math.min(jointN, 2)]);
+          motorChannelByQ.set(qKey(q), mp.ch ?? (["B", "C", "D"] as Channel[])[Math.min(jointN, 2)]);
           jointN++;
         }
       }

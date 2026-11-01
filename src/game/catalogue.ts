@@ -9,7 +9,9 @@
 // world never deletes your vehicles. Phase 1 sharing is a text code
 // (encodeModel/decodeModel); there is NO server — never fake one.
 
-export type ModelPart = { id: number; o: number; dq: [number, number, number] };
+/** `ch`: optional pre-bound channel for a joint part (servo / screw).
+ *  Without it, a loaded model's joints bind B, C, then D in order. */
+export type ModelPart = { id: number; o: number; dq: [number, number, number]; ch?: "A" | "B" | "C" | "D" };
 export type VehicleModel = {
   name: string;
   author: string;
@@ -96,7 +98,7 @@ export function removeModel(list: VehicleModel[], name: string): VehicleModel[] 
  *  catalogue.test.ts re-validates it headless through
  *  vehicleFromAssembly. Positions are hub-anchored lattice offsets. */
 export function builtinModels(): VehicleModel[] {
-  const P = (id: number, dq: [number, number, number], o = 0): ModelPart => ({ id, o, dq });
+  const P = (id: number, dq: [number, number, number], o = 0, ch?: ModelPart["ch"]): ModelPart => (ch ? { id, o, dq, ch } : { id, o, dq });
   return [
     {
       name: "Starter Buggy",
@@ -137,13 +139,19 @@ export function builtinModels(): VehicleModel[] {
         // legally AND keep the serial joint chain base→arm→bucket;
         // the "built-in models PLACE" test in catalogue.test.ts now
         // replays the real load law so this cannot regress silently.
-        P(450, [-2, 12, 4], 4),
+        // B21 #12: channels are bound by ROLE, not by order. The turret
+        // (vertical axis) used to land on B, so the first channel a
+        // player tried swung the whole arm sideways and the bucket never
+        // came down. Now B = boom (S lowers it to the ground), C = stick
+        // + bucket curl (W curls the bucket up and out with its load),
+        // D = turret slew.
+        P(450, [-2, 12, 4], 4, "D"),
         P(454, [0, 13, 0]),
-        P(450, [10, 15, -4]),
+        P(450, [10, 15, -4], 0, "B"),
         P(454, [16, 19, 0]),
-        P(450, [26, 19, 4]),
+        P(450, [26, 19, 4], 0, "C"),
         P(379, [32, 15, 0]),
-        P(450, [38, 18, -4]),
+        P(450, [38, 18, -4], 0, "C"),
         P(471, [44, 12, 0]),
         // P5d (tester 2026-10-31 noted the builtin carried no sensor):
         // a distance sensor mirrored across from the drive motor, so
