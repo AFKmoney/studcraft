@@ -178,3 +178,11 @@ Journal de travail de studs game tester (Grok Bot) sur StudCraft. Heures en heur
 - L'objet tenu est masqué quand on est assis dans un véhicule.
 - Captures : studcraft-qa/shots/b18-crossbow-fp.png, b18-crossbow-tp.png, b18-drive-{fwd,left,right,rear}.png, b18-drive-montage.png.
 - Reste à faire : prise de l'arbalète en 3e personne non vérifiée visuellement (la caméra est derrière le perso).
+
+## B19 — Arbalète Lego refaite : corde + animation de tir (2026-10-31)
+- Nouveau modèle procédural (crossbowRig.ts + game.ts) : crosse fine, bloc-poignée sous la crosse pour la main de la figurine, arc horizontal courbé à bouts arrondis, corde tendue des bouts jusqu'à la noix, carreau visible quand c'est chargé. Matériaux skin() (shader SNR quand le plastique est activé). L'icône est refaite.
+- Animation synchronisée avec shootHeld() : armée (corde à la noix + carreau) → tir (la corde claque vers l'avant, les bouts de l'arc fléchissent, recul des bras et de l'arbalète, le carreau part comme projectile via launchArrow) → réarmement court (0,55 s). On ne peut pas retirer avant la fin du réarmement. Même pose en 1re et 3e personne (recul sur figHeldGroup).
+- La tenue B18 (horizontale, vers l'avant) est conservée. Hooks QA : xbShoot, xbHold.
+- Tests : crossbowRig.test.ts (5), 213/213 au total.
+- Captures : studcraft-qa/shots/b19-crossbow-{idle,drawn,fire,fire-tp,front-tp}.png.
+- Limite : la 3e personne n'est pas vérifiable à l'image (caméra derrière le perso, l'arbalète est cachée par le corps).

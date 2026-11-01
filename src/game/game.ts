@@ -22,6 +22,7 @@ import { Director, generateQuest, newStory, storyFrom, type WorldView } from "./
 import { PREFETCH_TIMEOUT_MS } from "./llm/prompt";
 import { NpcModel } from "./llm/runtime";
 import { GenPool, poolSize, type WorkerLike } from "./genPool";
+import { XB, xbPose, stringHalf, prodPoint, XB_CYCLE, type XbPose } from "./crossbowRig";
 import { CROSSBOW_HOLD } from "./heldPose";
 import { driverOccluders, seatEye } from "./vehView";
 import { armorMaxDur, combineDur, repairCost, wearArmor } from "./foundry";
@@ -376,6 +377,8 @@ declare global {
       getArmor?: () => number[];
       give?: (id: number, n: number) => boolean;
       setInv?: (id: number, n: number) => boolean;
+      xbShoot?: () => boolean;
+      xbHold?: (t: number | null) => boolean;
       mpConnect?: (url: string, room: string, name: string) => boolean;
       getMobs?: () => string[];
       mobAudit?: () => Record<string, { h: number; minY: number; w: number; d: number }>;
@@ -2331,33 +2334,38 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
 
     if (id === ID.Crossbow) {
-      // Distinct crossbow: stock + horizontal prod + short string.
+      // B19 (Philippe): LEGO-style minifig crossbow — slim stock, grip
+      // block under it for the hand clip, curved horizontal prod with
+      // rounded tips, a taut string tip → nut, and a bolt when loaded.
+      // Geometry/animation data live in crossbowRig.ts; xbApply() re-poses
+      // the prod, string and bolt every frame (draw / fire / reload).
       const woodMat = skin(0x7c522b);
-      const stringMat = skin(0xe8e4dc);
+      const darkMat = skin(0x4a2e16);
+      const stringMat = skin(0xf2efe6);
       const metalMat = skin(0xb0b6be);
+      const prodMat = skin(0x3a3f46);
       const fletchMat = skin(0xd82e22);
-      // Stock
-      addBoxPart(group, 0.18, 0.032, 0.028, -0.04, 0, 0, woodMat);
-      addBoxPart(group, 0.06, 0.028, 0.032, -0.12, -0.01, 0, woodMat);
-      // B18: Lego-style pistol grip UNDER the stock — the minifig hand holds it.
-      addBoxPart(group, 0.024, 0.06, 0.026, -0.07, -0.045, 0, woodMat);
-      // Prod — B17: the bow limb spans Z, PERPENDICULAR to the
-      // stock. It used to run along X, collinear with the stock:
-      // the whole model was one thin line (0.31 × 0.05 × 0.03), so
-      // no first-person transform could ever give it a readable
-      // silhouette — measured as a sliver at the frame's edge
-      // across three rig runs. Across the stock, it reads as a
-      // crossbow from every side.
-      addBoxPart(group, 0.016, 0.018, 0.22, 0.04, 0.02, 0, woodMat);
-      addBoxPart(group, 0.018, 0.018, 0.018, 0.04, 0.02, 0.095, metalMat);
-      addBoxPart(group, 0.018, 0.018, 0.018, 0.04, 0.02, -0.095, metalMat);
-      // String
-      addBoxPart(group, 0.006, 0.006, 0.22, 0.04, 0.01, 0, stringMat);
-      // Bolt
-      const bolt = addCylPart(group, 0.006, 0.006, 0.16, 0.02, 0, 0, woodMat, 8);
-      bolt.rotation.z = Math.PI / 2;
-      addBoxPart(group, 0.016, 0.016, 0.016, 0.11, 0, 0, metalMat);
-      addBoxPart(group, 0.008, 0.020, 0.016, -0.06, 0, 0, fletchMat);
+      const S = XB.stock;
+      addBoxPart(group, S.len, S.h, S.w, S.x, 0, 0, woodMat);
+      addBoxPart(group, 0.07, 0.04, 0.034, S.x - S.len / 2 + 0.03, -0.012, 0, darkMat); // butt
+      addBoxPart(group, XB.grip.w, XB.grip.h, XB.grip.d, XB.grip.x, XB.grip.y, 0, darkMat);
+      addBoxPart(group, 0.03, 0.03, 0.04, XB.prodX, XB.prodY, 0, metalMat); // prod mount
+      addBoxPart(group, 0.016, 0.014, 0.02, XB.nutX, S.h / 2 + 0.006, 0, metalMat); // nut
+      addBoxPart(group, 0.012, 0.022, 0.008, XB.nutX - 0.02, -0.024, 0, metalMat); // trigger
+      const segs: THREE.Mesh[] = [];
+      for (let i = 0; i < XB.prodSegs * 2; i++) segs.push(addBoxPart(group, 1, XB.prodR * 2, XB.prodR * 2, 0, 0, 0, prodMat));
+      const tips = [addCylPart(group, XB.tipR, XB.tipR, XB.tipR * 1.6, 0, 0, 0, metalMat, 10), addCylPart(group, XB.tipR, XB.tipR, XB.tipR * 1.6, 0, 0, 0, metalMat, 10)];
+      const strs = [addBoxPart(group, 1, XB.stringR * 2, XB.stringR * 2, 0, 0, 0, stringMat), addBoxPart(group, 1, XB.stringR * 2, XB.stringR * 2, 0, 0, 0, stringMat)];
+      const bolt = new THREE.Group();
+      const shaft = addCylPart(bolt, XB.bolt.r, XB.bolt.r, XB.bolt.len, 0, 0, 0, woodMat, 8);
+      shaft.rotation.z = Math.PI / 2;
+      const head = addCylPart(bolt, 0, XB.bolt.r * 2.2, 0.026, XB.bolt.len / 2 + 0.013, 0, 0, metalMat, 8);
+      head.rotation.z = -Math.PI / 2;
+      addBoxPart(bolt, 0.024, 0.016, 0.004, -XB.bolt.len / 2 + 0.014, 0.008, 0, fletchMat);
+      bolt.position.set(XB.nutX + XB.bolt.len / 2, S.h / 2 + XB.bolt.r + 0.002, 0);
+      group.add(bolt);
+      group.userData.xb = { segs, tips, strs, bolt };
+      xbApply(group, xbPose(Infinity, true));
       return { group, isTool: true, flames };
     }
 
@@ -3609,6 +3617,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const fh = fb.max.y - fb.min.y;
     if (fh > 0.05) fig.group.scale.setScalar(1.8 / fh);
   }
+  let xbShotAt = -1e9;
+  let xbKick = 0;
+  let xbQaSince: number | null = null;
+  let xbFp: THREE.Object3D | null = null;
+  let xbTp: THREE.Object3D | null = null;
   const figHeldGroup = new THREE.Group();
   figHeldGroup.position.set(-0.08, -0.58, -0.10);
   fig.armR.add(figHeldGroup);
@@ -9371,6 +9384,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   }
 
   function shootHeld() {
+    // B19: the crossbow can't fire again until its cock-back is done.
+    if (hotbar[slot] === ID.Crossbow && elapsed - xbShotAt < XB_CYCLE) return;
     if ((inv[ID.Arrow] ?? 0) <= 0 && !creative) return say("Need arrows");
     // Infinity: the quiver never empties while you hold one arrow.
     if (!creative && enchLvl(hotbar[slot], "infinity") === 0) spend(ID.Arrow, 1);
@@ -9381,6 +9396,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const bowId = hotbar[slot];
     // A crossbow hits harder and its bolt punches through the first mob.
     const cross = bowId === ID.Crossbow;
+    if (cross) xbShotAt = elapsed; // B19: drives the snap / recoil / reload animation
     launchArrow(player.x, player.y + 1.4, player.z, dx, dy, dz, true, enchLvl(bowId, "power") + (cross ? 2 : 0), enchLvl(bowId, "flame") > 0, enchLvl(bowId, "punch"), cross);
     audio.place();
   }
@@ -14627,8 +14643,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const holding = heldBrickGroup.visible && lastHeldId > 0;
     const swT = holding ? 0.35 : 0.5; // holding: the hand stays put, the item does the chop; bare hand: half travel (see the !holding branch below)
     const ax = (holding ? (heldKind ? mcTune.bx : mcTune.ax) : MC_ANCHOR.x) - 0.4 * gA * swT + (walkX + vm.swayX * 0.5 + vm.sprint * 0.03) * 2.2 * k;
-    const ay = (holding ? (heldKind ? mcTune.by : mcTune.ay) : MC_ANCHOR.y) + 0.2 * Math.sin(sq * Math.PI * 2) * swT + (walkY + breathe + landY - vm.swayY * 0.4 - vm.sprint * 0.05) * 2.2 * k - eq * 0.6;
-    const az = (holding ? (heldKind ? mcTune.bz : mcTune.az) : MC_ANCHOR.z) - 0.2 * Math.sin(sw * Math.PI);
+    const ay = (holding ? (heldKind ? mcTune.by : mcTune.ay) : MC_ANCHOR.y) + 0.2 * Math.sin(sq * Math.PI * 2) * swT + (walkY + breathe + landY - vm.swayY * 0.4 - vm.sprint * 0.05) * 2.2 * k - eq * 0.6 + 0.05 * xbKick;
+    const az = (holding ? (heldKind ? mcTune.bz : mcTune.az) : MC_ANCHOR.z) - 0.2 * Math.sin(sw * Math.PI) + 0.14 * xbKick;
     viewBrick.scale.setScalar(MC_K);
     viewBrick.position.set(ax * MC_K, ay * MC_K, az * MC_K);
     const qa = new THREE.Quaternion()
@@ -14848,7 +14864,21 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           });
         }
         figHeldGroup.add(built3.group);
+        xbFp = held === ID.Crossbow ? built1.group : null;
+        xbTp = held === ID.Crossbow ? built3.group : null;
       }
+    }
+    // B19: crossbow draw / fire / reload, same pose in first and third person.
+    xbKick = 0;
+    figHeldGroup.position.set(-0.08, -0.58, -0.10);
+    figHeldGroup.rotation.set(0, 0, 0);
+    if (held === ID.Crossbow && (xbFp || xbTp)) {
+      const pose = xbPose(xbQaSince ?? elapsed - xbShotAt, creative || (inv[ID.Arrow] ?? 0) > 0);
+      if (xbFp) xbApply(xbFp, pose);
+      if (xbTp) xbApply(xbTp, pose);
+      xbKick = reduceMotion ? pose.kick * 0.3 : pose.kick;
+      figHeldGroup.position.y += 0.05 * xbKick;
+      figHeldGroup.rotation.x = -0.35 * xbKick;
     }
     // B18: nothing in hand while seated in a vehicle (restored on exit).
     heldBrickGroup.visible = !!held && !vehEnt;
@@ -15549,6 +15579,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   );
 
   window.__controlsTest = {
+    // B19 QA: fire the held crossbow through the real path; xbHold(t)
+    // freezes the draw/fire/reload pose at t s after the shot (null = live).
+    xbShoot: () => { shootHeld(); return elapsed - xbShotAt < 0.5; },
+    xbHold: (t: number | null) => { xbQaSince = t; return true; },
     getYaw: () => player.yaw,
     getSpeed: () => Math.hypot(player.vx, player.vz),
     getPos: () => ({ x: player.x, y: player.y, z: player.z }),
@@ -17782,6 +17816,31 @@ float srnHashW(vec3 c) { return fract(sin(dot(c, vec3(12.9898, 78.233, 37.719)))
   };
   mat.customProgramCacheKey = () => cacheKey + "-siren-v7";
   return mat;
+}
+
+/** B19: re-pose a crossbow model built by buildStudsItem3D. */
+function xbApply(group: THREE.Object3D, pose: XbPose) {
+  const r = group.userData.xb as { segs: THREE.Mesh[]; tips: THREE.Mesh[]; strs: THREE.Mesh[]; bolt: THREE.Object3D } | undefined;
+  if (!r) return;
+  const n = r.segs.length / 2;
+  for (let i = 0; i < r.segs.length; i++) {
+    const side = i < n ? 1 : -1, k = i % n;
+    const a = prodPoint(side * (k / n), pose.flex), b = prodPoint(side * ((k + 1) / n), pose.flex);
+    const m = r.segs[i], dx = b.x - a.x, dz = b.z - a.z;
+    m.position.set((a.x + b.x) / 2, a.y, (a.z + b.z) / 2);
+    m.scale.x = Math.hypot(dx, dz) + XB.prodR;
+    m.rotation.set(0, Math.atan2(-dz, dx), 0);
+  }
+  for (let i = 0; i < 2; i++) {
+    const side = i === 0 ? 1 : -1;
+    const t = prodPoint(side, pose.flex);
+    r.tips[i].position.set(t.x, t.y, t.z);
+    const h = stringHalf(side as 1 | -1, pose);
+    r.strs[i].position.set(h.x, h.y, h.z);
+    r.strs[i].scale.x = h.len;
+    r.strs[i].rotation.set(0, h.yaw, 0);
+  }
+  r.bolt.visible = pose.bolt;
 }
 
 function skin(

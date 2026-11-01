@@ -892,12 +892,20 @@ function StudsBow({ fill }: { fill: string }) {
 }
 
 function StudsCrossbow() {
+  // B19: LEGO minifig crossbow, top-down: slim stock, curved prod with
+  // round tips, taut string drawn to the nut, loaded bolt, grip block.
   return (
     <g>
-      <rect x="14.2" y="7" width="3.6" height="20" rx="1.2" fill="#8a6428" />
-      <path d="M5 13 Q16 7 27 13" fill="none" stroke="#5c646c" strokeWidth="3" strokeLinecap="round" />
-      <line x1="5" y1="13" x2="27" y2="13" stroke="#f4f1ea" strokeWidth="1.2" />
-      <IsoStud cx={16} cy={16} fill="#ffd84a" r={2} h={1.3} />
+      <rect x="14.4" y="9" width="3.2" height="19" rx="1.4" fill="#7c522b" />
+      <rect x="13.6" y="24" width="4.8" height="5" rx="1.6" fill="#4a2e16" />
+      <rect x="17.6" y="19" width="3.4" height="4.2" rx="1.2" fill="#4a2e16" />
+      <path d="M4.5 10.5 Q16 4.5 27.5 10.5" fill="none" stroke="#3a3f46" strokeWidth="2.6" strokeLinecap="round" />
+      <polyline points="4.5,10.5 16,17 27.5,10.5" fill="none" stroke="#f2efe6" strokeWidth="1" />
+      <circle cx="4.5" cy="10.5" r="1.9" fill="#b0b6be" />
+      <circle cx="27.5" cy="10.5" r="1.9" fill="#b0b6be" />
+      <line x1="16" y1="17" x2="16" y2="4.5" stroke="#c4924a" strokeWidth="1.4" />
+      <polygon points="16,2.2 14.2,5.4 17.8,5.4" fill="#b0b6be" />
+      <IsoStud cx={16} cy={17.6} fill="#b0b6be" r={1.5} h={1} />
     </g>
   );
 }
