@@ -273,6 +273,11 @@ describe("p5c-3 vehicle joints", () => {
     // Channel B swings the servo to its +90° stop.
     drive(v, 1, { throttle: 1, steer: 0, channel: "B" });
     assert.ok(j.angle > 1.4, "servo swung: " + j.angle);
+    // B21: releasing the key (or switching channel) HOLDS the angle.
+    const held = j.angle;
+    drive(v, 1, { throttle: 0, steer: 0, channel: "B" });
+    assert.equal(j.angle, held, "servo holds when released");
+    assert.ok(j.angle <= Math.PI / 2 + 1e-9);
     const endMoved = applyJointPoint(v, beam.group, { x: beam.localPos.x + 2, y: beam.localPos.y, z: beam.localPos.z });
     assert.ok(Math.hypot(endMoved.x - endRest.x, endMoved.y - endRest.y, endMoved.z - endRest.z) > 1, "beam end travelled");
     // Parking folds the joint to the quarter turn and stays valid.

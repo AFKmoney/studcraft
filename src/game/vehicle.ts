@@ -611,9 +611,11 @@ export function stepVehicle(v: Vehicle, dt: number, cmd: DriveCmd, heightAt: (x:
   for (const j of v.joints) {
     if (j.channel !== cmd.channel) continue;
     if (j.kind === "servo") {
-      const target = throttle * (Math.PI / 2);
-      const stepMax = 2.2 * dt;
-      j.angle += Math.max(-stepMax, Math.min(stepMax, target - j.angle));
+      // B21: the servo used to chase throttle × 90° and spring back to
+      // 0 the moment W was released — so a boom fell back down as soon
+      // as you switched channel to curl the bucket, and a Digger could
+      // never dig. It now HOLDS its angle: throttle sets the swing rate.
+      j.angle = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, j.angle + throttle * 2.2 * dt));
     } else {
       j.ext = Math.max(0, Math.min(1, j.ext + throttle * dt * 0.8));
     }

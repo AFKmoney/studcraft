@@ -359,6 +359,7 @@ declare global {
       contractsQa?: () => unknown[];
       storyQa?: () => unknown;
       claimQa?: (id: string) => boolean;
+      societyQa?: () => unknown;
       setThirdQa?: (on: boolean) => boolean;
       getDriveView?: () => unknown;
       getLlm?: () => { state: string; transport: string; progress: number; why: string; model: string; isolated: boolean };
@@ -6724,7 +6725,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const bx = Math.floor(camera.position.x + dir.x * 3.5);
     const bz = Math.floor(camera.position.z + dir.z * 3.5);
     const minDqY = Math.min(...model.parts.map((p) => p.dq[1]));
-    const groundQ = (world.heightAt(bx, bz) + 1) * 4 - minDqY;
+    // B21: world.heightAt is the GENERATOR's height — it ignores edits,
+    // dug pits, player-built pads and village plazas, so a model loaded
+    // on a cleared or raised pad spawned half inside the ground or in
+    // the air. Use the real top block below eye level at the look point.
+    const groundQ = (surfaceBelow(bx, Math.floor(camera.position.y) + 1, bz) + 1) * 4 - minDqY;
     let anchorQ: [number, number, number] = [bx * 4, groundQ, bz * 4];
     let bestFits = -1;
     for (let lift = 0; lift <= 3; lift++) {
@@ -11520,6 +11525,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   }
   // ================= end v4.15 fire FX =================
 
+  /** Top solid block at (x, z) at or below `fromY` (24 down), else the generator height. */
+  function surfaceBelow(x: number, fromY: number, z: number): number {
+    for (let y = Math.min(HEIGHT - 2, fromY); y >= Math.max(1, fromY - 24); y--) if (def(world.get(x, y, z)).solid) return y;
+    return world.heightAt(x, z);
+  }
   function groundY(x: number, z: number) {
     const ix = Math.floor(x);
     const iz = Math.floor(z);
@@ -16311,6 +16321,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return m ? societyTalk(m) : false;
     },
     contractsQa: () => society.active.map((a) => ({ id: a.q.id, title: a.q.text.title, giver: a.q.giver.kind, track: a.q.track.kind, n: a.n, need: a.q.track.need })),
+    societyQa: () => ({ standing: society.standing, guilds: society.guilds, done: [...society.done] }),
     claimQa: (id: string) => { const before = society.active.length; api.claim(id.startsWith("soc:") ? id : "soc:" + id); return society.active.length < before; },
     storyQa: () => ({ ...director.status(), llm: !!director.llm, story: director.story }),
     setThirdQa: (on: boolean) => { api.setThird(on); return true; },
