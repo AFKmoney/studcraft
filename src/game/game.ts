@@ -26,6 +26,7 @@ import { XB, xbPose, stringHalf, prodPoint, XB_CYCLE, type XbPose } from "./cros
 import { cropLight, growChance, hydrated, nextStage, fruitSpot, canStack, harvestDrops, tramples, compostChance, COMPOST_FULL, isRipe, type FarmIds } from "./farming";
 import { CROSSBOW_HOLD } from "./heldPose";
 import { ACCESSORIES, ACC_BASE, type Acc } from "./accessories";
+import { buildWeapon, type Finish } from "./weaponModels";
 import { GUNS, type GunSpec, type GunState, ammoLabel, damageAt, finishReload, flashAt, newGun, recoilAt, reloadPose, startReload, tryFire } from "./firearms";
 import { itemByName } from "./recipes";
 import { driverOccluders, liftToFit, seatEye, vehChaseDistance, viewBlocked } from "./vehView";
@@ -1903,7 +1904,23 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     if (acc) {
       const mats = new Map<number, THREE.Material>();
       const mat = (hex: number) => { let m = mats.get(hex); if (!m) { m = skin(hex); mats.set(hex, m); } return m; };
-      for (const p of acc.parts) {
+      // t92u: bespoke weapon builds first (same skin() path, finish-tuned).
+      const W = buildWeapon(acc.key, (hex: number, f?: Finish) => {
+        const m = f === "glass" ? skin(hex, { transparent: true, opacity: 0.55 }) : skin(hex);
+        const sm = m as THREE.MeshStandardMaterial;
+        if (sm.isMeshStandardMaterial) {
+          if (f === "metal") { sm.metalness = 0.75; sm.roughness = 0.28; }
+          else if (f === "blued") { sm.metalness = 0.6; sm.roughness = 0.42; }
+          else if (f === "gold") { sm.metalness = 0.8; sm.roughness = 0.3; }
+          else if (f === "wood") sm.roughness = 0.62;
+          else if (f === "rubber") sm.roughness = 0.85;
+          else if (f === "glass") sm.roughness = 0.08;
+        }
+        if (f === "glow" && "emissive" in m) { (m as THREE.MeshLambertMaterial).emissive = new THREE.Color(hex); (m as THREE.MeshLambertMaterial).emissiveIntensity = 1.4; }
+        return m;
+      });
+      if (W) for (const c of [...W.group.children]) group.add(c);
+      if (!W) for (const p of acc.parts) {
         const m = p[0] === "b" ? addBoxPart(group, p[1], p[2], p[3], p[4], p[5], p[6], mat(p[7])) : addCylPart(group, p[8] ?? p[1], p[1], p[2], p[3], p[4], p[5], mat(p[6] ?? 0x8a8f96), 12);
         const rz = p[0] === "b" ? p[8] : p[7];
         if (rz) m.rotation.z = rz;
