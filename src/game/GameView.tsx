@@ -2738,7 +2738,7 @@ function StationScreen({ game }: { game: GameApi }) {
                             <span className="sc-offer-text">
                               <strong>{p.name}</strong>
                               <small>
-                                {p.parts} parts · delivered in front of you{p.afford ? "" : " · not enough matter"}
+                                {p.blurb ? p.blurb + " · " : ""}{p.parts} parts{p.afford ? "" : " · not enough matter"}
                               </small>
                             </span>
                           </button>

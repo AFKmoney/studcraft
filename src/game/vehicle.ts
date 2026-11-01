@@ -178,7 +178,7 @@ export type Vehicle = {
 };
 
 export function roleOf(id: number): PartRole {
-  if (id === ID.Wheel) return "wheel";
+  if (id === ID.Wheel || id === ID.Road) return "wheel"; // Road = real rim + tyre (56145)
   if (id === ID.TechHub) return "hub";
   if (id === ID.Battery) return "battery";
   if (id === ID.Remote) return "remote";
@@ -229,7 +229,7 @@ export function wheelRadius(p: Part): number {
     for (const op of s.ops) {
       if (op.k === "cyl" || op.k === "tube" || op.k === "sphere") rModules = Math.max(rModules, op.r);
       else if (op.k === "blade") rModules = Math.max(rModules, op.r0, op.r1);
-      else if (op.k === "lathe") for (const pt of op.pts) rModules = Math.max(rModules, pt[1]);
+      else if (op.k === "lathe") for (const pt of op.pts) rModules = Math.max(rModules, pt[0]); // lathe pts are [radius, axial] (teksGeo revolve)
       else if (op.k === "helix") rModules = Math.max(rModules, op.r + op.tr);
     }
   }

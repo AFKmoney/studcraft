@@ -155,7 +155,7 @@ export type Hud = {
   beaconBuff: string;
   bookshelves: number;
   offers: { pay: number; pn: number; out: number; on: number; payName: string; outName: string; tier: number; locked: boolean; stock: number }[];
-  prefabs: { name: string; parts: number; ingots: number; copper: number; afford: boolean }[];
+  prefabs: { name: string; blurb: string; parts: number; ingots: number; copper: number; afford: boolean }[];
   reputation: number;
   repWord: string;
   traderLevel: string;
@@ -473,7 +473,7 @@ declare global {
       grantRelicQa?: () => void;
       openTradeQa?: (role: string) => boolean;
       getFolkRoles?: () => string[];
-      getPrefabs?: () => { name: string; parts: number; ingots: number; copper: number; afford: boolean }[];
+      getPrefabs?: () => { name: string; blurb: string; parts: number; ingots: number; copper: number; afford: boolean }[];
       buyPrefabQa?: (name: string) => void;
       getVillageAt?: () => { x: number; z: number } | null;
       findStructureQa?: (kind: string, zone?: string) => { x: number; z: number; y: number; w: number; d: number; kind: string; zone: string; label: string } | null;
@@ -4696,6 +4696,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
             const price = prefabPrice(m);
             return {
               name: m.name,
+              blurb: m.blurb ?? "",
               parts: m.parts.length,
               ingots: price.ingots,
               copper: price.copper,
@@ -16035,6 +16036,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
 
     sky(dt);
     noteClock();
+    // Kilns keep cooking while a panel is open (Minecraft's furnace runs
+    // while you watch it). The world tick below is play-only, so the
+    // furnace UI used to freeze at 0% — Philippe: « progression du kiln
+    // invisible » (§21). Measured in the rig: cook stayed 0 with the panel up.
+    if (phase === "inventory") tickFurnaces(dt);
     if (phase === "play") {
       tickExtras(dt);
       weatherIn -= dt;

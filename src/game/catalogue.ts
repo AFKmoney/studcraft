@@ -17,6 +17,8 @@ export type VehicleModel = {
   author: string;
   parts: ModelPart[];
   savedAt: number;
+  /** Showroom line for built-ins (garage listing). */
+  blurb?: string;
 };
 
 export const CATALOGUE_KEY = "studs.catalogue.v1";
