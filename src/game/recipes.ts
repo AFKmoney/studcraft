@@ -1,4 +1,5 @@
-import { ID, TEKS, def } from "./blocks.ts";
+import { BLOCKS, ID, TEKS, def } from "./blocks.ts";
+import { ACCESSORIES, ACC_BASE } from "./accessories.ts";
 import { SPECS, type Spec } from "./teks.ts";
 import { MATERIALS, QUALITY_ITEM, QUALITY_VALUE, RARE_MELT, fuelValue, isMeltable, meltRatio, qualityOf, rejectReason, salvageYield } from "./foundry.ts";
 
@@ -1583,6 +1584,14 @@ export const RECIPES: Recipe[] = [
   r("hanging", "Hanging plant", "1 hard brick + 2 leaf bricks", [[ID.Hard, 1], [ID.Leaves, 2]], ID.HangingPlant, 1, { cat: "build" }),
   r("picket", "Picket fence", "1 white brick + 2 sticks → 3", [[ID.White, 1], [S, 2]], ID.Picket, 3, { cat: "build" }),
 ];
+
+// t91u: one recipe per minifig accessory; ingredients named by item name.
+export const itemByName = (n: string) => BLOCKS.findIndex((b) => b && b.name === n);
+ACCESSORIES.forEach((a, i) => {
+  const need = a.recipe.map(([n, c]) => [itemByName(n), c] as [number, number]);
+  const cat = a.kind === "food" ? "food" : a.kind === "wear" || a.kind === "shield" ? "gear" : a.kind === "item" ? (a.cat === "Munitions" ? "tools" : "build") : "tools";
+  RECIPES.push(r("acc-" + a.key.toLowerCase(), a.name, a.recipe.map(([n, c]) => c + " " + n.toLowerCase()).join(" + "), need, ACC_BASE + i, a.out ?? 1, { cat }));
+});
 
 // ── Teks casting (Muse, 2026-10-30 — audit §21 A3) ─────────────────
 // The 99 Teks parts had NO Survival source (debris sites and dungeon

@@ -1,3 +1,4 @@
+import { ACCESSORIES, ACC_BASE } from "./accessories.ts";
 export const ID = {
   Air: 0,
   Grass: 1,
@@ -536,6 +537,71 @@ export const ID = {
   Pennant: 529,
   HangingPlant: 530,
   Picket: 531,
+  // t91u minifig accessories (accessories.ts order, ACC_BASE 540)
+  Wrench: 540,
+  Drill: 541,
+  Hammer: 542,
+  Crowbar: 543,
+  OilCan: 544,
+  Broom: 545,
+  Extinguisher: 546,
+  Chainsaw: 547,
+  FireAxe: 548,
+  Walkie: 549,
+  Megaphone: 550,
+  TvCamera: 551,
+  Binoculars: 552,
+  Magnifier: 553,
+  Phone: 554,
+  Mug: 555,
+  Goblet: 556,
+  Suitcase: 557,
+  TreasureChest: 558,
+  Bag: 559,
+  Croissant: 560,
+  Banana: 561,
+  TurkeyLeg: 562,
+  HotDog: 563,
+  IceCream: 564,
+  Pizza: 565,
+  ShortSword: 566,
+  LongSword: 567,
+  Katana: 568,
+  Halberd: 569,
+  TriShield: 570,
+  OvalShield: 571,
+  RoundShield: 572,
+  Cutlass: 573,
+  Handcuffs: 574,
+  Lightsaber: 575,
+  Cauldron: 576,
+  ElectricGuitar: 577,
+  AcousticGuitar: 578,
+  Saxophone: 579,
+  HardHat: 580,
+  SpaceHelmet: 581,
+  Visor: 582,
+  BaseballCap: 583,
+  Bicorne: 584,
+  Backpack: 585,
+  AirTanks: 586,
+  Quiver: 587,
+  Breastplate: 588,
+  Cape: 589,
+  Flintlock: 590,
+  Musket: 591,
+  Revolver: 592,
+  Carbine: 593,
+  Rifle: 594,
+  BlasterS: 595,
+  BlasterM: 596,
+  BlasterL: 597,
+  Launcher: 598,
+  Wand: 599,
+  Casing: 600,
+  Bullet: 601,
+  Cartridge: 602,
+  PowerCell: 603,
   // P6 step 4 / P7 tool moulds (Muse): plastic tools cast at the
   // Foundry — the mould is the shape, the ingot is the stock. Tier 2
   // (stone class), 120 uses: moulded plastic, honestly mid-table.
@@ -1593,6 +1659,19 @@ deco(ID.Picket, "Picket fence", ID.White, "picket", { solid: true });
 
 /** t79u: decor pieces (for the creative menu and the audit tests). */
 export const DECOR: number[] = [ID.FlowerPot, ID.Planter, ID.Table, ID.Chair, ID.Stool, ID.Shelf, ID.RugRed, ID.RugBlue, ID.RugGreen, ID.PaperLamp, ID.Trapdoor, ID.SmallCrate, ID.LampPost, ID.Candle, ID.Vase, ID.Settle, ID.PaintingSea, ID.PaintingSun, ID.Pennant, ID.HangingPlant, ID.Picket, ID.Composter0];
+
+
+// t91u: minifig accessories (procedural models in game.ts, data in accessories.ts).
+// Items borrow the stick's atlas tile (no atlas growth); icons/models are their own.
+ACCESSORIES.forEach((a, i) => {
+  const ex: Partial<BlockDef> = { skinOf: ID.Stick };
+  if (a.tool) { ex.tool = a.tool; ex.tier = a.tier ?? 1; }
+  if (a.maxUse) ex.maxUse = a.maxUse;
+  if (a.food) ex.food = a.food;
+  if (a.armorSlot) { ex.armorSlot = a.armorSlot; ex.armor = a.key === "Breastplate" ? 0.2 : a.key === "HardHat" ? 0.08 : 0.04; }
+  if (a.light) ex.light = a.light;
+  item(ACC_BASE + i, a.name, a.color, ex);
+});
 
 export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];

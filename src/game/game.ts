@@ -25,6 +25,9 @@ import { GenPool, poolSize, type WorkerLike } from "./genPool";
 import { XB, xbPose, stringHalf, prodPoint, XB_CYCLE, type XbPose } from "./crossbowRig";
 import { cropLight, growChance, hydrated, nextStage, fruitSpot, canStack, harvestDrops, tramples, compostChance, COMPOST_FULL, isRipe, type FarmIds } from "./farming";
 import { CROSSBOW_HOLD } from "./heldPose";
+import { ACCESSORIES, ACC_BASE, type Acc } from "./accessories";
+import { GUNS, type GunSpec, type GunState, ammoLabel, damageAt, finishReload, flashAt, newGun, recoilAt, reloadPose, startReload, tryFire } from "./firearms";
+import { itemByName } from "./recipes";
 import { driverOccluders, seatEye } from "./vehView";
 import { armorMaxDur, combineDur, repairCost, wearArmor } from "./foundry";
 import { plasticCost, salvageOf } from "./recipes";
@@ -57,6 +60,13 @@ import { batteryAt, remoteChAt, setRemoteChannel, springsJustSpent, stepMech, to
 // t79u farming ids (farming.ts is id-agnostic). Beetroot is its own seed.
 const FARM: FarmIds = { ...(ID as unknown as FarmIds), BeetSeeds: ID.Beetroot };
 const FARM_X = { ...FARM, Leaves: ID.Leaves, Sapling: ID.Sapling, TallGrass: ID.TallGrass, Flower: ID.Flower, Hay: ID.Hay, Bread: ID.Bread };
+// t91u: accessory / firearm lookups by item id
+const ACC_OF = (id: number): Acc | undefined => (id >= ACC_BASE && id < ACC_BASE + ACCESSORIES.length ? ACCESSORIES[id - ACC_BASE] : undefined);
+const GUN_OF = (id: number): GunSpec | undefined => { const a = ACC_OF(id); return a && a.kind === "gun" ? GUNS[a.key] : undefined; };
+const GUN_AMMO_ID = (g: GunSpec) => (g.ammo ? itemByName(g.ammo === "Cartridge" ? "Cartridge" : g.ammo === "PowerCell" ? "Power cell" : g.ammo) : 0);
+const isShieldId = (id: number) => id === ID.Shield || ACC_OF(id)?.kind === "shield";
+/** pistol-grip x of a gun model (where the minifig hand closes) */
+const gunGripX = (a: Acc) => { for (const p of a.parts) if (p[0] === "b" && p[8] === -0.25) return p[4]; return CROSSBOW_HOLD.gripLocal.x; };
 const FARM_CROP = new Set<number>([ID.Crop, ID.Crop1, ID.Crop2, ID.CropRipe, ID.CarrotCrop, ID.CarrotRipe, ID.PotatoCrop, ID.PotatoRipe, ID.BeetCrop, ID.BeetRipe, ID.PumpkinStem, ID.MelonStem]);
 
 export type Phase = "title" | "play" | "pause" | "inventory" | "dead";
@@ -1880,6 +1890,41 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const s = 0.25;
     const hs = s / 2;
 
+    // t91u: minifig accessories — procedural parts, every material via skin() (SNR path).
+    const acc = ACC_OF(id);
+    if (acc) {
+      const mats = new Map<number, THREE.Material>();
+      const mat = (hex: number) => { let m = mats.get(hex); if (!m) { m = skin(hex); mats.set(hex, m); } return m; };
+      for (const p of acc.parts) {
+        const m = p[0] === "b" ? addBoxPart(group, p[1], p[2], p[3], p[4], p[5], p[6], mat(p[7])) : addCylPart(group, p[8] ?? p[1], p[1], p[2], p[3], p[4], p[5], mat(p[6] ?? 0x8a8f96), 12);
+        const rz = p[0] === "b" ? p[8] : p[7];
+        if (rz) m.rotation.z = rz;
+        if (acc.key === "Lightsaber" && p[0] === "c" && p[2] > 0.2) { const lm = m.material as THREE.MeshStandardMaterial; if (lm.emissive) { lm.emissive = new THREE.Color(0x3aff6a); lm.emissiveIntensity = 1.4; } }
+      }
+      if (acc.kind === "gun") {
+        // procedural muzzle flash: two crossed additive star quads + core, hidden until a shot
+        const fl = new THREE.Group();
+        // snr-exempt: additive muzzle-flash glow (unlit by design)
+        const fm = new THREE.MeshBasicMaterial({ color: GUNS[acc.key]?.energy ? 0x7af0ff : 0xffc860, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+        for (let k = 0; k < 3; k++) {
+          const q = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 0.03), fm);
+          q.rotation.x = (k * Math.PI) / 3;
+          q.position.x = 0.04;
+          fl.add(q);
+        }
+        const core = new THREE.Mesh(new THREE.PlaneGeometry(0.04, 0.04), fm);
+        core.rotation.y = Math.PI / 2;
+        fl.add(core);
+        const mz = acc.muzzle ?? [0.15, -0.04, 0];
+        fl.position.set(mz[0], mz[1], mz[2]);
+        fl.visible = false;
+        fl.userData.flash = true;
+        group.add(fl);
+        group.userData.gunFlash = fl;
+      }
+      return { group, isTool: acc.kind === "tool" || acc.kind === "gun", flames };
+    }
+
     // 1. WORKSTATIONS & BESPOKE MULTI-PART STUDS BLOCKS
     if (id === ID.Furnace) {
       const darkStone = skin(0x3e4248);
@@ -3529,10 +3574,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       const mouthT = ARM_OUT.clone().negate();
       placeArm(grip, shaft, mouthT, ARM_SCALE * 0.82);
-    } else if (id === ID.Crossbow) {
+    } else if (id === ID.Crossbow || GUN_OF(id)) {
       // B18 (Philippe): held like a Lego crossbow — level, straight
       // ahead, prod across the view, hand on the grip under the stock.
-      const H = CROSSBOW_HOLD;
+      // t91u: every gun shares the hold, hand on its own pistol grip.
+      const gacc = ACC_OF(id);
+      const H = gacc ? { ...CROSSBOW_HOLD, gripLocal: { ...CROSSBOW_HOLD.gripLocal, x: gunGripX(gacc) } } : CROSSBOW_HOLD;
       M = new THREE.Matrix4()
         .makeTranslation(H.grip.x, H.grip.y, H.grip.z)
         .multiply(new THREE.Matrix4().makeScale(H.scale, H.scale, H.scale))
@@ -4301,6 +4348,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     pierce?: boolean;
     hitSet?: Set<Mob>;
     splash?: number;
+    /** t91u: exact bullet damage + its own gravity */
+    bullet?: number;
+    grav?: number;
   };
   const rockets: { mesh: THREE.Mesh; t: number; color: string; trail: number }[] = [];
   const shots: Shot[] = [];
@@ -5396,9 +5446,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   function hurt(n: number) {
     if (creative || n <= 0 || phase !== "play" || invuln > 0) return;
     const sneaking = isSneaking();
-    if (sneaking && (hotbar.includes(ID.Shield) || offhand === ID.Shield)) {
+    if (sneaking && (hotbar.some(isShieldId) || isShieldId(offhand))) {
       n *= 0.35;
-      if (hotbar[slot] === ID.Shield || offhand === ID.Shield) wearHeld();
+      if (isShieldId(hotbar[slot]) || isShieldId(offhand)) wearHeld();
     }
     if (rankLv >= 8) n *= 0.86;
     let resist = 0;
@@ -6446,7 +6496,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
 
   function tickTeks(dt: number) {
     // Spin input: R key (edge, consumed) + the touch "tourner" pulse.
-    if (keys.has("KeyR")) {
+    if (keys.has("KeyR") && !GUN_OF(hotbar[slot])) {
       keys.delete("KeyR");
       techSpin++;
       techWantO = null; // back to the planner's cycling
@@ -9038,6 +9088,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const heldDef = def(held);
     if (TEKS_SET.has(held)) return; // Teks parts place through the Teks layer only
     if (held === ID.Bow || held === ID.Crossbow) return shootHeld();
+    if (GUN_OF(held)) return; // t91u: guns fire from tickGuns
+    if (accUse(held, hit)) return;
     if (held === ID.Trident) return throwTrident();
     if (held === ID.Firework) return launchFirework();
     if (hit.id === ID.Soul && held === ID.WitherSkull && (creative || (inv[ID.WitherSkull] ?? 0) >= 3)) {
@@ -9471,6 +9523,117 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     if (!url) return;
     mp.connect(url, room, mpName);
     say(hosting ? "Hosting room " + room + " — share the code" : "Joining room " + room);
+  }
+
+  // ---- t91u firearms: magazine per gun, cartridges from the inventory ----
+  const gunStates = new Map<number, GunState>();
+  let gunFp: THREE.Group | null = null;
+  let gunTp: THREE.Group | null = null;
+  let gunPending: { id: number; take: number; at: number } | null = null;
+  let gunTriggerWas = false;
+  function gunState(id: number): GunState {
+    let st = gunStates.get(id);
+    if (!st) { st = newGun(GUN_OF(id)!); gunStates.set(id, st); }
+    return st;
+  }
+  function gunReserve(g: GunSpec) {
+    const aid = GUN_AMMO_ID(g);
+    return creative ? 999 : aid > 0 ? (inv[aid] ?? 0) : 0;
+  }
+  function gunReload(id: number) {
+    const g = GUN_OF(id);
+    if (!g || gunPending) return;
+    const st = gunState(id);
+    const take = startReload(g, st, elapsed, gunReserve(g));
+    if (take <= 0) { if (st.mag < g.mag && g.ammo) say("No " + (g.ammo === "PowerCell" ? "power cells" : g.ammo.toLowerCase() + "s")); return; }
+    if (!creative) spend(GUN_AMMO_ID(g), take);
+    gunPending = { id, take, at: st.reloadUntil };
+    audio.place();
+  }
+  function gunFire(id: number, held: boolean) {
+    const g = GUN_OF(id)!;
+    const st = gunState(id);
+    const r = tryFire(g, st, elapsed, held);
+    if (r === "empty") { if (!held) gunReload(id); return; }
+    if (r !== "fired") return;
+    wearHeld();
+    const sp = g.spread * (isSneaking() ? 0.5 : 1);
+    const yaw = player.yaw + (Math.random() - 0.5) * sp * 2;
+    const pitch = player.pitch + (Math.random() - 0.5) * sp * 2;
+    const dx = -Math.sin(yaw) * Math.cos(pitch);
+    const dy = Math.sin(pitch);
+    const dz = -Math.cos(yaw) * Math.cos(pitch);
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(g.energy ? 0.05 : 0.04, g.energy ? 0.05 : 0.04, g.energy ? 0.5 : 0.18), skin(g.energy ? 0x7af0ff : 0xd8a22e));
+    if (g.energy) { const m = mesh.material as THREE.MeshStandardMaterial; if (m.emissive) { m.emissive = new THREE.Color(0x3ad8ff); m.emissiveIntensity = 1.5; } }
+    mesh.lookAt(dx, dy, dz);
+    scene.add(mesh);
+    const near = mobs.reduce((b, m) => (m.dead ? b : Math.min(b, Math.hypot(m.x - player.x, m.z - player.z))), 99);
+    shots.push({ x: player.x, y: player.y + 1.45, z: player.z, vx: dx * g.speed, vy: dy * g.speed, vz: dz * g.speed, life: 2.2, friendly: true, mesh, bullet: damageAt(g, near), grav: g.grav, pierce: g.dmg >= 14 });
+    // recoil climbs the aim a touch
+    player.pitch = Math.min(1.5, player.pitch + g.kick * 0.035);
+    audio.place();
+    if (st.mag <= 0 && g.ammo && gunReserve(g) > 0) gunReload(id);
+  }
+  /** per frame: trigger (auto / semi), R to reload, reload completion, HUD ammo */
+  function tickGuns(firing: boolean) {
+    const id = hotbar[slot];
+    if (gunPending && elapsed >= gunPending.at) { finishReload(gunState(gunPending.id), gunPending.take); gunPending = null; }
+    const g = GUN_OF(id);
+    if (!g) { gunTriggerWas = false; return; }
+    if (keys.has("KeyR")) { keys.delete("KeyR"); gunReload(id); }
+    if (firing && phase === "play") gunFire(id, gunTriggerWas);
+    gunTriggerWas = firing;
+    hud.targetName = def(id).name + " · " + ammoLabel(g, gunState(id), gunReserve(g), elapsed);
+  }
+
+  // ---- t91u accessory right-click actions ----
+  let accZoom = false;
+  function accUse(id: number, hit: ReturnType<typeof raycast> | null): boolean {
+    const a = ACC_OF(id);
+    if (!a?.use) return false;
+    if (a.use === "extinguish") {
+      const cx = hit ? hit.x : Math.floor(player.x), cy = hit ? hit.y : Math.floor(player.y), cz = hit ? hit.z : Math.floor(player.z);
+      let n = 0;
+      for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) for (let dz = -2; dz <= 2; dz++) {
+        const bid = world.get(cx + dx, cy + dy, cz + dz);
+        if (bid === ID.Fire) { world.set(cx + dx, cy + dy, cz + dz, ID.Air); markDirtyAt(cx + dx, cz + dz); n++; }
+        else if (bid === ID.Campfire) { world.set(cx + dx, cy + dy, cz + dz, ID.Log); markDirtyAt(cx + dx, cz + dz); n++; }
+      }
+      fireT = 0;
+      burst(cx + 0.5, cy + 1, cz + 0.5, "#f2f6fa", 18);
+      wearHeld();
+      say(n ? "Fire out (" + n + ")" : "Foam");
+      return true;
+    }
+    if (a.use === "zoom") { accZoom = !accZoom; return true; }
+    if (a.use === "shout") {
+      let n = 0;
+      for (const m of mobs) {
+        if (m.dead) continue;
+        const d = Math.hypot(m.x - player.x, m.z - player.z);
+        if (d > 10 || d < 0.1) continue;
+        m.x += ((m.x - player.x) / d) * 1.5;
+        m.z += ((m.z - player.z) / d) * 1.5;
+        m.slowT = Math.max(m.slowT ?? 0, 2);
+        n++;
+      }
+      say(n ? "📣 Everyone back!" : "📣 Hello?");
+      return true;
+    }
+    if (a.use === "radio") { const L = ["…kssh… patrol east, over.", "…all clear at the hamlet…", "…storm front rolling in…", "…copy that, base…"]; say(L[Math.floor(Math.random() * L.length)]); return true; }
+    if (a.use === "music") { audio.note(Math.floor(Math.random() * 12)); return true; }
+    if (a.use === "inspect") { if (hit) { const d = def(hit.id); say(d.name + " · hardness " + d.hard + (d.need ? " · needs tier " + d.need : "")); } return true; }
+    if (a.use === "sweep" && hit) {
+      let n = 0;
+      for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) for (let dy = 0; dy <= 1; dy++) {
+        const x = hit.x + dx, y = hit.y + dy, z = hit.z + dz;
+        const bid = world.get(x, y, z);
+        if (bid === ID.TallGrass || bid === ID.Web || bid === ID.Flower || bid === ID.FlowerRed) { world.set(x, y, z, ID.Air); markDirtyAt(x, z); n++; }
+      }
+      if (n) wearHeld();
+      return true;
+    }
+    return false;
   }
 
   function shootHeld() {
@@ -10323,7 +10486,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     let w = 0;
     for (const s of shots) {
       s.life -= dt;
-      s.vy -= 6 * dt;
+      s.vy -= (s.grav ?? 6) * dt;
       s.x += s.vx * dt;
       s.y += s.vy * dt;
       s.z += s.vz * dt;
@@ -10368,7 +10531,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
               if (s.hitSet.has(m)) continue;
               s.hitSet.add(m);
             }
-            let hit = s.trident ? 9 : 4 + (strengthT > 0 ? 2 : 0) + (s.pow ?? 0);
+            let hit = s.bullet ?? (s.trident ? 9 : 4 + (strengthT > 0 ? 2 : 0) + (s.pow ?? 0));
             if (m.kind === "dragon" && crystalsLeft() > 0) hit = Math.max(1, Math.ceil(hit * 0.5));
             if (m.kind === "wither" && ((m.spawnT ?? 0) > 0 || m.shield)) {
               if (m.shield && (m.spawnT ?? 0) <= 0) burst(s.x, s.y, s.z, "#9a97ad", 5);
@@ -11927,6 +12090,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   }
 
   function interactMob(mob: Mob) {
+    // t91u handcuffs: a cuffed mob shuffles (slowed 30 s), the cuffs wear.
+    if (ACC_OF(hotbar[slot])?.use === "cuff") {
+      mob.slowT = Math.max(mob.slowT ?? 0, 30);
+      wearHeld();
+      say("Cuffed");
+      return;
+    }
     const held = hotbar[slot];
     if (held === ID.NameTag && mob.kind !== "boat" && mob.kind !== "cart") {
       void askText("Name this brick friend", "A named mob never despawns", mob.name ?? "").then((answer) => {
@@ -13883,7 +14053,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
 
     if (!blockFirst && mob) {
       hud.targetName = mob.socName ? mob.socName : mob.kind === "villager" && !mob.species && !mob.bossOf ? traderOf(mob.role).name : displayName({ ...mob, elder: mob.kind === "guardian" && !mob.bossOf && (mob.maxHp ?? 0) >= 30 });
-      if (sample.first && sample.place && !prevPlace) interactMob(mob);
+      if (sample.first && sample.place && !prevPlace && !GUN_OF(hotbar[slot])) interactMob(mob);
       // Player hits are gated by the mob's own hurt cooldown (hitCd), not by its
       // attack cooldown: sharing one timer meant a mob biting you every second
       // reset it just before your swing was checked — it could never be hit back.
@@ -14237,6 +14407,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (sample.first && sample.place && !prevPlace) {
         if (heldId === ID.Tome) castSpell();
         else if (heldId === ID.Bow || heldId === ID.Crossbow) shootHeld();
+        else if (GUN_OF(heldId)) { /* t91u: tickGuns */ }
+        else if (accUse(heldId, null)) { /* t91u accessory */ }
         else if (heldId === ID.Trident) throwTrident();
         else if (heldId === ID.Firework) launchFirework();
         else if (heldId === ID.Eye) hopRealm(2);
@@ -14264,6 +14436,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (id === ID.Bow) hud.targetName += " · " + (inv[ID.Arrow] ?? 0) + " arrows";
       else if (held.food) hud.targetName += " · +" + held.food;
     }
+    tickGuns(!!sample.place && !!sample.first);
     if (sample.place) placeCool -= dt;
     else placeCool = 0;
     prevPlace = sample.place;
@@ -14798,7 +14971,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       camera.rotation.x = player.pitch;
     }
     const baseFov = settings.fov;
-    camera.fov = THREE.MathUtils.lerp(camera.fov, isSprinting() && phase === "play" && !flying ? baseFov + 8 : baseFov, 0.1);
+    if (accZoom && ACC_OF(hotbar[slot])?.use !== "zoom") accZoom = false; // t91u binoculars / camera
+    camera.fov = THREE.MathUtils.lerp(camera.fov, accZoom ? baseFov * 0.3 : isSprinting() && phase === "play" && !flying ? baseFov + 8 : baseFov, 0.1);
     camera.updateProjectionMatrix();
     if (phase === "title") {
       if (!reduceMotion) orbit += dt * 0.15;
@@ -14945,7 +15119,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         placeHeldMinecraft(held, built1.group, heldIsTool);
 
         const built3 = buildStudsItem3D(held);
-        if (held === ID.Crossbow) {
+        if (held === ID.Crossbow || GUN_OF(held)) {
           built3.group.scale.setScalar(1.35);
           built3.group.rotation.set(CROSSBOW_HOLD.tpRot.x, CROSSBOW_HOLD.tpRot.y, CROSSBOW_HOLD.tpRot.z);
         } else if (built3.isTool) {
@@ -14964,6 +15138,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         figHeldGroup.add(built3.group);
         xbFp = held === ID.Crossbow ? built1.group : null;
         xbTp = held === ID.Crossbow ? built3.group : null;
+        gunFp = GUN_OF(held) ? built1.group : null;
+        gunTp = GUN_OF(held) ? built3.group : null;
       }
     }
     // B19: crossbow draw / fire / reload, same pose in first and third person.
@@ -14977,6 +15153,25 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       xbKick = reduceMotion ? pose.kick * 0.3 : pose.kick;
       figHeldGroup.position.y += 0.05 * xbKick;
       figHeldGroup.rotation.x = -0.35 * xbKick;
+    }
+    // t91u: gun recoil, reload dip and muzzle flash (first + third person).
+    const gspec = GUN_OF(held);
+    if (gspec && (gunFp || gunTp)) {
+      const st = gunState(held);
+      const since = elapsed - st.lastShot;
+      const kick = recoilAt(gspec, since) * (reduceMotion ? 0.3 : 1);
+      const rl = reloadPose(gspec, st, elapsed);
+      xbKick = kick;
+      figHeldGroup.position.y += 0.05 * kick - 0.12 * rl;
+      figHeldGroup.rotation.x = -0.35 * kick - 0.5 * rl;
+      const fs = flashAt(since);
+      for (const g of [gunFp, gunTp]) {
+        if (!g) continue;
+        g.rotation.z = (g === gunFp ? 0 : g.rotation.z) + 0;
+        const fl = g.userData.gunFlash as THREE.Object3D | undefined;
+        if (fl) { fl.visible = fs > 0; fl.scale.setScalar(0.6 + fs); fl.rotation.x = since * 40; }
+      }
+      if (gunFp) gunFp.rotation.x = -0.6 * rl;
     }
     // B18: nothing in hand while seated in a vehicle (restored on exit).
     heldBrickGroup.visible = !!held && !vehEnt;

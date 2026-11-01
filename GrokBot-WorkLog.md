@@ -213,3 +213,11 @@ Journal de travail de studs game tester (Grok Bot) sur StudCraft. Heures en heur
 - Compilation du fork depuis les sources impossible sur la box : pas de g++, et apt refuse à cause des paquets bloqués (« held »), que je n'ai pas forcés. J'utilise donc les binaires officiels des releases du fork. La procédure Windows (Vulkan/AMD) et la compilation manuelle sont dans `desktop/README.md`.
 - Electron n'est ni installé ni lancé sur la box (disque plein). PR laissée ouverte pour un test sur le PC de Philippe.
 - Vérification du web sur main a3ffb67 (serveur de dev, en-têtes identiques) : 11/11 morceaux dans OPFS (248 302 272 octets), moteur wasm prêt en 29 s. Dans le jeu complet, 1re quête JSON valide en 65 s, 2e en 19,8 s grâce au cache du préfixe. studcraft.pages.dev sert toujours #13 à 18 h 03 HP : le déploiement de #14 ne s'est pas fait côté watcher, qui est hors de mon accès.
+
+## t91u — Accessoires minifig (annuaire p.4) + armes à feu à cartouches
+- Diff de l'annuaire d'accessoires (p.4) contre le jeu : 60 accessoires manquants ajoutés (ids 540–603) dans `accessories.ts`, piloté par données : modèles SNR procéduraux (tout passe par `skin()`), icônes SVG générées par projection des pièces, prises 1re/3e personne, recettes (ingrédients résolus par nom, tous obtenables).
+- Déjà présents donc non dupliqués : pelle, pioche, tonneau, pomme, arc, arbalète, bouclier, casquette.
+- Fonctionnels : outils (pioche/hache/épée avec durabilité), nourriture, casques/dos portés (armure), extincteur (éteint le feu), jumelles/loupe (zoom / dureté), mégaphone (repousse les mobs), talkie (radio), instruments (notes), balai (nettoie l'herbe), menottes (mob ralenti 30 s), sabre laser lumineux.
+- Armes : `firearms.ts` — chargeur, rechargement (R), cadence auto/semi, recul, flash de bouche procédural, chute de dégâts, consommation de munitions, usure, compteur HUD. Cartouche = douille (cuivre) + poudre Popper + balle ; Carabine 20 coups auto, Fusil 5 coups ; blasters à cellules d'énergie ; baguette sans munitions.
+- Tests : accessories.test.ts (63) + firearms.test.ts (6) — 297 tests au vert.
+- Captures : studcraft-qa/shots/b20-acc-*.png.
