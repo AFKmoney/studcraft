@@ -380,6 +380,7 @@ declare global {
       setSteer?: (v: number) => void;
       setLook?: (yaw: number, pitch: number) => void;
       setDig?: (mine: boolean, place: boolean) => void;
+      setTimeQa?: (t: number) => number;
       gravQa?: (x: number, y: number, z: number, run?: boolean) => { pending: number; queue: number; chunks: number; fallers: number; clock: number; verdict: string };
       getFallersQa?: () => { n: number; scanAcc: number; ys: number[]; chunks: { cells: number; y: number; age: number }[] };
       getBlock?: (x: number, y: number, z: number) => number;
@@ -16975,6 +16976,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       mousePlace = place;
     },
     getBlock: (x: number, y: number, z: number) => world.get(Math.floor(x), Math.floor(y), Math.floor(z)),
+    setTimeQa: (t: number) => { worldTime = ((t % 1) + 1) % 1; return worldTime; },
     gravQa: (x: number, y: number, z: number, run = false) => {
       if (run) runGravityScan(Math.floor(x), Math.floor(y), Math.floor(z));
       return { pending: gravPending.size, queue: gravQueue.length, chunks: chunks.length, fallers: fallers.length, clock: +gravClock.toFixed(2), verdict: analyzeComponent((a, b, c) => world.get(a, b, c), Math.floor(x), Math.floor(y), Math.floor(z), { ...gravOpts, maxCells: 2500 }).kind };
