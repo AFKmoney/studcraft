@@ -2765,9 +2765,24 @@ function StationScreen({ game }: { game: GameApi }) {
 
 function QuestList({ hud, onClaim }: { hud: GameApi["hud"]; onClaim: (id: string) => void }) {
   let lastChain = "";
+  // 2026-11-01: the board grew past 40 entries — filter it, ready first.
+  const [view, setView] = useState<"active" | "ready" | "done">("active");
+  const ready = hud.quests.filter((q) => q.ready && !q.done).length;
+  const list = hud.quests
+    .filter((q) => (view === "done" ? q.done : view === "ready" ? q.ready && !q.done : !q.done && !q.locked))
+    .sort((a, b) => Number(!!b.ready) - Number(!!a.ready));
   return (
+    <>
+    <div className="sc-chips" role="tablist" style={{ marginBottom: 10 }}>
+      {(["active", "ready", "done"] as const).map((f) => (
+        <button key={f} role="tab" aria-selected={view === f} className={"sc-chip-btn" + (view === f ? " on" : "")} onClick={() => setView(f)}>
+          {f === "active" ? "Active" : f === "ready" ? `Ready to claim${ready ? " (" + ready + ")" : ""}` : "Done"}
+        </button>
+      ))}
+    </div>
     <ul className="sc-cards">
-      {hud.quests.map((quest) => {
+      {list.length === 0 && <li className="sc-muted">{view === "ready" ? "Nothing to hand in yet." : view === "done" ? "No quest finished yet." : "All caught up — visit a village chief or a guild hall for contracts."}</li>}
+      {list.map((quest) => {
         const header = quest.chainName && quest.chainName !== lastChain ? quest.chainName : null;
         if (quest.chainName) lastChain = quest.chainName;
         return (
@@ -2800,6 +2815,7 @@ function QuestList({ hud, onClaim }: { hud: GameApi["hud"]; onClaim: (id: string
         );
       })}
     </ul>
+    </>
   );
 }
 
@@ -2886,6 +2902,33 @@ function Journal({ hud, game }: { hud: GameApi["hud"]; game: GameApi }) {
         ))}
         <small className="sc-muted">Press F5 (or the camera button) for third person to admire the fit.</small>
       </div>
+      <p className="sc-label">Standing</p>
+      <ul className="sc-standing">
+        {hud.standings.map((v) => (
+          <li key={v.key}>
+            <span>Village {v.key.replace(",", " · ")}</span>
+            <div className={"sc-rep-bar" + (v.rep < 0 ? " bad" : "")}>
+              <i style={{ width: `${Math.min(100, Math.abs(v.rep))}%` }} />
+            </div>
+            <b className={v.rep < 0 ? "bad" : v.rep > 0 ? "good" : ""}>
+              {v.word} ({v.rep > 0 ? "+" : ""}
+              {v.rep})
+            </b>
+            {v.bounty > 0 && <em>Bounty {v.bounty}</em>}
+          </li>
+        ))}
+        {hud.guildRanks.map((g) => (
+          <li key={g.name} className="guild">
+            <span>{g.name}</span>
+            <div className="sc-rep-bar">
+              <i style={{ width: `${g.next ? Math.min(100, (g.xp / g.next) * 100) : 100}%` }} />
+            </div>
+            <b className="good">{g.rank}</b>
+            <em>{g.next ? `${g.xp} / ${g.next}` : "Top rank"}</em>
+          </li>
+        ))}
+        {hud.standings.length === 0 && hud.guildRanks.length === 0 && <li className="sc-muted">Nobody knows your name yet — talk to a village chief, take a contract, join a guild.</li>}
+      </ul>
       <p className="sc-label">Deeds</p>
       <ul className="sc-journal-stats">
         {STAT_ROWS.map(([k, label]) => (

@@ -5,7 +5,7 @@ import { NFR_FIELDS, type NfrLayer } from "./nfrFields";
 import { ATLAS_COLS, ATLAS_ROWS, BLOCKS, CREATIVE_BAR, ID, TEKS, def, faceTile, stairsVariant, type BlockDef } from "./blocks";
 import { TechWorld, ORIENTS, composeO, worldCells, rot, SENSOR_RANGES, SENSOR_TARGETS, nextSensorCfg, sensorCfgLabel, colorFamilyOf, bbox as techBbox, spec as techSpec, type Part as TechPart, type Plan as TechPlan, type Target as TechTarget } from "./teks";
 import { buildTeksGeometry, buildTeksRodGeometries } from "./teksGeo";
-import { analyzeComponent } from "./gravity";
+import { analyzeComponent, type GravCell } from "./gravity";
 import { dissolvedYield } from "./dissolve";
 import { beadSegments, supportCant, weldComponentOf, type BeadSeg } from "./weld";
 import { AFFIXES, PATHS, PATH_CHANGE_COST, rollRelic, type AffixKey, type PathId, type Relic } from "./identity";
@@ -47,7 +47,7 @@ import { CS, HEIGHT, SEA, World, decorate, folkLayout, inNether, penSheep, paint
 import { DEBRIS_ADVANCED, debrisAt } from "./debris";
 import { stockChest } from "./loot";
 import { banditFolk, civicOf, patrolOf, findStructure, garageOf, structureAt, structureFolk, structuresNear, structureLabel, structureOwning, stockStructureChest, type StructKind, type Structure } from "./structures";
-import { BOUNTY_ARREST, banditQuests, chiefOf, chiefQuests, COIN, CRIME, guildEntryQuest, guildQuests, GUILDS, guildsIn, makeQuest, type Quest, mobTag, seenBy, type CrimeKind, type Observer } from "./society";
+import { BOUNTY_ARREST, banditQuests, chiefOf, chiefQuests, COIN, CRIME, GUILD_RANK_XP, guildEntryQuest, guildQuests, guildRank, GUILDS, guildsIn, makeQuest, type Quest, mobTag, seenBy, type CrimeKind, type Observer } from "./society";
 import { Society, baseQuestId } from "./societyState";
 import { classifyContext, presetFor, readGl, SOFTWARE_HINT } from "./gpu";
 import { mayYield, spillSlots } from "./yields";
@@ -93,6 +93,8 @@ export type Hud = {
   path: string;
   stats: Stats;
   look: Look;
+  standings: { key: string; rep: number; word: string; bounty: number }[];
+  guildRanks: { name: string; rank: string; xp: number; next: number }[];
   trophies: ReturnType<typeof trophyRows>;
   named: Record<number, string>;
   nextPerk: string;
@@ -378,7 +380,7 @@ declare global {
       setSteer?: (v: number) => void;
       setLook?: (yaw: number, pitch: number) => void;
       setDig?: (mine: boolean, place: boolean) => void;
-      getFallersQa?: () => { n: number; scanAcc: number; ys: number[] };
+      getFallersQa?: () => { n: number; scanAcc: number; ys: number[]; chunks: { cells: number; y: number; age: number }[] };
       getBlock?: (x: number, y: number, z: number) => number;
       put?: (x: number, y: number, z: number, id: number) => boolean;
       ignite?: (x: number, y: number, z: number) => boolean;
@@ -577,6 +579,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     path: "",
     stats: {},
     look: { ...DEFAULT_LOOK },
+    standings: [],
+    guildRanks: [],
     trophies: [],
     named: {},
     nextPerk: "Steady hands",
@@ -4574,6 +4578,17 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     hud.stats = { ...stats };
     hud.look = settings.look;
+    if (phase === "inventory" || !hud.standings.length) {
+      hud.standings = Object.entries(society.standing)
+        .map(([key, st]) => ({ key, rep: st.rep, word: repWord(st.rep), bounty: st.bounty }))
+        .sort((a, b) => b.rep - a.rep)
+        .slice(0, 12);
+      hud.guildRanks = GUILDS.filter((g) => (society.guilds[g.id] ?? 0) > 0).map((g) => {
+        const xp = society.guilds[g.id] ?? 0;
+        const r = guildRank(xp);
+        return { name: g.name, rank: g.ranks[r], xp, next: GUILD_RANK_XP[r + 1] ?? 0 };
+      });
+    }
     hud.trophies = phase === "inventory" || hud.trophies.length === 0 ? trophyRows(stats, trophies) : hud.trophies;
     hud.hotbar = hotbar.map((id) => ({ id, count: creative ? -1 : (inv[id] ?? 0) }));
     hud.offhand = offhand;
@@ -6089,6 +6104,106 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     makeFaller(x, y, z, id);
   }
 
+  // ===== Teardown-style rigid chunks (2026-11-01, Claude) =====
+  // A detached component no longer rains down block by block: it leaves
+  // the grid as ONE rigid body, tips over its last support (torque from
+  // the centre of mass), tumbles, and on impact each block either
+  // shatters into studded rubble (matter is kept: it drops as an item)
+  // or, on a soft landing, snaps back into the grid where it lies.
+  type Chunk = { group: THREE.Group; cells: { id: number; o: THREE.Vector3 }[]; pos: THREE.Vector3; vel: THREE.Vector3; q: THREE.Quaternion; w: THREE.Vector3; age: number };
+  const chunks: Chunk[] = [];
+  const CHUNK_MAX_CELLS = 320;
+  function makeChunk(cells: GravCell[]): boolean {
+    if (cells.length < 2 || cells.length > CHUNK_MAX_CELLS || chunks.length >= 6) return false;
+    const member = new Set(cells.map((c) => c.x + "," + c.y + "," + c.z));
+    const com = new THREE.Vector3();
+    for (const c of cells) com.add(new THREE.Vector3(c.x + 0.5, c.y + 0.5, c.z + 0.5));
+    com.multiplyScalar(1 / cells.length);
+    // support cells: resting on ground that is not part of the chunk
+    const sup = cells.filter((c) => !member.has(c.x + "," + (c.y - 1) + "," + c.z) && def(world.get(c.x, c.y - 1, c.z)).solid);
+    const group = new THREE.Group();
+    const body: Chunk = { group, cells: [], pos: com.clone(), vel: new THREE.Vector3(), q: new THREE.Quaternion(), w: new THREE.Vector3(), age: 0 };
+    for (const c of cells) {
+      const o = new THREE.Vector3(c.x + 0.5, c.y + 0.5, c.z + 0.5).sub(com);
+      const m = new THREE.Mesh(fallerGeo(c.id), opaqueLam);
+      m.position.copy(o);
+      if (plasticOn) { m.castShadow = true; m.receiveShadow = true; }
+      group.add(m);
+      body.cells.push({ id: c.id, o });
+      world.set(c.x, c.y, c.z, ID.Air);
+      markDirtyAt(c.x, c.z);
+      netSendEdit(c.x, c.y, c.z, ID.Air);
+    }
+    if (sup.length === 1) {
+      // tip over the last support: spin about the horizontal axis that
+      // carries the centre of mass away from the pivot, slide off it
+      const piv = new THREE.Vector3(sup[0].x + 0.5, sup[0].y, sup[0].z + 0.5);
+      const off = com.clone().sub(piv).setY(0);
+      if (off.lengthSq() < 0.01) off.set(Math.random() - 0.5, 0, Math.random() - 0.5);
+      off.normalize();
+      body.w.copy(new THREE.Vector3(0, 1, 0).cross(off)).multiplyScalar(-1.6 - Math.random() * 0.8);
+      body.vel.copy(off).multiplyScalar(1.4);
+    } else {
+      body.w.set((Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.8);
+    }
+    group.position.copy(body.pos);
+    scene.add(group);
+    chunks.push(body);
+    audio.brickBreak();
+    return true;
+  }
+  const _cv = new THREE.Vector3();
+  const _dq = new THREE.Quaternion();
+  function updateChunks(dt: number) {
+    for (let i = chunks.length - 1; i >= 0; i--) {
+      const b = chunks[i];
+      b.age += dt;
+      b.vel.y = Math.max(-38, b.vel.y - 30 * dt);
+      b.pos.addScaledVector(b.vel, dt);
+      const wl = b.w.length();
+      if (wl > 1e-4) {
+        _dq.setFromAxisAngle(_cv.copy(b.w).multiplyScalar(1 / wl), wl * dt);
+        b.q.premultiply(_dq);
+      }
+      // impact: any block centre (pushed half a block down) inside solid ground
+      let hit = false;
+      for (const c of b.cells) {
+        _cv.copy(c.o).applyQuaternion(b.q).add(b.pos);
+        if (def(world.get(Math.floor(_cv.x), Math.floor(_cv.y - 0.45), Math.floor(_cv.z))).solid) { hit = true; break; }
+      }
+      if (hit || b.age > 10 || b.pos.y < -12) {
+        const speed = b.vel.length() + wl * 1.5;
+        for (const c of b.cells) {
+          _cv.copy(c.o).applyQuaternion(b.q).add(b.pos);
+          const x = Math.floor(_cv.x), z = Math.floor(_cv.z);
+          let y = Math.floor(_cv.y);
+          const shatter = speed > 9 ? Math.random() < 0.75 : speed > 5 ? Math.random() < 0.4 : false;
+          if (!shatter) {
+            for (let k = 0; k < 4 && def(world.get(x, y, z)).solid; k++) y++;
+            if (!def(world.get(x, y, z)).solid && world.set(x, y, z, c.id)) {
+              markDirtyAt(x, z);
+              continue;
+            }
+          }
+          // rubble: studded chips fly, the block's matter drops as an item
+          const col = def(c.id).side || def(c.id).color;
+          for (let p = 0; p < 4; p++) spawnPiece(_cv.x, _cv.y, _cv.z, col, b.vel.x * 0.3 + (Math.random() - 0.5) * 4, 2 + Math.random() * 3, b.vel.z * 0.3 + (Math.random() - 0.5) * 4);
+          const drop = def(c.id).drop;
+          if (!creative && drop !== -1) dropItem(drop || c.id, 1, _cv.x, _cv.y + 0.3, _cv.z);
+        }
+        burst(b.pos.x, b.pos.y, b.pos.z, "#c9b8a0", 14);
+        padRumble(Math.min(1, speed / 14), 0.3, 120);
+        audio.brickBreak();
+        scene.remove(b.group);
+        chunks.splice(i, 1);
+        saveDirty = true;
+        continue;
+      }
+      b.group.position.copy(b.pos);
+      b.group.quaternion.copy(b.q);
+    }
+  }
+
   function updateFallers(dt: number) {
     for (let i = fallers.length - 1; i >= 0; i--) {
       const f = fallers[i];
@@ -6167,6 +6282,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const v = analyzeComponent((x, y, z) => world.get(x, y, z), sx, sy, sz, { ...gravOpts, maxCells: 2500, seen: scanSeen });
       if (v.kind !== "falls") continue;
       if (v.cells.some((c) => gravQueued.has(c.x + "," + c.y + "," + c.z))) continue;
+      if (makeChunk(v.cells)) continue; // Teardown: the whole piece goes as one body
       for (const c of v.cells) {
         gravQueued.add(c.x + "," + c.y + "," + c.z);
         gravQueue.push(c);
@@ -7698,6 +7814,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     brickStress.clear();
     brickSagged.clear();
     for (const f of fallingBricks) scene.remove(f.mesh);
+    for (const c of chunks) scene.remove(c.group);
+    chunks.length = 0;
     fallingBricks.length = 0;
     for (const g of fallingGroups) scene.remove(g.group);
     fallingGroups.length = 0;
@@ -16253,6 +16371,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     updateFireFx();
     updateTopples(dt);
     updateFallers(dt);
+    updateChunks(dt);
     tickBricks(dt);
     tickTeks(dt);
     // DualSense adaptive triggers (t106u): bow tension, crossbow latch, gun
@@ -16833,7 +16952,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       mousePlace = place;
     },
     getBlock: (x: number, y: number, z: number) => world.get(Math.floor(x), Math.floor(y), Math.floor(z)),
-    getFallersQa: () => ({ n: fallers.length, scanAcc: fallScanAcc, ys: fallers.slice(0, 8).map((f) => +f.y.toFixed(2)) }),
+    getFallersQa: () => ({ n: fallers.length, scanAcc: fallScanAcc, ys: fallers.slice(0, 8).map((f) => +f.y.toFixed(2)), chunks: chunks.map((c) => ({ cells: c.cells.length, y: +c.pos.y.toFixed(2), age: +c.age.toFixed(2) })) }),
     // v4.15 fire QA hooks
     put: (x: number, y: number, z: number, id: number) => {
       const ok = world.set(Math.floor(x), Math.floor(y), Math.floor(z), id);
