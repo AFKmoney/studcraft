@@ -401,7 +401,7 @@ declare global {
       vehMobHpQa?: () => unknown;
       snrAuditQa?: () => { ok: number; bad: Record<string, number> };
       mobsToGroundQa?: () => boolean;
-      furnaceModeQa?: (plastic: boolean) => boolean;
+      furnaceModeQa?: (plastic: boolean, x?: number, y?: number, z?: number) => boolean;
       standingQa?: () => unknown;
       claimQuestQa?: (id: string) => boolean;
       getShots?: () => number;
@@ -16791,7 +16791,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       reportCrime(socKey(v), kind as CrimeKind, seen);
       return society.st(socKey(v));
     },
-    furnaceModeQa: (plastic: boolean) => { api.setFurnaceMode(plastic); return api.furnaceMode(); },
+    furnaceModeQa: (plastic: boolean, x?: number, y?: number, z?: number) => {
+      if (x === undefined) { api.setFurnaceMode(plastic); return api.furnaceMode(); }
+      // QA: the mode is per kiln; target one by coords without needing focus
+      const fx = Math.floor(x), fy = Math.floor(y!), fz = Math.floor(z!);
+      const f = ensureFurnace(fx + "," + fy + "," + fz, fx, fy, fz);
+      f.inN = 0; f.plastic = plastic; f.cook = 0;
+      return !!f.plastic;
+    },
     vehArmQa: (id: number) => { if (!vehEnt || !WEAPONS[id] || !vehEnt.arms.length) return false; for (const a of vehEnt.arms) a.st = newWeaponState(a.st.uid, id); const mz = vehMuzzle(vehEnt, vehEnt.arms[0]); return { p: mz.p, d: mz.d }; },
     vehMobHpQa: () => mobs.filter((m) => !m.dead && Math.hypot(m.x - player.x, m.z - player.z) < 40).map((m) => ({ kind: m.kind, hp: m.hp, x: +m.x.toFixed(1), z: +m.z.toFixed(1) })),
     mobsToGroundQa: () => { for (const m of mobs) if (!m.dead) { let y = Math.floor(player.y) + 4; while (y > 1 && !def(world.get(Math.floor(m.x), y - 1, Math.floor(m.z))).solid) y--; m.y = y; } return true; },

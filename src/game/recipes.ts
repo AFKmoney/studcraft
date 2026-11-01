@@ -1567,7 +1567,7 @@ export const RECIPES: Recipe[] = [
   r("table", "Table", "3 planks + 4 sticks", [[P, 3], [S, 4]], ID.Table, 1, { cat: "build" }),
   r("chair", "Chair", "2 planks + 4 sticks", [[P, 2], [S, 4]], ID.Chair, 1, { cat: "build" }),
   r("stool", "Stool", "1 wood → 2", [[ID.Log, 1]], ID.Stool, 2, { cat: "build" }),
-  r("shelf", "Wall shelf", "2 planks", [[P, 2]], ID.Shelf, 1, { cat: "build" }),
+  r("wall-shelf", "Wall shelf", "2 planks", [[P, 2]], ID.Shelf, 1, { cat: "build" }),
   r("rug-red", "Red rug", "2 red bricks", [[ID.Red, 2]], ID.RugRed, 3, { cat: "build" }),
   r("rug-blue", "Blue rug", "2 blue bricks", [[ID.Blue, 2]], ID.RugBlue, 3, { cat: "build" }),
   r("rug-green", "Green rug", "2 green bricks", [[ID.Green, 2]], ID.RugGreen, 3, { cat: "build" }),
