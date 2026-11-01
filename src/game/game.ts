@@ -376,6 +376,7 @@ declare global {
       tearTuft?: (x: number, y: number, z: number) => void;
       getTarget?: () => string;
       spawnMob?: (kind: string, dx?: number, dz?: number) => boolean;
+      spawnOutfit?: (soc: string, dx?: number, dz?: number, role?: string) => boolean;
       getPeers?: () => { name: string; x: number; y: number; z: number }[];
       getEnch?: (id: number) => Record<string, number> | null;
       setEnch?: (id: number, key: string, lvl: number) => boolean;
@@ -11409,7 +11410,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     mob.homeZ = z;
     mob.roam = true;
     mob.bodyMat?.color.setHex(tint);
-    decorateVillagerRole(mob.mesh, role);
+    decorateVillagerRole(mob.mesh, role, outfitFor(soc));
   }
   function losClear(ax: number, ay: number, az: number, bx: number, by: number, bz: number): boolean {
     const d = Math.hypot(bx - ax, by - ay, bz - az);
@@ -16327,6 +16328,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       spawnKind(kind as Mob["kind"], player.x + dx, player.z + dz);
       return true;
     },
+    // t92u QA: stand a dressed society figure (guard, chief, fence, guild:<id>) beside you
+    spawnOutfit: (soc: string, dx = 3, dz = 0, role = "clerk") => {
+      spawnSoc(player.x + dx, player.z + dz, soc, soc, role as TraderRole, OUTFITS[soc]?.tint ?? 0x8e959c);
+      const m = mobs[mobs.length - 1];
+      if (m) m.roam = false;
+      return !!m;
+    },
     getMobs: () => mobs.filter((m) => !m.dead).map((m) => m.kind),
     mobAudit: () => {
       const kinds = ["sheep", "creeper", "cow", "walker", "pig", "chicken", "spider", "skelly", "villager", "ghast", "dragon", "horse", "phantom", "piglin", "frog", "fox", "crab", "wisp", "slime", "wolf", "golem", "wither", "enderman", "blaze", "witch", "bee", "cat", "squid", "bat", "drowned", "husk", "stray", "goat", "axolotl", "parrot", "guardian", "shulker", "pillager", "vindicator", "evoker", "vex", "ravager"];
@@ -20201,7 +20209,7 @@ function beast(kind: string): StudsBody {
 }
 
 // Attach 3D STUDS Role Hats, Aprons, Packs, Spectacles & Held Tools to Hamlet NPC Villagers ("PNJ")
-export function decorateVillagerRole(group: THREE.Group, role?: TraderRole) {
+export function decorateVillagerRole(group: THREE.Group, role?: TraderRole, outfit?: Outfit | null) {
   if (!role || group.userData.roleDecorated) return;
   group.userData.roleDecorated = true;
   // v3 traders: every merchant wears a leather apron, a cross-body strap and a satchel; the
@@ -20227,6 +20235,12 @@ export function decorateVillagerRole(group: THREE.Group, role?: TraderRole) {
   const armL = group.children.find((c) => c.userData.arm === -1) ?? kit;
   const H = armR === kit ? [0.28, 0.5, -0.16] : [0.042, -0.4, -0.07];
   const hand = (_x: number) => [H[0], H[1], H[2]] as const;
+  if (!outfit && role === "outfitter") outfit = OUTFITS.outfitter;
+  if (!outfit && role === "fence") outfit = OUTFITS.fence;
+  if (outfit) {
+    wearOutfit(head, kit, armR, armL, H as unknown as [number, number, number], outfit);
+    return;
+  }
   if (role === "grocer") {
     put(head, geoLathe("hat-straw", [[0, 0.1], [0.12, 0.1], [0.15, 0.03], [0.28, 0.01], [0.28, 0]], 18), sheen(0xe8c455), 0, 0.26, 0, 0, true);
     put(head, geoTorus(0.15, 0.015, 16), sheen(0xc83228), 0, 0.29, 0, Math.PI / 2, true);
@@ -20285,6 +20299,150 @@ export function decorateVillagerRole(group: THREE.Group, role?: TraderRole) {
     const gr = gear(kit, goldM, ironM, 0.04, 0.02, 8);
     gr.position.set(-0.22, 0.52, 0.06);
   }
+}
+
+// ───────────── t92u: minifig outfits for NPCs, guards, chiefs and guild masters ─────────────
+// The catalogue's head / shoulder / hand accessories (CAT-06) dressed onto society figures:
+// each piece is a bespoke build in head-local (y 0 = neck, front −Z) or torso-local space,
+// all plastic through sheen() → skin() (SNR). Held weapons reuse the dedicated weaponModels.
+export type HeadPiece = "hardhat" | "spacehelmet" | "knight" | "cap" | "bicorne" | "hood";
+export type BackPiece = "backpack" | "airtanks" | "quiver" | "cape" | "breastplate";
+export interface Outfit { head?: HeadPiece; back?: BackPiece[]; right?: string; left?: string; tint?: number; trim?: number }
+export const OUTFITS: Record<string, Outfit> = {
+  guard: { head: "knight", back: ["breastplate"], right: "Halberd", left: "TriShield", tint: 0x8e959c, trim: 0xc8302a },
+  chief: { head: "bicorne", back: ["cape"], left: "Goblet", tint: 0x1f2a5a, trim: 0xf5c518 },
+  fence: { head: "bicorne", back: ["cape"], right: "Cutlass", tint: 0x1b1d21, trim: 0xe8dcc8 },
+  outfitter: { head: "cap", back: ["backpack"], right: "Suitcase", tint: 0x2f6fb0, trim: 0xf2efe6 },
+  "guild:techno": { head: "spacehelmet", back: ["airtanks"], right: "BlasterM", tint: 0x2f6fb0, trim: 0xf5c518 },
+  "guild:warriors": { head: "knight", back: ["breastplate", "cape"], right: "LongSword", left: "RoundShield", tint: 0xb8c0c8, trim: 0xc8302a },
+  "guild:traders": { head: "cap", back: ["backpack"], right: "Bag", left: "Suitcase", tint: 0xf5c518, trim: 0x7c522b },
+  "guild:politicians": { head: "bicorne", back: ["cape"], right: "Megaphone", tint: 0xf2efe6, trim: 0x3ec8ff },
+  "guild:thieves": { head: "hood", back: ["cape"], right: "ShortSword", left: "Bag", tint: 0x1b1d21, trim: 0x55585c },
+  "guild:rangers": { head: "cap", back: ["quiver"], right: "Binoculars", tint: 0x2f7d38, trim: 0x6b4426 },
+  "guild:mechanics": { head: "hardhat", back: ["backpack"], right: "Wrench", left: "OilCan", tint: 0xf08a24, trim: 0x23262b },
+  "guild:alchemists": { head: "hood", back: ["cape"], right: "Magnifier", left: "Cauldron", tint: 0x5a7d2a, trim: 0xd8a22e },
+  "guild:miners": { head: "hardhat", back: ["backpack"], right: "Drill", tint: 0xf5c518, trim: 0x8a6a4a },
+  "guild:explorers": { head: "cap", back: ["backpack"], right: "Binoculars", left: "TvCamera", tint: 0xe0c080, trim: 0x3ec8ff },
+  "guild:builders": { head: "hardhat", back: ["backpack"], right: "Hammer", left: "Crowbar", tint: 0xf5c518, trim: 0xf08a24 },
+  "guild:smiths": { head: "knight", back: ["breastplate"], right: "Hammer", tint: 0x3a3f46, trim: 0xc8302a },
+  "guild:assassins": { head: "hood", back: ["cape"], right: "Katana", tint: 0x1b1d21, trim: 0xc8302a },
+};
+/** Which outfit a society figure wears (sorcerers keep their wizard kit). */
+export function outfitFor(soc: string): Outfit | null {
+  return OUTFITS[soc] ?? null;
+}
+function wearOutfit(head: THREE.Object3D, kit: THREE.Object3D, armR: THREE.Object3D, armL: THREE.Object3D, H: [number, number, number], o: Outfit) {
+  const tint = sheen(o.tint ?? 0x8e959c), trim = sheen(o.trim ?? 0xf5c518), dark = sheen(0x23262b);
+  const gold = sheen(0xf5c518), steel = sheen(0xb8c0c8);
+  // ── head ──
+  const hd = o.head;
+  if (hd === "hardhat") {
+    put(head, geoDome(0.175, 18), tint, 0, 0.24, 0, 0, true).scale.set(1, 0.82, 1.05);
+    put(head, geoRBox(0.04, 0.012, 0.36, 0.005), tint, 0, 0.36, 0, 0, true); // crown ridge
+    put(head, geoLathe("mf-hh-brim", [[0.17, 0.0], [0.205, -0.004], [0.205, 0.008], [0.17, 0.014]], 24), tint, 0, 0.245, 0, 0, true);
+    put(head, geoCyl(0.032, 0.03, 14), trim, 0, 0.3, -0.16, Math.PI / 2, true); // lamp housing
+    put(head, geoCyl(0.024, 0.008, 14), skin(0xfff2b0), 0, 0.3, -0.176, Math.PI / 2, true);
+  } else if (hd === "spacehelmet") {
+    put(head, geoBall(0.215, 14), tint, 0, 0.13, 0, 0, true);
+    const visor = put(head, geoDome(0.2, 18), transTile(0xffc040, 0x8a5a10), 0, 0.13, -0.02, -Math.PI / 2, true);
+    visor.scale.set(0.92, 0.82, 0.9);
+    put(head, geoTorus(0.2, 0.018, 20), trim, 0, -0.04, 0, Math.PI / 2, true); // neck ring
+    put(head, geoCyl(0.006, 0.12, 6), steel, 0.14, 0.34, 0.05, 0, true); // antenna
+    put(head, geoBall(0.014, 6), sheen(0xff3a2a), 0.14, 0.4, 0.05, 0, true);
+  } else if (hd === "knight") {
+    put(head, geoDome(0.185, 18), steel, 0, 0.18, 0, 0, true).scale.set(1, 1.15, 1);
+    put(head, geoRBox(0.03, 0.16, 0.37, 0.008), steel, 0, 0.27, 0, 0, true); // crest ridge
+    const vis = put(head, geoRBox(0.32, 0.12, 0.04, 0.02), steel, 0, 0.16, -0.18, 0, true);
+    vis.rotation.x = -0.25;
+    for (const sx of [-0.06, 0.06]) put(head, geoRBox(0.08, 0.012, 0.01, 0.003), dark, sx, 0.17, -0.205, 0, true); // eye slits
+    for (const sx of [-0.18, 0.18]) put(head, geoCyl(0.018, 0.02, 10), gold, sx, 0.16, -0.06, 0, true).rotation.z = Math.PI / 2; // visor pivots
+    for (let k = 0; k < 5; k++) put(head, geoPlate("mf-plume" + k, [[0, 0], [0.03, 0.12], [-0.02, 0.1]], 0.012), trim, 0, 0.36, 0.06 + k * 0.03, 0, true).rotation.set(0.6 + k * 0.12, Math.PI / 2, 0);
+  } else if (hd === "cap") {
+    put(head, geoDome(0.165, 18), tint, 0, 0.23, 0, 0, true).scale.set(1, 0.75, 1);
+    put(head, geoRBox(0.22, 0.018, 0.14, 0.008), tint, 0, 0.245, -0.19, 0, true); // peak
+    put(head, geoBall(0.018, 6), trim, 0, 0.355, 0, 0, true); // button
+    put(head, geoRBox(0.06, 0.05, 0.01, 0.005), trim, 0, 0.3, -0.155, 0, true); // badge
+  } else if (hd === "bicorne") {
+    const b = put(head, geoLathe("mf-bicorne", [[0, 0.16], [0.08, 0.14], [0.2, 0.05], [0.3, 0.0], [0.3, -0.01], [0, -0.01]], 24), tint, 0, 0.26, 0, 0, true);
+    b.scale.set(1, 1, 0.42);
+    const rim = put(head, geoTorus(0.29, 0.012, 24), trim, 0, 0.265, 0, Math.PI / 2, true);
+    rim.scale.set(1, 0.42, 1);
+    put(head, geoCyl(0.04, 0.012, 16), sheen(0xc8302a), 0, 0.34, -0.06, Math.PI / 2, true); // cockade
+    put(head, geoBall(0.014, 6), gold, 0, 0.34, -0.07, 0, true);
+  } else if (hd === "hood") {
+    put(head, geoBall(0.2, 12), tint, 0, 0.15, 0.025, 0, true).scale.set(1, 1.1, 1.05);
+    put(head, geoRBox(0.27, 0.22, 0.05, 0.03), sheen(0x0c0c0e), 0, 0.12, -0.18, 0, true); // shadowed opening
+    for (const sx of [-0.055, 0.055]) put(head, geoBall(0.016, 6), skin(0xfff2b0), sx, 0.16, -0.205, 0, true); // eyes in the dark
+    put(head, geoTorus(0.16, 0.012, 16), trim, 0, 0.02, 0, Math.PI / 2, true);
+  }
+  // ── shoulders & back (torso-local: y 0.5–0.9, back +Z) ──
+  for (const bp of o.back ?? []) {
+    if (bp === "backpack") {
+      put(kit, geoRBox(0.24, 0.26, 0.1, 0.03), tint, 0, 0.72, 0.18, 0, true);
+      put(kit, geoRBox(0.24, 0.07, 0.11, 0.02), trim, 0, 0.86, 0.185, 0, true); // flap
+      put(kit, geoRBox(0.16, 0.08, 0.04, 0.012), trim, 0, 0.63, 0.24, 0, true); // front pocket
+      for (const sx of [-0.09, 0.09]) put(kit, geoRBox(0.03, 0.3, 0.02, 0.006), dark, sx, 0.74, -0.13, 0, true); // straps
+      put(kit, geoCyl(0.04, 0.24, 12), sheen(0x5b3a22), 0, 0.92, 0.17, 0, true).rotation.z = Math.PI / 2; // bedroll
+    } else if (bp === "airtanks") {
+      for (const sx of [-0.06, 0.06]) {
+        put(kit, geoCyl(0.055, 0.3, 14), tint, sx, 0.72, 0.18, 0, true);
+        put(kit, geoDome(0.055, 14), tint, sx, 0.87, 0.18, 0, true);
+        put(kit, geoCyl(0.018, 0.04, 8), steel, sx, 0.9, 0.18, 0, true);
+      }
+      put(kit, geoRBox(0.26, 0.05, 0.12, 0.015), trim, 0, 0.78, 0.18, 0, true);
+      put(kit, geoTorus(0.08, 0.008, 12), dark, 0.1, 0.96, 0.08, 0, true); // hose
+    } else if (bp === "quiver") {
+      const q = put(kit, geoCyl(0.055, 0.34, 12), sheen(0x6b4426), 0.07, 0.8, 0.17, 0, true);
+      q.rotation.z = -0.35;
+      for (let k = 0; k < 4; k++) {
+        const ar = put(kit, geoCyl(0.005, 0.14, 4), sheen(0x8a6a4a), 0.12 + k * 0.012, 1.0, 0.16 + (k % 2) * 0.02, 0, true);
+        ar.rotation.z = -0.35;
+        put(kit, geoPlate("mf-fletch", [[0, 0], [0.02, 0.05], [-0.02, 0.05]], 0.004), trim, 0.15 + k * 0.012, 1.06, 0.16 + (k % 2) * 0.02, 0, true).rotation.z = -0.35;
+      }
+    } else if (bp === "cape") {
+      const c = put(kit, geoRBox(0.36, 0.62, 0.02, 0.008), tint, 0, 0.62, 0.15, 0, true);
+      c.rotation.x = 0.1;
+      put(kit, geoRBox(0.4, 0.04, 0.27, 0.015), trim, 0, 0.92, 0.0, 0, true); // collar yoke
+      for (const sx of [-0.13, 0.13]) put(kit, geoBall(0.02, 8), gold, sx, 0.92, -0.135, 0, true); // clasps
+    } else if (bp === "breastplate") {
+      put(kit, geoRBox(0.34, 0.3, 0.05, 0.03), steel, 0, 0.74, -0.14, 0, true);
+      put(kit, geoRBox(0.34, 0.3, 0.04, 0.03), steel, 0, 0.74, 0.14, 0, true);
+      put(kit, geoRBox(0.04, 0.26, 0.02, 0.008), trim, 0, 0.74, -0.168, 0, true); // tabard stripe
+      for (const sx of [-0.2, 0.2]) put(kit, geoDome(0.09, 14), steel, sx, 0.88, 0, 0, true).scale.set(1, 0.6, 1); // pauldrons
+      put(kit, geoRBox(0.36, 0.035, 0.3, 0.012), gold, 0, 0.6, 0, 0, true); // belt
+    }
+  }
+  // ── hands ──
+  const hold = (arm: THREE.Object3D, key: string, x: number) => {
+    const w = buildWeapon(key, (hex, f) => {
+      const m = f === "glow" ? skin(hex) : sheen(hex);
+      if (f === "glow" && "emissive" in m) { (m as THREE.MeshLambertMaterial).emissive = new THREE.Color(hex); (m as THREE.MeshLambertMaterial).emissiveIntensity = 1.2; }
+      return m;
+    });
+    const g = new THREE.Group();
+    if (w) for (const c of [...w.group.children]) g.add(c);
+    else {
+      const a = ACCESSORIES.find((q) => q.key === key);
+      if (!a) return;
+      for (const p of a.parts) {
+        const m = p[0] === "b"
+          ? put(g, geoRBox(p[1], p[2], p[3], Math.min(p[1], p[2], p[3]) * 0.25), sheen(p[7]), p[4], p[5], p[6], 0, true)
+          : put(g, geoCyl(p[1], p[2], 12, p[8] ?? p[1]), sheen(p[6] ?? 0x8a8f96), p[3], p[4], p[5], 0, true);
+        const rz = p[0] === "b" ? p[8] : p[7];
+        if (rz) m.rotation.z = rz;
+      }
+    }
+    const gun = ACC_OF(ID[key as keyof typeof ID] as number)?.kind === "gun";
+    const shield = key.endsWith("Shield");
+    g.scale.setScalar(1.6);
+    g.position.set(x, H[1] + 0.11 * 1.6, H[2]);
+    if (gun) { g.rotation.y = Math.PI / 2; g.position.y = H[1] + 0.07; }
+    if (shield) { g.rotation.y = Math.PI / 2; g.position.x = x * 1.5; }
+    g.userData.outfitHeld = key;
+    arm.add(g);
+  };
+  if (o.right) hold(armR, o.right, H[0]);
+  if (o.left) hold(armL, o.left, -H[0]);
 }
 
 // ───────────────────────── v3 pass: every creature, mob and NPC at v2 quality ─────────────────────────
