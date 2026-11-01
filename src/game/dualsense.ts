@@ -1,124 +1,99 @@
 // DualSense adaptive triggers over WebHID — progressive enhancement.
-// Chrome/Edge on desktop expose navigator.hid; everywhere else (Firefox,
-// Safari, Android, the APK WebView) this module reports "unavailable" and
-// the pad plays exactly as before. The Gamepad API itself has no trigger-
-// resistance channel, so WebHID is the only web route to the hardware.
+// Chrome/Edge on desktop and the Electron desktop shell expose navigator.hid
+// (the shell grants 054c:0ce6 / 054c:0df2 in its main process, so the pad is
+// picked up without a picker). Everywhere else this module reports
+// "unavailable" and the pad plays exactly as before.
 //
-// Protocol (USB output report 0x02, from the kernel's hid-playstation
-// struct): data[0]=valid_flag0, data[1]=valid_flag1, motors at [2..3],
-// then a 28-byte reserved span that carries the two 11-byte trigger
-// blocks: RIGHT at data[10..20], LEFT at data[21..31] (mode byte first).
-// Bluetooth uses report 0x31: a tag byte, the same common struct shifted
-// by one, and a CRC32 (seeded with 0xA2) over the whole frame.
-// Trigger modes: 0x00 off · 0x01 feedback [startZone 0-9, strength 0-8] ·
-// 0x02 weapon [startZone (>=2), endZone, strength 0-8].
+// Protocol (Linux hid-playstation structs):
+//  · USB  — output report 0x02, 63 bytes with the id → 62 data bytes:
+//           common[47] then 15 reserved bytes.
+//  · BT   — output report 0x31, 78 bytes with the id → 77 data bytes:
+//           seq_tag (seq<<4), tag 0x10, common[47], 24 reserved, CRC32 LE.
+//           CRC32 runs over [0xA2, 0x31, data[0..72]].
+//  common: [0] valid_flag0 (0x04 right trigger, 0x08 left trigger),
+//          [10..20] RIGHT trigger block, [21..31] LEFT trigger block.
+// Trigger blocks (11 bytes, mode first) use the zone-based modes:
+//  0x21 feedback (per-zone strength), 0x25 weapon (section), 0x26 vibration.
 
 export type TriggerFx =
   | { mode: "off" }
+  /** constant resistance from `start` (0-9) with `strength` 1-8 */
   | { mode: "feedback"; start: number; strength: number }
-  | { mode: "weapon"; start: number; end: number; strength: number };
+  /** resistance that ramps from strength a at zone start to b at zone end (bow draw) */
+  | { mode: "slope"; start: number; end: number; from: number; to: number }
+  /** a wall between start (2-7) and end (start+1..8) that snaps — a trigger break */
+  | { mode: "weapon"; start: number; end: number; strength: number }
+  /** buzz from `start` with amplitude 1-8 at `freq` Hz (automatic fire, laser) */
+  | { mode: "vibrate"; start: number; amplitude: number; freq: number };
 
 export type DsState = "unavailable" | "off" | "ready" | "connected";
+export type Transport = "usb" | "bt";
 
-type HidDeviceLike = {
-  vendorId: number;
-  productId: number;
-  opened: boolean;
-  open: () => Promise<void>;
-  close: () => Promise<void>;
-  sendReport: (reportId: number, data: BufferSource) => Promise<void>;
-  addEventListener: (type: string, fn: () => void) => void;
-};
-type HidLike = {
-  requestDevice: (opts: { filters: { vendorId: number }[] }) => Promise<HidDeviceLike[]>;
-  getDevices: () => Promise<HidDeviceLike[]>;
-  addEventListener: (type: string, fn: (e: { device: HidDeviceLike }) => void) => void;
-};
+export const DS_VENDOR = 0x054c;
+export const DS_PRODUCTS = [0x0ce6, 0x0df2]; // DualSense, DualSense Edge
+export const USB_REPORT_ID = 0x02;
+export const USB_DATA_LEN = 62;
+export const BT_REPORT_ID = 0x31;
+export const BT_DATA_LEN = 77;
 
-const SONY = 0x054c;
-let device: HidDeviceLike | null = null;
-let lastKey = "";
-let lastSentAt = 0;
-let seq = 0;
+const clampI = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.round(Number.isFinite(v) ? v : lo)));
 
-function hid(): HidLike | null {
-  const h = (navigator as unknown as { hid?: HidLike }).hid;
-  return h ?? null;
-}
-
-export function dsSupported(): boolean {
-  return !!hid();
-}
-
-export function dsState(enabled: boolean): DsState {
-  if (!dsSupported()) return "unavailable";
-  if (device) return "connected";
-  return enabled ? "ready" : "off";
-}
-
-async function attach(dev: HidDeviceLike): Promise<boolean> {
-  try {
-    if (!dev.opened) await dev.open();
-    device = dev;
-    lastKey = "";
-    dev.addEventListener("disconnect", () => {
-      if (device === dev) device = null;
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** Must be called from a user gesture (the Settings button click). */
-export async function dsRequest(): Promise<boolean> {
-  const h = hid();
-  if (!h) return false;
-  try {
-    const devs = await h.requestDevice({ filters: [{ vendorId: SONY }] });
-    for (const d of devs) if (await attach(d)) return true;
-    return false;
-  } catch {
-    return false;
-  }
-}
-
-/** Re-open an already-granted device (no gesture needed). */
-export async function dsTryReconnect(): Promise<void> {
-  const h = hid();
-  if (!h || device) return;
-  try {
-    const devs = await h.getDevices();
-    for (const d of devs) if (d.vendorId === SONY && (await attach(d))) return;
-  } catch {
-    /* not granted yet */
-  }
-}
-
-export async function dsRelease(): Promise<void> {
-  if (device) {
-    await dsApply({ mode: "off" }, { mode: "off" }, true);
-    try {
-      await device.close();
-    } catch {
-      /* already gone */
+/** Encode one 11-byte trigger block. */
+export function encodeFx(fx: TriggerFx): Uint8Array {
+  const b = new Uint8Array(11);
+  const zones = (strengthAt: (i: number) => number, mode: number) => {
+    let active = 0;
+    let force = 0;
+    for (let i = 0; i < 10; i++) {
+      const s = strengthAt(i);
+      if (s <= 0) continue;
+      active |= 1 << i;
+      force += ((s - 1) & 7) * 2 ** (3 * i);
     }
-    device = null;
-  }
-}
-
-function writeFx(buf: Uint8Array, at: number, fx: TriggerFx) {
-  if (fx.mode === "feedback") {
-    buf[at] = 0x01;
-    buf[at + 1] = Math.max(0, Math.min(9, Math.round(fx.start)));
-    buf[at + 2] = Math.max(0, Math.min(8, Math.round(fx.strength)));
-  } else if (fx.mode === "weapon") {
-    buf[at] = 0x02;
-    buf[at + 1] = Math.max(2, Math.min(9, Math.round(fx.start)));
-    buf[at + 2] = Math.max(0, Math.min(9, Math.round(fx.end)));
-    buf[at + 3] = Math.max(0, Math.min(8, Math.round(fx.strength)));
-  } else {
-    buf[at] = 0x00;
+    b[0] = mode;
+    b[1] = active & 0xff;
+    b[2] = (active >> 8) & 0xff;
+    for (let k = 0; k < 4; k++) b[3 + k] = Math.floor(force / 2 ** (8 * k)) & 0xff;
+  };
+  switch (fx.mode) {
+    case "feedback": {
+      const st = clampI(fx.start, 0, 9);
+      const s = clampI(fx.strength, 0, 8);
+      if (s === 0) return b;
+      zones((i) => (i >= st ? s : 0), 0x21);
+      return b;
+    }
+    case "slope": {
+      const st = clampI(fx.start, 0, 8);
+      const en = clampI(fx.end, st + 1, 9);
+      const a = clampI(fx.from, 1, 8);
+      const z = clampI(fx.to, 1, 8);
+      zones((i) => (i < st ? 0 : i >= en ? z : Math.round(a + ((z - a) * (i - st)) / (en - st))), 0x21);
+      return b;
+    }
+    case "weapon": {
+      const st = clampI(fx.start, 2, 7);
+      const en = clampI(fx.end, st + 1, 8);
+      const s = clampI(fx.strength, 0, 8);
+      if (s === 0) return b;
+      const z = (1 << st) | (1 << en);
+      b[0] = 0x25;
+      b[1] = z & 0xff;
+      b[2] = (z >> 8) & 0xff;
+      b[3] = s - 1;
+      return b;
+    }
+    case "vibrate": {
+      const st = clampI(fx.start, 0, 9);
+      const amp = clampI(fx.amplitude, 0, 8);
+      const hz = clampI(fx.freq, 1, 255);
+      if (amp === 0) return b;
+      zones((i) => (i >= st ? amp : 0), 0x26);
+      b[9] = hz;
+      return b;
+    }
+    default:
+      return b; // mode 0x00 = off
   }
 }
 
@@ -132,54 +107,207 @@ const CRC_TABLE = (() => {
   return t;
 })();
 
-function crc32(bytes: Uint8Array): number {
-  let c = 0xffffffff;
+/** Standard CRC-32 (IEEE, reflected), optionally continuing from `seed` state. */
+export function crc32(bytes: Uint8Array, seed = 0xffffffff): number {
+  let c = seed >>> 0;
   for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
   return (c ^ 0xffffffff) >>> 0;
 }
 
-function commonStruct(right: TriggerFx, left: TriggerFx): Uint8Array {
+export function commonStruct(right: TriggerFx, left: TriggerFx): Uint8Array {
   const d = new Uint8Array(47);
   d[0] = 0x04 | 0x08; // valid_flag0: right + left trigger effect sections
-  writeFx(d, 10, right);
-  writeFx(d, 21, left);
+  d.set(encodeFx(right), 10);
+  d.set(encodeFx(left), 21);
   return d;
 }
 
-/**
- * Apply trigger effects. Deduped by value and rate-limited — safe to call
- * every frame. Fire-and-forget: a transport failure just drops the effect.
- */
-export function dsApply(right: TriggerFx, left: TriggerFx, force = false): void {
+/** USB output report 0x02 payload (without the report id). */
+export function buildUsbReport(right: TriggerFx, left: TriggerFx): Uint8Array {
+  const d = new Uint8Array(USB_DATA_LEN);
+  d.set(commonStruct(right, left), 0);
+  return d;
+}
+
+/** Bluetooth output report 0x31 payload (without the report id), CRC included. */
+export function buildBtReport(right: TriggerFx, left: TriggerFx, seq: number): Uint8Array {
+  const d = new Uint8Array(BT_DATA_LEN);
+  d[0] = (seq & 0x0f) << 4;
+  d[1] = 0x10; // DS_OUTPUT_TAG
+  d.set(commonStruct(right, left), 2);
+  const head = new Uint8Array(2 + BT_DATA_LEN - 4);
+  head[0] = 0xa2;
+  head[1] = BT_REPORT_ID;
+  head.set(d.subarray(0, BT_DATA_LEN - 4), 2);
+  const crc = crc32(head);
+  d[73] = crc & 0xff;
+  d[74] = (crc >>> 8) & 0xff;
+  d[75] = (crc >>> 16) & 0xff;
+  d[76] = (crc >>> 24) & 0xff;
+  return d;
+}
+
+type HidCollection = { outputReports?: { reportId: number }[] };
+type HidDeviceLike = {
+  vendorId: number;
+  productId: number;
+  opened: boolean;
+  collections?: HidCollection[];
+  open: () => Promise<void>;
+  close: () => Promise<void>;
+  sendReport: (reportId: number, data: BufferSource) => Promise<void>;
+  receiveFeatureReport?: (reportId: number) => Promise<DataView>;
+};
+type HidLike = {
+  requestDevice: (opts: { filters: { vendorId: number; productId?: number }[] }) => Promise<HidDeviceLike[]>;
+  getDevices: () => Promise<HidDeviceLike[]>;
+  addEventListener: (type: string, fn: (e: { device: HidDeviceLike }) => void) => void;
+};
+
+/** Which framing a device speaks — from its HID descriptor when exposed. */
+export function transportOf(dev: { collections?: HidCollection[] }): Transport | null {
+  const ids = new Set<number>();
+  for (const c of dev.collections ?? []) for (const r of c.outputReports ?? []) ids.add(r.reportId);
+  if (ids.has(BT_REPORT_ID)) return "bt";
+  if (ids.has(USB_REPORT_ID)) return "usb";
+  return null;
+}
+
+export const isDualSense = (d: { vendorId: number; productId: number }) => d.vendorId === DS_VENDOR && DS_PRODUCTS.includes(d.productId);
+
+let device: HidDeviceLike | null = null;
+let transport: Transport | null = null;
+let lastKey = "";
+let lastSentAt = 0;
+let seq = 0;
+let listening = false;
+
+function hid(): HidLike | null {
+  if (typeof navigator === "undefined") return null;
+  return (navigator as unknown as { hid?: HidLike }).hid ?? null;
+}
+
+export function dsSupported(): boolean {
+  return !!hid();
+}
+
+export function dsState(enabled: boolean): DsState {
+  if (!dsSupported()) return "unavailable";
+  if (device) return "connected";
+  return enabled ? "ready" : "off";
+}
+
+function listen(h: HidLike) {
+  if (listening) return;
+  listening = true;
+  h.addEventListener("disconnect", (e) => {
+    if (e.device === device) {
+      device = null;
+      transport = null;
+    }
+  });
+  // Plugged in (or paired) mid-game: the Electron shell has already granted it.
+  h.addEventListener("connect", (e) => {
+    if (!device && isDualSense(e.device)) void attach(e.device);
+  });
+}
+
+async function attach(dev: HidDeviceLike): Promise<boolean> {
+  try {
+    if (!dev.opened) await dev.open();
+    transport = transportOf(dev);
+    // Over Bluetooth the pad starts in "simple" mode and ignores 0x31 until
+    // the calibration feature report has been read once.
+    if (transport !== "usb") await dev.receiveFeatureReport?.(0x05).catch(() => undefined);
+    device = dev;
+    lastKey = "";
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const FILTERS = DS_PRODUCTS.map((productId) => ({ vendorId: DS_VENDOR, productId }));
+
+/** Opens the browser picker — must run from a user gesture. In Electron the shell answers it. */
+export async function dsRequest(): Promise<boolean> {
+  const h = hid();
+  if (!h) return false;
+  listen(h);
+  if (device) return true;
+  await dsTryReconnect();
+  if (device) return true;
+  try {
+    const devs = await h.requestDevice({ filters: FILTERS });
+    for (const d of devs) if (await attach(d)) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/** Re-open an already-granted device (no gesture needed; Electron grants on its own). */
+export async function dsTryReconnect(): Promise<boolean> {
+  const h = hid();
+  if (!h) return false;
+  listen(h);
+  if (device) return true;
+  try {
+    const devs = await h.getDevices();
+    for (const d of devs) if (isDualSense(d) && (await attach(d))) return true;
+  } catch {
+    /* not granted yet */
+  }
+  return false;
+}
+
+const OFF: TriggerFx = { mode: "off" };
+
+/** Triggers back to neutral (pause, focus loss, quit). Device stays open. */
+export function dsReset(): Promise<void> {
+  return dsApply(OFF, OFF, true);
+}
+
+export async function dsRelease(): Promise<void> {
   if (!device) return;
+  await dsReset();
+  try {
+    await device.close();
+  } catch {
+    /* already gone */
+  }
+  device = null;
+  transport = null;
+}
+
+async function send(dev: HidDeviceLike, right: TriggerFx, left: TriggerFx) {
+  const bt = () => dev.sendReport(BT_REPORT_ID, buildBtReport(right, left, seq++) as unknown as BufferSource);
+  const usb = () => dev.sendReport(USB_REPORT_ID, buildUsbReport(right, left) as unknown as BufferSource);
+  if (transport === "bt") return bt();
+  if (transport === "usb") return usb();
+  // Descriptor not exposed: try USB framing, learn from what the pad accepts.
+  try {
+    await usb();
+    transport = "usb";
+  } catch {
+    await bt();
+    transport = "bt";
+  }
+}
+
+/**
+ * Apply trigger effects. Deduped by value and rate-limited (the caller runs
+ * every frame, so a change dropped here goes out a frame later). A transport
+ * failure just drops the effect — never throws.
+ */
+export function dsApply(right: TriggerFx, left: TriggerFx, force = false): Promise<void> {
+  if (!device) return Promise.resolve();
   const key = JSON.stringify([right, left]);
-  const now = performance.now();
-  if (!force && (key === lastKey || now - lastSentAt < 50)) return;
+  const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+  if (!force && (key === lastKey || now - lastSentAt < 30)) return Promise.resolve();
   lastKey = key;
   lastSentAt = now;
-  const dev = device;
-  const common = commonStruct(right, left);
-  // USB pads report collections with report 0x02 support; Bluetooth ones
-  // use 0x31. WebHID doesn't say which transport — try USB framing first,
-  // fall back to BT framing (with CRC) when the device rejects it.
-  void dev
-    .sendReport(0x02, common as unknown as BufferSource)
-    .catch(() => {
-      const data = new Uint8Array(78);
-      data[0] = ((seq++ & 0x0f) << 4) | 0x01;
-      data.set(common, 1);
-      const crcInput = new Uint8Array(2 + 78 - 4);
-      crcInput[0] = 0xa2;
-      crcInput[1] = 0x31;
-      crcInput.set(data.subarray(0, 78 - 4), 2);
-      const crc = crc32(crcInput);
-      data[74] = crc & 0xff;
-      data[75] = (crc >>> 8) & 0xff;
-      data[76] = (crc >>> 16) & 0xff;
-      data[77] = (crc >>> 24) & 0xff;
-      return dev.sendReport(0x31, data as unknown as BufferSource);
-    })
-    .catch(() => {
-      /* pad refused both framings — effects stay off, no crash */
-    });
+  return send(device, right, left).catch(() => {
+    lastKey = ""; // retry next frame
+  });
 }

@@ -9,6 +9,7 @@ const { pathToFileURL } = require("node:url");
 protocol.registerSchemesAsPrivileged([{ scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }]);
 const path = require("node:path");
 const { Sidecar } = require("./sidecar.cjs");
+const { allowDualSense, resetTriggersOnClose } = require("./hid.cjs");
 
 const res = app.isPackaged ? process.resourcesPath : path.join(__dirname, "resources");
 const exe = process.platform === "win32" ? "llama-server.exe" : "llama-server";
@@ -36,6 +37,9 @@ app.whenReady().then(() => {
     webPreferences: { preload: path.join(__dirname, "preload.cjs"), contextIsolation: true, sandbox: true, nodeIntegration: false },
   });
   win.setMenuBarVisibility(false);
+  // DualSense adaptive triggers (WebHID, USB + Bluetooth) — see hid.cjs.
+  allowDualSense(win.webContents.session);
+  resetTriggersOnClose(win);
   const root = app.isPackaged ? path.join(process.resourcesPath, "game") : path.join(__dirname, "..", "dist-game");
   protocol.handle("app", (req) => {
     const rel = decodeURIComponent(new URL(req.url).pathname).replace(/^\/+/, "") || "index.html";

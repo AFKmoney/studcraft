@@ -52,7 +52,8 @@ import { classifyRenderer, presetFor, readGl, SOFTWARE_HINT } from "./gpu";
 import { mayYield, spillSlots } from "./yields";
 import { Upscaler, upscaleScale } from "./upscale";
 import { BTN, PadEdges, activePad, padBusy, padLabel, rumble, stick } from "./gamepad";
-import { dsApply, dsRelease, dsRequest, dsState, dsTryReconnect, type TriggerFx } from "./dualsense";
+import { dsApply, dsRelease, dsRequest, dsReset, dsState, dsTryReconnect } from "./dualsense";
+import { pickTriggers } from "./triggerFx";
 import { parseSeed, hash3 } from "./noise";
 import { MobBatchRenderer } from "./mobBatch";
 import { mobLabel } from "./mobNames";
@@ -540,7 +541,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     invertY: savedSettings?.invertY ?? false,
     deadL: savedSettings?.deadL ?? 0.16,
     deadR: savedSettings?.deadR ?? 0.14,
-    adaptive: savedSettings?.adaptive ?? false,
+    adaptive: savedSettings?.adaptive ?? true,
     mods: {
       hard: savedSettings?.mods?.hard ?? false,
       generous: savedSettings?.mods?.generous ?? false,
@@ -658,7 +659,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   //   B/○ or R3 sneak (hold) · L3 sprint (toggle) · D-pad ←/→ hotbar
   //   D-pad ↑ third person · D-pad ↓ cycle spell · View/Share hide HUD · Menu/Options pause
   // Menus are driven by the UI layer (GameView useGamepadMenu).
-  const padIn = { x: 0, y: 0, lx: 0, ly: 0, jump: false, mine: false, place: false, sneak: false, sprint: false };
+  const padIn = { x: 0, y: 0, lx: 0, ly: 0, rt: 0, lt: 0, jump: false, mine: false, place: false, sneak: false, sprint: false };
   const padEdges = new PadEdges();
   let padSprint = false;
   let padWasPlay = false;
@@ -676,7 +677,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     padWasPlay = inPlay;
     const e = padEdges.update(p);
     if (!p || !inPlay) {
-      padIn.x = padIn.y = padIn.lx = padIn.ly = 0;
+      padIn.x = padIn.y = padIn.lx = padIn.ly = padIn.rt = padIn.lt = 0;
       padIn.jump = padIn.mine = padIn.place = padIn.sneak = padIn.sprint = false;
       padSprint = false;
       return;
@@ -690,6 +691,10 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     padIn.ly = lk.y;
     padIn.jump = e.down(BTN.A);
     padIn.mine = e.down(BTN.RT);
+    // Analog trigger travel (vehicle accelerator / brake).
+    const trig = (i: number) => { const b = p.buttons[i]; const v = b ? Math.max(b.value ?? 0, b.pressed ? 1 : 0) : 0; return v < 0.06 ? 0 : v; };
+    padIn.rt = trig(BTN.RT);
+    padIn.lt = trig(BTN.LT);
     padIn.place = e.down(BTN.LT);
     padIn.sneak = e.down(BTN.B) || e.down(BTN.R3);
     // Build mode on the pad (all-devices line): L3+R3 pressed together
@@ -14077,6 +14082,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const jump = !flyMode && (keys.has("Space") || touch.jump || padIn.jump);
     let mine = mouseMine || touch.mine || padIn.mine;
     let place = mousePlace || touch.place || padIn.place;
+    // DualSense/pad in a Teks vehicle: L2 brakes (and reverses), R2 is the
+    // accelerator when no weapon is mounted (an armed vehicle keeps R2 = fire).
+    if (vehEnt && !flyMode) {
+      const armed = vehEnt.arms.length > 0;
+      fwd += (armed ? 0 : padIn.rt) - padIn.lt;
+      if (padIn.lt > 0) place = mousePlace || touch.place;
+      if (!armed && padIn.rt > 0) mine = mouseMine || touch.mine;
+    }
     if (holdLatch) {
       if (!mine && !place) holdLatch = false;
       else mine = place = false;
@@ -15988,14 +16001,29 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     updateFallers(dt);
     tickBricks(dt);
     tickTeks(dt);
-    // DualSense adaptive triggers (v4.18): R2 stiffens as the block cracks
-    // while you mine; L2 gets a weapon "wall" while a bow is in hand.
+    // DualSense adaptive triggers (t106u): bow tension, crossbow latch, gun
+    // trigger break + per-shot recoil (buzz on automatics), vehicle
+    // accelerator / brake and mounted cannon / laser / rockets. Neutral
+    // whenever the game is not in play or the window has lost focus.
     if (settings.adaptive) {
-      const mining = phase === "play" && mineTime > 0 && hud.mine > 0;
-      const right: TriggerFx = mining ? { mode: "feedback", start: 1, strength: Math.round(1 + hud.mine * 7) } : { mode: "off" };
+      const focused = typeof document === "undefined" || document.hasFocus();
       const heldNow = hotbar[slot];
-      const left: TriggerFx = phase === "play" && (heldNow === ID.Bow || heldNow === ID.Crossbow) ? { mode: "weapon", start: 3, end: 8, strength: 7 } : { mode: "off" };
-      dsApply(right, left);
+      const g = GUN_OF(heldNow);
+      const gs = g ? gunState(heldNow) : null;
+      const nowS = performance.now() / 1000;
+      const arm = vehEnt?.arms[0];
+      const fx = pickTriggers({
+        playing: phase === "play" && focused && !hud.ask,
+        mining: mineTime > 0 ? hud.mine : 0,
+        held: heldNow === ID.Bow ? "bow" : heldNow === ID.Crossbow ? "crossbow" : null,
+        xbSince: elapsed - xbShotAt,
+        xbCycle: XB_CYCLE,
+        gun: g && gs ? { auto: g.auto, kick: g.kick, interval: g.interval, sinceShot: elapsed - gs.lastShot, reloading: elapsed < gs.reloadUntil || !!gunPending, empty: gs.mag <= 0 && gunReserve(g) <= 0, firing: gunTriggerWas } : null,
+        veh: vehEnt
+          ? { weapon: arm ? (WEAPONS[arm.st.id]?.kind ?? null) : null, speed: Math.abs(vehEnt.v.vel) / 12, sinceShot: arm ? nowS - arm.st.lastShot : 1e9, firing: vehFireHeld, overheated: arm?.st.overheated }
+          : null,
+      });
+      void dsApply(fx.right, fx.left);
     }
     renderCamera(dt);
     stream(phase === "title" ? 3 : 2);
@@ -16021,6 +16049,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
 
   applyQuality();
   if (settings.adaptive) void dsTryReconnect();
+  // Triggers go limp the moment the game stops having the player's hands:
+  // pause, focus loss, hidden tab, quit (the desktop shell also calls this on close).
+  (window as unknown as { __dsReset?: () => Promise<void> }).__dsReset = () => dsReset();
   renderer.setAnimationLoop(frame);
   stream(2);
   spawnSheep();
@@ -16144,11 +16175,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     },
     opt,
   );
-  window.addEventListener("blur", () => keys.clear(), opt);
+  window.addEventListener("blur", () => { keys.clear(); void dsReset(); }, opt);
+  window.addEventListener("focus", () => { if (settings.adaptive) void dsTryReconnect(); }, opt);
+  window.addEventListener("beforeunload", () => void dsReset(), opt);
   document.addEventListener(
     "visibilitychange",
     () => {
       if (document.hidden) {
+        void dsReset();
         keys.clear();
         mouseMine = false;
         mousePlace = false;
@@ -16172,6 +16206,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   window.addEventListener(
     "pagehide",
     () => {
+      void dsReset();
       if (sessionStarted) saveWorld();
     },
     opt,
@@ -18060,7 +18095,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       persistSettings();
       emit();
       if (on) void dsRequest().then(() => emit());
-      else void dsRelease();
+      else void dsRelease().then(() => emit());
     },
     dsState() {
       return dsState(settings.adaptive);

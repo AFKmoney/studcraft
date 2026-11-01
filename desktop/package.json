@@ -18,7 +18,7 @@
   "build": {
     "appId": "com.studcraft.game",
     "productName": "StudCraft",
-    "files": ["main.cjs", "preload.cjs", "sidecar.cjs"],
+    "files": ["main.cjs", "preload.cjs", "sidecar.cjs", "hid.cjs"],
     "extraResources": [
       { "from": "../dist-game", "to": "game", "filter": ["**/*", "!models/**", "!wllama/**"] },
       { "from": "resources/llama", "to": "llama" },
