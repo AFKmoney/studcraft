@@ -23,6 +23,7 @@ import { PREFETCH_TIMEOUT_MS } from "./llm/prompt";
 import { NpcModel } from "./llm/runtime";
 import { GenPool, poolSize, type WorkerLike } from "./genPool";
 import { XB, xbPose, stringHalf, prodPoint, XB_CYCLE, type XbPose } from "./crossbowRig";
+import { cropLight, growChance, hydrated, nextStage, fruitSpot, canStack, harvestDrops, tramples, compostChance, COMPOST_FULL, isRipe, type FarmIds } from "./farming";
 import { CROSSBOW_HOLD } from "./heldPose";
 import { driverOccluders, seatEye } from "./vehView";
 import { armorMaxDur, combineDur, repairCost, wearArmor } from "./foundry";
@@ -52,6 +53,11 @@ import { mobBaseDrops, rollBonusDrops } from "./mobDrops";
 import { BOSS_BY_ID, SPECIES_BY_ID, ZONES, bossRoll, type BossRule, type BossState, type SpeciesSpec, type ZoneMob } from "./biomes";
 import { displayName } from "./mobNames";
 import { batteryAt, remoteChAt, setRemoteChannel, springsJustSpent, stepMech, toggleValve, windSpring } from "./mechLink";
+
+// t79u farming ids (farming.ts is id-agnostic). Beetroot is its own seed.
+const FARM: FarmIds = { ...(ID as unknown as FarmIds), BeetSeeds: ID.Beetroot };
+const FARM_X = { ...FARM, Leaves: ID.Leaves, Sapling: ID.Sapling, TallGrass: ID.TallGrass, Flower: ID.Flower, Hay: ID.Hay, Bread: ID.Bread };
+const FARM_CROP = new Set<number>([ID.Crop, ID.Crop1, ID.Crop2, ID.CropRipe, ID.CarrotCrop, ID.CarrotRipe, ID.PotatoCrop, ID.PotatoRipe, ID.BeetCrop, ID.BeetRipe, ID.PumpkinStem, ID.MelonStem]);
 
 export type Phase = "title" | "play" | "pause" | "inventory" | "dead";
 export type EnterKind = "play" | "survival" | "flat" | "continue";
@@ -1064,10 +1070,12 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   scene.add(hemi, ambient, sun, sun.target);
   const sunMesh = new THREE.Mesh(
     new THREE.SphereGeometry(7, 16, 12),
+    // snr-exempt: unlit sun disc
     new THREE.MeshBasicMaterial({ color: 0xffe38a }),
   );
   const moonMesh = new THREE.Mesh(
     new THREE.SphereGeometry(5, 16, 12),
+    // snr-exempt: unlit moon disc
     new THREE.MeshBasicMaterial({ color: 0xe7eef8 }),
   );
   scene.add(sunMesh, moonMesh);
@@ -1080,6 +1088,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   };
   const skyDome = new THREE.Mesh(
     new THREE.SphereGeometry(380, 32, 15),
+    // snr-exempt: sky dome, own gradient shader
     new THREE.ShaderMaterial({
       uniforms: skyU,
       side: THREE.BackSide,
@@ -1132,6 +1141,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   const pmrem = new THREE.PMREMGenerator(renderer);
   const envScene = new THREE.Scene();
   const envDomeGeo = new THREE.SphereGeometry(20, 24, 16);
+  // snr-exempt: env-map dome, own shader
   const envDomeMat = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     vertexShader: `
@@ -1163,13 +1173,16 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   scene.environment = settings.realistic ? envTex : null;
   scene.environmentIntensity = settings.realistic ? 0.52 : 1;
 
+  // snr-exempt: Lambert low-quality fallback of sirenized opaqueStd
   const opaqueLam = new THREE.MeshLambertMaterial({ map: atlas });
+  // snr-exempt: Lambert fallback of sirenized glassStd
   const glassLam = new THREE.MeshLambertMaterial({
     map: atlas,
     transparent: true,
     opacity: 0.9,
     depthWrite: false,
   });
+  // snr-exempt: Lambert water fallback
   const waterLam = new THREE.MeshLambertMaterial({
     map: atlas,
     transparent: true,
@@ -1177,6 +1190,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     depthWrite: false,
     side: THREE.DoubleSide,
   });
+  // snr-exempt: Lambert fallback of sirenized plantStd
   const plantLam = new THREE.MeshLambertMaterial({
     map: atlas,
     alphaTest: 0.45,
@@ -1206,6 +1220,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     vertexColors: true,
   });
   const waterTime = { value: 0 };
+  // snr-exempt: water: own animated wave shader (customProgramCacheKey)
   const waterStd = new THREE.MeshStandardMaterial({
     map: atlas,
     roughness: 0.07,
@@ -1281,6 +1296,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   // the colour), the way real hot ABS reads. Only molten fragments pay it.
   // v4.17: no texture — the molten field carries the brick's own colour per
   // vertex (blended across fused bricks, charred), smooth as real liquid.
+  // snr-exempt: molten pool: emissive physical liquid, studs would be wrong
   const moltenStd = new THREE.MeshPhysicalMaterial({
     roughness: 0.42,
     metalness: 0.0,
@@ -1294,6 +1310,7 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     clearcoatRoughness: 0.2,
     vertexColors: true,
   });
+  // snr-exempt: Lambert molten fallback
   const moltenLam = new THREE.MeshLambertMaterial({ vertexColors: true });
   // v4.17 molten shader: the mesher writes, per vertex, brick A's colour
   // (color), brick B's colour + the signed distance dB − dA (tangent) and the
@@ -1443,6 +1460,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   starGeo.setAttribute("position", new THREE.BufferAttribute(starPos, 3));
   const stars = new THREE.Points(
     starGeo,
+    // snr-exempt: star points
     new THREE.PointsMaterial({ color: 0xfff6dd, size: 1.4, sizeAttenuation: false, transparent: true, opacity: 0 }),
   );
   scene.add(stars);
@@ -1479,6 +1497,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   };
   const deck = new THREE.Mesh(
     new THREE.PlaneGeometry(760, 760),
+    // snr-exempt: cloud plane, own shader
     new THREE.ShaderMaterial({
       uniforms: deckU,
       transparent: true,
@@ -1571,6 +1590,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   rainGeo.setAttribute("position", new THREE.BufferAttribute(rainPos, 3));
   const rainLines = new THREE.LineSegments(
     rainGeo,
+    // snr-exempt: rain streak lines
     new THREE.LineBasicMaterial({ color: 0xaaccee, transparent: true, opacity: 0 }),
   );
   rainLines.frustumCulled = false;
@@ -1595,6 +1615,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   rainPtGeo.setAttribute("position", new THREE.BufferAttribute(rainPtPos, 3));
   const rainPts = new THREE.Points(
     rainPtGeo,
+    // snr-exempt: rain points
     new THREE.PointsMaterial({ color: 0xcfe4ff, size: 0.09, sizeAttenuation: true, transparent: true, opacity: 0, depthWrite: false }),
   );
   rainPts.frustumCulled = false;
@@ -1604,6 +1625,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   let rainStreaksShown = 0;
   let rainPtsShown = 0;
 
+  // snr-exempt: selection outline lines
   const outlineMat = new THREE.LineBasicMaterial({ color: 0x1a120c });
   const highlight = new THREE.Group();
   highlight.add(
@@ -1679,6 +1701,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   const crackMats: THREE.MeshBasicMaterial[] = [];
   for (let s = 0; s < 6; s++) {
     crackMats.push(
+      // snr-exempt: block-crack decal overlay
       new THREE.MeshBasicMaterial({ map: makeCrackTexture(s), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }),
     );
   }
@@ -3810,12 +3833,17 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
+    // snr-exempt: decal overlay
     return new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   })();
+  // snr-exempt: HUD health-bar sprite
   const barBgMat = new THREE.SpriteMaterial({ color: 0x120c08, transparent: true, opacity: 0.78, depthWrite: false });
   const barMats = {
+    // snr-exempt: HUD health-bar sprite
     hi: new THREE.SpriteMaterial({ color: 0x5bd16a, depthWrite: false }),
+    // snr-exempt: HUD health-bar sprite
     mid: new THREE.SpriteMaterial({ color: 0xf5c518, depthWrite: false }),
+    // snr-exempt: HUD health-bar sprite
     lo: new THREE.SpriteMaterial({ color: 0xe23b2f, depthWrite: false }),
   };
   const tmpBox = new THREE.Box3();
@@ -5298,6 +5326,17 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (stepped) return;
     }
     if (axis === "y") {
+      if (delta < 0 && !creative && tramples(-player.vy)) {
+        // t79u: a hard landing tramples farmland (and uproots its crop)
+        const fx = Math.floor(player.x), fy = Math.floor(player.y - 0.05), fz = Math.floor(player.z);
+        for (const yy of [fy, fy - 1]) if (world.get(fx, yy, fz) === ID.Farmland) {
+          const above = world.get(fx, yy + 1, fz);
+          if (FARM_CROP.has(above)) world.set(fx, yy + 1, fz, ID.Air);
+          world.set(fx, yy, fz, ID.Dirt);
+          markDirtyAt(fx, fz);
+          break;
+        }
+      }
       if (delta < 0 && player.vy < -8) padRumble(Math.min(0.6, (-player.vy - 8) / 18 + 0.15), 0.25, 90); // hard landing thud
       if (delta < 0 && player.vy < -13 && !creative && !inWaterNow()) {
         let dmg = Math.round((-player.vy - 13) * 1.5);
@@ -5571,10 +5610,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
     } else if (canDrop && id === ID.TallGrass) {
       if (Math.random() < 0.4) yieldAt(ID.Seeds);
-    } else if (canDrop && (id === ID.Crop || id === ID.Crop1 || id === ID.Crop2 || id === ID.CarrotCrop || id === ID.PotatoCrop || id === ID.BeetCrop)) yieldAt(ID.Seeds);
-    else if (canDrop && id === ID.CropRipe) {
-      yieldAt(ID.Wheat);
-      yieldAt(ID.Seeds);
+    } else if (canDrop && (FARM_CROP.has(id) || id === ID.Berry)) {
+      // t79u: crops drop their produce + seeds (farming.ts harvestDrops)
+      for (const [d, n] of harvestDrops(FARM, id)) for (let k = 0; k < n; k++) yieldAt(d);
     } else if (canDrop && id === ID.Gravel) yieldAt(Math.random() < 0.14 ? ID.Flint : ID.Gravel);
     else if (canDrop && block.drop !== -1) yieldAt(enchLvl(hotbar[slot], "silk") > 0 ? id : block.drop || id);
     if (canDrop && block.drop !== -1 && (ORE_XP[id] ?? 0) > 0 && enchLvl(hotbar[slot], "silk") === 0) {
@@ -6023,7 +6061,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // of the surface (weld.ts holds the pure geometry). Rebuilt only
   // when the joint set changes (dirty flag, consumed by tickBricks
   // and immediately by the weld gesture).
-  const weldBeadMat = new THREE.MeshStandardMaterial({ color: 0xe9edf3, metalness: 0.85, roughness: 0.32 });
+  const weldBeadMat = sirenize(new THREE.MeshStandardMaterial({ color: 0xe9edf3, metalness: 0.85, roughness: 0.32 }));
   const beadUnitGeo = new THREE.BoxGeometry(1, 1, 1);
   let weldBeadMesh: THREE.InstancedMesh | null = null;
   let weldBeadsDirty = true;
@@ -6086,6 +6124,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   const techGeoPairs = new Map<number, { main: THREE.BufferGeometry; rod: THREE.BufferGeometry | null }>();
   // Non-realistic fallback: Phong (cheap Blinn specular sheen — modern
   // Lambert has no specular term at all, so it cannot fake the metal).
+  // snr-exempt: Phong low-quality fallback of sirenized techMatStd
   const techMatLam = new THREE.MeshPhongMaterial({ vertexColors: true, specular: 0x8a97a5, shininess: 48 });
   // SRN world shading on the Teks layer, with the METALLIC LAW
   // (Philippe, 2026-10-30, plan section 23): Teks parts are HARDWARE,
@@ -6100,6 +6139,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   const techMatStd = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.24, metalness: 0.85, envMapIntensity: 0.9 });
   sirenizeWorld(techMatStd, 0.3, 1, "srn-world-teks-1");
   let techMatSolid: THREE.Material = settings.realistic ? techMatStd : techMatLam;
+  // snr-exempt: translucent ghost preview
   const techGhostMat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.45, depthWrite: false });
   const techGhostMesh = new THREE.Mesh(new THREE.BufferGeometry(), techGhostMat);
   techGhostMesh.visible = false;
@@ -6112,6 +6152,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // (completeBlueprint). Persisted in the world save (blueprints).
   type Blueprint = { id: number; o: number; q: [number, number, number] };
   const blueprints: Blueprint[] = [];
+  // snr-exempt: translucent hologram blueprint
   const holoMat = new THREE.MeshLambertMaterial({ vertexColors: true, color: 0x86c9ff, transparent: true, opacity: 0.35, depthWrite: false });
   const holoGroup = new THREE.Group();
   holoGroup.frustumCulled = false;
@@ -6186,6 +6227,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   {
     const fill = new THREE.Mesh(
       new THREE.PlaneGeometry(15, 15),
+      // snr-exempt: build-plate glow plane
       new THREE.MeshBasicMaterial({ color: 0x86d7ff, transparent: true, opacity: 0.1, depthWrite: false }),
     );
     fill.rotation.x = -Math.PI / 2;
@@ -6197,9 +6239,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     const grid = new THREE.BufferGeometry();
     grid.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+    // snr-exempt: build-plate grid lines
     plateGroup.add(new THREE.LineSegments(grid, new THREE.LineBasicMaterial({ color: 0x86d7ff, transparent: true, opacity: 0.25 })));
     const border = new THREE.BufferGeometry();
     border.setAttribute("position", new THREE.Float32BufferAttribute([-7.5, 0, -7.5, 7.5, 0, -7.5, 7.5, 0, -7.5, 7.5, 0, 7.5, 7.5, 0, 7.5, -7.5, 0, 7.5, -7.5, 0, 7.5, -7.5, 0, -7.5], 3));
+    // snr-exempt: build-plate lines
     plateGroup.add(new THREE.LineSegments(border, new THREE.LineBasicMaterial({ color: 0xbfeaff, transparent: true, opacity: 0.85 })));
     // The full 3D grid of the box (Philippe, 2026-10-30: "un grid pour
     // pouvoir construire n'importe quelle machine"): stud-spaced
@@ -6218,6 +6262,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     const walls = new THREE.BufferGeometry();
     walls.setAttribute("position", new THREE.Float32BufferAttribute(wallPts, 3));
+    // snr-exempt: build-plate lines
     plateGroup.add(new THREE.LineSegments(walls, new THREE.LineBasicMaterial({ color: 0x86d7ff, transparent: true, opacity: 0.13 })));
     const ceilPts: number[] = [];
     for (let i = -30; i <= 30; i++) {
@@ -6226,12 +6271,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     const ceil = new THREE.BufferGeometry();
     ceil.setAttribute("position", new THREE.Float32BufferAttribute(ceilPts, 3));
+    // snr-exempt: build-plate lines
     plateGroup.add(new THREE.LineSegments(ceil, new THREE.LineBasicMaterial({ color: 0x86d7ff, transparent: true, opacity: 0.1 })));
     const postPts: number[] = [];
     for (const px of [-7.5, 7.5]) for (const pz of [-7.5, 7.5]) postPts.push(px, 0, pz, px, BOX_H, pz);
     postPts.push(-7.5, BOX_H, -7.5, 7.5, BOX_H, -7.5, 7.5, BOX_H, -7.5, 7.5, BOX_H, 7.5, 7.5, BOX_H, 7.5, -7.5, BOX_H, 7.5, -7.5, BOX_H, 7.5, -7.5, BOX_H, -7.5);
     const posts = new THREE.BufferGeometry();
     posts.setAttribute("position", new THREE.Float32BufferAttribute(postPts, 3));
+    // snr-exempt: build-plate lines
     plateGroup.add(new THREE.LineSegments(posts, new THREE.LineBasicMaterial({ color: 0xbfeaff, transparent: true, opacity: 0.85 })));
   }
   plateGroup.visible = false;
@@ -8787,12 +8834,44 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       return true;
     }
+    // t79u: pick a ripe berry bush (it regrows), toggle trapdoors, fill the composter.
+    if (hit.id === ID.Berry) {
+      world.set(hit.x, hit.y, hit.z, ID.BerryYoung);
+      if (!creative) for (const [d, n] of harvestDrops(FARM, ID.Berry)) addInv(d, n);
+      say("Picked berries");
+      markDirtyAt(hit.x, hit.z);
+      audio.break();
+      saveDirty = true;
+      return true;
+    }
+    if (hit.id === ID.Trapdoor || hit.id === ID.TrapdoorOpen) {
+      if (world.set(hit.x, hit.y, hit.z, hit.id === ID.Trapdoor ? ID.TrapdoorOpen : ID.Trapdoor)) markDirtyAt(hit.x, hit.z);
+      audio.place();
+      saveDirty = true;
+      return true;
+    }
+    if (hit.id >= ID.Composter0 && hit.id <= ID.Composter3) {
+      const lvl = hit.id - ID.Composter0;
+      if (lvl >= COMPOST_FULL) {
+        world.set(hit.x, hit.y, hit.z, ID.Composter0);
+        addInv(ID.Fertilizer, 1);
+        say("Fertilizer");
+      } else {
+        const h = hotbar[slot];
+        const ch = compostChance(FARM_X, h);
+        if (!ch) { say("Only plant matter composts"); return true; }
+        if (!creative) spend(h, 1);
+        if (Math.random() < ch) world.set(hit.x, hit.y, hit.z, ID.Composter0 + lvl + 1);
+        say(lvl + 1 >= COMPOST_FULL ? "Compost ready" : "Composting");
+      }
+      markDirtyAt(hit.x, hit.z);
+      audio.place();
+      saveDirty = true;
+      return true;
+    }
     if (hit.id === ID.CropRipe) {
       world.set(hit.x, hit.y, hit.z, ID.Air);
-      if (!creative) {
-        addInv(ID.Wheat, 1);
-        addInv(ID.Seeds, 1);
-      }
+      if (!creative) for (const [d, n] of harvestDrops(FARM, ID.CropRipe)) addInv(d, n);
       if (world.get(hit.x, hit.y - 1, hit.z) === ID.Farmland && (creative || spend(ID.Seeds, 1))) {
         world.set(hit.x, hit.y, hit.z, ID.Crop);
         say("Replanted");
@@ -8806,7 +8885,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const item = hit.id === ID.CarrotRipe ? ID.Carrot : hit.id === ID.PotatoRipe ? ID.Potato : ID.Beetroot;
       const shoot = hit.id === ID.CarrotRipe ? ID.CarrotCrop : hit.id === ID.PotatoRipe ? ID.PotatoCrop : ID.BeetCrop;
       world.set(hit.x, hit.y, hit.z, ID.Air);
-      if (!creative) addInv(item, 1);
+      if (!creative) for (const [d, n] of harvestDrops(FARM, hit.id)) addInv(d, n);
+      void item;
       const soil = world.get(hit.x, hit.y - 1, hit.z) === ID.Farmland;
       const spare = creative || (inv[item] ?? 0) > 1;
       if (soil && spare && (creative || spend(item, 1))) {
@@ -8982,7 +9062,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       say("Fuse");
       return;
     }
-    if (held === ID.Bone) return meal(hit);
+    if (held === ID.Bone || held === ID.Fertilizer) return meal(hit, held);
+    if (held === ID.Berry && (hit.id === ID.Grass || hit.id === ID.Dirt) && world.get(hit.x, hit.y + 1, hit.z) === ID.Air && (creative || spend(ID.Berry, 1))) {
+      world.set(hit.x, hit.y + 1, hit.z, ID.BerryYoung);
+      markDirtyAt(hit.x, hit.z);
+      audio.place();
+      saveDirty = true;
+      return;
+    }
     if (held === ID.Shears && hit.id === ID.Leaves) {
       breakBlock(hit.x, hit.y, hit.z);
       wearHeld();
@@ -9296,6 +9383,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       ctx.fillStyle = "#ffffff";
       ctx.fillText(label, 128, 42);
     }
+    // snr-exempt: name-tag sprite
     const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true }));
     spr.scale.set(1.7, 0.42, 1);
     spr.position.set(0, 2.2, 0);
@@ -9566,22 +9654,30 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     markDirtyAt(x, z);
   }
 
-  function meal(hit: { id: number; x: number; y: number; z: number }) {
+  function meal(hit: { id: number; x: number; y: number; z: number }, food: number = ID.Bone) {
     const id = hit.id;
-    if (id === ID.Crop || id === ID.Crop1 || id === ID.Crop2) {
+    if (id === ID.PumpkinStem || id === ID.MelonStem) {
+      // t79u: stems live on and set a fruit beside them
+      const f = fruitSpot(world.get.bind(world), FARM, hit.x, hit.y, hit.z);
+      if (!f) return say("No room for the fruit");
+      world.set(f[0], f[1], f[2], id === ID.PumpkinStem ? ID.Pumpkin : ID.Melon);
+      markDirtyAt(f[0], f[2]);
+      if (!creative) spend(food, 1);
+      return;
+    }
+    if (id === ID.BerryYoung) world.set(hit.x, hit.y, hit.z, ID.Berry);
+    else if (id === ID.Crop || id === ID.Crop1 || id === ID.Crop2) {
       const next = id === ID.Crop ? ID.Crop1 : id === ID.Crop1 ? ID.Crop2 : ID.CropRipe;
       world.set(hit.x, hit.y, hit.z, next);
     } else if (id === ID.CarrotCrop || id === ID.PotatoCrop || id === ID.BeetCrop) {
       const next = id === ID.CarrotCrop ? ID.CarrotRipe : id === ID.PotatoCrop ? ID.PotatoRipe : ID.BeetRipe;
       world.set(hit.x, hit.y, hit.z, next);
-    } else if (id === ID.PumpkinStem) world.set(hit.x, hit.y, hit.z, ID.Pumpkin);
-    else if (id === ID.MelonStem) world.set(hit.x, hit.y, hit.z, ID.Melon);
-    else if (id === ID.Sapling) growTree(hit.x, hit.y, hit.z);
+    } else if (id === ID.Sapling) growTree(hit.x, hit.y, hit.z);
     else if (id === ID.Cane && world.get(hit.x, hit.y + 1, hit.z) === ID.Air) world.set(hit.x, hit.y + 1, hit.z, ID.Cane);
     else if (id === ID.Grass || id === ID.Dirt) {
       if (world.get(hit.x, hit.y + 1, hit.z) === ID.Air) world.set(hit.x, hit.y + 1, hit.z, Math.random() < 0.5 ? ID.Flower : ID.TallGrass);
     } else return say("Nothing to feed");
-    if (!creative) spend(ID.Bone, 1);
+    if (!creative) spend(food, 1);
     markDirtyAt(hit.x, hit.z);
     audio.place();
   }
@@ -10170,13 +10266,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
             const x = gx + dx;
             const y = gy + dy;
             const z = gz + dz;
-            if (world.get(x, y, z) !== ID.Cane) continue;
-            let h = 1;
-            while (world.get(x, y - h, z) === ID.Cane) h++;
-            if (h >= 3) continue;
-            if (world.get(x, y + 1, z) !== ID.Air) continue;
-            if (Math.random() < 0.25) {
-              world.set(x, y + 1, z, ID.Cane);
+            const col = world.get(x, y, z);
+            if (col !== ID.Cane && col !== ID.Cactus) continue;
+            // t79u: cane needs water beside its soil, cactus needs sand and air around; both max 3 tall
+            if (!canStack(world.get.bind(world), FARM, col, x, y, z)) continue;
+            if (Math.random() < (col === ID.Cane ? 0.25 : 0.15)) {
+              world.set(x, y + 1, z, col);
               markDirtyAt(x, z);
             }
           }
@@ -11407,11 +11502,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // ---- Illager patrols and hamlet raids ----
   function attachBanner(mob: Mob) {
     const g = new THREE.Group();
-    const pole = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.5, 0.07), new THREE.MeshLambertMaterial({ color: 0x5a4632 }));
+    const pole = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.5, 0.07), skin(0x5a4632));
     pole.position.set(0, 2.2, 0.24);
-    const flag = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.7, 0.05), new THREE.MeshLambertMaterial({ color: 0xf2ead8 }));
+    const flag = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.7, 0.05), skin(0xf2ead8));
     flag.position.set(0.2, 2.65, 0.24);
-    const cross = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.14, 0.06), new THREE.MeshLambertMaterial({ color: 0x8a2f2a }));
+    const cross = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.14, 0.06), skin(0x8a2f2a));
     cross.position.set(0.2, 2.65, 0.24);
     g.add(pole, flag, cross);
     mob.mesh.add(g);
@@ -11650,6 +11745,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
               if (!beam) {
                 beam = new THREE.Mesh(
                   new THREE.BoxGeometry(0.55, 64, 0.55),
+                  // snr-exempt: beacon light beam
                   new THREE.MeshBasicMaterial({ color: 0x9ae8e0, transparent: true, opacity: 0.3, depthWrite: false }),
                 );
                 beam.userData.keepShadow = false;
@@ -15197,8 +15293,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         growAcc += dt;
         if (growAcc > 8) {
           growAcc = 0;
+          // t79u: staged growth on random ticks — light (sky by day or a
+          // lamp nearby), hydration (water within 4, or rain), stems that
+          // set fruit beside them, berry bushes; villagers tend ripe crops.
           const gx = Math.floor(player.x);
           const gz = Math.floor(player.z);
+          const day = Math.max(0, Math.min(1, Math.sin(worldTime * Math.PI * 2) * 2 + 0.5));
+          const get = world.get.bind(world);
+          const tenders = mobs.filter((m) => m.kind === "villager" && !m.dead && Math.abs(m.x - player.x) < 8 && Math.abs(m.z - player.z) < 8);
           for (let dz = -5; dz <= 5; dz++) {
             for (let dx = -5; dx <= 5; dx++) {
               for (let dy = -2; dy <= 2; dy++) {
@@ -15206,27 +15308,48 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
                 const y = Math.floor(player.y) + dy;
                 const z = gz + dz;
                 const cur = world.get(x, y, z);
-                const isWheat = cur === ID.Crop || cur === ID.Crop1 || cur === ID.Crop2;
-                const isVeg = cur === ID.CarrotCrop || cur === ID.PotatoCrop || cur === ID.BeetCrop;
-                const isStem = cur === ID.PumpkinStem || cur === ID.MelonStem;
-                if (!isWheat && !isVeg && !isStem) continue;
-                if (world.get(x, y - 1, z) !== ID.Farmland) continue;
-                let wet = raining;
-                for (const [ox, , oz] of NEIGHBORS) if (world.get(x + ox, y - 1, z + oz) === ID.Water) wet = true;
-                if (Math.random() < (wet ? 0.7 : 0.4)) {
-                  let next: number = cur;
-                  if (cur === ID.Crop) next = ID.Crop1;
-                  else if (cur === ID.Crop1) next = ID.Crop2;
-                  else if (cur === ID.Crop2) next = ID.CropRipe;
-                  else if (cur === ID.CarrotCrop) next = ID.CarrotRipe;
-                  else if (cur === ID.PotatoCrop) next = ID.PotatoRipe;
-                  else if (cur === ID.BeetCrop) next = ID.BeetRipe;
-                  else if (cur === ID.PumpkinStem) next = ID.Pumpkin;
-                  else if (cur === ID.MelonStem) next = ID.Melon;
-                  if (next !== cur) {
-                    world.set(x, y, z, next);
+                const berry = cur === ID.BerryYoung;
+                if (!berry && !FARM_CROP.has(cur)) {
+                  // dry, empty farmland slowly reverts to dirt
+                  if (cur === ID.Farmland && world.get(x, y + 1, z) === ID.Air && !hydrated(get, FARM, x, y, z, raining) && Math.random() < 0.05) {
+                    world.set(x, y, z, ID.Dirt);
                     markDirtyAt(x, z);
                   }
+                  continue;
+                }
+                const soil = world.get(x, y - 1, z);
+                if (!berry && soil !== ID.Farmland) continue;
+                if (isRipe(FARM, cur)) {
+                  if (tenders.some((m) => Math.abs(m.x - (x + 0.5)) < 1.6 && Math.abs(m.z - (z + 0.5)) < 1.6)) {
+                    const seed = cur === ID.CropRipe ? ID.Crop : cur === ID.CarrotRipe ? ID.CarrotCrop : cur === ID.PotatoRipe ? ID.PotatoCrop : cur === ID.BeetRipe ? ID.BeetCrop : cur;
+                    if (seed !== cur) {
+                      world.set(x, y, z, seed); // a farmer harvests and replants
+                      markDirtyAt(x, z);
+                    }
+                  }
+                  continue;
+                }
+                let sky = true;
+                for (let k = 1; k <= 12 && sky; k++) if (def(world.get(x, y + k, z)).solid) sky = false;
+                let lamp = false;
+                for (let k = 0; k < lamps.length && !lamp; k++) {
+                  const L = lamps[k];
+                  if (L.visible && Math.abs(L.position.x - x) < 5 && Math.abs(L.position.z - z) < 5 && Math.abs(L.position.y - y) < 4) lamp = true;
+                }
+                const wet = berry || hydrated(get, FARM, x, y - 1, z, raining);
+                if (Math.random() >= growChance(cropLight(sky, day, lamp), wet)) continue;
+                if (cur === ID.PumpkinStem || cur === ID.MelonStem) {
+                  const f = fruitSpot(get, FARM, x, y, z);
+                  if (f) {
+                    world.set(f[0], f[1], f[2], cur === ID.PumpkinStem ? ID.Pumpkin : ID.Melon);
+                    markDirtyAt(f[0], f[2]);
+                  }
+                  continue;
+                }
+                const next = nextStage(FARM, cur);
+                if (next !== cur) {
+                  world.set(x, y, z, next);
+                  markDirtyAt(x, z);
                 }
               }
             }
@@ -17859,6 +17982,7 @@ function skin(
   extra: { transparent?: boolean; opacity?: number; depthWrite?: boolean; depthTest?: boolean; side?: THREE.Side } = {},
 ) {
   if (plasticOn) return sirenize(new THREE.MeshStandardMaterial({ color, roughness: 0.38, metalness: 0.0, ...extra }));
+  // snr-exempt: skin(): Lambert path when plastic SNR is off
   return new THREE.MeshLambertMaterial({ color, ...extra });
 }
 
@@ -18248,6 +18372,7 @@ function makeDemoule(kind: string): StudsBody {
   paneGlow.emissive = new THREE.Color(pal.eye);
   (paneGlow as THREE.MeshStandardMaterial).emissiveIntensity = 0.9;
   put(head, geoRBox(0.125, 0.085, 0.02, 0.008), paneGlow, 0.068, 0.15, -0.165, 0, true);
+  // snr-exempt: additive glow halo
   const halo = new THREE.MeshBasicMaterial({ color: pal.eye, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false });
   put(head, geoBall(0.1, 12), halo, 0.068, 0.15, -0.18, 0, true).scale.set(1, 0.7, 0.25);
   put(head, geoRBox(0.012, 0.1, 0.03, 0.004), dark, 0, 0.15, -0.165, 0, true); // visor mullion
@@ -18497,6 +18622,7 @@ function glowEye(parent: THREE.Object3D, x: number, y: number, z: number, r: num
   const dome = put(e, geoDome(r, 18), lens, 0, 0, -r * 0.05, -Math.PI / 2, true);
   dome.scale.y = 0.55;
   if (halo) {
+    // snr-exempt: additive glow halo
     const hm = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false });
     put(e, geoBall(r * 1.7, 12), hm, 0, 0, -r * 0.2, 0, true).scale.z = 0.35;
   }
@@ -19300,6 +19426,7 @@ function beast(kind: string): StudsBody {
       put(head, geoRBox(0.03, 0.18, 0.3, 0.01), frame, sx * 0.26, 0.08, -0.16, 0, true); // cheek plates
     }
     for (const sx of [-0.16, -0.055, 0.055, 0.16]) for (const sy of [0.16, 0.1]) put(head, geoRBox(0.055, 0.045, 0.03, 0.01), eyeM, sx, sy, -0.395, 0, true);
+    // snr-exempt: additive glow halo
     const halo = new THREE.MeshBasicMaterial({ color: 0xd060ff, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false });
     put(head, geoBall(0.2, 10), halo, 0, 0.13, -0.42, 0, true).scale.set(1.3, 0.5, 0.25);
     for (const sx of [-1, 1]) {
@@ -19995,6 +20122,7 @@ function v3Limb(parent: THREE.Object3D, x: number, y: number, z: number, o: { w:
  *  No SNR plastic, no texture — a single cheap draw. */
 let fireMat: THREE.ShaderMaterial | null = null;
 function fireQuad(parent: THREE.Object3D, x: number, y: number, z: number, w: number, h: number, seed = 0) {
+  // snr-exempt: fire quads, own flame shader
   fireMat ??= new THREE.ShaderMaterial({
     uniforms: { uT: bossFxT },
     transparent: true,

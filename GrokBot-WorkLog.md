@@ -196,3 +196,13 @@ Journal de travail de studs game tester (Grok Bot) sur StudCraft. Heures en heur
 - **Build** : `vite.llmAssets.ts` copie `wllama/` et `models/` dans la sortie standalone et écrit le `_headers` Pages (COOP same-origin + COEP credentialless, cache immutable sur /models). En dev, ces dossiers sont servis avec Range et les mêmes en-têtes.
 - Hooks QA : `__controlsTest.getLlm()` et `llmGenerate(prompt, grammar)`. `PREFETCH_TIMEOUT_MS` passe à 200 s.
 - Rebase sur main (80786b6, #12/#13) : conflits résolus en gardant les deux côtés (hooks QA arbalète + hooks Bonsai, journal).
+
+## 2026-10-31 — Agriculture, décoration, animaux + audit du shader SNR (Grok Bot)
+- `farming.ts` (pur, testé) : hydratation (eau ≤ 4 blocs ou pluie), lumière (ciel × jour ou lanterne), chance de pousse (0 sous lumière 9, ×2 si hydraté), stades blé/carotte/patate/betterave/baies, tiges citrouille/melon qui posent le fruit à côté, canne (eau près du sol) et cactus (sable, côtés libres), max 3.
+- Boucle de croissance réécrite : terre labourée sèche → terre, villageois qui récoltent et replantent les cultures mûres, cactus ajouté à la boucle de la canne.
+- Récoltes : produit + graines (harvestDrops), aussi au cassage ; piétinement à l'atterrissage ; fertilisant (os ou composteur) ; composteur à 4 niveaux.
+- Nourriture : sucre (canne), gâteau (blé, lait, œuf, sucre), le four cuit le blé en pain.
+- Plastique : la matière végétale n'est jamais du plastique — paille/blé/canne = combustible, légumes refusés (« compost it »).
+- Décoration : 22 pièces (ids 500–531, Uint16) avec formes dédiées dans le mesher ; les tuiles sont empruntées (`skinOf`) → zéro nouvelle ligne d'atlas, mémoire texture inchangée ; deux tableaux procéduraux.
+- Audit shader : `shaderAudit.test.ts` échoue si un matériau n'utilise pas sirenize/sirenizeWorld/skin sans note `snr-exempt:`. Drapeaux d'illageois → skin(), soudure → sirenize ; 45 exemptions justifiées (ciel, HUD, lignes, halos, replis Lambert).
+- Tests : 226/226. Captures : b20-farm.png, b20-decor.png.

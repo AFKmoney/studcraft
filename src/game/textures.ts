@@ -161,6 +161,10 @@ function paintPlant(ctx: CanvasRenderingContext2D, ox: number, oy: number, bloom
 
 function paintSpecial(ctx: CanvasRenderingContext2D, block: BlockDef, ox: number, oy: number, face: number) {
   const S = TILE;
+  if (block.id === ID.Painting || block.id === ID.PaintingSea || block.id === ID.PaintingSun) {
+    paintCanvasArt(ctx, block.id, ox, oy);
+    return;
+  }
   if (block.id === ID.Glass) {
     paintGlass(ctx, ox, oy);
     return;
@@ -1082,4 +1086,49 @@ export function buildAtlas(): BrickAtlases {
     normal: finish(normalCanvas, THREE.LinearSRGBColorSpace),
     glow: finish(glowCanvas, THREE.SRGBColorSpace),
   };
+}
+
+/** t79u: procedural framed paintings — seeded per id, no assets. */
+function paintCanvasArt(ctx: CanvasRenderingContext2D, id: number, ox: number, oy: number) {
+  const S = TILE;
+  let seed = id * 9301 + 49297;
+  const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
+  ctx.fillStyle = "#6b3e22";
+  ctx.fillRect(ox, oy, S, S);
+  ctx.fillStyle = "#e0b15a";
+  ctx.fillRect(ox + S * 0.05, oy + S * 0.05, S * 0.9, S * 0.9);
+  const x0 = ox + S * 0.1, y0 = oy + S * 0.1, w = S * 0.8;
+  const sea = id === ID.PaintingSea, sun = id === ID.PaintingSun;
+  const g = ctx.createLinearGradient(0, y0, 0, y0 + w);
+  g.addColorStop(0, sea ? "#8accf5" : sun ? "#ffb04a" : "#bfe3ff");
+  g.addColorStop(1, sea ? "#f4f1ea" : sun ? "#e23b2f" : "#e7fbff");
+  ctx.fillStyle = g;
+  ctx.fillRect(x0, y0, w, w);
+  if (sun || !sea) {
+    ctx.fillStyle = sun ? "#ffe14a" : "#f5c518";
+    ctx.beginPath();
+    ctx.arc(x0 + w * (0.3 + rnd() * 0.4), y0 + w * (sun ? 0.55 : 0.3), w * (sun ? 0.2 : 0.11), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // layered hills / waves
+  const bands = sea ? ["#3b96e4", "#2f86d6", "#1d5fa3"] : sun ? ["#8d3e08", "#5c2a10", "#2a1408"] : ["#7ab648", "#3aaa4c", "#2f7d3a"];
+  bands.forEach((c, i) => {
+    ctx.fillStyle = c;
+    ctx.beginPath();
+    const base = y0 + w * (0.55 + i * 0.15);
+    ctx.moveTo(x0, y0 + w);
+    for (let k = 0; k <= 8; k++) ctx.lineTo(x0 + (w * k) / 8, base + Math.sin(k * (sea ? 1.6 : 0.8) + rnd() * 2) * w * (sea ? 0.03 : 0.07));
+    ctx.lineTo(x0 + w, y0 + w);
+    ctx.closePath();
+    ctx.fill();
+  });
+  if (sea) {
+    ctx.fillStyle = "#f4f1ea";
+    ctx.beginPath();
+    ctx.moveTo(x0 + w * 0.45, y0 + w * 0.6);
+    ctx.lineTo(x0 + w * 0.6, y0 + w * 0.6);
+    ctx.lineTo(x0 + w * 0.52, y0 + w * 0.32);
+    ctx.closePath();
+    ctx.fill();
+  }
 }

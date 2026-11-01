@@ -34,7 +34,8 @@ test("every recipe input is obtainable (world, drops, trade, smelt, craft)", () 
   // runtime sources living in game.ts (not tables): crop harvest → Grain,
   // chickens lay Eggs, leaves drop Apples, reeds → Cane, water freezes to
   // Ice in the cold, hay bales in farms, Prism ore → Core (22 %).
-  for (const id of [ID.Wheat, ID.Egg, ID.Apple, ID.Cane, ID.Ice, ID.Hay, ID.Core]) add(id);
+  // t79u: cows are milked with a bucket; full composters yield Fertilizer.
+  for (const id of [ID.Milk, ID.Fertilizer, ID.Wheat, ID.Egg, ID.Apple, ID.Cane, ID.Ice, ID.Hay, ID.Core]) add(id);
   for (let round = 0; round < 12; round++) {
     for (const [k, v] of Object.entries(SMELT)) if (have.has(+k)) add(v);
     for (const r of RECIPES) if (r.out && r.need.every(([i]) => have.has(i))) add(r.out);

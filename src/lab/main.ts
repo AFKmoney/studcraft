@@ -70,6 +70,7 @@ if (new URLSearchParams(location.search).has("noaniso")) {
   atlases.normal.anisotropy = 1;
   atlases.normal.needsUpdate = true;
 }
+// snr-exempt: offline lab viewer
 const opaqueMat = new THREE.MeshStandardMaterial({
   map: atlases.color,
   roughness: 1,
@@ -104,6 +105,7 @@ if (m) scene.add(m);
 // studio floor + lights
 const floor = new THREE.Mesh(
   new THREE.CircleGeometry(46, 48),
+  // snr-exempt: offline lab viewer
   new THREE.MeshStandardMaterial({ color: 0xececec, roughness: 1, metalness: 0 }),
 );
 floor.rotation.x = -Math.PI / 2;
