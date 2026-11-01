@@ -308,3 +308,9 @@ Fait :
 - Option Settings activée par défaut ; reset en pause, perte de focus, onglet caché, pagehide/beforeunload.
 - Tests : dualsense.test.ts (CRC, encodage, rapports USB/BT, sélection d'effets), desktop/hid.test.cjs. Sonde Playwright avec un faux navigator.hid : rapports 0x31 de 77 octets, effets arc/arbalète/armes, remise à zéro en pause.
 Non testé sur une vraie manette (pas d'accès au PC de Philippe).
+## 2026-10-31 20:40 (Vancouver) — Arbres beiges / « en pierre » (atlas)
+- Cause : `buildAtlas` peignait aussi les blocs alias `skinOf` (déco de la ferme, PR #16 a3ffb67) sur la tuile de leur cible, avec leurs propres couleurs (#c4924a). Le dernier alias gagnait : Tabouret → tuile Bois, Plante suspendue → tuile Feuilles, tapis → laines, lampadaire → fer, etc. Tous les arbres sortaient beiges, en jeu comme dans le décor du menu, quel que soit le GPU.
+- Bisection : dernier bon bb0b547, premier mauvais a3ffb67.
+- Correctif : `paintsOwnTile()` (blocks.ts), un alias ne peint jamais. Les 5 boucles de textures.ts l'utilisent.
+- Test : src/game/atlasPaint.test.ts (une tuile = un seul peintre, son propriétaire ; herbe, bois, feuilles, pierre, sable).
+- Reste à voir : 1267 tuiles pour 832 places dans l'atlas (16×52), donc les tuiles au-delà de la rangée 52 ne sont jamais peintes.
