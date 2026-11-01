@@ -79,7 +79,7 @@ export function viewBlocked(v: Vehicle, eye: V3, dir: V3, hidden: ReadonlySet<nu
 export function driverOccluders(v: Vehicle, eye: V3): Set<number> {
   const out = new Set<number>();
   for (const p of v.parts) {
-    if (!p.box || p.role === "wheel" || p.id === BUCKET_ID) continue;
+    if (!p.box || p.role === "wheel" || p.role === "cockpit" || p.id === BUCKET_ID) continue;
     const d = boxDist(p, eye);
     const diag = Math.hypot(p.box.max.x - p.box.min.x, p.box.max.y - p.box.min.y, p.box.max.z - p.box.min.z);
     if (d < 1.3 || (d < 2.5 && diag / Math.max(d, 0.05) > 1.1)) out.add(p.uid);
