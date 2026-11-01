@@ -234,11 +234,21 @@ export function guildsIn(gx: number, gz: number, zone: ZoneId, seed: number): Gu
 }
 export function guildQuests(g: Guild, hallKey: string, zone: ZoneId, seed: number, epoch: number): Quest[] {
   const giver = { kind: g.outlaw ? ("bandit" as const) : ("guild" as const), key: hallKey, name: g.name };
-  return [0, 1, 2].map((slot) => makeQuest(giver, zone, seed + GUILDS.indexOf(g) * 101, slot, epoch, g.missions));
+  // B21 lot 4: the id carries the guild ("guild:<hall>@<guild>:<epoch>:<slot>").
+  // Two halls in one city produced the SAME ids, so taking one guild's job
+  // read "Already taken" at the other and one claim completed both; an
+  // outlaw guild's ids also collided with the bandit boss's contracts.
+  return [0, 1, 2].map((slot) => {
+    const q = makeQuest(giver, zone, seed + GUILDS.indexOf(g) * 101, slot, epoch, g.missions);
+    return { ...q, id: `${giver.kind}:${hallKey}@${g.id}:${epoch}:${slot}` };
+  });
 }
-/** Joining: a fixed first mission from the guild's mix (epoch 0, slot 0). */
+/** Joining: the first mission of the guild's opening set that is not a
+ *  boss hunt (B21 lot 4: joining the Sorcerers asked a newcomer to kill
+ *  the biome boss); falls back to slot 0 for an all-boss mix. */
 export function guildEntryQuest(g: Guild, hallKey: string, zone: ZoneId, seed: number): Quest {
-  return guildQuests(g, hallKey, zone, seed, 0)[0];
+  const qs = guildQuests(g, hallKey, zone, seed, 0);
+  return qs.find((q) => q.type !== "boss") ?? qs[0];
 }
 
 // ---------------------------------------------------------------- bandits

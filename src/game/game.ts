@@ -391,6 +391,8 @@ declare global {
       getInv?: (id: number) => number;
       setOffhand?: (id: number) => boolean;
       api?: (name: string) => boolean;
+      sayLogQa?: () => string[];
+      claimQuestQa?: (id: string) => boolean;
       getShots?: () => number;
       getRockets?: () => number;
       getMusic?: () => string;
@@ -4471,7 +4473,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     listeners.forEach((fn) => fn());
   }
 
+  const sayLog: string[] = [];
   function say(text: string, ms = 2200) {
+    sayLog.push(text);
+    if (sayLog.length > 40) sayLog.shift();
     message = text;
     messageAt = performance.now();
     messageFor = ms;
@@ -16693,6 +16698,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (typeof fn !== "function") return false;
       (fn as () => void)();
       return true;
+    },
+    // B21 lot 4 QA hooks (inert in play): recent messages, claim a quest by id.
+    sayLogQa: () => sayLog.slice(),
+    claimQuestQa: (id: string) => {
+      api.claim(id);
+      return quests.find((p) => p.id === id)?.done ?? false;
     },
     getShots: () => shots.length,
     getRockets: () => rockets.length,
