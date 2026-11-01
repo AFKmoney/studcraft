@@ -81,6 +81,24 @@ test("director pre-generates, rolls the arc, story persists", async () => {
   assert.deepEqual(storyFrom(JSON.parse(JSON.stringify(d.story))), d.story);
 });
 
+test("B21: director serialises prefetches (the model serves one generation at a time)", async () => {
+  const d = new Director();
+  let inFlight = 0, maxIn = 0;
+  const busyLlm: Llm = async (...a) => {
+    if (inFlight) throw new Error("busy");
+    inFlight++; maxIn = Math.max(maxIn, inFlight);
+    await new Promise((r) => setTimeout(r, 5));
+    inFlight--;
+    return mock(...a);
+  };
+  d.prefetch("chief:a", () => generateQuest(busyLlm, view(), d.story, giver, "chief", proc, { seed: 7, slot: 0, epoch: 0 }));
+  d.prefetch("guild:b", () => generateQuest(busyLlm, view(), d.story, giver, "guild", proc, { seed: 7, slot: 1, epoch: 0 }));
+  assert.deepEqual(d.status().busy.sort(), ["chief:a", "guild:b"]);
+  await new Promise((r) => setTimeout(r, 60));
+  assert.equal(maxIn, 1);
+  assert.deepEqual(d.status().ready.map((r) => r.source), ["llm", "llm"], "both givers got an LLM quest, none fell back");
+});
+
 import { NpcModel, canRun, threadsFor, checkManifest, fetchModel, memStore, sha256Hex, MODEL_NAME, type Manifest } from "./llm/runtime.ts";
 import { readFileSync } from "node:fs";
 

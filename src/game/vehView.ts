@@ -86,3 +86,27 @@ export function driverOccluders(v: Vehicle, eye: V3): Set<number> {
   }
   return out;
 }
+
+/** B21: third-person chase distance from the driver's eye: past the
+ *  farthest part of the machine (frame AABBs) plus a margin. */
+export function vehChaseDistance(v: Vehicle, eye: V3 | null): number {
+  const e = eye ?? { x: 0, y: 0, z: 0 };
+  let far = 0;
+  for (const p of v.parts) {
+    if (!p.box) continue;
+    for (const x of [p.box.min.x, p.box.max.x]) for (const y of [p.box.min.y, p.box.max.y]) for (const z of [p.box.min.z, p.box.max.z])
+      far = Math.max(far, Math.hypot(x - e.x, y - e.y, z - e.z));
+  }
+  return Math.min(16, Math.max(4.2, far + 2));
+}
+
+/** B21: park on uneven ground — the rounded lattice poses lifted a
+ *  quarter-module at a time (≤ maxLift) to the first height where every
+ *  part fits; null when none does. */
+export function liftToFit<T extends { q: [number, number, number] }>(poses: T[], fits: (p: T) => boolean, maxLift = 8): T[] | null {
+  for (let l = 0; l <= maxLift; l++) {
+    const cand = poses.map((p) => ({ ...p, q: [p.q[0], p.q[1] + l, p.q[2]] as [number, number, number] }));
+    if (cand.every(fits)) return cand;
+  }
+  return null;
+}

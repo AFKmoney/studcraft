@@ -28,7 +28,7 @@ import { CROSSBOW_HOLD } from "./heldPose";
 import { ACCESSORIES, ACC_BASE, type Acc } from "./accessories";
 import { GUNS, type GunSpec, type GunState, ammoLabel, damageAt, finishReload, flashAt, newGun, recoilAt, reloadPose, startReload, tryFire } from "./firearms";
 import { itemByName } from "./recipes";
-import { driverOccluders, seatEye } from "./vehView";
+import { driverOccluders, liftToFit, seatEye, vehChaseDistance, viewBlocked } from "./vehView";
 import { armorMaxDur, combineDur, repairCost, wearArmor } from "./foundry";
 import { plasticCost, salvageOf } from "./recipes";
 import { AFFIX_INFO, MATERIALS, RARE_MELT, TIERS, cookRate, meltInto, meltRatioStep, rejectReason, poolGlow, pour, stepHeat, tierIndex, type Pool } from "./foundry";
@@ -345,6 +345,14 @@ export type GameApi = {
 declare global {
   interface Window {
     __controlsTest?: {
+      enterVehicleQa?: () => boolean;
+      leaveVehicleQa?: () => boolean;
+      talkQa?: (soc: string) => boolean;
+      contractsQa?: () => unknown[];
+      storyQa?: () => unknown;
+      claimQa?: (id: string) => boolean;
+      setThirdQa?: (on: boolean) => boolean;
+      getDriveView?: () => unknown;
       getLlm?: () => { state: string; transport: string; progress: number; why: string; model: string; isolated: boolean };
       llmGenerate?: (prompt: string, grammar: string) => Promise<{ text: string; ms: number }>;
       getYaw: () => number;
@@ -6671,12 +6679,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     return { ingots, copper };
   }
 
-  function catalogueLoadModel(name: string): { placed: number; holo: number } {
-    const model = loadCatalogue().find((m) => m.name === name) ?? builtinModels().find((m) => m.name === name);
-    if (!model) {
-      say("No such model in the catalogue");
-      return { placed: 0, holo: 0 };
-    }
+  /** Grounded model anchor at the look point (Tester 2026-10-31 law, shared by
+   *  the catalogue load and — B21 — the TEKS garage delivery). */
+  function groundedAnchor(model: { parts: { id: number; o: number; dq: [number, number, number] }[] }): { q: [number, number, number]; fits: number } {
     const dir = new THREE.Vector3();
     camera.getWorldDirection(dir);
     // Tester 2026-10-31: the anchor used the PLAYER's foot level, but
@@ -6705,6 +6710,16 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       if (fits === model.parts.length) break;
     }
+    return { q: anchorQ, fits: bestFits };
+  }
+
+  function catalogueLoadModel(name: string): { placed: number; holo: number } {
+    const model = loadCatalogue().find((m) => m.name === name) ?? builtinModels().find((m) => m.name === name);
+    if (!model) {
+      say("No such model in the catalogue");
+      return { placed: 0, holo: 0 };
+    }
+    const anchorQ = groundedAnchor(model).q;
     let placed = 0;
     let holo = 0;
     let jointN = 0;
@@ -6970,6 +6985,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   }
   /** B18: parts hugging the driver's eye, hidden in the first-person driving view. */
   let vehHidden = new Set<number>();
+  /** B21: chase-camera distance (outside every part) and the vehicle yaw last frame (the look turns with the car). */
+  let vehChaseDist = 6;
+  let vehLastYaw = 0;
   function applyDriverView() {
     if (!vehEnt) return;
     const fp = !settings.third;
@@ -7054,6 +7072,21 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     vehHidden = vehSeatEye ? driverOccluders(vehicle, vehSeatEye) : new Set();
     applyDriverView();
     placeVehGroup();
+    // B21: the driver faces the vehicle's front (-z of the frame) at
+    // entry — the look was left at the walking yaw, so a buggy parked
+    // sideways was driven looking out of the side window — and the
+    // chase camera sits outside the whole machine.
+    {
+      const hubVp = vehicle.parts.find((p) => p.role === "hub");
+      const e = vehSeatEye ?? hubVp?.centreLocal;
+      if (hubVp && e) {
+        const a = partWorldPoint(vehicle, hubVp, e), b = partWorldPoint(vehicle, hubVp, { x: e.x, y: e.y, z: e.z - 1 });
+        player.yaw = Math.atan2(-(b.x - a.x), -(b.z - a.z));
+        player.pitch = -0.12;
+      }
+      vehChaseDist = vehChaseDistance(vehicle, e ?? null);
+      vehLastYaw = vehicle.yaw;
+    }
     say("Driving — W/S throttle, A/D steer, Shift park · Fuel " + vehicle.fuel.toFixed(1) + "/" + FUEL.tankCapacity + " · Battery " + Math.round(vehicle.battery * 100) + "%");
     audio.place();
     saveDirty = true;
@@ -7066,11 +7099,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   function leaveVehicle(): boolean {
     if (!vehEnt) return false;
     const ent = vehEnt;
-    const poses = parkPoses(ent.v);
+    const raw = parkPoses(ent.v);
+    if (!raw) return false;
+    // B21: on a slope the rounded lattice pose sank a wheel into the
+    // terrain and parking was refused ("no room") almost everywhere
+    // off flat ground: lift the whole build a quarter-module at a time
+    // (≤ 2 blocks) and park at the first height where every part fits.
+    const poses = liftToFit(raw, (ps) => tech.test(ps.id, ps.o, ps.q, (bx, by, bz) => def(world.get(bx, by, bz)).solid) >= 0);
     if (!poses) return false;
-    for (const ps of poses) {
-      if (tech.test(ps.id, ps.o, ps.q, (bx, by, bz) => def(world.get(bx, by, bz)).solid) < 0) return false;
-    }
     // The bucket's load is matter: it goes to the player (or the
     // ground) before the machine becomes a build again.
     if (ent.bucket) emptyBucket(ent, ent.v.pos.x, ent.v.pos.y + 0.5, ent.v.pos.z);
@@ -11380,6 +11416,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   }
   function reportCrime(key: string, kind: CrimeKind, seen: boolean) {
     const r = society.crime(key, kind, seen);
+    for (const q of r.failed) director.outcome(baseQuestId(q.id), false);
     if (seen) {
       addRep(repKeyFor(player.x, player.z), CRIME[kind].rep);
       say("Seen! " + kind + " — bounty " + r.standing.bounty + " emeralds" + (r.failed.length ? " · contract failed: " + r.failed.map((q) => q.text.title).join(", ") : ""), 4200);
@@ -11413,6 +11450,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   function societyClaim(id: string) {
     const r = society.claim(id, (k) => (creative ? 9999 : (inv[k] ?? 0)));
     if (!r.ok) return say(r.msg);
+    // B21: the story director never heard how contracts ended
+    // (outcome() had no caller), so the LLM context's "recent
+    // outcomes" stayed empty for the whole game.
+    director.outcome(baseQuestId(id.replace(/^soc:/, "")), true);
     if (!creative) for (const [k, n] of r.take) spend(k, n);
     for (const [k, n] of r.give) give(k, n);
     if (r.rep > 0) addRep(repKeyFor(player.x, player.z), Math.ceil(r.rep / 2));
@@ -14517,6 +14558,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         stepVeh(v, dt, { throttle: tilted ? 0 : sample.fwd, steer: sample.str, channel: v.hubChannel, battMul: hubLvl.battMul, genMul: hubLvl.genMul }, (x, z) => groundY(x, z));
         placeVehGroup();
         applyDriverView();
+        // B21: the driver's look turns with the vehicle (free look stays relative).
+        player.yaw += v.yaw - vehLastYaw;
+        vehLastYaw = v.yaw;
         // P5c-3: channel cycling while driving (KeyC / the CH button),
         // bucket digging (the bucket digs where it MOVES through
         // blocks) and dumping (Use, unless refuelling).
@@ -15053,7 +15097,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const fx = -Math.sin(player.yaw) * cp, fy = Math.sin(player.pitch), fz = -Math.cos(player.yaw) * cp;
       const rx = Math.cos(player.yaw), rz = -Math.sin(player.yaw);
       const ex = player.x, ey = player.y + EYE, ez = player.z;
-      const want = 4.2, sh = 0.62, up = 0.28;
+      // B21: driving, the over-the-shoulder rig sat INSIDE the machine
+      // (4.2 blocks back from a seat whose bodywork spans ~6): a chase
+      // camera, centred, from outside the whole vehicle.
+      const want = vehEnt ? vehChaseDist : 4.2, sh = vehEnt ? 0 : 0.62, up = vehEnt ? 1.4 : 0.28;
       let dist = want;
       for (let i = 1; i <= 14; i++) {
         const t = i / 14;
@@ -15983,6 +16030,35 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         ? { load: [...vehEnt.bucket.load.entries()] as [number, number][], cap: vehEnt.bucket.cap, total: [...vehEnt.bucket.load.values()].reduce((s, n) => s + n, 0) }
         : null,
     cycleChannelQa: () => cycleDriveChannel(),
+    // B21 QA hooks (inert in play): enter the nearest complete vehicle
+    // through the real entry path, and read the driving view state.
+    enterVehicleQa: () => {
+      const hubs = [...tech.parts.values()].filter((p) => p.id === ID.TechHub);
+      hubs.sort((a, b) => Math.hypot(a.q[0] / 4 - player.x, a.q[2] / 4 - player.z) - Math.hypot(b.q[0] / 4 - player.x, b.q[2] / 4 - player.z));
+      for (let i = 0; i < 2 && hubs[0]; i++) if (tryEnterVehicle(hubs[0])) return true;
+      return !!vehEnt;
+    },
+    leaveVehicleQa: () => leaveVehicle(),
+    // B21 society QA hooks (inert in play): talk to the nearest NPC of a
+    // society role through the real path; contracts; the story director.
+    talkQa: (soc: string) => {
+      const m = mobs.filter((x) => !x.dead && x.soc === soc).sort((a, b) => Math.hypot(a.x - player.x, a.z - player.z) - Math.hypot(b.x - player.x, b.z - player.z))[0];
+      return m ? societyTalk(m) : false;
+    },
+    contractsQa: () => society.active.map((a) => ({ id: a.q.id, title: a.q.text.title, giver: a.q.giver.kind, track: a.q.track.kind, n: a.n, need: a.q.track.need })),
+    claimQa: (id: string) => { const before = society.active.length; api.claim(id.startsWith("soc:") ? id : "soc:" + id); return society.active.length < before; },
+    storyQa: () => ({ ...director.status(), llm: !!director.llm, story: director.story }),
+    setThirdQa: (on: boolean) => { api.setThird(on); return true; },
+    getDriveView: () => {
+      if (!vehEnt) return null;
+      const v = vehEnt.v;
+      const hub = v.parts.find((p) => p.role === "hub");
+      const eye = vehSeatEye;
+      const fwd = hub && eye ? partWorldPoint(v, hub, { x: eye.x, y: eye.y, z: eye.z - 1 }) : null;
+      const ew = hub && eye ? partWorldPoint(v, hub, eye) : null;
+      const blocked = eye ? viewBlocked(v, eye, { x: 0, y: 0, z: -1 }, vehHidden) : 1;
+      return { eye, hidden: vehHidden.size, parts: v.parts.length, blocked, cam: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, eyeW: ew, fwdYaw: ew && fwd ? Math.atan2(-(fwd.x - ew.x), -(fwd.z - ew.z)) : null, playerYaw: player.yaw, vehYaw: v.yaw };
+    },
     // All-devices QA witness (inert in play): build-mode state for the
     // touch/pad rig — toggled via the DOM Build button, rotated via
     // the DOM rotation buttons.
@@ -17345,13 +17421,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         if ((inv[ID.PlasticIngot] ?? 0) < price.ingots) return say("Need " + price.ingots + " plastic ingots for the " + name + " — the vehicle is priced by the matter in it.");
         if ((inv[ID.Copper] ?? 0) < price.copper) return say("Need " + price.copper + " copper for the " + name + " — motors and power eat copper.");
       }
-      const dir = new THREE.Vector3();
-      camera.getWorldDirection(dir);
-      const A: [number, number, number] = [
-        Math.floor(camera.position.x + dir.x * 3.5) * 4,
-        Math.floor(player.y) * 4,
-        Math.floor(camera.position.z + dir.z * 3.5) * 4,
-      ];
+      // B21: the delivery used the PLAYER's foot level as the hub
+      // height, so the buggy's wheels (7 quarters below the hub) were
+      // always inside the ground: "No room to deliver" on flat land.
+      // Same grounded anchor as the catalogue load.
+      const A = groundedAnchor(model).q;
       for (const mp of model.parts) {
         const q: [number, number, number] = [A[0] + mp.dq[0], A[1] + mp.dq[1], A[2] + mp.dq[2]];
         if (tech.test(mp.id, mp.o, q, techSolidAt) < 0 || techHitsPlayer(mp.id, mp.o, q)) {

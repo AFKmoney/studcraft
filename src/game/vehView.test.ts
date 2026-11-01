@@ -29,3 +29,25 @@ test("B18: Rig Digger first-person driving view is clear in all 4 directions", (
   for (const p of v.parts) if (p.role === "wheel" || p.id === 471) assert.ok(!hide.has(p.uid));
   console.log("view blocked before:", before, "hidden parts:", hide.size, "/", v.parts.length);
 });
+
+test("B21: chase camera sits outside every part of the machine", async () => {
+  const { vehChaseDistance, boxDist } = await import("./vehView.ts");
+  const v = rigDigger();
+  const eye = seatEye(v)!;
+  const d = vehChaseDistance(v, eye);
+  let far = 0;
+  for (const p of v.parts) if (p.box) far = Math.max(far, Math.hypot(Math.max(Math.abs(p.box.min.x - eye.x), Math.abs(p.box.max.x - eye.x)), Math.max(Math.abs(p.box.min.y - eye.y), Math.abs(p.box.max.y - eye.y)), Math.max(Math.abs(p.box.min.z - eye.z), Math.abs(p.box.max.z - eye.z))));
+  assert.ok(d > far && d > 4.2 && d <= 16, `chase ${d.toFixed(2)} vs farthest corner ${far.toFixed(2)}`);
+  // the old 4.2-block over-the-shoulder pull-back ended inside the bodywork
+  const back = { x: eye.x, y: eye.y + 0.28, z: eye.z + 4.2 };
+  assert.ok(v.parts.some((p) => boxDist(p, back) < 1.5) || far > 4.2);
+});
+
+test("B21: parking lifts the build off a slope instead of refusing", async () => {
+  const { liftToFit } = await import("./vehView.ts");
+  const poses = [{ q: [0, 0, 0] as [number, number, number] }, { q: [8, -7, 0] as [number, number, number] }];
+  // ground top at q.y = -4 under the second part: it fits from lift 3
+  const out = liftToFit(poses, (p) => p.q[1] >= -4)!;
+  assert.deepEqual(out.map((p) => p.q[1]), [3, -4]);
+  assert.equal(liftToFit(poses, () => false), null);
+});
