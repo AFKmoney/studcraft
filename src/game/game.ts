@@ -380,6 +380,7 @@ declare global {
       setSteer?: (v: number) => void;
       setLook?: (yaw: number, pitch: number) => void;
       setDig?: (mine: boolean, place: boolean) => void;
+      gravQa?: (x: number, y: number, z: number, run?: boolean) => { pending: number; queue: number; chunks: number; fallers: number; clock: number; verdict: string };
       getFallersQa?: () => { n: number; scanAcc: number; ys: number[]; chunks: { cells: number; y: number; age: number }[] };
       getBlock?: (x: number, y: number, z: number) => number;
       put?: (x: number, y: number, z: number, id: number) => boolean;
@@ -6258,7 +6259,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   const gravOpts = {
     solid: (id: number) => def(id).solid,
     anchor: (id: number) => id === ID.Bedrock,
-    fixed: (id: number) => def(id).work !== undefined || id === ID.Chest || id === ID.ShulkerBox || !!def(id).sign,
+    // BUG (2026-11-01, Claude, rig-measured): every def carries work: "" by
+    // default, so `work !== undefined` made EVERY block fixed — no block was
+    // ever a member and universal gravity never dropped anything in game.
+    fixed: (id: number) => !!def(id).work || id === ID.Chest || id === ID.ShulkerBox || !!def(id).sign,
     fall: (id: number) => !!def(id).fall,
   };
   const gravPending = new Map<string, { x: number; y: number; z: number; at: number }>();
@@ -16956,6 +16960,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       mousePlace = place;
     },
     getBlock: (x: number, y: number, z: number) => world.get(Math.floor(x), Math.floor(y), Math.floor(z)),
+    gravQa: (x: number, y: number, z: number, run = false) => {
+      if (run) runGravityScan(Math.floor(x), Math.floor(y), Math.floor(z));
+      return { pending: gravPending.size, queue: gravQueue.length, chunks: chunks.length, fallers: fallers.length, clock: +gravClock.toFixed(2), verdict: analyzeComponent((a, b, c) => world.get(a, b, c), Math.floor(x), Math.floor(y), Math.floor(z), { ...gravOpts, maxCells: 2500 }).kind };
+    },
     getFallersQa: () => ({ n: fallers.length, scanAcc: fallScanAcc, ys: fallers.slice(0, 8).map((f) => +f.y.toFixed(2)), chunks: chunks.map((c) => ({ cells: c.cells.length, y: +c.pos.y.toFixed(2), age: +c.age.toFixed(2) })) }),
     // v4.15 fire QA hooks
     put: (x: number, y: number, z: number, id: number) => {

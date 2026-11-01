@@ -107,3 +107,14 @@ describe("gravity §12 component analysis", () => {
     assert.equal(analyzeComponent(get, 0, 9, 0, opts).kind, "anchored");
   });
 });
+
+// 2026-11-01 regression guard: every BlockDef carries work: "" by default,
+// so game.ts's `fixed` predicate must test a NON-EMPTY workstation tag —
+// `work !== undefined` made every block fixed and gravity never fired.
+import { readFileSync as readSrc } from "node:fs";
+it("game gravity opts: fixed = non-empty workstation tag, not 'defined'", () => {
+  const src = readSrc(new URL("./game.ts", import.meta.url), "utf8");
+  const block = src.slice(src.indexOf("const gravOpts = {"), src.indexOf("const gravOpts = {") + 900).split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
+  assert.ok(!/work\s*!==\s*undefined/.test(block), "fixed must not use work !== undefined");
+  assert.ok(/!!def\(id\)\.work/.test(block), "fixed tests a non-empty work tag");
+});
