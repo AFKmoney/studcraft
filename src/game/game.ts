@@ -19514,7 +19514,7 @@ function makeDemoule(kind: string): StudsBody {
   return { group: g, legs: [legL, legR, armR, armL], bodyMat: plastic };
 }
 
-// Character customisation (2026-11-01): the player's minifig colours.
+// Character customisation (2026-11-01): the player's Studsman colours.
 export type Look = { shirt: number; pants: number; hair: number; skin: number };
 export const DEFAULT_LOOK: Look = { shirt: 0xe23b2f, pants: 0x1f5fbf, hair: 0x241c16, skin: 0xf3d37a };
 export const LOOK_SWATCHES: Record<keyof Look, number[]> = {

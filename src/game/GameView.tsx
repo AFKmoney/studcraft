@@ -2880,7 +2880,7 @@ function Journal({ hud, game }: { hud: GameApi["hud"]; game: GameApi }) {
           </small>
         </div>
       </div>
-      <p className="sc-label">Your minifig</p>
+      <p className="sc-label">Your Studsman</p>
       <div className="sc-look">
         {(["shirt", "pants", "hair", "skin"] as (keyof Look)[]).map((part) => (
           <div key={part} className="sc-look-row">

@@ -130,7 +130,7 @@ export type SettingsSave = {
   fov?: number;
   showFps?: boolean;
   npcLlm?: boolean;
-  /** Character customisation (2026-11-01): minifig colours. */
+  /** Character customisation (2026-11-01): Studsman colours. */
   look?: { shirt: number; pants: number; hair: number; skin: number };
   music?: number;
   sfx?: number;
