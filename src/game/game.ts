@@ -392,6 +392,14 @@ declare global {
       setOffhand?: (id: number) => boolean;
       api?: (name: string) => boolean;
       sayLogQa?: () => string[];
+      crimeQa?: (kind: string, seen: boolean) => unknown;
+      giveQa?: (id: number, n: number) => number;
+      vehArmQa?: (id: number) => unknown;
+      vehMobHpQa?: () => unknown;
+      snrAuditQa?: () => { ok: number; bad: Record<string, number> };
+      mobsToGroundQa?: () => boolean;
+      furnaceModeQa?: (plastic: boolean) => boolean;
+      standingQa?: () => unknown;
       claimQuestQa?: (id: string) => boolean;
       getShots?: () => number;
       getRockets?: () => number;
@@ -966,6 +974,11 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
   let prevWorldTime = 0;
   function repKeyFor(x: number, z: number): string {
     if (villageAt && Math.hypot(x - villageAt.x, z - villageAt.z) < 100) return villageAt.x + "," + villageAt.z;
+    // B21 lot 5: villageAt is only the spawn village — every other
+    // village keyed its reputation by your rounded position, so a crime
+    // or a sale was forgotten one step later. Key it by the village.
+    const v = villageAround(x, z);
+    if (v) return "v:" + v.gx + "," + v.gz;
     return Math.round(x) + "," + Math.round(z);
   }
   function curTraderKey(): string {
@@ -7051,6 +7064,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     if (dmg <= 0 || m.dead) return;
     m.hp -= dmg;
     if (m.kind === "villager" || m.kind === "golem") {
+      if (m.kind === "villager" && (m.byPlayerT ?? 0) <= 0 && !m.soc?.startsWith("guard") && !creative && realm === 0) {
+        const v = villageAround(m.homeX ?? m.x, m.homeZ ?? m.z);
+        if (v) reportCrime(socKey(v), "assault", playerSeen());
+      }
       m.byPlayerT = 6;
       addRep(repKeyFor(m.homeX ?? m.x, m.homeZ ?? m.z), m.kind === "villager" ? -3 : -2);
       if (m.soc === "guard") guardStruck = true;
@@ -10777,9 +10794,20 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     for (const s of shots) {
       s.life -= dt;
       s.vy -= (s.grav ?? 6) * dt;
-      s.x += s.vx * dt;
-      s.y += s.vy * dt;
-      s.z += s.vz * dt;
+      // B21 lot 5: swept flight. A cannonball (38 m/s) moved ~2 blocks
+      // per frame at 20 fps — more than a mob is wide — so shells and
+      // arrows flew through mobs (and thin walls) untouched. Sub-step at
+      // ≤ 0.4 block and stop on the first block / body in the path; the
+      // hit tests below then resolve the contact at that point.
+      const sub = Math.max(1, Math.min(40, Math.ceil((Math.hypot(s.vx, s.vy, s.vz) * dt) / 0.4)));
+      for (let k = 1; k <= sub; k++) {
+        s.x += (s.vx * dt) / sub;
+        s.y += (s.vy * dt) / sub;
+        s.z += (s.vz * dt) / sub;
+        if (k === sub) break;
+        if (def(world.get(Math.floor(s.x), Math.floor(s.y), Math.floor(s.z))).solid) break;
+        if (s.friendly ? mobs.some((m) => !m.dead && m.kind !== "boat" && m.kind !== "cart" && Math.hypot(m.x - s.x, m.z - s.z) < 0.7 && Math.abs(m.y + 0.6 - s.y) < 1 && !s.hitSet?.has(m)) : Math.hypot(player.x - s.x, player.z - s.z) < 0.6 && Math.abs(player.y + 1 - s.y) < 1.2) break;
+      }
       s.mesh.position.set(s.x, s.y, s.z);
       let dead = s.life <= 0;
       const bx = Math.floor(s.x);
@@ -11540,10 +11568,15 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     for (let y = Math.min(HEIGHT - 2, fromY); y >= Math.max(1, fromY - 24); y--) if (def(world.get(x, y, z)).solid) return y;
     return world.heightAt(x, z);
   }
-  function groundY(x: number, z: number) {
+  /** Top of the solid column under (x,z). The scan starts 8 above the
+   *  generated terrain (so a roof does not count) — or, B21 lot 5, at
+   *  `fromY` when that is higher: a mob or a vehicle standing on a
+   *  player-built floor, bridge or tower more than 8 above the original
+   *  ground was snapped down through it into the rock below. */
+  function groundY(x: number, z: number, fromY?: number) {
     const ix = Math.floor(x);
     const iz = Math.floor(z);
-    let y = Math.min(HEIGHT - 2, world.heightAt(ix, iz) + 8);
+    let y = Math.min(HEIGHT - 2, Math.max(world.heightAt(ix, iz) + 8, fromY === undefined ? -1 : Math.floor(fromY)));
     for (; y >= 1; y--) {
       const d = def(world.get(ix, y, iz));
       if (d.solid) return y + (d.slab ? 0.5 : 1);
@@ -12254,7 +12287,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   }
 
   function spawnKind(kind: Mob["kind"], x: number, z: number, scale = 1) {
-    const y = kind === "ghast" || kind === "dragon" || kind === "phantom" || kind === "wither" || kind === "blaze" ? groundY(x, z) + (kind === "dragon" ? 6 : kind === "wither" ? 5 : 4) : groundY(x, z);
+    const y = kind === "ghast" || kind === "dragon" || kind === "phantom" || kind === "wither" || kind === "blaze" ? groundY(x, z) + (kind === "dragon" ? 6 : kind === "wither" ? 5 : 4) : groundY(x, z, Math.hypot(x - player.x, z - player.z) < 24 ? player.y + 1.2 : undefined);
     const body = buildStuds(kind, scale);
     const mob: Mob = {
       kind,
@@ -13551,14 +13584,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           const sp = 2.1;
           m.x += -Math.sin(m.yaw) * sp * dt;
           m.z += -Math.cos(m.yaw) * sp * dt;
-          m.y = groundY(m.x, m.z);
+          m.y = groundY(m.x, m.z, m.y + 1.2);
         }
         const speed = (m.kind === "shulker" ? 0 : m.kind === "goat" && m.mode === "aim" ? 0 : m.kind === "goat" && m.mode === "charge" ? 5.2 : foe ? 2.7 : chase ? (m.kind === "spider" ? 3.1 : m.kind === "slime" ? 1.35 : m.kind === "vindicator" ? 2.6 : m.kind === "ravager" ? 2.35 : m.kind === "pillager" ? 2.15 : m.kind === "evoker" ? 2.0 : m.kind === "walker" || m.kind === "husk" ? 2.15 : 2.4) : ((m.kind === "wolf" || m.kind === "cat" || m.kind === "parrot") && m.tame && d > 4) ? 2.35 : m.kind === "bee" || m.kind === "bat" || m.kind === "parrot" ? 1.7 : 1.05) * ((m.slowT ?? 0) > 0 ? 0.45 : 1);
         const fx = -Math.sin(m.yaw);
         const fz = -Math.cos(m.yaw);
         const nx = m.x + fx * speed * dt;
         const nz = m.z + fz * speed * dt;
-        const gy = groundY(nx, nz);
+        const gy = groundY(nx, nz, m.y + 1.2);
         // Water: land animals refuse deep water instead of walking
         // the lake bed. Swimmers (crab, frog, slime) ride the surface.
         const swimmer = m.kind === "crab" || m.kind === "frog" || m.kind === "slime" || m.kind === "squid" || m.kind === "drowned" || m.kind === "axolotl" || m.kind === "guardian";
@@ -14404,6 +14437,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         mob.hp -= dmg;
         if (dmg > 0) padRumble(0.3, 0.15, 55);
         if (mob.kind === "villager" || mob.kind === "golem") {
+          // B21 lot 5: striking a townsfolk (not a guard — that is resisting
+          // arrest) is an assault: seen → bounty. Before, beating a villager
+          // only nudged the trade rep and the guards never cared.
+          if (mob.kind === "villager" && (mob.byPlayerT ?? 0) <= 0 && !mob.soc?.startsWith("guard") && !creative && realm === 0) {
+            const v = villageAround(mob.homeX ?? mob.x, mob.homeZ ?? mob.z);
+            if (v) reportCrime(socKey(v), "assault", playerSeen());
+          }
           mob.byPlayerT = 6;
           addRep(repKeyFor(mob.homeX ?? mob.x, mob.homeZ ?? mob.z), mob.kind === "villager" ? -3 : -2);
           if (mob.soc === "guard") guardStruck = true;
@@ -14816,7 +14856,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         }
         const hubLvl = HUB_LVL[(teksLvl.get(vehEnt.hubKey) ?? 1) - 1];
         const prevJointAngles = v.joints.map((j) => j.angle);
-        stepVeh(v, dt, { throttle: tilted ? 0 : sample.fwd, steer: sample.str, channel: v.hubChannel, battMul: hubLvl.battMul, genMul: hubLvl.genMul }, (x, z) => groundY(x, z));
+        stepVeh(v, dt, { throttle: tilted ? 0 : sample.fwd, steer: sample.str, channel: v.hubChannel, battMul: hubLvl.battMul, genMul: hubLvl.genMul }, (x, z) => groundY(x, z, v.pos.y + 1.5));
         placeVehGroup();
         applyDriverView();
         // B21: the driver's look turns with the vehicle (free look stays relative).
@@ -16701,6 +16741,34 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     },
     // B21 lot 4 QA hooks (inert in play): recent messages, claim a quest by id.
     sayLogQa: () => sayLog.slice(),
+    // B21 lot 5 QA hooks (inert in play): a crime at the village you
+    // stand in, give items, standing of that village.
+    crimeQa: (kind: string, seen: boolean) => {
+      const v = villageAround(player.x, player.z);
+      if (!v) return false;
+      reportCrime(socKey(v), kind as CrimeKind, seen);
+      return society.st(socKey(v));
+    },
+    furnaceModeQa: (plastic: boolean) => { api.setFurnaceMode(plastic); return api.furnaceMode(); },
+    vehArmQa: (id: number) => { if (!vehEnt || !WEAPONS[id] || !vehEnt.arms.length) return false; for (const a of vehEnt.arms) a.st = newWeaponState(a.st.uid, id); const mz = vehMuzzle(vehEnt, vehEnt.arms[0]); return { p: mz.p, d: mz.d }; },
+    vehMobHpQa: () => mobs.filter((m) => !m.dead && Math.hypot(m.x - player.x, m.z - player.z) < 40).map((m) => ({ kind: m.kind, hp: m.hp, x: +m.x.toFixed(1), z: +m.z.toFixed(1) })),
+    mobsToGroundQa: () => { for (const m of mobs) if (!m.dead) { let y = Math.floor(player.y) + 4; while (y > 1 && !def(world.get(Math.floor(m.x), y - 1, Math.floor(m.z))).solid) y--; m.y = y; } return true; },
+    snrAuditQa: () => {
+      const bad: Record<string, number> = {};
+      let ok = 0;
+      scene.traverse((o) => {
+        const mats = (o as THREE.Mesh).material;
+        if (!mats || !(o as THREE.Mesh).isMesh || !o.visible) return;
+        for (const m of Array.isArray(mats) ? mats : [mats]) {
+          const key = m.customProgramCacheKey?.call(m) ?? "";
+          if (/siren|studcraft-water/.test(key) || m.onBeforeCompile.toString().includes("Siren")) ok++;
+          else { const k = m.type + ":" + (o.name || o.parent?.name || (o as THREE.Mesh).geometry?.type || "?"); bad[k] = (bad[k] ?? 0) + 1; }
+        }
+      });
+      return { ok, bad };
+    },
+    giveQa: (id: number, n: number) => { give(id, n); return inv[id] ?? 0; },
+    standingQa: () => { const v = villageAround(player.x, player.z); return v ? { key: socKey(v), ...society.st(socKey(v)), tradeRep: repAtKey(repKeyFor(player.x, player.z)) } : null; },
     claimQuestQa: (id: string) => {
       api.claim(id);
       return quests.find((p) => p.id === id)?.done ?? false;

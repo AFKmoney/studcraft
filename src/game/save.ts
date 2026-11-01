@@ -318,6 +318,14 @@ export function normalizeSave(raw: unknown): SaveV1 | null {
   if (!data || data.v !== 1 || !Array.isArray(data.edits)) return null;
   const max = data.ids === 16 ? 0xffff : 0xff;
   data.edits = data.edits.filter((e) => Array.isArray(e) && e.length === 4 && Number.isInteger(e[3]) && e[3] >= 0 && e[3] <= max);
+  // A damaged or hand-edited inventory must not make the whole world unopenable.
+  const inv: unknown = data.inv;
+  const pairs: [number, number][] = Array.isArray(inv)
+    ? inv
+    : inv && typeof inv === "object"
+      ? Object.entries(inv as Record<string, unknown>).map(([k, n]) => [Number(k), Number(n)] as [number, number])
+      : [];
+  data.inv = pairs.filter((p) => Array.isArray(p) && Number.isInteger(p[0]) && p[0] > 0 && p[0] <= max && Number.isFinite(p[1]) && p[1] > 0);
   data.ids = 16;
   return data;
 }

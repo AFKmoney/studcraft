@@ -85,3 +85,10 @@ test("mesher builds faces for ids > 255", async () => {
   const after = buildChunk(w, 0, 0, false, false);
   assert.ok(count(after.opaque) > count(before.opaque) || count(after.glass) > count(before.glass));
 });
+
+test("a malformed inventory never blocks loading a save", () => {
+  const obj = normalizeSave({ v: 1, seed: 1, flat: false, creative: false, edits: [], px: 0, py: 0, pz: 0, yaw: 0, pitch: 0, health: 20, inv: { "3": 12, "111": 5 } });
+  assert.deepEqual(obj?.inv, [[3, 12], [111, 5]]);
+  const bad = normalizeSave({ v: 1, seed: 1, flat: false, creative: false, edits: [], px: 0, py: 0, pz: 0, yaw: 0, pitch: 0, health: 20, inv: "x" });
+  assert.deepEqual(bad?.inv, []);
+});
