@@ -23,7 +23,7 @@ function freePort() {
 }
 
 class Sidecar {
-  /** @param {{ bin: string, model: string, threads?: number, gpuLayers?: number, ctx?: number, log?: (s: string) => void }} o */
+  /** @param {{ bin: string, model: string, threads?: number, gpuLayers?: number, ctx?: number, backend?: string, fallback?: { bin: string, gpuLayers?: number }, log?: (s: string) => void }} o */
   constructor(o) {
     this.o = o;
     this.proc = null;
@@ -33,6 +33,7 @@ class Sidecar {
     this.failures = 0;
     this.stopped = false;
     this.log = o.log || (() => {});
+    this.backend = o.backend || (o.gpuLayers === 0 ? "cpu" : "gpu");
   }
   async start() {
     this.stopped = false;
@@ -61,6 +62,7 @@ class Sidecar {
         const r = await fetch(`http://127.0.0.1:${this.port}/health`);
         if (r.ok) {
           this.ready = true;
+          this.everReady = true;
           this.failures = 0;
           this.why = "";
           this.log("ready on port " + this.port);
@@ -76,6 +78,17 @@ class Sidecar {
   }
   fail(why, retry) {
     this.ready = false;
+    // Hardware fallback: if the GPU (Vulkan) build never became healthy,
+    // switch once to the bundled CPU build. Same model file.
+    const fb = this.o.fallback;
+    if (fb && !this.everReady && !this.usedFallback && !this.stopped && fs.existsSync(fb.bin)) {
+      this.usedFallback = true;
+      this.log("GPU backend failed (" + why.slice(0, 200) + "), falling back to CPU: " + fb.bin);
+      this.o = { ...this.o, bin: fb.bin, gpuLayers: fb.gpuLayers ?? 0 };
+      this.backend = "cpu";
+      setTimeout(() => !this.stopped && !this.proc && this.start(), 200).unref?.();
+      return;
+    }
     this.why = why.slice(0, 300);
     this.log("fail: " + this.why);
     if (!retry || this.stopped) return;
@@ -83,7 +96,7 @@ class Sidecar {
     setTimeout(() => !this.stopped && !this.proc && this.start(), d).unref?.();
   }
   status() {
-    return { ready: this.ready, model: "Bonsai 1.7B Q1_0", why: this.why };
+    return { ready: this.ready, model: "Bonsai 1.7B Q1_0", backend: this.backend, why: this.why };
   }
   /** One constrained completion; a timeout kills + restarts the server. */
   async generate(prompt, grammar, o = {}) {
