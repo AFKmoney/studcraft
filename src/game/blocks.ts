@@ -1705,8 +1705,8 @@ export function def(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[ID.Air];
 }
 
-export const ATLAS_COLS = 16;
-export const ATLAS_ROWS = 52; // 48 → 52 for the biome bricks (2048×6656 px, under the 8192 WebGL limit)
+export const ATLAS_COLS = 32; // 16 → 32 (2026-10-31): 1 268 tiles had overflowed the 16×52 = 832 slots
+export const ATLAS_ROWS = 40; // 32×40 = 1 280 tiles, 4096×5120 px (under the 8192 WebGL limit); atlasPaint.test.ts fails when full
 export const TILE = 128;
 
 // Atlas slots: world bricks first (id order, so every existing slot keeps

@@ -32,3 +32,15 @@ test("buildAtlas loops skip aliases", () => {
   assert.ok(!/if \(!block\) continue;/.test(src), "a buildAtlas loop paints aliases again");
   assert.ok((src.match(/paintsOwnTile\(block\)/g) ?? []).length >= 5);
 });
+
+test("every drawn block's tiles fit inside the atlas (no unpainted overflow)", async () => {
+  const { ATLAS_COLS, ATLAS_ROWS, TILE } = await import("./blocks.ts");
+  assert.ok(ATLAS_COLS * TILE <= 8192 && ATLAS_ROWS * TILE <= 8192, "atlas over the 8192 px WebGL limit");
+  for (const b of BLOCKS) {
+    if (!b) continue;
+    for (const f of [0, 1, 2, 3] as const) {
+      const t = faceTile(b.id, f);
+      assert.ok(Math.floor(t / ATLAS_COLS) < ATLAS_ROWS, `${b.name} (${b.id}) face ${f}: tile ${t} outside the atlas`);
+    }
+  }
+});

@@ -390,6 +390,8 @@ declare global {
       getEnch?: (id: number) => Record<string, number> | null;
       setEnch?: (id: number, key: string, lvl: number) => boolean;
       getInv?: (id: number) => number;
+      getDropsQa?: () => { id: number; n: number; x: number; y: number; z: number }[];
+      getPhaseQa?: () => string;
       setOffhand?: (id: number) => boolean;
       api?: (name: string) => boolean;
       sayLogQa?: () => string[];
@@ -14687,7 +14689,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
               const left: number[] = [];
               for (let p = 0; p < 12; p++) if (!(rm & (1 << p))) left.push(p);
               left.sort((a, b) => depth(a) - depth(b) || Math.random() - 0.5);
-              chipPieces(hit.x, hit.y, hit.z, left.slice(0, pathId === "breaker" ? 3 : 2), () => [ // R4 Breaker: 3 chips a stage
+              // Harvest fix (2026-10-31): mining chips never take the LAST piece —
+              // emptying the block here turned it to Air before breakBlock()
+              // ran, so nothing ever dropped. breakBlock() removes the rest.
+              chipPieces(hit.x, hit.y, hit.z, left.slice(0, Math.min(pathId === "breaker" ? 3 : 2, left.length - 1)), () => [ // R4 Breaker: 3 chips a stage
                 hit.nx * 2.2 + (Math.random() - 0.5) * 1.4,
                 1.6 + hit.ny * 1.5 + Math.random() * 1.2,
                 hit.nz * 2.2 + (Math.random() - 0.5) * 1.4,
@@ -16764,6 +16769,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return true;
     },
     getInv: (id: number) => inv[id] ?? 0,
+    getDropsQa: () => drops.map((d) => ({ id: d.id, n: d.n, x: d.x, y: d.y, z: d.z })),
+    getPhaseQa: () => phase,
     setOffhand: (id: number) => {
       offhand = id;
       return true;

@@ -314,3 +314,10 @@ Non testé sur une vraie manette (pas d'accès au PC de Philippe).
 - Correctif : `paintsOwnTile()` (blocks.ts), un alias ne peint jamais. Les 5 boucles de textures.ts l'utilisent.
 - Test : src/game/atlasPaint.test.ts (une tuile = un seul peintre, son propriétaire ; herbe, bois, feuilles, pierre, sable).
 - Reste à voir : 1267 tuiles pour 832 places dans l'atlas (16×52), donc les tuiles au-delà de la rangée 52 ne sont jamais peintes.
+
+## 2026-10-31 20:55 (Vancouver) — Récolte cassée et débordement de l'atlas
+- Récolte : en minant, les éclats du dernier palier retiraient la 12e pièce STUDS. `chipPieces` mettait alors le bloc à Air AVANT `breakBlock()`, qui voyait de l'Air et ne lâchait rien : aucun drop, pour tous les blocs. Correctif : le minage laisse toujours la dernière pièce, et `breakBlock()` fait le reste. Vérifié en jeu sur le build standalone en headless : herbe minée, 1 terre dans l'inventaire (avant : 0, et aucune entité de drop).
+- Atlas : il fallait 1 268 tuiles pour 832 places (16×52). Il passe à 32×40 = 1 280 (4096×5120 px). Test : chaque face de chaque bloc tombe dans l'atlas, ≤ 8192 px.
+- Ids : snapshot figé (blockIds.snapshot.json et blockIds.test.ts). Contrôle : aucun id n'a bougé depuis 0c47518, ni avant la migration Uint16. Ce n'est pas un décalage d'ids.
+- Sol noir : pas reproduit en headless (SwiftShader) sur main après la PR #29. À revérifier sur l'exe reconstruit.
+- Hooks QA : getDropsQa et getPhaseQa.
