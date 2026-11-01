@@ -258,3 +258,10 @@ Plan (phases, une PR par phase, merge quand tsc + node --test + vite build sont 
 - Hooks QA : `vehFireQa`, `getVehArmsQa`. Tests : +3 (muzzles/pod, cockpit non masqué, câblage game.ts) → 325/325. tsc 0, vite build OK.
 - Captures (SwiftShader) : /workspace/studcraft-qa/shots/b21-veh-*.png.
 - B21 lot 2 : contrats de récolte nommant l'objet et titres propres aux guildes ; ancrage des modèles sur le vrai sol (surfaceBelow) au lieu de la hauteur du générateur ; les servos gardent leur angle au relâchement. Ouvert : le godet du Rig Digger n'atteint pas le sol.
+
+## t100u — Exe Windows StudCraft + Bonsai 1.7B Q1_0 embarqué (2026-10-31, Grok Bot)
+- Correctif : `desktop/` embarque aussi le llama-server CPU (`resources/llama-cpu`, release PrismML `win-cpu-x64`) en repli matériel ; le sidecar bascule une fois sur le CPU (`-ngl 0`, même modèle) si le binaire Vulkan ne devient jamais sain. `STUDCRAFT_CPU=1` force le CPU. `status()` expose `backend`.
+- Construit sur DESKTOP-DR74Q85 (Ryzen 5 5500U, Radeon intégrée, pilote 31.0.21921.1000) : `--list-devices` → `Vulkan0: AMD Radeon(TM) Graphics`.
+- Smoke (prompt + grammaire réels du jeu) : Vulkan 3/3 quêtes valides, tg ≈ 20–21 t/s ; CPU 3/3, tg ≈ 20–24 t/s ; redémarrage après kill OK.
+- llama-bench : Vulkan pp128 131 t/s / tg64 22.8 t/s ; CPU (6 threads) pp128 45 t/s / tg64 25.8 t/s.
+- `electron-builder --win dir` → `win-unpacked` 740 Mo, modèle sha256 vérifié dans `resources/models`. L'exe démarre, lance llama-server Vulkan (`-ngl 99`), écran titre affiché.
