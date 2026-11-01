@@ -281,3 +281,17 @@ Plan (phases, une PR par phase, merge quand tsc + node --test + vite build sont 
 - Hooks QA : `sayLogQa`, `claimQuestQa`.
 - Migration des sauvegardes 8 bits → Uint16 : couverte par chunk16.test.ts, code relu, OK.
 - Non testé dans ce lot : prison/réputation/argent, fonderie, enclume, agriculture, animaux, butin, shader SNR, z-fighting, armes de véhicule.
+
+## B21 lot 5 — QA étape 3 (société, fonderie, armes de véhicule, visuel, sauvegarde)
+
+Corrigé :
+- Réputation commerciale : les villages hors spawn utilisaient une clé arrondie à la position → la réputation était oubliée au pas suivant. Clé désormais par village (`villageAround`).
+- Frapper un villageois (mêlée ou véhicule) n'était jamais un crime : `reportCrime(..., "assault")` ajouté.
+- Projectiles : sous-pas balayés (arrêt au premier bloc / mob / joueur) → plus de tunnelling à bas FPS.
+- `groundY(x, z, fromY)` : mobs et véhicules ne traversent plus les planchers construits > 8 blocs au-dessus du terrain.
+- Armes fixes (Starter Buggy) : plage de tangage -0.5..0.25 (avant -0.1..0.25 ×0.3, impossible de toucher les mobs au sol) ; tourelles -0.5..0.9. Test ajouté.
+- Sauvegarde : un inventaire mal formé (objet au lieu de paires) rendait le monde impossible à ouvrir ; `normalizeSave` le convertit/filtre. Test ajouté.
+- Hooks QA : crimeQa, giveQa, standingQa, furnaceModeQa, vehArmQa, vehMobHpQa, mobsToGroundQa, snrAuditQa.
+
+Testé OK : prison (prime, amende, prison 24 h + confiscation), argent, fonderie normale, butin de 10 mobs, laser/roquette (dégâts + explosion), shader SNR (mode réaliste : tout est siren sauf ciel/particules/FX), migration Uint16 d'une vieille sauvegarde v1 (blocs id ≤ 255, inventaire, position).
+Reste : mode plastique sans sortie visible pendant le test (ratio accumulé ; pellets non acceptés, voulu) ; canon/canon doré parfois 0 dégât au tir en roulant (recul) ; enclume et agriculture vérifiées par revue de code et tests unitaires seulement.

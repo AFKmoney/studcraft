@@ -95,7 +95,11 @@ export function coolWeapon(st: WeaponState, dt: number) {
  *  Returns a world direction (unit). Game convention: forward = (−sin, 0, −cos). */
 export function aimDir(vehYaw: number, hasTurret: boolean, aimYaw: number, aimPitch: number): { x: number; y: number; z: number; yaw: number; pitch: number } {
   const yaw = hasTurret ? aimYaw : vehYaw;
-  const pitch = hasTurret ? Math.max(-0.35, Math.min(0.9, aimPitch)) : Math.max(-0.1, Math.min(0.25, aimPitch * 0.3));
+  // B21 lot 5: a fixed mount sits ~4 blocks up on the Starter Buggy;
+  // clamped to -0.1 rad it could not reach anything on the ground closer
+  // than ~40 blocks (the laser's range is 28), so no mob was ever hit.
+  // The barrel now dips to -0.5 rad (ground ~8 blocks out) and climbs to 0.25.
+  const pitch = hasTurret ? Math.max(-0.5, Math.min(0.9, aimPitch)) : Math.max(-0.5, Math.min(0.25, aimPitch * 0.7));
   return { x: -Math.sin(yaw) * Math.cos(pitch), y: Math.sin(pitch), z: -Math.cos(yaw) * Math.cos(pitch), yaw, pitch };
 }
 

@@ -93,6 +93,10 @@ test("aim: locked forward without a turret, mouse yaw with one", () => {
   const t = aimDir(0.5, true, 2.0, 0.6);
   assert.ok(Math.abs(t.yaw - 2.0) < 1e-9 && Math.abs(t.pitch - 0.6) < 1e-9);
   assert.ok(Math.abs(Math.hypot(t.x, t.y, t.z) - 1) < 1e-9);
+  // B21 lot 5: a fixed barrel can dip far enough to hit the ground ~8
+  // blocks ahead from a 4-block-high mount (the laser's range is 28).
+  const down = aimDir(0.5, false, 0.5, -1.2);
+  assert.ok(down.pitch <= -0.45 && 4 / Math.tan(-down.pitch) < 28);
 });
 
 function placeModel(name: string) {
