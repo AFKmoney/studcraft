@@ -214,6 +214,11 @@ function pushStudVert(
   s.tan.push(tx, ty, tz, 1);
 }
 
+// Stud LOD (2026-11-01, Claude — profile: stud meshing ≈ 9 % of main-thread
+// frame time, 136 triangles per studded top): 1 = full 12-segment round
+// studs (near ring), 2 = every other segment (6) for the outer stud ring,
+// 32–48 blocks out, where the facets are sub-pixel. Set per buildChunk call.
+let studStep = 1;
 function addStud(s: Surface, x: number, y: number, z: number, tile: number, jit = 1, sink = 0, flat = 1, mask = 15) {
   const y0 = y + 1.001 - sink;
   const y1 = y0 + STUD_H * flat;
@@ -229,8 +234,8 @@ function addStud(s: Surface, x: number, y: number, z: number, tile: number, jit 
     const cz = z + off[1];
     const t0x = cx + STUD_COS[0] * STUD_TOP_R;
     const t0z = cz + STUD_SIN[0] * STUD_TOP_R;
-    for (let i = 0; i < STUD_N; i++) {
-      const j = (i + 1) % STUD_N;
+    for (let i = 0; i < STUD_N; i += studStep) {
+      const j = (i + studStep) % STUD_N;
       const ci = STUD_COS[i];
       const si = STUD_SIN[i];
       const cj = STUD_COS[j];
@@ -259,7 +264,7 @@ function addStud(s: Surface, x: number, y: number, z: number, tile: number, jit 
       pushStudVert(s, bjx, y0, bjz, cj, 0, sj, cu, cv, tx, 0, tz, baseShade);
 
       // Top cap N-gon triangle fan (STUD_N - 2 triangles instead of STUD_N center-fan triangles)
-      if (i >= 1 && i < STUD_N - 1) {
+      if (i >= studStep && i < STUD_N - studStep) {
         pushStudVert(s, t0x, y1, t0z, 0, 1, 0, cu, cv, 1, 0, 0, topShade);
         pushStudVert(s, tjx, y1, tjz, 0, 1, 0, cu, cv, 1, 0, 0, topShade);
         pushStudVert(s, tix, y1, tiz, 0, 1, 0, cu, cv, 1, 0, 0, topShade);
@@ -278,7 +283,8 @@ function appendAll(dst: number[], src: number[]) {
   for (let i = 0; i < src.length; i += 4096) dst.push(...src.slice(i, i + 4096));
 }
 
-export function buildChunk(world: World, cx: number, cz: number, fancy: boolean, detail = true) {
+export function buildChunk(world: World, cx: number, cz: number, fancy: boolean, detail = true, studLod = 1) {
+  studStep = studLod === 2 ? 2 : 1;
   const opaque = empty();
   const glass = empty();
   const water = empty();

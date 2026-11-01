@@ -449,7 +449,7 @@ declare global {
       socMobsQa?: () => { soc: string; name: string; role: string; x: number; y: number; z: number }[];
       openFurnaceQa?: () => boolean;
       getGpuQa?: () => string;
-      getGenStats?: () => { workers: number; adopted: number; wasted: number; ms: number; meshN: number; meshMs: number };
+      getGenStats?: () => { workers: number; adopted: number; wasted: number; ms: number; meshN: number; meshMs: number; tris: number };
       /** QA: stop/restart the frame loop so a capture sees a still frame. */
       hold?: (on: boolean) => void;
       getRes?: () => string;
@@ -1498,7 +1498,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // v4.12: studs (tier 0) are only readable within ~3 chunks — a 5-chunk
     // stud field was ~81 chunks × 47k triangles and 141 ms of meshing per
     // chunk. Tier 0 now covers d2<=9 (~29 chunks), tier 1 d2<=36.
-    return d2 <= 9 ? 0 : d2 <= 36 ? 1 : 2;
+    // 2026-11-01: tier 0 splits — 0 = 12-segment studs in the 3×3 nearest
+    // chunks, 0.5 = 6-segment studs for the rest of the stud ring.
+    return d2 <= 2 ? 0 : d2 <= 9 ? 0.5 : d2 <= 36 ? 1 : 2;
   }
 
   const starGeo = new THREE.BufferGeometry();
@@ -4278,7 +4280,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         else if (mesh.renderOrder === 3) mesh.material = plantMat;
         else if (mesh.renderOrder === 4) mesh.material = moltenMat;
         else mesh.material = opaqueMat;
-        mesh.castShadow = settings.realistic && tier === 0 && (mesh.renderOrder === 0 || mesh.renderOrder === 4);
+        mesh.castShadow = settings.realistic && tier < 1 && (mesh.renderOrder === 0 || mesh.renderOrder === 4);
         mesh.receiveShadow = settings.realistic;
       }
     }
@@ -5225,7 +5227,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     if (surf.col.length === surf.pos.length) geo.setAttribute("color", new THREE.Float32BufferAttribute(surf.col, 3));
     if (surf.tan.length * 3 === surf.pos.length * 4) geo.setAttribute("tangent", new THREE.Float32BufferAttribute(surf.tan, 4));
     const mesh = new THREE.Mesh(geo, material);
-    mesh.castShadow = settings.realistic && tier === 0 && (order === 0 || order === 4);
+    mesh.castShadow = settings.realistic && tier < 1 && (order === 0 || order === 4);
     mesh.receiveShadow = settings.realistic;
     mesh.renderOrder = order;
     return mesh;
@@ -5284,7 +5286,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   function rebuild(cx: number, cz: number, key: string, tier: number) {
     seedChunkDebris(cx, cz);
     dropChunk(key);
-    const built = buildChunk(world, cx, cz, tier === 0 ? settings.studs : false, tier < 2);
+    const built = buildChunk(world, cx, cz, tier < 1 ? settings.studs : false, tier < 2, tier === 0 ? 1 : 2);
     FS.emitters.set(key, built.emitters); // v4.15: campfires / exposed lava for the fire tick
     chunkTier.set(key, tier);
     const list: THREE.Mesh[] = [];
@@ -16835,7 +16837,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return true;
     },
     getGpuQa: () => hud.gpu,
-    getGenStats: () => ({ workers: genPool?.size ?? 0, ...(genPool?.stats ?? { adopted: 0, wasted: 0, ms: 0 }), meshN: meshStats.n, meshMs: meshStats.ms }),
+    getGenStats: () => ({ workers: genPool?.size ?? 0, ...(genPool?.stats ?? { adopted: 0, wasted: 0, ms: 0 }), meshN: meshStats.n, meshMs: meshStats.ms, tris: [...meshes.values()].reduce((a, l) => a + l.reduce((b, m) => b + (m.geometry.getAttribute("position")?.count ?? 0) / 3, 0), 0) }),
     hold: (on: boolean) => renderer.setAnimationLoop(on ? null : frame),
     getRes: () => hud.renderRes,
     getMobFx: () =>
