@@ -1706,7 +1706,7 @@ export function def(id: number): BlockDef {
 }
 
 export const ATLAS_COLS = 32; // 16 → 32 (2026-10-31): 1 268 tiles had overflowed the 16×52 = 832 slots
-export const ATLAS_ROWS = 40; // 32×40 = 1 280 tiles, 4096×5120 px (under the 8192 WebGL limit); atlasPaint.test.ts fails when full
+export const ATLAS_ROWS = 48; // 32×48 = 1 536 tiles, 4096×6144 px (under the 8192 WebGL limit); atlasPaint.test.ts demands ≥ 200 free tiles of headroom
 export const TILE = 128;
 
 // Atlas slots: world bricks first (id order, so every existing slot keeps

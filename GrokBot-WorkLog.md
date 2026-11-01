@@ -321,3 +321,9 @@ Non testé sur une vraie manette (pas d'accès au PC de Philippe).
 - Ids : snapshot figé (blockIds.snapshot.json et blockIds.test.ts). Contrôle : aucun id n'a bougé depuis 0c47518, ni avant la migration Uint16. Ce n'est pas un décalage d'ids.
 - Sol noir : pas reproduit en headless (SwiftShader) sur main après la PR #29. À revérifier sur l'exe reconstruit.
 - Hooks QA : getDropsQa et getPhaseQa.
+
+## 2026-10-31 — Audit étape 3, lot 1 (grokbot/audit-lot1)
+- Audit en jeu sur le build standalone (Chromium headless, SwiftShader) : 492/492 recettes craftables (les 25 « échecs » armure/accessoires étaient un faux négatif du hook : la pièce s'équipe au lieu d'aller dans l'inventaire), fonderie normale OK (minerai de fer → lingot, sable → verre), mode plastique OK (Cobble → Pellets) une fois le four ciblé, 40/40 mobs apparaissent et lâchent leurs drops, boss Wither apparaît/meurt avec drops, 38 quêtes OK, village : 18 PNJ / 9 métiers, sauvegarde + rechargement OK, aucune erreur de page. Les arbres sont verts au menu et en jeu.
+- Bug corrigé : id de recette « shelf » en double (Étagère + Étagère murale) → l'étagère murale était introuvable ; renommée « wall-shelf ». Test : recipeIntegrity.test.ts (ids uniques, références valides, SMELT valide).
+- Atlas : ATLAS_ROWS 40 → 48 (1 536 tuiles, 4096×6144 px) ; test de marge ≥ 200 tuiles libres.
+- Hook QA furnaceModeQa(plastic, x, y, z) : le mode est par four, on peut maintenant cibler un four sans focus.

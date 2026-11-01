@@ -44,3 +44,11 @@ test("every drawn block's tiles fit inside the atlas (no unpainted overflow)", a
     }
   }
 });
+
+test("atlas keeps ≥ 200 free tiles of headroom for new blocks", async () => {
+  const { ATLAS_COLS, ATLAS_ROWS } = await import("./blocks.ts");
+  let used = 0;
+  for (const b of BLOCKS) if (b) for (const f of [0, 1, 2, 3] as const) used = Math.max(used, faceTile(b.id, f) + 1);
+  const free = ATLAS_COLS * ATLAS_ROWS - used;
+  assert.ok(free >= 200, `only ${free} free atlas tiles left: raise ATLAS_ROWS (keep ≤ 8192 px)`);
+});
