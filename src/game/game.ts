@@ -6787,8 +6787,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // placed). Ground the anchor instead: the model's LOWEST part
     // rests on the surface at the look point, then lift block by
     // block (≤3) and keep the height where the most parts fit.
-    const bx = Math.floor(camera.position.x + dir.x * 3.5);
-    const bz = Math.floor(camera.position.z + dir.z * 3.5);
+    // 2026-11-01 (Claude, rig): a fixed 3.5-block offset put any vehicle
+    // longer than ~3 blocks INSIDE the player — techHitsPlayer refused
+    // those parts and they became holograms (Twin Motor Racer: 6 placed,
+    // 7 holograms on open ground). Deliver at the model's own reach.
+    const reach = Math.max(3.5, 1.5 + Math.max(...model.parts.map((p) => Math.hypot(p.dq[0], p.dq[2]) / 4 + 1)));
+    const flat = Math.hypot(dir.x, dir.z) || 1;
+    const bx = Math.floor(camera.position.x + (dir.x / flat) * reach);
+    const bz = Math.floor(camera.position.z + (dir.z / flat) * reach);
     const minDqY = Math.min(...model.parts.map((p) => p.dq[1]));
     // B21: world.heightAt is the GENERATOR's height — it ignores edits,
     // dug pits, player-built pads and village plazas, so a model loaded
