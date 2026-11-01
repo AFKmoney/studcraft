@@ -6294,7 +6294,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   function tickGravity(dt: number) {
     gravClock += dt;
     let scans = 0;
-    for (const [k, s] of [...gravPending.entries()]) {
+    // Newest edits first (2026-11-01): after a big edit (a TNT crater, a
+    // cleared pad) hundreds of scans queue up at 2 per frame; oldest-first
+    // made the player's latest cut wait behind all of them, so a cut
+    // tower stood for seconds. The freshest scan is the one being watched.
+    for (const [k, s] of [...gravPending.entries()].reverse()) {
       if (scans >= 2) break; // perf law: at most 2 analyses per frame
       if (gravClock - s.at < 0.3) continue;
       gravPending.delete(k);
