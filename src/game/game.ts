@@ -3507,23 +3507,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const xAxis = new THREE.Vector3().crossVectors(fpsBore, zMouth).normalize();
     fpsClaw.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xAxis, fpsBore, zMouth));
   }
-  // Studsman fist (2026-11-01, legal §23: never the C-clamp hand). In this
-  // frame y runs along the bore (the held tool passes through the grip) and
-  // z points out of the mouth: a closed block fist wrapped around the bore,
-  // knuckle ridge on top, thumb across the front.
-  {
-    const fist = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.12, 0.15), fpsSkinMat);
-    fist.position.set(0, 0, 0.01);
-    fpsClaw.add(fist);
-    for (let k = 0; k < 4; k++) {
-      const kn = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.11, 0.03), fpsSkinMat);
-      kn.position.set(-0.054 + k * 0.036, 0, 0.085);
-      fpsClaw.add(kn);
-    }
-    const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.11), fpsSkinMat);
-    thumb.position.set(0.085, 0.035, 0.01);
-    fpsClaw.add(thumb);
-  }
+  // 2026-11-01 (Philippe): the C hand is back, by his call.
+  const clawOuter = new THREE.Mesh(geoClaw(0.074, 0.084), fpsSkinMat);
+  fpsClaw.add(clawOuter);
   fpsArmGroup.add(fpsClaw);
   fpsArmGroup.traverse((o) => {
     const m = o as THREE.Mesh;
@@ -20024,14 +20010,12 @@ function makeFig(shirt: number, pants: number, hairCol: number, face: FigFace, h
     put(pivot, geoCyl(0.048, 0.16, 10, 0.052), sleeveM, side * 0.042, -0.25, -0.015, 0.18);
     // Wrist pin
     put(pivot, geoCyl(0.034, 0.055, 8), headM, side * 0.042, -0.34, -0.035, 0.22, true);
-    // Studsman fist (2026-11-01, legal §23: never the C-clamp hand) —
-    // a closed block fist with a thumb, gripping forward.
+    // Open 270° C hand oriented to grip forward (2026-11-01, Philippe: back as before)
     const clawGrp = new THREE.Group();
     clawGrp.position.set(side * 0.042, -0.39, -0.055);
-    clawGrp.rotation.x = 0.22;
-    put(clawGrp, geoBox(0.1, 0.1, 0.11), headM, 0, 0, 0, 0, true);
-    put(clawGrp, geoBox(0.035, 0.05, 0.06), headM, -side * 0.06, 0.015, -0.02, 0, true); // thumb
-    put(clawGrp, geoBox(0.102, 0.012, 0.112), black, 0, 0.02, 0, 0, true); // finger seam
+    clawGrp.rotation.x = Math.PI / 2 + 0.22;
+    clawGrp.rotation.z = Math.PI / 2;
+    put(clawGrp, geoClaw(0.056, 0.066), headM, 0, 0, 0, 0, true);
     pivot.add(clawGrp);
     g.add(pivot);
     return pivot;
