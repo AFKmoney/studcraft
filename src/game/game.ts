@@ -386,6 +386,7 @@ declare global {
       setDig?: (mine: boolean, place: boolean) => void;
       setTimeQa?: (t: number) => number;
       gravQa?: (x: number, y: number, z: number, run?: boolean) => { pending: number; queue: number; chunks: number; fallers: number; clock: number; verdict: string };
+      explodeQa?: (x: number, y: number, z: number, r?: number) => void;
       getFallersQa?: () => { n: number; scanAcc: number; ys: number[]; chunks: { cells: number; y: number; age: number }[] };
       getBlock?: (x: number, y: number, z: number) => number;
       put?: (x: number, y: number, z: number, id: number) => boolean;
@@ -12344,7 +12345,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const v = Number.isFinite(gx) && Number.isFinite(gz) ? structureAt(world, gx, gz) : null;
       addRep(v ? repKeyFor(v.x + v.w / 2, v.z + v.d / 2) : repKeyFor(player.x, player.z), Math.ceil(r.rep / 2));
     }
-    gainXp(Math.round(10 * (1 + society.perk("xp")))); // guild perk
+    // RPG: a contract pays XP by the danger of the land it was given in.
+    let qZoneLvl = ZONE_LEVEL[world.zoneAt(player.x, player.z) || "plains"];
+    if (r.giverKey) {
+      const [gx, gz] = r.giverKey.split(",").map(Number);
+      const gs = Number.isFinite(gx) && Number.isFinite(gz) ? structureAt(world, gx, gz) : null;
+      if (gs) qZoneLvl = ZONE_LEVEL[gs.zone];
+    }
+    gainXp(Math.round(10 * mobScale(qZoneLvl).xp * (1 + society.perk("xp")))); // guild perk
     say(r.msg + (r.joined ? " — you joined the " + r.joined.name + "!" : r.rankUp ? " — new rank in the " + r.rankUp.name + "!" : ""));
     stat("quests");
     saveDirty = true;
@@ -13385,7 +13393,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // that is no longer connected (face to face) to the box's walls/floor —
   // i.e. to the rest of the world — falls as STUDS rubble. A flood fill over
   // at most (2R+1)^3 cells, once per explosion.
-  function collapseAround(cx: number, cy: number, cz: number, R: number, debrisBudget: { n: number }) {
+  function collapseAround(cx: number, cy: number, cz: number, R: number, debrisBudget: { n: number }, maxMass = Infinity) {
     const S = 2 * R + 1;
     const seen = new Uint8Array(S * S * S);
     const idx = (x: number, y: number, z: number) => (x - cx + R) + S * ((z - cz + R) + S * (y - cy + R));
@@ -13414,6 +13422,41 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
     }
     let fell = 0;
+    // maxMass: only crush floating islands of at most this many cells (the
+    // rest is left to the gravity scans: rigid chunks / fallers).
+    if (maxMass !== Infinity) {
+      for (let y = cy - R + 1; y < cy + R; y++) for (let z = cz - R + 1; z < cz + R; z++) for (let x = cx - R + 1; x < cx + R; x++) {
+        const i0 = idx(x, y, z);
+        if (seen[i0] || !solidAt(x, y, z)) continue;
+        // measure this island (flood within the box), mark it seen
+        const isl: number[] = [x, y, z];
+        seen[i0] = 1;
+        for (let q = 0; q < isl.length && isl.length / 3 <= maxMass + 1; q += 3) {
+          for (const [ox, oy, oz] of NEIGHBORS6) {
+            const nx = isl[q] + ox, ny = isl[q + 1] + oy, nz = isl[q + 2] + oz;
+            if (nx <= cx - R || nx >= cx + R || ny <= cy - R || ny >= cy + R || nz <= cz - R || nz >= cz + R) continue;
+            const i = idx(nx, ny, nz);
+            if (seen[i] || !solidAt(nx, ny, nz)) continue;
+            seen[i] = 1;
+            isl.push(nx, ny, nz);
+          }
+        }
+        if (isl.length / 3 > maxMass) continue; // big enough to fall as a body
+        for (let q = 0; q < isl.length; q += 3) {
+          const bx = isl[q], by = isl[q + 1], bz = isl[q + 2];
+          const id = world.get(bx, by, bz);
+          if (id === ID.Bedrock) continue;
+          fell++;
+          if (!creative && def(id).drop !== -1 && Math.random() < 0.6) dropItem(def(id).drop || id, 1, bx + 0.5, by + 0.4, bz + 0.5);
+          CH.setRemoved(bx, by, bz, id, 0);
+          world.set(bx, by, bz, ID.Air);
+          netSendEdit(bx, by, bz, ID.Air);
+          markDirtyAt(bx, bz);
+        }
+      }
+      if (fell) saveDirty = true;
+      return fell;
+    }
     for (let y = cy - R + 1; y < cy + R; y++) for (let z = cz - R + 1; z < cz + R; z++) for (let x = cx - R + 1; x < cx + R; x++) {
       if (seen[idx(x, y, z)] || !solidAt(x, y, z)) continue;
       const id = world.get(x, y, z);
@@ -13473,8 +13516,24 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         }
       }
     }
-    collapseAround(x, y, z, r + 5, budget);
-    scheduleGravity(x, y, z); // §12: what the blast disconnected falls as blocks, not rubble
+    // Teardown (2026-11-01, Philippe): what the blast cut loose is NOT
+    // vaporised — every solid block on the crater rim gets a gravity scan,
+    // so a severed tower, a hanging roof or an undercut ledge breaks free
+    // as ONE rigid chunk (tips, tumbles, shatters where it lands) or, if
+    // it is too big for a chunk, falls block by block. Only a sliver of
+    // loose rubble (≤ 2 cells) floating in the blast is crushed outright.
+    scheduleGravity(x, y, z);
+    const rimR = r + 1;
+    // the upper half of the rim (what hangs or stands on the crater), one
+    // cell in two — the scans share a mass, so that is plenty
+    for (let dy = -1; dy <= rimR; dy++) for (let dz = -rimR; dz <= rimR; dz++) for (let dx = -rimR; dx <= rimR; dx++) {
+      if ((dx + dy + dz) & 1) continue;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 < (rimR - 1) * (rimR - 1) || d2 > rimR * rimR + 1) continue;
+      const bx = x + dx, by = y + dy, bz = z + dz;
+      if (def(world.get(bx, by, bz)).solid) scheduleGravity(bx, by, bz);
+    }
+    collapseAround(x, y, z, r + 2, budget, 2);
     const c0x = Math.floor((x - r) / CS);
     const c1x = Math.floor((x + r) / CS);
     const c0z = Math.floor((z - r) / CS);
@@ -15806,7 +15865,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     let hemiSky = lerpHex(hemiNight, hemiDay, dayF);
     if (goldenF > 0.01) hemiSky = lerpHex(hemiSky, hemiSunset, goldenF * 0.28);
     hemi.color.setHex(hemiSky);
-    hemi.groundColor.setHex(lerpHex(0x08101a, 0x6b8450, dayF));
+    hemi.groundColor.setHex(lerpHex(0x18222f, 0x6b8450, dayF)); // night ground bounce lifted (2026-11-01)
 
     const middaySun = 0xfff8ee;
     const goldenSun = isSunrise ? 0xffb068 : 0xff7c38;
@@ -15822,11 +15881,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     srnLightU.uSkyCol.value.copy(hemi.color);
     srnLightU.uDayF.value = dayF;
     if (settings.realistic) {
-      hemi.intensity = 0.16 + dayF * 0.44;
-      ambient.intensity = 0.08 + dayF * 0.16;
-      sun.intensity = 0.22 + dayF * (0.42 + 0.68 * Math.min(1, Math.max(0, sunH * 1.6))) * 1.68;
-      scene.environmentIntensity = 0.10 + dayF * 0.38;
-      renderer.toneMappingExposure = 0.94 + dayF * 0.10;
+      // Visual polish (2026-11-01): moonlit nights you can play in — the
+      // night floor rises (blue moonlight, a brighter sky fill) while every
+      // daytime value stays exactly where it was.
+      hemi.intensity = 0.25 + dayF * 0.35;
+      ambient.intensity = 0.13 + dayF * 0.11;
+      sun.intensity = 0.34 + dayF * (0.42 + 0.68 * Math.min(1, Math.max(0, sunH * 1.6))) * 1.68 - dayF * 0.12;
+      scene.environmentIntensity = 0.16 + dayF * 0.32;
+      renderer.toneMappingExposure = 1.02 + dayF * 0.02;
       const texel = 60 / (narrow ? 1024 : 2048);
       const px = Math.round(player.x / texel) * texel;
       const py = Math.round((player.y + 1) / texel) * texel;
@@ -15839,9 +15901,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         ? THREE.MathUtils.clamp((sunH + 0.02) / 0.12, 0.25, 1)
         : THREE.MathUtils.clamp((-sunH - 0.02) / 0.18, 0.22, 0.62);
     } else {
-      hemi.intensity = 0.22 + dayF * 0.42;
-      ambient.intensity = 0.16 + dayF * 0.16;
-      sun.intensity = 0.18 + dayF * 0.82;
+      hemi.intensity = 0.3 + dayF * 0.34;
+      ambient.intensity = 0.2 + dayF * 0.12;
+      sun.intensity = 0.26 + dayF * 0.74;
       sun.position.set(lightX * 60, lightY * 50 + 8, 24);
       sun.castShadow = false;
     }
@@ -17321,6 +17383,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     },
     getBlock: (x: number, y: number, z: number) => world.get(Math.floor(x), Math.floor(y), Math.floor(z)),
     setTimeQa: (t: number) => { worldTime = ((t % 1) + 1) % 1; return worldTime; },
+    /** QA: a blast at x,y,z (radius r) — the Teardown path. */
+    explodeQa: (x: number, y: number, z: number, r = 3) => explode(x, y, z, r),
     gravQa: (x: number, y: number, z: number, run = false) => {
       if (run) runGravityScan(Math.floor(x), Math.floor(y), Math.floor(z));
       return { pending: gravPending.size, queue: gravQueue.length, chunks: chunks.length, fallers: fallers.length, clock: +gravClock.toFixed(2), verdict: analyzeComponent((a, b, c) => world.get(a, b, c), Math.floor(x), Math.floor(y), Math.floor(z), { ...gravOpts, maxCells: 2500 }).kind };

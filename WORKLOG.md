@@ -5147,3 +5147,6 @@ Fixed to match the guide:
   - Heart of the Great Press: +2 hearts.
   - Triple core: +2 to every blow.
 - Tests 375/375, tsc clean. Visual checks of the halls and showroom in the rig are in progress.
+- **Teardown blasts**: an explosion no longer vaporises what it cuts loose. Every solid cell on the upper rim of the crater gets a gravity scan, so a severed tower, a hanging roof or an undercut ledge breaks free as one rigid chunk (tips, tumbles, shatters on landing) or falls block by block when too big. Only floating slivers of 2 cells or fewer are crushed in place (`collapseAround(..., maxMass)`). QA hook: `explodeQa`.
+- **Moonlit nights**: the night light floor is raised (sky fill, ambient, blue moonlight, ground bounce, exposure); every daytime value is unchanged.
+- **Quest XP scales with the zone's danger level** (contracts given in the volcano pay more than those in the plains).
