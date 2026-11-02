@@ -5084,3 +5084,12 @@ Rig local : build standalone hors-ligne (esbuild + Tailwind CLI, three r186 + ex
 - **Still to do (legal pass, player-visible strings):** realm/biome label "Nether" (also an internal biome key: rename display only), boss label and effect name "Wither", "nether star" in the beacon recipe text, the "enderman" display name in mobNames.ts, and the `LEGO_ORANGE` constant name in weaponModels.ts (internal, but rename it anyway). Controller names (Xbox/PlayStation/Switch Pro) stay: they're compatibility statements.
 - 10-minute English promo (HyperFrames format, Kokoro voice) is being built from real in-game captures; the script avoids every third-party brand.
 - **C hand restored (Philippe, 2026-11-01 18:13):** "met la main du bonhomme comme avant": the open C hand is back in first person and third person (geoClaw), replacing the block fist from the §23 redesign. Head, torso, neck and hips stay as they were redesigned. Note for the legal file: §23 listed the C-clamp hand as part of the protected figurine shape; it's back on Philippe's decision. Tests 373/373, tsc clean, checked in the browser rig (first-person hand + third-person view).
+
+## 2026-11-01 evening — Realistic fire, pass 1 (Claude, for Philippe)
+Philippe: "le feu est mal fait, faudrait que le feu fasse comme du vrai feu qui couvre toutes les surfaces".
+- **fireSkin** (new): a glowing burn layer on EVERY exposed face of a burning block (sides, top, underside) and on the fuel faces a fire cell licks. The pattern is computed in world space, so a whole burning wall reads as one continuous running sheet of fire, with ember cracks.
+- **Tongues** reworked: camera-turned, domain-warped turbulent wisps with a blackbody ramp, toned down so additive stacking stays orange instead of white. Big flames only roll out of the TOP of a blaze (top row and roof); below that, the skin carries the fire, so there are no stacked rows of triangles.
+- **Embers** (new): sparks spiral up and wink out.
+- **Fire light**: the 3 nearest blaze clusters take lamps from the pool (orange, range 18) and flicker every frame.
+- **Spread**: a burning block now ignites its flammable neighbours (up ×1.6, down ×0.45), and blocks burn 5–10 s / flam instead of 2.5–6, so a structure gets wrapped in fire before it falls in.
+- Tests 373/373, tsc clean. Visual tuning still in progress in the browser rig (burning plank hut, day + dusk). *(pending Philippe's verdict on the A54)*

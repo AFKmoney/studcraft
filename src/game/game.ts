@@ -8976,7 +8976,9 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   function startBurning(x: number, y: number, z: number) {
     const f = flamOf(world.get(x, y, z));
     if (!f || FS.burningMap.has(FS.fkey(x, y, z))) return false;
-    FS.burningMap.set(FS.fkey(x, y, z), (2.5 + Math.random() * 3.5) / f);
+    // v4.19: a block burns long enough for the fire to run over the whole
+    // structure before it falls in (Philippe: real fire covers everything)
+    FS.burningMap.set(FS.fkey(x, y, z), (5 + Math.random() * 5) / f);
     fireFxDirty = true;
     saveDirty = true;
     return true;
@@ -9114,6 +9116,19 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const t = t0 - step;
       if (t > 0) {
         FS.burningMap.set(k, t);
+        // v4.19: fire RUNS over flammable surfaces — a burning block sets
+        // its flammable neighbours alight, fastest upward and sideways, so a
+        // wall, a roof or a tree is soon wrapped in flame.
+        {
+          const [bx, by, bz] = FS.funkey(k);
+          const kf = step / 0.25;
+          for (const [ox, oy, oz] of NEIGHBORS6) {
+            const f = flamOf(world.get(bx + ox, by + oy, bz + oz));
+            if (!f) continue;
+            const bias = oy > 0 ? 1.6 : oy < 0 ? 0.45 : 1;
+            if (Math.random() < f * 0.07 * bias * kf) startBurning(bx + ox, by + oy, bz + oz);
+          }
+        }
         // v4.18: live fires throw the odd ember (near fires only — budget).
         if (Math.random() < 0.1) {
           const [ex, ey, ez] = FS.funkey(k);
@@ -11604,13 +11619,45 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   }
 
   // ================= v4.15: SRN fire FX (flames + smoke) =================
-  // Every flame and every smoke puff in the world is ONE instanced shader
-  // mesh each: the animation (flicker, tongues, rise, dissipation) is pure
-  // sine-field math in the shaders (zero textures, zero per-frame CPU) —
-  // game.ts only rewrites the instance lists when the fire set changes.
-  const FIRE_MAX = 512;
+  // v4.19 realistic fire (Philippe, 2026-11-01: "que le feu couvre toutes
+  // les surfaces, comme du vrai feu"). Four instanced shader meshes, zero
+  // textures, zero per-frame CPU (game.ts only rewrites the instance lists
+  // when the fire set changes):
+  //  - fireSkin: a glowing burn layer laid ON every exposed face of a
+  //    burning block (sides, top and underside) and on the face a fire cell
+  //    licks: rolling flame sheets and ember cracks in world space, so a
+  //    whole burning wall reads as one continuous sheet of fire;
+  //  - flameFx: volumetric tongues (camera-turned, ragged, blackbody
+  //    coloured) rising from every burning face and the top of the blaze,
+  //    several per face at varied heights;
+  //  - emberFx: sparks that spiral up out of the fire and wink out;
+  //  - smokeFx: the smoke column (unchanged).
+  // Fire also lights the scene: burning blocks join the lamp pool and the
+  // lamps flicker (see fireLampFlicker).
+  const FIRE_MAX = 6144;
+  const SKIN_MAX = 4096;
+  const EMBER_MAX = 2048;
   const SMOKE_PER = 4;
-  const SMOKE_MAX = FIRE_MAX * SMOKE_PER;
+  const SMOKE_MAX = 512 * SMOKE_PER;
+  const FX_NOISE = `
+    float fhash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float vnoise(vec2 p){
+      vec2 i = floor(p), f = fract(p);
+      vec2 u = f * f * (3.0 - 2.0 * f);
+      return mix(mix(fhash(i), fhash(i + vec2(1.0, 0.0)), u.x), mix(fhash(i + vec2(0.0, 1.0)), fhash(i + vec2(1.0, 1.0)), u.x), u.y);
+    }
+    float fbm(vec2 p){
+      float v = 0.0, a = 0.5;
+      for (int i = 0; i < 5; i++) { v += a * vnoise(p); p = p * 2.03 + vec2(1.7, 9.2); a *= 0.5; }
+      return v;
+    }
+    // blackbody-ish ramp: deep red -> orange -> yellow -> white core
+    vec3 fireRamp(float f){
+      vec3 c = mix(vec3(0.55, 0.05, 0.0), vec3(1.0, 0.32, 0.02), smoothstep(0.0, 0.35, f));
+      c = mix(c, vec3(1.0, 0.68, 0.12), smoothstep(0.35, 0.65, f));
+      return mix(c, vec3(1.0, 0.95, 0.78), smoothstep(0.7, 1.0, f));
+    }`;
+  // Tongue: aDir.x = width multiplier (0 = 1), aScale = height.
   const fireFxVert = `
     attribute vec3 aPos; attribute float aPhase; attribute float aScale; attribute vec3 aDir;
     uniform float uTime; varying vec2 vUv; varying float vPhase;
@@ -11618,47 +11665,111 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       vUv = uv; vPhase = aPhase;
       float ly = position.y + 0.5;
       vec3 toCam = cameraPosition - aPos; toCam.y = 0.0;
-      // aDir != 0: a FACE SHEET lying flat on a burning façade (Minecraft
-      // side fire); aDir == 0: a free flame turning to the camera.
-      vec3 fwd = dot(aDir, aDir) > 0.0 ? aDir : normalize(toCam + vec3(0.001, 0.0, 0.0));
+      vec3 fwd = normalize(toCam + vec3(0.001, 0.0, 0.0));
       vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), fwd));
-      float sway = sin(uTime * 3.1 + aPhase * 23.0 + ly * 2.6) * 0.07 * ly;
-      vec3 wp = aPos + right * (position.x * aScale + sway) + vec3(0.0, ly * 1.05 * aScale, 0.0);
+      float w = (aDir.x > 0.0 ? aDir.x : 1.0) * aScale;
+      float sway = (sin(uTime * 2.3 + aPhase * 23.0 + ly * 2.1) + 0.5 * sin(uTime * 5.7 + aPhase * 11.0)) * 0.06 * ly * ly * aScale;
+      vec3 wp = aPos + right * (position.x * w + sway) + vec3(0.0, ly * 1.15 * aScale, 0.0);
       gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
     }`;
   const fireFxFrag = `
     precision highp float;
     varying vec2 vUv; varying float vPhase;
     uniform float uTime;
-    float sn(vec2 p){ return sin(p.x) * sin(p.y); }
-    float snoise(vec2 p){
-      float v = 0.0; float a = 0.55;
-      for(int i = 0; i < 4; i++){ v += a * sn(p); p = vec2(p.y * 1.7 + p.x * 0.6, p.x * 1.3 - p.y * 0.4) * 1.6; a *= 0.55; }
-      return v;
-    }
+    ${FX_NOISE}
     void main(){
       float t = uTime;
-      vec2 uv = vUv;
-      float rise = uv.y;
-      vec2 fp = vec2(uv.x * 6.8 + vPhase * 31.0, uv.y * 9.5 - t * 3.1 + vPhase * 17.0);
-      float n = snoise(fp) * 0.5 + 0.5;
-      float n2 = snoise(fp * 2.3 + vec2(3.7, 1.3) - vec2(0.0, t * 1.7)) * 0.5 + 0.5;
-      // Physics rework (Philippe: flames read as flat "cards"): ragged
-      // silhouette — noise eats the width, the edge is crisp not feathered,
-      // and erosion punches real gaps between tongues.
-      float w = mix(0.46, 0.05, pow(rise, 1.25)) * (0.85 + 0.3 * sin(t * 9.0 + vPhase * 41.0)) * (0.62 + 0.62 * n2);
-      float d = abs(uv.x - 0.5 + (n - 0.5) * 0.42 * rise);
-      float body = smoothstep(w, w - 0.15, d);
-      float lick = smoothstep(0.35, 0.9, n2 + (1.0 - rise) * 0.55);
-      float a = clamp(body * (0.35 + lick), 0.0, 1.0) * (0.9 + 0.18 * sin(t * 13.0 + vPhase * 57.0));
-      a *= smoothstep(0.10, 0.42, n + (1.0 - rise) * 0.38);
-      a *= 1.0 - smoothstep(0.72, 1.0, rise) * 0.9;
-      if (a < 0.012) discard;
-      float heat = clamp((1.0 - rise) * 0.75 + n * 0.38, 0.0, 1.0);
-      vec3 col = mix(vec3(0.85, 0.16, 0.02), vec3(1.0, 0.45, 0.05), smoothstep(0.05, 0.45, heat));
-      col = mix(col, vec3(1.0, 0.83, 0.25), smoothstep(0.45, 0.75, heat));
-      col = mix(col, vec3(1.0, 0.98, 0.88), smoothstep(0.62, 0.92, heat));
-      gl_FragColor = vec4(col * (1.45 + heat * 1.25), a * 0.92);
+      float y = vUv.y;
+      float x = vUv.x - 0.5;
+      // turbulent upward flow, domain-warped so tongues split and curl
+      vec2 p = vec2(vUv.x * 2.6 + vPhase * 17.0, y * 2.4 - t * 1.9 + vPhase * 5.0);
+      float warp = fbm(p * 1.3 + vec2(0.0, -t * 0.9));
+      float n = fbm(p + vec2(warp * 1.1, warp * 0.6));
+      // body: wide hot base, narrowing, bent by the turbulence
+      float n2 = fbm(vec2(vUv.x * 5.0 - vPhase * 9.0, y * 3.5 - t * 2.6));
+      float width = mix(0.5, 0.1, y) * (0.7 + 0.6 * n2);
+      float d = abs(x + (n - 0.5) * 0.9 * (y + 0.15));
+      float body = 1.0 - smoothstep(width * 0.1, width, d);
+      // heat falls with height and the turbulence eats it into wisps
+      float f = body * (1.1 - y) - (1.0 - n) * 0.75 * y - (1.0 - n2) * 0.25 - 0.05;
+      f = clamp(f * 1.7, 0.0, 1.0);
+      f *= 1.0 - smoothstep(0.85, 1.0, y);
+      f *= smoothstep(0.0, 0.06, y + 0.02);
+      float flick = 0.88 + 0.12 * sin(t * 15.0 + vPhase * 61.0);
+      float a = smoothstep(0.02, 0.32, f) * flick;
+      if (a < 0.01) discard;
+      // additive layers stack up: keep each one modest so a blaze stays
+      // orange with a yellow-white heart, never a white slab
+      vec3 col = fireRamp(f * 0.8) * (0.4 + f * 0.45);
+      gl_FragColor = vec4(col * a, a);
+    }`;
+  // Skin: aPos = face centre (already pushed off the face), aDir = face
+  // normal, aScale = side length.
+  const skinVert = `
+    attribute vec3 aPos; attribute float aPhase; attribute float aScale; attribute vec3 aDir;
+    uniform float uTime; varying vec2 vUv; varying float vPhase; varying vec2 vW; varying float vSide; varying float vDown;
+    void main(){
+      vec3 n = aDir;
+      vec3 up = abs(n.y) > 0.5 ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
+      vec3 r = normalize(cross(up, n));
+      vec3 u = cross(n, r);
+      vec3 wp = aPos + (r * position.x + u * position.y) * aScale;
+      vUv = uv; vPhase = aPhase;
+      vSide = 1.0 - abs(n.y);
+      vDown = n.y < -0.5 ? 1.0 : 0.0;
+      // world-space pattern coords: continuous across neighbouring faces
+      vW = vSide > 0.5 ? vec2(dot(wp, r), wp.y) : wp.xz;
+      gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
+    }`;
+  const skinFrag = `
+    precision highp float;
+    varying vec2 vUv; varying float vPhase; varying vec2 vW; varying float vSide; varying float vDown;
+    uniform float uTime;
+    ${FX_NOISE}
+    void main(){
+      float t = uTime;
+      vec2 p = vW * 2.2;
+      // on a wall the fire RUNS UP the face; on a top it boils in place
+      p.y -= t * 1.7 * vSide;
+      float warp = fbm(p * 0.9 + vec2(t * 0.25, -t * 0.4));
+      float n = fbm(p + warp * 1.2);
+      // licking flame sheet: hottest at the foot of the face
+      float foot = vSide * (1.0 - vUv.y);
+      float sheet = smoothstep(0.5, 0.92, n + foot * 0.34 + 0.06 * (1.0 - vSide));
+      // ember cracks: thin glowing veins in the charred surface
+      float e = fbm(vW * 5.0 + vPhase * 3.0 + vec2(0.0, t * 0.15));
+      float veins = smoothstep(0.035, 0.0, abs(e - 0.5)) * (0.55 + 0.45 * sin(t * 3.0 + e * 20.0));
+      float f = clamp(sheet * 0.95 + veins * 0.55, 0.0, 1.0);
+      f *= 1.0 - vDown * 0.5;
+      float a = smoothstep(0.03, 0.4, f) * (0.9 + 0.1 * sin(t * 13.0 + vPhase * 37.0));
+      if (a < 0.01) discard;
+      gl_FragColor = vec4(fireRamp(f * 0.75) * (0.35 + f * 0.35) * a, a);
+    }`;
+  const emberVert = `
+    attribute vec3 aPos; attribute float aPhase; attribute float aScale; attribute vec3 aDir;
+    uniform float uTime; varying vec2 vUv; varying float vLife; varying float vPhase;
+    void main(){
+      vUv = uv; vPhase = aPhase;
+      float lt = fract(uTime / (1.6 + aPhase * 1.4) + aPhase * 7.0);
+      vLife = lt;
+      float sw = aPhase * 50.0 + uTime * (1.5 + aPhase);
+      vec3 c = aPos + vec3(sin(sw) * 0.35 * lt + (aPhase - 0.5) * 0.8, lt * (2.2 + aPhase * 1.8) * aScale, cos(sw * 0.8) * 0.35 * lt + (fract(aPhase * 13.0) - 0.5) * 0.8);
+      vec3 right = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
+      vec3 up = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
+      float sz = 0.045 * (1.0 - lt * 0.6);
+      gl_Position = projectionMatrix * viewMatrix * vec4(c + (right * position.x + up * position.y) * sz, 1.0);
+    }`;
+  const emberFrag = `
+    precision highp float;
+    varying vec2 vUv; varying float vLife; varying float vPhase;
+    uniform float uTime;
+    void main(){
+      float d = length(vUv - 0.5) * 2.0;
+      float a = smoothstep(1.0, 0.0, d) * (1.0 - vLife) * smoothstep(0.0, 0.08, vLife);
+      a *= 0.6 + 0.4 * sin(uTime * 20.0 + vPhase * 90.0);
+      if (a < 0.02) discard;
+      vec3 col = mix(vec3(1.0, 0.85, 0.45), vec3(1.0, 0.3, 0.03), vLife);
+      gl_FragColor = vec4(col * a * 1.6, a);
     }`;
   const smokeVert = `
     attribute vec3 aPos; attribute float aPhase; attribute float aScale;
@@ -11694,7 +11805,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (a < 0.004) discard;
       gl_FragColor = vec4(mix(vec3(0.13, 0.13, 0.14), vec3(0.33, 0.33, 0.35), n), a);
     }`;
-  function makeFxMesh(max: number, vert: string, frag: string, additive: boolean) {
+  function makeFxMesh(max: number, vert: string, frag: string, additive: boolean, order?: number) {
     const plane = new THREE.PlaneGeometry(1, 1);
     const geo = new THREE.InstancedBufferGeometry();
     geo.index = plane.index;
@@ -11715,23 +11826,28 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       uniforms: { uTime: { value: 0 } },
       transparent: true,
       depthWrite: false,
-      blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+      // additive FX write premultiplied colour: ONE, ONE
+      blending: additive ? THREE.CustomBlending : THREE.NormalBlending,
+      blendSrc: THREE.OneFactor,
+      blendDst: THREE.OneFactor,
       side: THREE.DoubleSide,
     });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.frustumCulled = false;
-    mesh.renderOrder = additive ? 7 : 8;
+    mesh.renderOrder = order ?? (additive ? 7 : 8);
     scene.add(mesh);
     return { geo, mat, pos, phase, scale, dir, count: 0 };
   }
-  const flameFx = makeFxMesh(FIRE_MAX, fireFxVert, fireFxFrag, true);
-  const smokeFx = makeFxMesh(SMOKE_MAX, smokeVert, smokeFrag, false);
+  const skinFx = makeFxMesh(SKIN_MAX, skinVert, skinFrag, true, 6);
+  const flameFx = makeFxMesh(FIRE_MAX, fireFxVert, fireFxFrag, true, 7);
+  const emberFx = makeFxMesh(EMBER_MAX, emberVert, emberFrag, true, 7);
+  const smokeFx = makeFxMesh(SMOKE_MAX, smokeVert, smokeFrag, false, 8);
   function fxHash(k: string) {
     let h = 2166136261;
     for (let i = 0; i < k.length; i++) h = Math.imul(h ^ k.charCodeAt(i), 16777619);
     return ((h >>> 0) % 1000) / 1000;
   }
-  function fxPush(fx: typeof flameFx, x: number, y: number, z: number, phase: number, scale: number, dx = 0, dz = 0) {
+  function fxPush(fx: typeof flameFx, x: number, y: number, z: number, phase: number, scale: number, dx = 0, dz = 0, dy = 0) {
     if (fx.count >= fx.pos.length / 3) return;
     const i = fx.count++;
     fx.pos[i * 3] = x;
@@ -11740,7 +11856,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     fx.phase[i] = phase;
     fx.scale[i] = scale;
     fx.dir[i * 3] = dx;
-    fx.dir[i * 3 + 1] = 0;
+    fx.dir[i * 3 + 1] = dy;
     fx.dir[i * 3 + 2] = dz;
   }
   function fxCommit(fx: typeof flameFx) {
@@ -11755,37 +11871,83 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // v4.18: transient explosion emitters (fireball + smoke column + dust ring),
   // aged in updateFireFx and folded into the same instanced sync.
   const boomFx: { x: number; y: number; z: number; r: number; age: number }[] = [];
+  const FACES6 = [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0], [0, -1, 0]] as const;
+  /** Tongues rising from one face of a burning block (centre cx,cy,cz of
+   *  the block, face normal nx,ny,nz): a row of 3 along a side face, a
+   *  cluster of 4 over a top face. Heights vary so the blaze is ragged. */
+  function pushTongues(cx: number, cy: number, cz: number, nx: number, ny: number, nz: number, h: number, power: number) {
+    if (ny > 0) {
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + h * 6.28;
+        const r = 0.18 + 0.12 * fxHash(String(h + i));
+        fxPush(flameFx, cx + Math.cos(a) * r, cy + 0.5, cz + Math.sin(a) * r, (h + i * 0.29) % 1, power * (0.7 + 0.7 * fxHash(String(h * 3 + i))), 0.7);
+      }
+      fxPush(flameFx, cx, cy + 0.48, cz, (h + 0.77) % 1, power * 1.3, 0.85);
+      return;
+    }
+    if (ny < 0) return;
+    // along a side face: tangent t = (-nz, 0, nx)
+    for (let i = -1; i <= 1; i++) {
+      const s = i * 0.32 + (fxHash(String(h + i)) - 0.5) * 0.12;
+      fxPush(flameFx, cx + nx * 0.62 - nz * s, cy - 0.5, cz + nz * 0.62 + nx * s, (h + (i + 1) * 0.31) % 1, power * (0.9 + 0.6 * fxHash(String(h * 7 + i))), 0.6);
+    }
+  }
   function syncFireFx() {
-    // v4.16.1 Minecraft-style flames (Claude): every flame is ANCHORED to
-    // a surface — nothing floats. A fire cell on solid ground burns tall
-    // from the ground; a fire cell beside fuel lays a flat sheet on each
-    // flammable face it touches; a burning block wears sheets on its own
-    // exposed faces (the façade burns) and a crown on an open top.
+    // Every flame is ANCHORED to a surface — nothing floats. A burning
+    // block wears the burn skin on EVERY exposed face and tongues on its
+    // sides and top; a fire cell burns the ground it sits on and licks the
+    // fuel faces around it.
     const SIDE4 = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
     const fuelAt = (x: number, y: number, z: number) => flamOf(world.get(x, y, z)) > 0;
     const openAt = (x: number, y: number, z: number) => {
       const id = world.get(x, y, z);
       return id === ID.Air || id === ID.Fire || def(id).plant;
     };
-    for (const k of FS.fireCells) {
-      const [x, y, z] = FS.funkey(k);
-      const h = fxHash(k);
-      if (def(world.get(x, y - 1, z)).solid) fxPush(flameFx, x + 0.5, y + 0.02, z + 0.5, h, 1);
-      for (const [ox, oz] of SIDE4) {
-        // a flammable block on this side: the sheet lies on ITS face,
-        // turned outward into this fire cell
-        if (fuelAt(x + ox, y, z + oz)) fxPush(flameFx, x + 0.5 + ox * 0.46, y - 0.02, z + 0.5 + oz * 0.46, h + 0.13 * (ox + 2 * oz), 0.95, -ox, -oz);
-      }
-    }
+    const skinned = new Set<string>();
+    const skinFace = (bx: number, by: number, bz: number, nx: number, ny: number, nz: number, h: number) => {
+      const key = bx + "," + by + "," + bz + "," + nx + "," + ny + "," + nz;
+      if (skinned.has(key)) return false;
+      skinned.add(key);
+      fxPush(skinFx, bx + 0.5 + nx * 0.515, by + 0.5 + ny * 0.515, bz + 0.5 + nz * 0.515, h, 1.0, nx, nz, ny);
+      return true;
+    };
     for (const k of FS.burningMap.keys()) {
       const [x, y, z] = FS.funkey(k);
-      const h = fxHash(k) + 0.37;
-      for (const [ox, oz] of SIDE4) {
-        if (!openAt(x + ox, y, z + oz)) continue;
-        if (FS.fireCells.has(FS.fkey(x + ox, y, z + oz))) continue; // that fire cell already dresses this face
-        fxPush(flameFx, x + 0.5 + ox * 0.54, y - 0.02, z + 0.5 + oz * 0.54, h + 0.21 * (ox + 2 * oz), 0.85, ox, oz);
+      const h = fxHash(k);
+      // Real building fires: the walls wear a running SHEET of fire (the
+      // skin) and the big flames roll out of the top of the blaze — so side
+      // tongues only on the top row of a burning face (nothing burning or
+      // solid above), plus the odd tall one lower down to break the rows.
+      const topRow = openAt(x, y + 1, z);
+      for (const [nx, ny, nz] of FACES6) {
+        if (!openAt(x + nx, y + ny, z + nz)) continue;
+        const fh = (h + 0.23 * (nx + 2 * nz + 3 * ny) + 1) % 1;
+        skinFace(x, y, z, nx, ny, nz, (h + 0.17 * (nx + 2 * nz + 3 * ny) + 1) % 1);
+        if (ny > 0) pushTongues(x + 0.5, y + 0.5, z + 0.5, 0, 1, 0, fh, 1.7);
+        else if (ny === 0 && (topRow || fxHash(k + nx + nz) < 0.2)) pushTongues(x + 0.5, y + 0.5, z + 0.5, nx, 0, nz, fh, topRow ? 1.35 : 0.8);
       }
-      if (openAt(x, y + 1, z)) fxPush(flameFx, x + 0.5, y + 0.98, z + 0.5, h + 0.5, 0.8);
+      fxPush(emberFx, x + 0.5, y + 0.9, z + 0.5, h, 1);
+      fxPush(emberFx, x + 0.5, y + 0.6, z + 0.5, (h + 0.5) % 1, 0.8);
+    }
+    for (const k of FS.fireCells) {
+      const [x, y, z] = FS.funkey(k);
+      const h = fxHash(k) + 0.37;
+      if (def(world.get(x, y - 1, z)).solid) {
+        // the ground under the fire burns, and the fire stands on it
+        skinFace(x, y - 1, z, 0, 1, 0, h % 1);
+        pushTongues(x + 0.5, y - 0.5, z + 0.5, 0, 1, 0, h % 1, 1);
+      }
+      for (const [ox, oz] of SIDE4) {
+        // a flammable block on this side: its face (turned into this fire
+        // cell) burns, flames climbing it
+        if (!fuelAt(x + ox, y, z + oz)) continue;
+        // tongues only at the TOP of a fire column; below, the burning
+        // face is the running sheet of the skin (no stacked rows of flames)
+        if (skinFace(x + ox, y, z + oz, -ox, 0, -oz, (h + 0.13 * (ox + 2 * oz) + 1) % 1) && !FS.fireCells.has(FS.fkey(x, y + 1, z)) && !fuelAt(x + ox, y + 1, z + oz))
+          pushTongues(x + ox + 0.5, y + 0.5, z + oz + 0.5, -ox, 0, -oz, (h + 0.19 * (ox + 2 * oz) + 1) % 1, 1.2);
+      }
+      if (fuelAt(x, y + 1, z)) skinFace(x, y + 1, z, 0, -1, 0, (h + 0.41) % 1);
+      fxPush(emberFx, x + 0.5, y + 0.3, z + 0.5, h % 1, 1);
     }
     // Melting plastic BURNS as it liquefies (Philippe: "que ça brûle plus"):
     // low flames hugging the exposed foot of the slumping mass and a small
@@ -11797,20 +11959,23 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       let n = 0;
       for (const [ox, oz] of SIDE4) {
         if (n >= 2 || !openAt(x + ox, y, z + oz)) continue;
-        fxPush(flameFx, x + 0.5 + ox * 0.6, y - 0.02, z + 0.5 + oz * 0.6, h + 0.19 * (ox + 2 * oz), 0.55, ox, oz);
+        fxPush(flameFx, x + 0.5 + ox * 0.6, y - 0.02, z + 0.5 + oz * 0.6, (h + 0.19 * (ox + 2 * oz) + 1) % 1, 0.55, 0.8);
         n++;
       }
-      if (openAt(x, y + 1, z)) fxPush(flameFx, x + 0.5, y + 1 - 0.8 * st.m, z + 0.5, h + 0.4, 0.45);
+      if (openAt(x, y + 1, z)) fxPush(flameFx, x + 0.5, y + 1 - 0.8 * st.m, z + 0.5, (h + 0.4) % 1, 0.45, 0.9);
     }
     // v4.18: explosion fireballs — a fat, short-lived flame cluster.
     for (const b of boomFx) {
       if (b.age >= 0.45) continue;
       const h = fxHash("boom" + b.x + "," + b.z);
       fxPush(flameFx, b.x, b.y - 0.4, b.z, h, 2.7);
-      fxPush(flameFx, b.x + 0.7, b.y - 0.5, b.z + 0.3, h + 0.33, 1.9);
-      fxPush(flameFx, b.x - 0.6, b.y - 0.5, b.z - 0.5, h + 0.66, 1.7);
+      fxPush(flameFx, b.x + 0.7, b.y - 0.5, b.z + 0.3, (h + 0.33) % 1, 1.9);
+      fxPush(flameFx, b.x - 0.6, b.y - 0.5, b.z - 0.5, (h + 0.66) % 1, 1.7);
+      for (let i = 0; i < 12; i++) fxPush(emberFx, b.x, b.y - 0.3, b.z, (h + i / 12) % 1, 1.6);
     }
+    fxCommit(skinFx);
     fxCommit(flameFx);
+    fxCommit(emberFx);
     // Smoke: fires, burning blocks, campfires, exposed lava.
     const puff = (x: number, y: number, z: number, k: string, s: number) => {
       const h = fxHash(k);
@@ -11846,11 +12011,25 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     fxCommit(smokeFx);
     fireFxDirty = false;
   }
+  /** Fire lamps flicker like a real blaze (two incommensurate sines + a
+   *  per-lamp phase). Base intensity is set by the lamp scan. */
+  function fireLampFlicker(t: number) {
+    for (let i = 0; i < lamps.length; i++) {
+      const L = lamps[i];
+      const base = L.userData.fireBase as number | undefined;
+      if (!base) continue;
+      const f = 0.78 + 0.14 * Math.sin(t * 11.3 + i * 1.7) + 0.08 * Math.sin(t * 23.9 + i * 4.1) + 0.05 * Math.sin(t * 5.1 + i);
+      L.intensity = base * f;
+    }
+  }
   let fxLastT = 0;
   function updateFireFx() {
     const t = performance.now() / 1000;
+    skinFx.mat.uniforms.uTime.value = t;
     flameFx.mat.uniforms.uTime.value = t;
+    emberFx.mat.uniforms.uTime.value = t;
     smokeFx.mat.uniforms.uTime.value = t;
+    fireLampFlicker(t);
     if (boomFx.length) {
       const dt = Math.min(0.1, fxLastT ? t - fxLastT : 0.016);
       for (let i = boomFx.length - 1; i >= 0; i--) {
@@ -16333,7 +16512,26 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       lightAcc += dt;
       if (lightAcc > 0.16) {
         lightAcc = 0;
-        const foundLamps: { x: number; y: number; z: number; power: number }[] = [];
+        const foundLamps: { x: number; y: number; z: number; power: number; fire?: boolean }[] = [];
+        // v4.19: the nearest blazes light the scene first (warm, flickering)
+        {
+          const blaze: { x: number; y: number; z: number; d: number }[] = [];
+          const near = (k: string, lift: number) => {
+            const [bx, by, bz] = FS.funkey(k);
+            const d = Math.hypot(bx + 0.5 - player.x, by - player.y, bz + 0.5 - player.z);
+            if (d < 26) blaze.push({ x: bx + 0.5, y: by + lift, z: bz + 0.5, d });
+          };
+          for (const k of FS.burningMap.keys()) near(k, 1.1);
+          for (const k of FS.fireCells) near(k, 0.7);
+          blaze.sort((p, q) => p.d - q.d);
+          const picked: typeof blaze = [];
+          for (const b of blaze) {
+            if (picked.length >= 3) break;
+            if (picked.some((q) => Math.hypot(q.x - b.x, q.y - b.y, q.z - b.z) < 3.5)) continue; // one lamp per cluster
+            picked.push(b);
+          }
+          for (const b of picked) foundLamps.push({ x: b.x, y: b.y, z: b.z, power: 1.25, fire: true });
+        }
         const heldLight = Math.max(def(hotbar[slot]).light, def(offhand).light);
         if (heldLight > 0) {
           foundLamps.push({
@@ -16351,13 +16549,16 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
             for (let dx = -7; dx <= 7 && foundLamps.length < lamps.length; dx++) {
               const id = world.get(ox + dx, oy + dy, oz + dz);
               const l = def(id).light;
-              if (l) foundLamps.push({ x: ox + dx + 0.5, y: oy + dy + 0.65, z: oz + dz + 0.5, power: l });
+              if (l && id !== ID.Fire) foundLamps.push({ x: ox + dx + 0.5, y: oy + dy + 0.65, z: oz + dz + 0.5, power: l });
             }
           }
         }
         for (let i = 0; i < lamps.length; i++) {
           const spot = foundLamps[i];
-          lamps[i].intensity = spot ? 1.65 * Math.min(1.2, spot.power) : 0;
+          lamps[i].intensity = spot ? 1.65 * Math.min(1.2, spot.power) * (spot.fire ? 1.6 : 1) : 0;
+          lamps[i].userData.fireBase = spot?.fire ? lamps[i].intensity : 0;
+          lamps[i].color.setHex(spot?.fire ? 0xff7a26 : 0xffb85c);
+          lamps[i].distance = spot?.fire ? 18 : 14;
           if (spot) lamps[i].position.set(spot.x, spot.y, spot.z);
         }
       }
