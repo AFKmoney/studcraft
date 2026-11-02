@@ -25,7 +25,7 @@ import { GenPool, poolSize, type WorkerLike } from "./genPool";
 import { XB, xbPose, stringHalf, prodPoint, XB_CYCLE, type XbPose } from "./crossbowRig";
 import { cropLight, growChance, hydrated, nextStage, fruitSpot, canStack, harvestDrops, tramples, compostChance, COMPOST_FULL, isRipe, type FarmIds } from "./farming";
 import { CROSSBOW_HOLD } from "./heldPose";
-import { ACCESSORIES, ACC_BASE, ACC_BY_KEY, type Acc } from "./accessories";
+import { ACCESSORIES, ACC_BASE, ACC_BY_KEY, accId, type Acc } from "./accessories";
 import { bump, newlyEarned, statsFrom, trophyRows, type Stat, type Stats } from "./trophies";
 import { buildWeapon, type Finish } from "./weaponModels";
 import { GUNS, type GunSpec, type GunState, ammoLabel, damageAt, finishReload, flashAt, newGun, recoilAt, reloadPose, startReload, tryFire } from "./firearms";
@@ -46,7 +46,7 @@ import { buildAtlas } from "./textures";
 import { CS, HEIGHT, SEA, World, decorate, folkLayout, inNether, penSheep, paintEndCrystals, END_PILLARS, type Decor, type FolkSpot } from "./world";
 import { DEBRIS_ADVANCED, debrisAt } from "./debris";
 import { stockChest } from "./loot";
-import { banditFolk, civicOf, patrolOf, findStructure, garageOf, structureAt, structureFolk, structuresNear, structureLabel, structureOwning, stockStructureChest, type StructKind, type Structure } from "./structures";
+import { banditFolk, civicOf, hallBricks, houseBricks, patrolOf, findStructure, garageOf, structureAt, structureFolk, structuresNear, structureLabel, structureOwning, stockStructureChest, type StructKind, type Structure } from "./structures";
 import { BOUNTY_ARREST, banditQuests, chiefOf, chiefQuests, COIN, CRIME, GUILD_RANK_XP, guildEntryQuest, guildQuests, guildRank, GUILDS, guildsIn, makeQuest, type Quest, mobTag, seenBy, type CrimeKind, type Observer } from "./society";
 import { Society, baseQuestId } from "./societyState";
 import { classifyContext, presetFor, readGl, SOFTWARE_HINT } from "./gpu";
@@ -59,7 +59,7 @@ import { parseSeed, hash3 } from "./noise";
 import { MobBatchRenderer } from "./mobBatch";
 import { mobLabel } from "./mobNames";
 import { mobBaseDrops, rollBonusDrops } from "./mobDrops";
-import { BOSS_BY_ID, SPECIES_BY_ID, ZONES, bossRoll, type BossRule, type BossState, type SpeciesSpec, type ZoneMob } from "./biomes";
+import { BOSS_BY_ID, SPECIES_BY_ID, ZONES, bossRoll, type BossRule, type BossState, type SpeciesSpec, type ZoneMob, ZONE_LEVEL, mobScale } from "./biomes";
 import { displayName } from "./mobNames";
 import { remoteChAt, setRemoteChannel, springsJustSpent, stepMech, toggleValve, windSpring } from "./mechLink";
 
@@ -84,6 +84,10 @@ export type Hud = {
   slot: number;
   offhand: number;
   health: number;
+  /** max health (grows with level) */
+  healthMax: number;
+  /** danger level of the zone you stand in (0 = none) */
+  zoneLvl: number;
   hunger: number;
   xp: number;
   xpNeed: number;
@@ -490,6 +494,7 @@ declare global {
       getCatalogue?: () => { name: string; parts: number }[];
       catalogueSaveQa?: (name: string) => boolean;
       catalogueLoadQa?: (name: string) => { placed: number; holo: number };
+      stampQa?: (what: string, x: number, y: number, z: number) => number;
       getBlueprints?: () => [number, number, number, number, number][];
       completeBlueprintQa?: (i: number) => void;
       stepTeks?: (dt: number) => { parts: number; jammed: boolean; omegas: Record<string, number>; angles: Record<string, number> };
@@ -573,6 +578,8 @@ export function mount(canvas: HTMLCanvasElement): GameApi {
     slot: 0,
     offhand: 0,
     health: 20,
+    healthMax: 20,
+    zoneLvl: 0,
     hunger: 20,
     xp: 0,
     xpNeed: 10,
@@ -3927,6 +3934,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     shield?: boolean;
     phaseN?: number;
     maxHp?: number;
+    /** RPG level (zone creatures and bosses; 0 = unlevelled). */
+    lvl?: number;
     captain?: boolean;
     raidMob?: boolean;
     summoned?: boolean;
@@ -4300,7 +4309,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     techMatSolid = settings.realistic ? techMatStd : techMatLam;
     for (const mesh of techMeshes.values()) {
-      mesh.material = techMatSolid;
+      mesh.material = techMatFor(mesh.userData.tint || undefined);
       mesh.castShadow = settings.realistic;
       mesh.receiveShadow = settings.realistic;
     }
@@ -4597,6 +4606,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     hud.offhand = offhand;
     hud.slot = slot;
     hud.health = health;
+    hud.healthMax = maxHp();
     hud.hunger = hunger;
     const needXp = xpNeed(rankLv);
     hud.xp = xp;
@@ -4706,6 +4716,15 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     hud.y = player.y;
     hud.z = player.z;
     hud.biome = world.biomeAt(player.x, player.z);
+    {
+      const zn = world.zoneAt(player.x, player.z);
+      const zl = zn ? ZONE_LEVEL[zn] : 0;
+      hud.zoneLvl = zl;
+      if (zn && zn !== lastZoneNamed && phase === "play" && !creative) {
+        lastZoneNamed = zn;
+        say(ZONES[zn].label + " — danger level " + zl + (zl > rankLv + 4 ? " · far above you, tread carefully" : zl > rankLv ? " · above your level" : ""), 3200);
+      }
+    }
     hud.seed = seed;
     hud.seedText = seedText;
     hud.flash = flash;
@@ -5198,6 +5217,14 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       if (ext) p.ext = ext;
       if (cfg !== undefined && techSpec(id)?.sensor) p.cfg = cfg;
     }
+    // Liveries ride beside the rows (positional rows stay untouched for old saves).
+    {
+      const tintAt = new Map((data.teksTint ?? []).map(([x, y, z, t]) => [x + "," + y + "," + z, t] as const));
+      if (tintAt.size) for (const p of tech.parts.values()) {
+        const t = tintAt.get(p.q[0] + "," + p.q[1] + "," + p.q[2]);
+        if (t) p.tint = t;
+      }
+    }
     // B17: a save written mid-drive carries the dig bucket's load —
     // it lands in the player's inventory here (the machine itself
     // comes back parked from its teks rows): a save deletes nothing.
@@ -5219,7 +5246,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     blueprints.length = 0;
     for (const [id, o, qx, qy, qz, chRaw] of data.blueprints ?? []) {
       if (!TEKS_SET.has(id)) continue;
-      blueprints.push({ id, o, q: [qx, qy, qz], ...(chRaw ? { ch: chRaw as Channel } : {}) });
+      const bt = (data.blueprintTint ?? []).find(([x, y, z]) => x === qx && y === qy && z === qz)?.[3];
+      blueprints.push({ id, o, q: [qx, qy, qz], ...(chRaw ? { ch: chRaw as Channel } : {}), ...(bt ? { tint: bt } : {}) });
     }
     syncHoloMeshes();
     techRevSeen = tech.rev;
@@ -5520,6 +5548,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         if (skills.has("raise")) dmg = Math.round(dmg * 0.75);
         const feather = enchLvl(armor[3], "feather");
         if (feather > 0) dmg = Math.round(dmg * (1 - 0.18 * feather));
+        if (relicOn("JellyBoots")) dmg = 0;
         if (dmg > 0) hurt(dmg);
       }
       if (delta > 0) player.y = Math.floor(player.y + BODY) - BODY - 1e-3;
@@ -5569,6 +5598,31 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     return def(world.get(Math.floor(player.x), Math.floor(player.y + 0.4), Math.floor(player.z))).fluid;
   }
 
+  /** Max health grows with level: +1 heart every 6 levels (20 → 30 at 30),
+   *  +2 hearts with the Heart of the Great Press. */
+  function maxHp() {
+    return creative ? 20 : 20 + 2 * Math.floor(Math.min(30, rankLv) / 6) + (relicOn("PressHeart") ? 4 : 0);
+  }
+  // ---- boss relics (2026-11-01): one signature item per boss ----
+  const RELIC_OF_BOSS = new Map(ACCESSORIES.filter((a) => a.boss).map((a) => [a.boss!, a.key] as const));
+  const relicWarned = new Set<string>();
+  /** Is the relic `key` in play right now (held for tools, worn for wear,
+   *  carried for the rest) AND awake (builder level ≥ its level)? */
+  function relicOn(key: string): boolean {
+    const a = ACC_BY_KEY[key];
+    if (!a) return false;
+    const id = ACC_BASE + ACCESSORIES.indexOf(a);
+    const inPlay = a.kind === "tool" ? hotbar[slot] === id : a.kind === "wear" ? armor.includes(id) : (inv[id] ?? 0) > 0 || offhand === id;
+    if (!inPlay) return false;
+    if (!creative && rankLv < (a.lvl ?? 0)) {
+      if (!relicWarned.has(key)) {
+        relicWarned.add(key);
+        say(a.name + " lies dormant — it wakes at builder level " + a.lvl, 3000);
+      }
+      return false;
+    }
+    return true;
+  }
   function hurt(n: number) {
     if (creative || n <= 0 || phase !== "play" || invuln > 0) return;
     const sneaking = isSneaking();
@@ -5576,7 +5630,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       n *= 0.35;
       if (isShieldId(hotbar[slot]) || isShieldId(offhand)) wearHeld();
     }
-    if (rankLv >= 8) n *= 0.86;
+    // RPG toughness: every level hardens the Studsman by 1 % (cap 30 %),
+    // and the Thick shell perk (level 8) adds its own 8 %.
+    n *= 1 - Math.min(0.3, rankLv * 0.01);
+    if (rankLv >= 8) n *= 0.92;
     let resist = 0;
     let prot = 0;
     for (const id of armor) {
@@ -5605,8 +5662,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     if (health <= 0) die();
   }
 
+  let biterLvl = 0;
+  let lastZoneNamed = "";
   function bite(n: number) {
-    hurt(settings.mods.hard ? Math.ceil(n * 1.5) : n);
+    const lv = biterLvl;
+    biterLvl = 0;
+    const scaled = n * mobScale(lv).bite;
+    hurt(settings.mods.hard ? Math.ceil(scaled * 1.5) : Math.round(scaled));
   }
 
   // Thorns: worn armor bites back at a melee attacker.
@@ -6441,6 +6503,21 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   const techMatStd = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.24, metalness: 0.85, envMapIntensity: 0.9 });
   sirenizeWorld(techMatStd, 0.3, 1, "srn-world-teks-1");
   let techMatSolid: THREE.Material = settings.realistic ? techMatStd : techMatLam;
+  // Catalogue liveries (2026-11-01): a painted part shares one cached
+  // clone of the current Teks material per paint colour (colour ×
+  // vertex colour — white panels take the paint fully).
+  const techTintMats = new Map<string, THREE.Material>();
+  function techMatFor(tint?: number): THREE.Material {
+    if (!tint) return techMatSolid;
+    const key = (techMatSolid === techMatStd ? "s" : "l") + tint;
+    let m = techTintMats.get(key);
+    if (!m) {
+      m = (techMatSolid as THREE.MeshStandardMaterial).clone();
+      (m as THREE.MeshStandardMaterial).color.setHex(tint);
+      techTintMats.set(key, m);
+    }
+    return m;
+  }
   // snr-exempt: translucent ghost preview
   const techGhostMat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.45, depthWrite: false });
   const techGhostMesh = new THREE.Mesh(new THREE.BufferGeometry(), techGhostMat);
@@ -6452,7 +6529,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   // hologram is never solid and never drivable. Translucent blue
   // ghosts of the real geometry; the use gesture on one completes it
   // (completeBlueprint). Persisted in the world save (blueprints).
-  type Blueprint = { id: number; o: number; q: [number, number, number]; ch?: Channel };
+  type Blueprint = { id: number; o: number; q: [number, number, number]; ch?: Channel; tint?: number };
   const blueprints: Blueprint[] = [];
   // snr-exempt: translucent hologram blueprint
   const holoMat = new THREE.MeshLambertMaterial({ vertexColors: true, color: 0x86c9ff, transparent: true, opacity: 0.35, depthWrite: false });
@@ -6655,7 +6732,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     for (const p of tech.parts.values()) {
       if (techMeshes.has(p.uid)) continue;
       const pair = techGeoPairOf(p.id);
-      const mesh = new THREE.Mesh(pair.main, techMatSolid);
+      const mesh = new THREE.Mesh(pair.main, techMatFor(p.tint));
+      mesh.userData.tint = p.tint ?? 0;
       mesh.frustumCulled = false;
       mesh.matrixAutoUpdate = false;
       if (plasticOn) {
@@ -7021,12 +7099,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const owned = creative || (inv[mp.id] ?? 0) > 0;
       const ch = boundCh(mp, i);
       if (fits && owned) {
-        tech.add(mp.id, mp.o, q);
+        const np = tech.add(mp.id, mp.o, q);
+        if (mp.tint) np.tint = mp.tint;
         if (!creative) spend(mp.id, 1);
         placed++;
         if (ch) motorChannelByQ.set(qKey(q), ch);
       } else {
-        blueprints.push({ id: mp.id, o: mp.o, q, ...(ch ? { ch } : {}) });
+        blueprints.push({ id: mp.id, o: mp.o, q, ...(ch ? { ch } : {}), ...(mp.tint ? { tint: mp.tint } : {}) });
         holo++;
       }
     }
@@ -7058,7 +7137,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return;
     }
     blueprints.splice(i, 1);
-    tech.add(bp.id, bp.o, bp.q);
+    const bpPart = tech.add(bp.id, bp.o, bp.q);
+    if (bp.tint) bpPart.tint = bp.tint;
     // The hologram carried its model's channel (audit 2026-10-31): a joint
     // completed from a hologram binds it now, instead of falling back to
     // the drive channel A.
@@ -7537,7 +7617,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const group = new THREE.Group();
     const meshes = vehicle.parts.map((vp) => {
       const pair = techGeoPairOf(vp.id);
-      const mesh = new THREE.Mesh(pair.main, techMatSolid);
+      const mesh = new THREE.Mesh(pair.main, techMatFor(vp.tint));
       mesh.matrixAutoUpdate = false;
       const base = new THREE.Matrix4();
       techBaseMatrix(vp.localO, [vp.localPos.x * 4, vp.localPos.y * 4, vp.localPos.z * 4], base);
@@ -7634,6 +7714,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       const added = tech.add(ps.id, ps.o, ps.q, ps.uid);
       const vp = ent.v.parts.find((p) => p.uid === ps.uid);
       if (vp) added.on = vp.on;
+      if (vp?.tint) added.tint = vp.tint;
       // P5c-3: rod states ride back to the lattice (a screw joint's
       // travel, any other rod part's conversion extension).
       const jnt = ent.v.joints.find((j) => j.uid === ps.uid && j.kind === "screw");
@@ -8729,7 +8810,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     if (!creative && mana < spell.cost) return say("Need " + spell.cost + " mana");
     if (!creative) mana -= spell.cost;
     if (spell.id === "mend") {
-      health = Math.min(20, health + 5);
+      health = Math.min(maxHp(), health + 5);
       say("Mended");
     } else if (spell.id === "blink") {
       const dist = 5;
@@ -8797,7 +8878,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     if (!spend(id, 1)) return false;
     hunger = Math.min(20, hunger + food);
-    if (health < 20 && food >= 6) health = Math.min(20, health + 1);
+    if (health < maxHp() && food >= 6) health = Math.min(maxHp(), health + 1);
     audio.place();
     if (id === ID.Core) {
       gainXp(8);
@@ -9656,7 +9737,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       stat("days", worldDays, true);
       spawnPoint = { x: player.x, y: player.y, z: player.z };
       sinceSleep = 0;
-      if (hunger > 0) health = Math.min(20, health + 4);
+      if (hunger > 0) health = Math.min(maxHp(), health + 4);
       say(`Slept until morning · Day ${worldDays}`);
       saveDirty = true;
       return true;
@@ -10347,7 +10428,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return;
     }
     if (id === ID.PotionHeal) {
-      health = Math.min(20, health + 8);
+      health = Math.min(maxHp(), health + 8);
       if (!creative) spend(id, 1);
       say("Mended");
       return;
@@ -10365,7 +10446,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return;
     }
     if (id === ID.Gapple) {
-      health = Math.min(20, health + 6);
+      health = Math.min(maxHp(), health + 6);
       hunger = Math.min(20, hunger + 8);
       fireT = 0;
       if (!creative) spend(id, 1);
@@ -10853,7 +10934,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       healAcc += dt;
       while (healAcc >= 2) {
         healAcc -= 2;
-        health = Math.min(20, health + 1);
+        health = Math.min(maxHp(), health + 1);
       }
     }
     if (poisonT > 0) {
@@ -10894,6 +10975,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         }
       }
     }
+    if (fireT > 0 && relicOn("SphinxMask")) fireT = 0;
     if (fireT > 0) {
       fireT -= dt;
       if (Math.floor(fireT * 2) !== Math.floor((fireT + dt) * 2)) hurt(1);
@@ -12138,7 +12220,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           if (!show) continue;
           const A: [number, number, number] = [bay.display[0] * 4, bay.display[1] * 4 + 5, bay.display[2] * 4 + 2];
           const free = show.parts.every((mp) => tech.test(mp.id, mp.o, [A[0] + mp.dq[0], A[1] + mp.dq[1], A[2] + mp.dq[2]], techSolidAt) >= 0);
-          if (free) for (const mp of show.parts) if (mp.id !== ID.Battery) tech.add(mp.id, mp.o, [A[0] + mp.dq[0], A[1] + mp.dq[1], A[2] + mp.dq[2]]);
+          if (free) for (const mp of show.parts) if (mp.id !== ID.Battery) {
+            const np = tech.add(mp.id, mp.o, [A[0] + mp.dq[0], A[1] + mp.dq[1], A[2] + mp.dq[2]]);
+            if (mp.tint) np.tint = mp.tint;
+          }
         }
         g.racks.forEach(([x, y, z], i) => {
           const q: [number, number, number] = [x * 4 + 2, y * 4, z * 4 + 2];
@@ -12206,7 +12291,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     return seenBy(obs as Observer[], { x: player.x, z: player.z, sneaking: isSneaking(), light }, (o) => {
       const m = (o as (typeof obs)[number]).m;
       return !losClear(m.x, m.y + 1.5, m.z, player.x, eye, player.z);
-    }, 0.5 - society.perk("stealth")); // guild perk: harder to spot
+    }, 0.5 - society.perk("stealth") + (relicOn("RaiderCloak") ? 0.25 : 0)); // guild perk / raider cloak: harder to spot
   }
   function reportCrime(key: string, kind: CrimeKind, seen: boolean) {
     const r = society.crime(key, kind, seen);
@@ -12938,6 +13023,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const mob = entry.species ? spawnSpecies(entry.species, x, z) : entry.kind ? spawnKind(entry.kind as Mob["kind"], x, z) : null;
     if (!mob) return;
     mob.zone = zone;
+    const lvl = (ZONE_LEVEL[zone as keyof typeof ZONE_LEVEL] ?? 1) + Math.floor(Math.random() * 3);
+    mob.lvl = lvl;
+    mob.hp = Math.round(mob.hp * mobScale(lvl).hp);
+    mob.maxHp = mob.hp;
     if (entry.tint !== undefined) applyBiomeLook(mob.mesh, entry.tint, 0.55);
     if (entry.label) mob.variantLabel = entry.label;
   }
@@ -12947,10 +13036,11 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     const mob = spawnKind(boss.ai as Mob["kind"], player.x + Math.cos(a) * 14, player.z + Math.sin(a) * 14, boss.scale);
     applyBiomeLook(mob.mesh, boss.tint, 0.6, boss.rule);
     mob.bossOf = boss.id;
-    mob.hp = boss.hp;
-    mob.maxHp = boss.hp;
+    mob.lvl = ZONE_LEVEL[zone] + 3;
+    mob.hp = Math.round(boss.hp * mobScale(mob.lvl).hp);
+    mob.maxHp = mob.hp;
     mob.zone = zone;
-    say(boss.label + " rises — the " + ZONES[zone].label + " has a guardian.", 4200);
+    say(boss.label + " (level " + mob.lvl + ") rises — the " + ZONES[zone].label + " has a guardian." + (rankLv + 3 < mob.lvl ? " You are outmatched." : ""), 4200);
   }
   const bossState: BossState = { lastZone: "", cooldown: 60 };
   let zoneAcc = 0;
@@ -13193,6 +13283,19 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       : mob.species
         ? [...(SPECIES_BY_ID.get(mob.species)?.drops ?? [ID.Pellets])]
         : mobBaseDrops(mob.kind, { sheared: !!mob.sheared, size: mob.size });
+    // Boss relic: the first kill of a boss always drops its signature item
+    // (later kills: 1 in 4); otherwise it is cast from the boss's matter.
+    const relicKey = RELIC_OF_BOSS.get(mob.bossOf ?? (mob.kind === "dragon" || mob.kind === "wither" ? mob.kind : ""));
+    if (relicKey && (mob.byPlayerT ?? 0) > 0) {
+      const rid = accId(relicKey);
+      const owned = (inv[rid] ?? 0) > 0 || armor.includes(rid) || hotbar.includes(rid);
+      if (!owned || Math.random() < 0.25) {
+        dropItem(rid, 1, mob.x, mob.y + 0.8, mob.z);
+        const a = ACC_BY_KEY[relicKey];
+        say("Boss relic: " + a.name + " — " + a.power + (a.lvl && rankLv < a.lvl ? " (wakes at level " + a.lvl + ")" : ""), 5200);
+      }
+    }
+    if (relicOn("PiggyBank") && Math.random() < 0.4) dropItem(ID.Emerald, 1, mob.x, mob.y + 0.6, mob.z);
     if (!creative) {
       for (const drop of drops) dropItem(drop, 1, mob.x, mob.y + 0.4, mob.z);
       // P6: every mob is a plastic toy — foundry pellets on every kill,
@@ -13223,7 +13326,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     burst(mob.x, mob.y + 0.5, mob.z, drops.length ? def(drops[0]).color : "#3aaa4c", 12);
     padRumble(0.3, 0.2, 70); // kill thump
     audio.break();
-    gainXp(MOB_XP[mob.kind] ?? 2);
+    gainXp((MOB_XP[mob.kind] ?? 2) * mobScale(mob.lvl ?? 0).xp);
     if (mob.kind === "walker" || mob.kind === "creeper" || mob.kind === "skelly" || mob.kind === "husk" || mob.kind === "stray" || mob.kind === "pillager" || mob.kind === "vindicator" || mob.kind === "evoker" || mob.kind === "vex" || mob.kind === "ravager") bumpQuest("kill", "host");
     if (mob.kind === "spider") bumpQuest("kill", "spider");
     societyKill(mob);
@@ -13771,6 +13874,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     for (const m of mobs) {
       if (m.dead) continue;
+      biterLvl = m.lvl ?? 0; // a levelled creature bites harder (bite())
       m.cool = Math.max(0, m.cool - dt);
       if (m.hitCd) m.hitCd = Math.max(0, m.hitCd - dt);
       const dx = player.x - m.x;
@@ -14394,6 +14498,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     // so a reload restores the machine whole and parked. The live
     // vehicle, its bucket load and the driver are not touched.
     let vehRows: number[][] = [];
+    const vehTint: [number, number, number, number][] = [];
     let vehBucket: [number, number][] | undefined;
     let bindMap = motorChannelByQ;
     let hubChMap = hubChannelByQ;
@@ -14435,6 +14540,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           if (ext) row.push(Math.round(ext * 1000) / 1000);
         }
         vehRows.push(row);
+        if (vp.tint) vehTint.push([ps.q[0], ps.q[1], ps.q[2], vp.tint]);
         const key = qKey(ps.q);
         if (vp.role === "motor") bindMap.set(key, vp.channel);
         if (vp.role === "hub") {
@@ -14534,6 +14640,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         return row;
       }).concat(vehRows),
       blueprints: blueprints.map((b) => [b.id, b.o, b.q[0], b.q[1], b.q[2], b.ch ?? ""] as [number, number, number, number, number, string]),
+      blueprintTint: blueprints.filter((b) => b.tint).map((b) => [b.q[0], b.q[1], b.q[2], b.tint!] as [number, number, number, number]),
+      teksTint: [...tech.parts.values()].filter((p) => p.tint).map((p) => [p.q[0], p.q[1], p.q[2], p.tint!] as [number, number, number, number]).concat(vehTint),
       vehBind: [...bindMap.entries()],
       vehHubCh: [...hubChMap.entries()],
       vehFuel: [...fuelMap.entries()],
@@ -14769,7 +14877,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
 
     if (player.y < -6) die();
     if (!creative && phase === "play") {
-      if (headWater && gillT <= 0) {
+      if (headWater && gillT <= 0 && !relicOn("KrakenEye")) {
         oxygen = Math.max(0, oxygen - dt * (rankLv >= 10 ? 0.7 : 1.15));
         if (oxygen <= 0) {
           drownTick += dt;
@@ -14783,7 +14891,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         drownTick = 0;
       }
       hurtAgo += dt;
-      if (health > 0 && health < 20 && hurtAgo > 6 && !headWater) health = Math.min(20, health + dt * 0.45);
+      if (health > 0 && health < maxHp() && hurtAgo > 6 && !headWater) health = Math.min(maxHp(), health + dt * 0.45 * (relicOn("MeadowBell") ? 2 : 1));
     } else oxygen = 10;
 
     const moving = Math.hypot(player.vx, player.vz) > 0.8 && player.grounded;
@@ -14979,6 +15087,13 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         if ((blade.tool === "sword" || blade.tool === "axe") && mob.kind === "spider") dmg += enchLvl(heldWeaponId, "bane") * 2;
         if ((heldWeaponId === ID.TidalBlade || heldWeaponId === ID.Trident) && (mob.kind === "guardian" || mob.kind === "drowned" || inWaterNow())) dmg += 3;
         if (rankLv >= 18 && blade.tool === "sword") dmg += 1;
+        dmg += Math.floor(rankLv / 6); // RPG: +1 melee damage every 6 levels
+        if (relicOn("FrostTusk")) dmg += 1;
+        if (relicOn("TitanMaul")) dmg += 2;
+        if (relicOn("PressGauntlet")) dmg += 3;
+        if (relicOn("TripleCore")) dmg += 2;
+        // fighting far above your level: the creature shrugs off part of the blow
+        if ((mob.lvl ?? 0) > rankLv + 4) dmg = Math.max(1, Math.round(dmg * (1 - Math.min(0.5, ((mob.lvl ?? 0) - rankLv - 4) * 0.06))));
         if (hasAffix(heldWeaponId, "keen")) dmg += 2; // R4 relic affix
         const hostile =
           mob.kind === "walker" ||
@@ -15026,12 +15141,15 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
           mob.burn = Math.max(mob.burn ?? 0, 3);
           mob.slowT = Math.max(mob.slowT ?? 0, 5);
         }
+        if (relicOn("LianeWhip")) mob.slowT = Math.max(mob.slowT ?? 0, 4);
+        if (relicOn("FrostTusk")) mob.slowT = Math.max(mob.slowT ?? 0, 3);
+        if (relicOn("TitanMaul")) mob.burn = Math.max(mob.burn ?? 0, 5);
         if (blade.tool === "sword" || blade.tool === "axe" || blade.tool === "bow" || heldWeaponId === ID.Trident) wearHeld();
         mob.hitCd = 0.42;
         padRumble(0.25, 0.45, 60);
         mob.cool = Math.max(mob.cool, 0.42); // a hit still staggers its next bite
         mob.fuse = Math.max(0, mob.fuse - 0.25);
-        const kb = 0.4 + (blade.tool === "sword" ? enchLvl(hotbar[slot], "knockback") * 0.3 : 0);
+        const kb = 0.4 + (blade.tool === "sword" ? enchLvl(hotbar[slot], "knockback") * 0.3 : 0) + (relicOn("PressGauntlet") ? 1.4 : 0);
         if (mob.kind !== "shulker" && mob.kind !== "dragon") shove(mob, mob.x - player.x, mob.z - player.z, kb);
         audio.hit();
         swing = 1;
@@ -15125,6 +15243,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         const eff = enchLvl(hotbar[slot], "efficiency");
         if (eff > 0 && rightTool) need = (block.hard * (slowRate ? 5 : 1.5)) / (speed + eff * eff + 1);
         if (rankLv >= 2) need /= 1.15;
+        if (relicOn("StrataPick")) need /= 2;
         if (pathId === "breaker") need /= 1.25; // R4 Breaker path
         if (hasAffix(hotbar[slot], "swift")) need /= 1.15; // R4 relic affix
         if (hammer && block.tough) need *= 0.38;
@@ -15226,6 +15345,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         const eff = enchLvl(hotbar[slot], "efficiency");
         if (eff > 0 && rightTool) need = (block.hard * (slowRate ? 5 : 1.5)) / (speed + eff * eff + 1);
         if (rankLv >= 2) need /= 1.15;
+        if (relicOn("StrataPick")) need /= 2;
         if (hammer && block.tough) need *= 0.38;
         hud.mine = Math.min(1, mineTime / Math.max(need, 0.01));
         // v4.14 — the block visibly crumbles: crack overlay grows with
@@ -15370,7 +15490,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
         mana = Math.min(maxMana, mana + dt * (skills.has("scribe") ? 1.35 : skills.has("blink") ? 1.15 : 0.65));
       }
       regenAcc += dt;
-      if (hunger >= 18 && health < 20 && regenAcc > 1.4) {
+      if (hunger >= 18 && health < maxHp() && regenAcc > (relicOn("MeadowBell") ? 0.7 : 1.4)) {
         health += 1;
         regenAcc = 0;
       }
@@ -16990,6 +17110,17 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     getCatalogue: () => loadCatalogue().map((m) => ({ name: m.name, parts: m.parts.length })),
     catalogueSaveQa: (name: string) => catalogueSaveCurrent(name),
     catalogueLoadQa: (name: string) => catalogueLoadModel(name),
+    /** QA showcase: stamp a guild hall (by guild id) or a furnished house ("house:<salt>") at x,y,z (y = floor). */
+    stampQa: (what: string, x: number, y: number, z: number) => {
+      const g = GUILDS.find((q) => q.id === what);
+      const bricks = g ? hallBricks(g) : what.startsWith("house") ? houseBricks("plains", +(what.split(":")[1] ?? 0)) : [];
+      for (const k of bricks) {
+        if (k.mode === 2) continue;
+        world.set(x + k.dx, y + k.dy, z + k.dz, k.id);
+        markDirtyAt(x + k.dx, z + k.dz);
+      }
+      return bricks.length;
+    },
     getBlueprints: () => blueprints.map((b) => [b.id, b.o, b.q[0], b.q[1], b.q[2]] as [number, number, number, number, number]),
     completeBlueprintQa: (i: number) => completeBlueprint(i),
     stepTeks: (dt: number) => {
@@ -17695,7 +17826,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       emit();
     },
     respawn() {
-      health = 20;
+      health = maxHp();
       hunger = 20;
       oxygen = 10;
       flying = false;
@@ -18485,7 +18616,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       let jointN = 0;
       for (const mp of model.parts) {
         const q: [number, number, number] = [A[0] + mp.dq[0], A[1] + mp.dq[1], A[2] + mp.dq[2]];
-        tech.add(mp.id, mp.o, q);
+        const np = tech.add(mp.id, mp.o, q);
+        if (mp.tint) np.tint = mp.tint;
         // P5c-3: prefab joints arrive pre-bound B / C / D, like the catalogue.
         const msp = techSpec(mp.id);
         if (mp.id === ID.Servo || msp?.drive === "screw") {

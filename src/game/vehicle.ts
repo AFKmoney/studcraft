@@ -106,6 +106,8 @@ export function jointForce(j: VJoint): number {
 export type VPart = {
   uid: number;
   id: number;
+  /** livery paint carried from the lattice part */
+  tint?: number;
   o: number; // lattice orientation at conversion
   on: boolean;
   role: PartRole;
@@ -396,6 +398,7 @@ export function vehicleFromAssembly(
       group: Math.max(0, groupOfIdx[i]),
       ext0: p.ext ?? 0,
       cfg: p.cfg ?? 0,
+      ...(p.tint ? { tint: p.tint } : {}),
       relOrigin: sub(wo, origin),
       localPos: toLocal(wo),
       localO: localO >= 0 ? localO : p.o,

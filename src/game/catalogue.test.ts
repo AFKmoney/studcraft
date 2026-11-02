@@ -280,8 +280,8 @@ test("B26-D5: vendor prefab price is the REAL recipe cost (castMatter), never th
   const buggy = builtinModels().find((m) => m.name === "Starter Buggy")!;
   const digger = builtinModels().find((m) => m.name === "Rig Digger")!;
   const sum = (m: typeof buggy) => m.parts.reduce((a, p) => { const c = castMatter(p.id); return { ingots: a.ingots + c.ingots, copper: a.copper + c.copper }; }, { ingots: 0, copper: 0 });
-  assert.deepEqual(sum(buggy), { ingots: 86, copper: 10 });
-  assert.deepEqual(sum(digger), { ingots: 134, copper: 18 });
+  assert.deepEqual(sum(buggy), { ingots: 115, copper: 10 }); // 2026-11-01 showroom: livery panels + tyres
+  assert.deepEqual(sum(digger), { ingots: 160, copper: 18 });
   // Wiring guard: game.ts prefabPrice prices from castMatter.
   const { readFileSync } = await import("node:fs");
   const game = readFileSync(new URL("./game.ts", import.meta.url), "utf8");

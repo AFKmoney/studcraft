@@ -55,3 +55,20 @@ test("ids are contiguous and unique", () => {
   ACCESSORIES.forEach((a: any, i: number) => assert.equal(BLOCKS[ACC_BASE + i].name, a.name));
   assert.equal(new Set(ACCESSORIES.map((a: any) => a.key)).size, ACCESSORIES.length);
 });
+
+test("boss relics: one per zone boss + the dragon + the dungeon boss, each cast from its boss's matter, level-gated, with a power", async () => {
+  const { ZONES, ZONE_LEVEL } = await import("./biomes.ts");
+  const relics = ACCESSORIES.filter((a) => a.boss);
+  const bosses = new Set(Object.values(ZONES).map((z) => z.boss.id));
+  for (const b of bosses) assert.ok(relics.some((a) => a.boss === b), "relic for " + b);
+  assert.ok(relics.some((a) => a.boss === "dragon") && relics.some((a) => a.boss === "wither"));
+  for (const a of relics) {
+    assert.ok(a.power && a.power.length > 8, a.key + " says what it does");
+    assert.ok((a.lvl ?? 0) >= 1, a.key + " has a level");
+    const zone = Object.entries(ZONES).find(([, z]) => z.boss.id === a.boss)?.[0] as keyof typeof ZONE_LEVEL | undefined;
+    if (zone) assert.equal(a.lvl, ZONE_LEVEL[zone], a.key + " wakes at its zone's danger level");
+    const r = RECIPES.find((x) => x.id === "acc-" + a.key.toLowerCase());
+    assert.ok(r && r.lvl === a.lvl, a.key + " recipe is level-gated");
+  }
+  assert.ok(ACC_BASE + ACCESSORIES.length - 1 < 640, "accessory ids stay below the vehicle parts block (640)");
+});

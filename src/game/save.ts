@@ -97,6 +97,9 @@ export type SaveV1 = {
   // lattice position "qx,qy,qz" (stable across save/load, unlike uids):
   // motor channel bindings, hub channels, hub fuel + battery reserves.
   vehBind?: [string, string][];
+  /** Catalogue liveries: [qx, qy, qz, tint] per painted Teks part (2026-11-01). */
+  teksTint?: [number, number, number, number][];
+  blueprintTint?: [number, number, number, number][];
   vehHubCh?: [string, string][];
   vehFuel?: [string, number][];
   vehBatt?: [string, number][];

@@ -1696,7 +1696,7 @@ ACCESSORIES.forEach((a, i) => {
   if (a.tool) { ex.tool = a.tool; ex.tier = a.tier ?? 1; }
   if (a.maxUse) ex.maxUse = a.maxUse;
   if (a.food) ex.food = a.food;
-  if (a.armorSlot) { ex.armorSlot = a.armorSlot; ex.armor = a.key === "Breastplate" ? 0.2 : a.key === "HardHat" ? 0.08 : 0.04; }
+  if (a.armorSlot) { ex.armorSlot = a.armorSlot; ex.armor = a.armor ?? (a.key === "Breastplate" ? 0.2 : a.key === "HardHat" ? 0.08 : 0.04); }
   if (a.light) ex.light = a.light;
   item(ACC_BASE + i, a.name, a.color, ex);
 });

@@ -1589,7 +1589,7 @@ export const itemByName = (n: string) => BLOCKS.findIndex((b) => b && b.name ===
 ACCESSORIES.forEach((a, i) => {
   const need = a.recipe.map(([n, c]) => [itemByName(n), c] as [number, number]);
   const cat = a.kind === "food" ? "food" : a.kind === "wear" || a.kind === "shield" ? "gear" : a.kind === "item" ? (a.cat === "Munitions" ? "tools" : "build") : "tools";
-  RECIPES.push(r("acc-" + a.key.toLowerCase(), a.name, a.recipe.map(([n, c]) => c + " " + n.toLowerCase()).join(" + "), need, ACC_BASE + i, a.out ?? 1, { cat }));
+  RECIPES.push(r("acc-" + a.key.toLowerCase(), a.name, a.recipe.map(([n, c]) => c + " " + n.toLowerCase()).join(" + "), need, ACC_BASE + i, a.out ?? 1, { cat: a.boss ? "gear" : cat, ...(a.lvl ? { lvl: a.lvl } : {}) }));
 });
 
 // ── Teks casting (Muse, 2026-10-30 — audit §21 A3) ─────────────────

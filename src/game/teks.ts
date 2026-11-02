@@ -875,7 +875,7 @@ export function localCells(id: number): Cell[] {
   return out;
 }
 
-export type Part = { uid: number; id: number; o: number; q: V3; on?: boolean; ext?: number; cfg?: number; sense?: 0 | 1 };
+export type Part = { uid: number; id: number; o: number; q: V3; on?: boolean; ext?: number; cfg?: number; sense?: 0 | 1; /** paint (catalogue livery), multiplied over the part colour */ tint?: number };
 type Occ = { uid: number; t: Cell["t"]; ax: Ax };
 const K = (x: number, y: number, z: number) => x + "," + y + "," + z;
 

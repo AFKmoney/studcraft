@@ -158,6 +158,20 @@ export function zoneFor(biome: string, h: number, v: (salt: number) => number): 
 
 // ---------- boss spawn rule ----------
 export const BOSS_CHANCE = 0.1;
+
+/** RPG danger level of each zone (2026-11-01, Philippe: "que les lvl
+ *  means something"). Creatures born in a zone are this level (+0..2),
+ *  with HP, bite and XP scaled to it; the zone's boss is 3 levels above.
+ *  The world opens gently around spawn (plains, valley) and grows
+ *  harder outward — the HUD names the level when you cross a border. */
+export const ZONE_LEVEL: Record<ZoneId, number> = {
+  plains: 1, valley: 2, jungle: 4, swamp: 6, desert: 7, canyon: 9,
+  mountain: 11, arctic: 13, islands: 15, volcano: 18, desertCity: 20,
+};
+/** Scaled stats for a creature of level `lvl` (pure; tests pin it). */
+export function mobScale(lvl: number): { hp: number; bite: number; xp: number } {
+  return { hp: 1 + lvl * 0.07, bite: 1 + lvl * 0.05, xp: 1 + lvl * 0.1 };
+}
 export const BOSS_COOLDOWN_S = 240;
 export type BossState = { lastZone: string; cooldown: number };
 

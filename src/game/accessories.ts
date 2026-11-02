@@ -31,6 +31,14 @@ export type Acc = {
   out?: number;
   /** gun muzzle in model space */
   muzzle?: [number, number, number];
+  /** armour value when worn (default: small) */
+  armor?: number;
+  /** builder level needed to craft AND to wake the item's power */
+  lvl?: number;
+  /** the zone boss whose signature matter it is cast from (first kill drops one) */
+  boss?: string;
+  /** one line: what the special item does */
+  power?: string;
 };
 
 const H = Math.PI / 2;
@@ -135,6 +143,24 @@ export const ACCESSORIES: Acc[] = [
   { key: "LightRound", name: "Light round", cat: "Munitions", kind: "item", color: "#d8a22e", parts: [["c", 0.01, 0.03, 0, -0.008, 0, GLD], ["c", 0.009, 0.014, 0, 0.014, 0, 0xe8dcc0, 0, 0.004]], recipe: [["Brass casing", 1], ["Popper powder", 1], ["Stud slug", 1]], out: 4 },
   { key: "RifleRound", name: "Rifle round", cat: "Munitions", kind: "item", color: "#d8a22e", parts: [["c", 0.011, 0.05, 0, -0.01, 0, GLD], ["c", 0.009, 0.02, 0, 0.025, 0, 0xe8dcc0, 0, 0.003]], recipe: [["Brass casing", 2], ["Popper powder", 2], ["Stud slug", 1]], out: 3 },
   { key: "Shell", name: "Shotgun shell", cat: "Munitions", kind: "item", color: "#c8302a", parts: [["c", 0.014, 0.04, 0, 0.004, 0, RED], ["c", 0.0145, 0.012, 0, -0.022, 0, GLD]], recipe: [["Brass casing", 1], ["Popper powder", 1], ["Stud slug", 3]], out: 2 },
+  // ---- 2026-11-01 (Claude, Philippe: "objets spéciaux pour les boss") ----
+  // One signature item per boss. Matter law: each is CAST from that boss's
+  // own drops (what it is made of, how it is made) — the first kill of a
+  // boss also drops one. Its power wakes only at the builder level of the
+  // boss's zone (lvl), so the item is a goal, not a free win.
+  { key: "LianeWhip", name: "Liane whip", cat: "Reliques de boss", kind: "tool", color: "#3f8a3a", boss: "totem-liane", lvl: 4, power: "Roots what it strikes in place for 4 s", parts: [grip(0x2e5a20), ["c", 0.012, 0.22, 0, 0.03, 0, 0x3f8a3a], ["c", 0.009, 0.1, 0.03, 0.17, 0, 0x6ac04a, -0.6], ["b", 0.03, 0.03, 0.03, 0.06, 0.21, 0, 0xa6e05a]], tool: "sword", tier: 3, maxUse: 420, recipe: [["Wax", 2], ["Crystal", 1], ["Trade gem", 1], ["Rubber band", 2]] },
+  { key: "SphinxMask", name: "Sphinx mask", cat: "Reliques de boss", kind: "wear", color: "#d8b04a", boss: "sphinx-moule", lvl: 7, power: "Fire and burning cannot touch you", armorSlot: 1, armor: 0.14, parts: [["b", 0.16, 0.14, 0.15, 0, 0, 0, GLD], ["b", 0.18, 0.04, 0.16, 0, 0.07, 0, 0x1d4ed8], ["b", 0.03, 0.05, 0.02, -0.035, 0.0, -0.075, BLK], ["b", 0.03, 0.05, 0.02, 0.035, 0.0, -0.075, BLK]], recipe: [["Scarab relic", 2], ["Gold", 3], ["Scale", 2]] },
+  { key: "FrostTusk", name: "Frost tusk", cat: "Reliques de boss", kind: "tool", color: "#dff0ff", boss: "mammouth-glacon", lvl: 13, power: "Freezes: the struck creature slows for 3 s, +1 damage", parts: [grip(0x6a7a8a), ["c", 0.02, 0.26, 0, 0.04, 0, 0xeaf6ff, 0, 0.004], ["b", 0.07, 0.025, 0.03, 0, -0.04, 0, 0x7ad8ff]], tool: "sword", tier: 4, maxUse: 620, recipe: [["Frost shard", 3], ["Fuzz", 2], ["Crystal", 1], ["Tempered ingot", 1]] },
+  { key: "TitanMaul", name: "Titan maul", cat: "Reliques de boss", kind: "tool", color: "#2a1e1a", boss: "forge-titan", lvl: 18, power: "Sets the struck creature ablaze, +2 damage", parts: [grip(0x2a1e1a), ["c", 0.018, 0.2, 0, 0.02, 0, 0x2a1e1a], ["b", 0.13, 0.08, 0.08, 0, 0.14, 0, 0x3a2a24], ["b", 0.135, 0.02, 0.085, 0, 0.14, 0, 0xff7a1a]], tool: "axe", tier: 5, maxUse: 760, recipe: [["Ember rod", 2], ["Ember scrap", 3], ["Cinder", 2], ["Tempered ingot", 2]] },
+  { key: "MeadowBell", name: "Meadow bell", cat: "Reliques de boss", kind: "item", color: "#f4f1ea", boss: "grand-meuhbloc", lvl: 2, power: "Carried: your health mends twice as fast", parts: [["c", 0.045, 0.06, 0, 0, 0, GLD, 0, 0.025], ["c", 0.012, 0.02, 0, -0.035, 0, DWD], ["b", 0.11, 0.015, 0.015, 0, 0.04, 0, 0xc8302a]], recipe: [["Gold", 2], ["Felt", 2], ["Toy ham", 1]] },
+  { key: "PiggyBank", name: "Golden piggy bank", cat: "Reliques de boss", kind: "item", color: "#f2a2c0", boss: "grand-tirelire", lvl: 1, power: "Carried: every kill may shake loose a trade gem", parts: [["b", 0.1, 0.07, 0.07, 0, 0, 0, 0xf2a2c0], ["b", 0.03, 0.03, 0.03, 0.06, 0.01, 0, 0xf2a2c0], ["b", 0.04, 0.008, 0.012, 0, 0.038, 0, GLD]], recipe: [["Gold", 3], ["Trade gem", 2], ["Toy ham", 1]] },
+  { key: "StrataPick", name: "Strata pick", cat: "Reliques de boss", kind: "tool", color: "#8a8f96", boss: "golem-strate", lvl: 11, power: "Mines twice as fast", parts: [grip(WD), ["c", 0.017, 0.24, 0, 0.03, 0, WD], ["b", 0.2, 0.035, 0.035, 0, 0.15, 0, 0x8a8f96], ["b", 0.05, 0.04, 0.04, 0, 0.15, 0, 0xc87a3a]], tool: "pick", tier: 5, maxUse: 1100, recipe: [["Ingot", 3], ["Copper", 3], ["Crystal", 1]] },
+  { key: "JellyBoots", name: "Jelly boots", cat: "Reliques de boss", kind: "wear", color: "#7ad04a", boss: "reine-gelatine", lvl: 6, power: "Falls never hurt you", armorSlot: 4, armor: 0.1, parts: [["b", 0.08, 0.05, 0.12, -0.05, 0, 0, 0x7ad04a], ["b", 0.08, 0.05, 0.12, 0.05, 0, 0, 0x7ad04a], ["b", 0.2, 0.012, 0.13, 0, -0.03, 0, 0x4a9a2a]], recipe: [["Gel", 4], ["Mixer essence", 1], ["Mend brew", 1]] },
+  { key: "RaiderCloak", name: "Raider cloak", cat: "Reliques de boss", kind: "wear", color: "#5a3a2a", boss: "chef-pilleplot", lvl: 9, power: "Guards and villagers spot you half as well", armorSlot: 2, armor: 0.12, parts: [["b", 0.2, 0.22, 0.03, 0, 0, 0.06, 0x5a3a2a], ["b", 0.22, 0.04, 0.12, 0, 0.11, 0, 0x3a2418], ["b", 0.05, 0.05, 0.01, 0, 0.06, 0.08, 0xc8302a]], recipe: [["Raider badge", 2], ["Felt", 3], ["Trade gem", 1]] },
+  { key: "PressGauntlet", name: "Press gauntlet", cat: "Reliques de boss", kind: "tool", color: "#f5c518", boss: "pharaon-presse", lvl: 20, power: "Flattens: +3 damage and a crushing knock-back", parts: [["b", 0.09, 0.09, 0.1, 0, 0, 0, GLD], ["b", 0.095, 0.03, 0.105, 0, 0.05, 0, 0x1d4ed8], ["b", 0.03, 0.06, 0.04, 0.055, -0.01, 0, GLD]], tool: "sword", tier: 5, maxUse: 700, recipe: [["Scarab relic", 3], ["Gold", 3], ["Last stud", 1], ["Tempered ingot", 2]] },
+  { key: "KrakenEye", name: "Kraken eye", cat: "Reliques de boss", kind: "wear", color: "#2ab0a8", boss: "kraken-bouee", lvl: 15, power: "Breathe under water for as long as you like", armorSlot: 1, armor: 0.12, parts: [["b", 0.16, 0.12, 0.15, 0, 0, 0, 0x2ab0a8], ["c", 0.04, 0.02, 0, 0.0, -0.08, 0xffe14a, H], ["c", 0.018, 0.022, 0, 0.0, -0.085, BLK, H]], recipe: [["Buoy spike", 2], ["Shell chip", 3], ["Prism", 1]] },
+  { key: "PressHeart", name: "Heart of the Great Press", cat: "Reliques de boss", kind: "item", color: "#7a3ad0", boss: "dragon", lvl: 22, power: "Carried: +2 hearts of health", parts: [["b", 0.08, 0.08, 0.08, 0, 0, 0, 0x2a1a3a], ["b", 0.084, 0.02, 0.084, 0, 0.02, 0, 0xd86aff], ["b", 0.02, 0.02, 0.09, 0, -0.02, 0, 0xff5ab0]], recipe: [["Prism sentinel core", 1], ["Last stud", 1], ["Prism", 2], ["Tempered ingot", 2]] },
+  { key: "TripleCore", name: "Triple core", cat: "Reliques de boss", kind: "item", color: "#3a3f46", boss: "wither", lvl: 20, power: "Carried: +2 damage to every blow", parts: [["c", 0.03, 0.03, -0.04, 0, 0, 0x3a3f46], ["c", 0.03, 0.03, 0.04, 0, 0, 0x3a3f46], ["c", 0.035, 0.035, 0, 0.03, 0, 0x5a5f66], ["c", 0.01, 0.04, 0, 0.03, -0.03, 0xff3a2a, H]], recipe: [["Weld star", 2], ["Ember scrap", 2], ["Tempered ingot", 2]] },
 ];
 
 export const ACC_BY_KEY: Record<string, Acc> = Object.fromEntries(ACCESSORIES.map((a) => [a.key, a]));

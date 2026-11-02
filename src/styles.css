@@ -4056,3 +4056,8 @@ kbd {
 .sc-rep-bar i { display: block; height: 100%; background: linear-gradient(90deg, #4b9f4a, #7ed37a); }
 .sc-rep-bar.bad i { background: linear-gradient(90deg, #c8302a, #ff7a6a); }
 @media (max-width: 560px) { .sc-standing li { grid-template-columns: 1fr auto; } .sc-standing .sc-rep-bar { grid-column: 1 / -1; } }
+
+/* RPG zone level next to the biome name (2026-11-01) */
+.sc-zone-lvl { font-weight: 600; opacity: 0.85; }
+.sc-zone-lvl.warn { color: #f5c518; opacity: 1; }
+.sc-zone-lvl.danger { color: #ff5a4a; opacity: 1; }

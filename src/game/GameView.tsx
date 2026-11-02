@@ -1329,7 +1329,7 @@ function Hud({ game, touchUI }: { game: GameApi; touchUI: boolean }) {
             <TimeGlyph label={hud.timeLabel} weather={hud.weather} />
           </span>
           <span>
-            <strong>{hud.biome}</strong>
+            <strong>{hud.biome}</strong>{hud.zoneLvl > 0 && <span className={"sc-zone-lvl" + (hud.zoneLvl > hud.level + 4 ? " danger" : hud.zoneLvl > hud.level ? " warn" : "")}> · Lv {hud.zoneLvl}</span>}
             <small>
               {hud.weather !== "clear" ? `${hud.weather.toUpperCase()} · ` : ""}
               {hud.realm !== "Overworld" ? hud.realm : "Overworld"}
@@ -1422,7 +1422,7 @@ function Hud({ game, touchUI }: { game: GameApi; touchUI: boolean }) {
           <div className="sc-vitals">
             <div className="sc-vital-col">
               {armorPts > 0 && <IconRow kind="armor" value={armorPts} />}
-              <IconRow kind="heart" value={hud.health} pulse={hud.health <= 6} />
+              <IconRow kind="heart" value={hud.health} pulse={hud.health <= 6} count={Math.round((hud.healthMax ?? 20) / 2)} />
             </div>
             <div className="sc-vital-col right">
               {hud.oxygen < 10 && (
@@ -1446,9 +1446,9 @@ function Hud({ game, touchUI }: { game: GameApi; touchUI: boolean }) {
   );
 }
 
-function IconRow({ kind, value, right = false, pulse = false }: { kind: "heart" | "food" | "armor"; value: number; right?: boolean; pulse?: boolean }) {
-  const icons = Array.from({ length: 10 }, (_, i) => {
-    const idx = right ? 9 - i : i;
+function IconRow({ kind, value, right = false, pulse = false, count = 10 }: { kind: "heart" | "food" | "armor"; value: number; right?: boolean; pulse?: boolean; count?: number }) {
+  const icons = Array.from({ length: count }, (_, i) => {
+    const idx = right ? count - 1 - i : i;
     const full = value >= (idx + 1) * 2;
     const half = !full && value >= idx * 2 + 1;
     const f = (full ? 1 : half ? 0.5 : 0) as 0 | 0.5 | 1;

@@ -76,3 +76,13 @@ test("boss spawns on ~10% of zone entries (seeded RNG), with cooldown and one at
   assert.equal(bossRoll(st, "arctic", true, 1, () => 0), "", "boss alive");
   assert.ok(ID.Pellets);
 });
+
+test("RPG zone levels: every zone has one, spawn zones are gentle, the world hardens outward; scaling grows with level", async () => {
+  const { ZONE_LEVEL, mobScale, ZONES } = await import("./biomes.ts");
+  for (const z of Object.keys(ZONES)) assert.ok((ZONE_LEVEL as Record<string, number>)[z] >= 1, z + " has a level");
+  assert.ok(ZONE_LEVEL.plains <= 2 && ZONE_LEVEL.valley <= 2, "the spawn biomes are beginner zones");
+  assert.ok(ZONE_LEVEL.volcano > ZONE_LEVEL.jungle && ZONE_LEVEL.desertCity >= ZONE_LEVEL.volcano);
+  const a = mobScale(1), b = mobScale(20);
+  assert.ok(b.hp > a.hp && b.bite > a.bite && b.xp > a.xp);
+  assert.equal(mobScale(0).hp, 1);
+});

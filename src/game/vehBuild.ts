@@ -9,7 +9,8 @@ import type { VehicleModel } from "./catalogue.ts";
 export type BuildIssue = { code: "cockpit" | "power" | "hub" | "drive" | "wheels" | "ammo" | "turret" | "cockpits"; msg: string; fatal: boolean };
 export type BuildReport = { ok: boolean; issues: BuildIssue[]; cockpit: number | null; weapons: number[]; turret: boolean; power: { battery: boolean; hub: boolean } };
 
-const WHEELS = new Set<number>([ID.Wheel]);
+// Road (56145) is the tyred road wheel the showroom rolls on — a wheel too (vehicle.ts treats both as wheels).
+const WHEELS = new Set<number>([ID.Wheel, ID.Road]);
 const MOTORS = new Set<number>([ID.MotorM, ID.MotorL, ID.MotorXL]);
 
 /** Validate a build from its part ids. Fatal: no cockpit, no power

@@ -134,11 +134,36 @@ function house(b: Build, ox: number, oz: number, t: Theme, wall: number, face: 0
   const W = 7;
   const D = 6;
   const dz = face ? D - 1 : 0; // door wall
-  const furnish = (y: number) => {
-    b.put(ox + 2, y, oz + (face ? 1 : 4), ID.Chest);
-    b.put(ox + 4, y, oz + (face ? 2 : 3), ID.Bed);
-    b.put(ox + 5, y, oz + (face ? 1 : 4), r(1) > 0.5 ? ID.Bench : ID.Furnace);
-    b.put(ox + 1, y, oz + (face ? 1 : 4), t.light === ID.Torch ? ID.Torch : ID.Lantern);
+  // Furniture (2026-11-01, Philippe: "que les bâtiments aient de la
+  // furniture"): every home is lived in — a bed, a table with its chairs,
+  // shelves, a rug on the way in, a plant, a light — and one in three is a
+  // workshop or a pantry instead. zb = depth from the back wall; the door
+  // column (x = 3) stays clear so the doorway is never blocked.
+  const furnish = (y: number, ceil: number) => {
+    const Z = (zb: number) => oz + (face ? zb : D - 1 - zb);
+    const P = (x: number, zb: number, id: number, dy = 0) => b.put(ox + x, y + dy, Z(zb), id);
+    const light = t.light === ID.Torch ? ID.Torch : ID.Lantern;
+    const rug = [ID.RugRed, ID.RugBlue, ID.RugGreen][Math.floor(r(3) * 3)];
+    const kind = r(2);
+    if (kind < 0.62) {
+      // home
+      P(1, 1, ID.Bed); P(2, 1, ID.Shelf); P(4, 1, ID.Chest); P(5, 1, r(1) > 0.5 ? ID.Bench : ID.Furnace);
+      P(4, 3, ID.Table); P(5, 3, ID.Chair); P(4, 2, ID.Chair); P(4, 3, ID.Candle, 1);
+      P(3, 2, rug); P(3, 3, rug);
+      P(1, 4, r(4) > 0.5 ? ID.Planter : ID.Vase); P(5, 4, ID.Barrel); P(1, 3, light);
+      P(5, 1, ID.HangingPlant, ceil - 1);
+    } else if (kind < 0.82) {
+      // workshop
+      P(1, 1, ID.Bench); P(2, 1, ID.Anvil); P(4, 1, ID.Furnace); P(5, 1, ID.Grindstone);
+      P(5, 3, ID.Table); P(5, 2, ID.Stool); P(1, 3, ID.Bed);
+      P(1, 4, ID.SmallCrate); P(5, 4, ID.SmallCrate); P(5, 4, ID.SmallCrate, 1); P(4, 4, ID.Barrel);
+      P(1, 2, ID.Shelf); P(3, 3, rug); P(5, 1, light, 1);
+    } else {
+      // pantry / farmhouse
+      P(1, 1, ID.Bed); P(2, 1, ID.Chest); P(4, 1, ID.Barrel); P(5, 1, ID.Barrel); P(5, 1, ID.Barrel, 1);
+      P(4, 3, ID.Table); P(4, 2, ID.Chair); P(5, 3, ID.Cauldron); P(1, 4, ID.Hay); P(1, 3, ID.Hay);
+      P(5, 4, ID.FlowerPot); P(3, 3, rug); P(1, 2, light);
+    }
   };
   if (t.shape === "dome") {
     const cx = ox + 3;
@@ -192,12 +217,16 @@ function house(b: Build, ox: number, oz: number, t: Theme, wall: number, face: 0
     }
   }
   if (t.shape === "tower") {
-    // two floors joined by a ladder; crate upstairs
+    // two floors joined by a ladder; a bedroom upstairs
     b.box(ox + 1, y0 + 4, oz + 1, ox + W - 2, y0 + 4, oz + D - 2, t.floor);
-    for (let y = y0 + 1; y <= y0 + 4; y++) b.put(ox + 5, y, oz + (face ? 1 : 4), ID.Ladder);
+    for (let y = y0 + 1; y <= y0 + 4; y++) b.put(ox + 3, y, oz + (face ? 1 : 4), ID.Ladder); // back-centre: clear of the furniture
     b.put(ox + 2, y0 + 5, oz + 2, ID.Chest);
+    b.put(ox + 1, y0 + 5, oz + 3, ID.Bed);
+    b.put(ox + 3, y0 + 5, oz + 2, ID.Shelf);
+    b.put(ox + 2, y0 + 5, oz + 3, ID.RugRed);
+    b.put(ox + 3, y0 + 6, oz + 3, ID.Lantern);
   }
-  furnish(y0 + 1);
+  furnish(y0 + 1, wallH);
   const top = y0 + wallH + 1;
   if (t.shape === "cottage" || t.shape === "tower" || t.shape === "stilt") {
     // gable roof along x, overhanging by one
@@ -345,35 +374,237 @@ function jail(b: Build, ox: number, oz: number, t: Theme, y0: number) {
 /** Cell centres relative to the manor origin (x offsets; z = 5). */
 const JAIL_CELLS: readonly [number][] = [[2], [5], [8]];
 
-/** A guild hall in the guild's own colours: 9x7, banner tower, counter. */
+/** A guild hall (2026-11-01, Philippe: "chaque guilde a sa propre identité
+ *  visuelle"). Same 9x7 footprint and the same anchors (the guild master
+ *  stands at the centre cell, a counter in front of him, the guild chest),
+ *  but every guild builds its own house: its silhouette (roof), its wall
+ *  pattern, the signature pieces out front and the furniture of its trade.
+ *  Pure bricks relative to the origin; door on +z when face=1 else -z. */
+type HallRoof = "flat" | "gable" | "spire" | "dome" | "crenel" | "saw" | "pediment";
+type HallStyle = { roof: HallRoof; height: number; stripes?: number; timber?: boolean; bigDoor?: boolean };
+const HALL_STYLE: Record<string, HallStyle> = {
+  techno: { roof: "flat", height: 5, stripes: ID.Glass },
+  sorcerers: { roof: "spire", height: 5 },
+  warriors: { roof: "crenel", height: 6 },
+  traders: { roof: "gable", height: 4, timber: true },
+  politicians: { roof: "pediment", height: 6 },
+  rangers: { roof: "gable", height: 4, timber: true },
+  mechanics: { roof: "saw", height: 5, bigDoor: true },
+  alchemists: { roof: "dome", height: 4 },
+  miners: { roof: "flat", height: 4, stripes: ID.Copper },
+  explorers: { roof: "dome", height: 5 },
+  builders: { roof: "gable", height: 5, stripes: ID.Yellow },
+  smiths: { roof: "flat", height: 5 },
+  scholars: { roof: "gable", height: 6 },
+  thieves: { roof: "flat", height: 4 },
+  assassins: { roof: "flat", height: 4 },
+};
 function guildHall(b: Build, ox: number, oz: number, t: Theme, g: Guild, face: 0 | 1, water: boolean) {
   const W = 9;
   const D = 7;
+  const st = HALL_STYLE[g.id] ?? { roof: "flat", height: 5 };
+  const H = st.height;
+  const { wall, accent, banner } = g.hall;
+  // zb: depth counted from the BACK wall (0) to the door wall (D-1);
+  // zf(k): k rows out in front of the door.
+  const Z = (zb: number) => oz + (face ? zb : D - 1 - zb);
+  const zf = (k: number) => oz + (face ? D - 1 + k : -k);
+  const P = (x: number, y: number, zb: number, id: number) => b.put(ox + x, y, Z(zb), id);
+  const Pf = (x: number, y: number, k: number, id: number) => b.put(ox + x, y, zf(k), id);
   if (water) for (const [px, pz] of [[0, 0], [W - 1, 0], [0, D - 1], [W - 1, D - 1]] as const) b.put(ox + px, -1, oz + pz, t.post, 2);
-  b.box(ox, 0, oz, ox + W - 1, 0, oz + D - 1, t.floor === ID.Sand ? t.stone : t.floor);
-  const dz = face ? D - 1 : 0;
-  for (let y = 1; y <= 5; y++) for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
-    const edge = x === 0 || z === 0 || x === W - 1 || z === D - 1;
+  const floor = t.floor === ID.Sand ? t.stone : t.floor;
+  b.box(ox, 0, oz, ox + W - 1, 0, oz + D - 1, floor);
+  for (let y = 1; y <= H; y++) for (let zb = 0; zb < D; zb++) for (let x = 0; x < W; x++) {
+    const edge = x === 0 || zb === 0 || x === W - 1 || zb === D - 1;
     if (!edge) {
-      b.put(ox + x, y, oz + z, ID.Air);
+      P(x, y, zb, ID.Air);
       continue;
     }
-    const corner = (x === 0 || x === W - 1) && (z === 0 || z === D - 1);
-    let id = corner ? g.hall.accent : g.hall.wall;
-    if (z === dz && x === 4 && y <= 2) id = ID.Air;
-    else if (!corner && y === 3 && x % 2 === 0 && z !== dz) id = t.glass === ID.Air ? ID.Glass : t.glass;
-    b.put(ox + x, y, oz + z, id);
+    const corner = (x === 0 || x === W - 1) && (zb === 0 || zb === D - 1);
+    let id = corner ? accent : wall;
+    if (st.timber && !corner && (y === H || x % 4 === 0)) id = ID.Log; // timber frame
+    if (st.stripes !== undefined && !corner && y === 3) id = st.stripes; // a band round the hall
+    const door = zb === D - 1 && (st.bigDoor ? x >= 3 && x <= 5 && y <= 3 : x === 4 && y <= 2);
+    if (door) id = ID.Air;
+    else if (!corner && y === 3 && x % 2 === 0 && zb !== D - 1 && st.stripes === undefined) id = t.glass === ID.Air ? ID.Glass : t.glass;
+    P(x, y, zb, id);
   }
-  b.box(ox - 1, 6, oz - 1, ox + W, 6, oz + D, g.hall.accent);
-  // banner tower
-  for (let y = 7; y <= 9; y++) b.put(ox + 4, y, oz + 3, g.hall.wall);
-  for (let y = 8; y <= 9; y++) b.put(ox + 5, y, oz + 3, g.hall.banner);
-  b.put(ox + 4, 10, oz + 3, ID.Lantern);
-  // counter and the guild chest
-  for (let x = 2; x <= 6; x++) b.put(ox + x, 1, oz + (face ? 2 : 4), x === 4 ? g.hall.accent : ID.Planks);
-  b.put(ox + 1, 1, oz + (face ? 1 : 5), ID.Chest);
-  b.put(ox + 7, 1, oz + (face ? 1 : 5), ID.Bench);
-  b.put(ox + 4, 4, oz + 3, ID.Lantern);
+  // ----- roof: the silhouette tells the guild from across the village
+  const top = H + 1;
+  if (st.roof === "gable" || st.roof === "pediment") {
+    const roofId = st.roof === "pediment" ? ID.White : accent;
+    for (let k = 0; k <= 4; k++) {
+      for (let zb = -1; zb <= D; zb++) {
+        b.put(ox - 1 + k, top + k, Z(zb), roofId);
+        b.put(ox + W - k, top + k, Z(zb), roofId);
+      }
+      if (k > 0) for (let x = k; x < W - k; x++) for (const zb of [0, D - 1]) P(x, top + k - 1, zb, st.roof === "pediment" ? ID.White : wall);
+    }
+    for (let zb = -1; zb <= D; zb++) b.put(ox + 4, top + 4, Z(zb), roofId);
+  } else if (st.roof === "crenel") {
+    b.box(ox, top, oz, ox + W - 1, top, oz + D - 1, wall);
+    for (let x = 0; x < W; x++) for (const zb of [0, D - 1]) if (x % 2 === 0) P(x, top + 1, zb, wall);
+    for (let zb = 0; zb < D; zb++) for (const x of [0, W - 1]) if (zb % 2 === 0) P(x, top + 1, zb, wall);
+    // corner keep tower with the war banner
+    for (let y = top + 1; y <= top + 4; y++) P(W - 1, y, 0, wall);
+    for (let y = top + 3; y <= top + 5; y++) P(W - 2, y, 0, banner);
+  } else if (st.roof === "spire") {
+    b.box(ox, top, oz, ox + W - 1, top, oz + D - 1, wall);
+    // a tapering crystal spire over the middle of the hall
+    for (let y = top + 1; y <= top + 3; y++) for (let x = 3; x <= 5; x++) for (let zb = 2; zb <= 4; zb++) P(x, y, zb, (x + zb + y) % 2 ? wall : accent);
+    for (let y = top + 4; y <= top + 7; y++) P(4, y, 3, accent);
+    P(4, top + 8, 3, ID.LampOn);
+    for (const [x, zb] of [[0, 0], [W - 1, 0], [0, D - 1], [W - 1, D - 1]] as const) P(x, top + 1, zb, accent);
+  } else if (st.roof === "dome") {
+    b.box(ox, top, oz, ox + W - 1, top, oz + D - 1, wall);
+    const cx = 4, cz = 3;
+    for (let y = 1; y <= 3; y++) for (let x = 1; x <= 7; x++) for (let zb = 1; zb <= 5; zb++) {
+      const d = Math.hypot((x - cx) / 3.2, y / 3.2, (zb - cz) / 2.4);
+      if (d <= 1 && d > 0.62) P(x, top + y, zb, g.id === "explorers" ? ID.Glass : accent);
+    }
+    if (g.id === "explorers") {
+      // the telescope pokes out of the observatory dome
+      P(4, top + 1, 3, ID.IronBlock);
+      P(5, top + 2, 3, ID.Fence);
+      P(6, top + 3, 3, ID.Fence);
+    } else {
+      // the alchemists' still: a chimney that smokes
+      for (let y = top + 1; y <= top + 4; y++) P(7, y, 1, ID.Cobble);
+      P(7, top + 5, 1, ID.Campfire);
+    }
+  } else if (st.roof === "saw") {
+    // workshop sawtooth: three north-light teeth
+    for (let tooth = 0; tooth < 3; tooth++) for (let zb = 0; zb < D; zb++) {
+      const x0 = tooth * 3;
+      b.put(ox + x0, top, Z(zb), accent);
+      b.put(ox + x0 + 1, top, Z(zb), accent);
+      b.put(ox + x0 + 2, top, Z(zb), accent);
+      b.put(ox + x0 + 1, top + 1, Z(zb), accent);
+      b.put(ox + x0 + 2, top + 1, Z(zb), ID.Glass);
+      b.put(ox + x0 + 2, top + 2, Z(zb), accent);
+    }
+  } else {
+    b.box(ox - 1, top, oz - 1, ox + W, top, oz + D, accent);
+  }
+  if (water) for (let x = -1; x <= W; x++) for (const k of [1, 2, 3]) Pf(x, 0, k, t.floor); // the yard is a deck
+  // ----- the guild's banners either side of the door, every guild
+  for (const x of [2, 6]) for (let y = 2; y <= Math.min(4, H); y++) Pf(x, y, 1, banner);
+  // ----- the counter in front of the guild master (centre cell stays clear)
+  for (const x of [2, 3, 5, 6]) P(x, 1, 4, x === 3 || x === 5 ? accent : ID.Planks);
+  P(1, 1, 1, ID.Chest); // the guild chest
+  P(4, H, 3, ID.Lantern);
+  // ----- trade furniture inside + signature pieces out front
+  const back = (x: number, id: number, y = 1) => P(x, y, 1, id);
+  switch (g.id) {
+    case "techno":
+      back(2, ID.Shelf); back(3, ID.LampOn); back(5, ID.Note); back(6, ID.Shelf); back(7, ID.SmallCrate);
+      P(7, 1, 3, ID.Table); P(7, 1, 2, ID.Stool); P(1, 1, 3, ID.Daylight);
+      for (const x of [0, W - 1]) { P(x, top + 1, 0, ID.Fence); P(x, top + 2, 0, ID.Fence); P(x, top + 3, 0, ID.LampOn); }
+      for (let x = 2; x <= 6; x += 2) P(x, top + 1, 3, ID.Daylight);
+      break;
+    case "sorcerers":
+      back(2, ID.Bookshelf); back(3, ID.Bookshelf); back(4, ID.Enchanter); back(5, ID.Bookshelf); back(6, ID.Bookshelf); back(7, ID.Brew);
+      P(1, 1, 3, ID.Candle); P(7, 1, 3, ID.Candle); P(4, 1, 2, ID.RugRed); P(2, 1, 2, ID.PaperLamp);
+      Pf(1, 1, 1, ID.CrystalBrick); Pf(7, 1, 1, ID.CrystalBrick); Pf(1, 2, 1, ID.Candle); Pf(7, 2, 1, ID.Candle);
+      break;
+    case "warriors":
+      back(2, ID.Anvil); back(3, ID.Grindstone); back(5, ID.Barrel); back(6, ID.Barrel); back(7, ID.Chest);
+      for (let zb = 2; zb <= 3; zb++) { P(1, 1, zb, ID.Fence); P(7, 1, zb, ID.Fence); } // weapon racks
+      // training yard: two dummies and a target
+      for (const x of [1, 7]) { Pf(x, 1, 2, ID.Fence); Pf(x, 2, 2, ID.Hay); Pf(x, 3, 2, ID.Pumpkin); }
+      Pf(4, 1, 3, ID.Target);
+      break;
+    case "traders":
+      back(2, ID.Barrel); back(3, ID.Shelf); back(5, ID.Shelf); back(6, ID.Barrel); back(7, ID.SmallCrate);
+      P(7, 1, 2, ID.Chest); P(1, 1, 3, ID.Barrel); P(7, 1, 3, ID.Vase);
+      // striped market awning and stalls out front
+      for (let x = -1; x <= W; x++) for (const k of [1, 2]) Pf(x, 4, k, (x + k) % 2 ? ID.Yellow : ID.White);
+      for (const x of [0, 8]) for (let y = 1; y <= 3; y++) Pf(x, y, 2, ID.Log);
+      Pf(1, 1, 2, ID.Melon); Pf(2, 1, 2, ID.Pumpkin); Pf(6, 1, 2, ID.Hay); Pf(7, 1, 2, ID.Barrel);
+      break;
+    case "politicians":
+      // the council table and its chairs, the archive, the seats of the envoys
+      back(2, ID.Bookshelf); back(3, ID.Settle); back(5, ID.Settle); back(6, ID.Bookshelf); back(7, ID.Candle);
+      P(2, 1, 2, ID.Table); P(6, 1, 2, ID.Table); P(1, 1, 2, ID.Chair); P(7, 1, 2, ID.Chair);
+      P(4, 1, 2, ID.RugBlue); P(4, 1, 5, ID.RugBlue);
+      // colonnade and steps
+      for (const x of [0, 2, 6, 8]) for (let y = 1; y <= H; y++) Pf(x, y, 1, ID.White);
+      for (let x = 0; x < W; x++) { Pf(x, H + 1, 1, ID.White); Pf(x, 0, 2, ID.SlabWhite); }
+      break;
+    case "rangers":
+      back(2, ID.Bed); back(3, ID.Barrel); back(5, ID.Chest); back(6, ID.Bed); back(7, ID.HangingPlant, H);
+      P(7, 1, 3, ID.Table); P(7, 1, 2, ID.Chair); P(1, 1, 3, ID.Lantern);
+      // archery butts, a corral rail and a campfire
+      Pf(1, 1, 3, ID.Target); Pf(7, 1, 3, ID.Target); Pf(1, 1, 2, ID.Hay); Pf(7, 1, 2, ID.Hay);
+      Pf(4, 1, 3, ID.Campfire);
+      break;
+    case "mechanics":
+      back(2, ID.Bench); back(3, ID.Anvil); back(5, ID.Grindstone); back(6, ID.SmallCrate); back(7, ID.SmallCrate);
+      P(7, 2, 1, ID.SmallCrate); P(1, 1, 3, ID.IronBlock); P(1, 2, 3, ID.Lever); P(7, 1, 3, ID.Barrel);
+      // oil drums and a parts crate by the big door
+      Pf(0, 1, 1, ID.Barrel); Pf(8, 1, 1, ID.Barrel); Pf(0, 2, 1, ID.Barrel); Pf(8, 1, 2, ID.SmallCrate);
+      break;
+    case "alchemists":
+      back(2, ID.Cauldron); back(3, ID.Brew); back(5, ID.Brew); back(6, ID.Cauldron); back(7, ID.Shelf);
+      P(1, 1, 3, ID.Planter); P(7, 1, 3, ID.FlowerPot); P(2, H, 2, ID.HangingPlant); P(6, H, 2, ID.HangingPlant); P(4, 1, 2, ID.RugGreen);
+      Pf(1, 1, 1, ID.Planter); Pf(7, 1, 1, ID.Planter); Pf(1, 1, 2, ID.Cauldron);
+      break;
+    case "miners":
+      back(2, ID.Furnace); back(3, ID.Furnace); back(5, ID.Barrel); back(6, ID.SmallCrate); back(7, ID.Chest);
+      P(1, 1, 3, ID.Lantern); P(7, 1, 3, ID.Barrel);
+      // pit-head frame over a capped shaft, ore samples by the door
+      for (const x of [1, 3]) for (let y = 1; y <= 5; y++) Pf(x, y, 2, ID.Log);
+      Pf(2, 5, 2, ID.Log); Pf(2, 4, 2, ID.Fence); Pf(2, 3, 2, ID.Lantern);
+      Pf(2, 0, 2, ID.Rail);
+      Pf(6, 1, 1, ID.IronOre); Pf(7, 1, 1, ID.CopperOre); Pf(6, 1, 2, ID.CoalOre); Pf(7, 1, 2, ID.GoldOre);
+      break;
+    case "explorers":
+      back(2, ID.Bookshelf); back(3, ID.Chest); back(5, ID.Barrel); back(6, ID.Bookshelf); back(7, ID.Vase);
+      P(7, 1, 3, ID.Table); P(7, 2, 3, ID.Candle); P(7, 1, 2, ID.Chair); P(1, 1, 3, ID.Lantern);
+      Pf(1, 1, 1, ID.Fence); Pf(1, 2, 1, ID.Fence); Pf(1, 3, 1, ID.Pennant); Pf(7, 1, 1, ID.Fence); Pf(7, 2, 1, ID.Fence); Pf(7, 3, 1, ID.Pennant);
+      break;
+    case "builders":
+      back(2, ID.Bench); back(3, ID.Shelf); back(5, ID.SmallCrate); back(6, ID.SmallCrate); back(7, ID.Ladder); P(7, 2, 1, ID.Ladder);
+      P(7, 1, 3, ID.Table); P(7, 1, 2, ID.Stool);
+      // scaffold up one side, brick pallets out front
+      for (let y = 1; y <= top; y++) { b.put(ox - 1, y, Z(0), ID.Fence); b.put(ox - 1, y, Z(D - 1), ID.Fence); }
+      for (let zb = 0; zb < D; zb++) for (const y of [3, top]) b.put(ox - 1, y, Z(zb), ID.SlabPlanks);
+      Pf(6, 1, 2, ID.Red); Pf(7, 1, 2, ID.Blue); Pf(6, 2, 2, ID.Yellow); Pf(7, 1, 1, ID.White);
+      break;
+    case "smiths":
+      back(2, ID.Furnace); back(3, ID.Furnace); back(5, ID.Anvil); back(6, ID.Grindstone); back(7, ID.Cauldron);
+      P(7, 1, 3, ID.Anvil); P(1, 1, 3, ID.Barrel);
+      // the forge chimney, smoking
+      for (let y = 1; y <= top + 4; y++) { P(2, y, 0, ID.Cobble); P(3, y, 0, ID.Cobble); }
+      P(2, top + 5, 0, ID.Campfire);
+      Pf(1, 1, 1, ID.Anvil);
+      break;
+    case "scholars":
+      for (let x = 2; x <= 6; x++) back(x, ID.Bookshelf);
+      for (const x of [2, 3, 4, 5, 6]) back(x, ID.Bookshelf, 2);
+      back(7, ID.Candle);
+      P(1, 1, 2, ID.Bookshelf); P(1, 1, 3, ID.Bookshelf); P(7, 1, 2, ID.Table); P(7, 2, 2, ID.Candle); P(7, 1, 3, ID.Chair);
+      P(4, 1, 2, ID.Bench); // the lectern
+      Pf(1, 1, 1, ID.LampPost); Pf(7, 1, 1, ID.LampPost);
+      break;
+    default:
+      back(2, ID.Barrel); back(6, ID.Chest); P(7, 1, 3, ID.Bench);
+  }
+}
+
+/** QA / showcase: the bricks of one guild's hall in a given zone theme
+ *  (door on +z), relative to its origin. */
+export function hallBricks(g: Guild, zone: ZoneId = "plains"): SBrick[] {
+  const b = new Build();
+  guildHall(b, 0, 0, THEMES[zone], g, 1, false);
+  return b.out;
+}
+/** QA / showcase: one furnished house (door on +z). */
+export function houseBricks(zone: ZoneId = "plains", salt = 0): SBrick[] {
+  const b = new Build();
+  const t = THEMES[zone];
+  house(b, 0, 0, t, t.walls[0], 1, (s) => ((Math.sin((s + salt) * 12.9898) * 43758.5453) % 1 + 1) % 1);
+  return b.out;
 }
 
 export const BANDIT_W = 23;
