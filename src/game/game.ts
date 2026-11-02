@@ -11648,8 +11648,8 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
     float fbm(vec2 p){
       float v = 0.0, a = 0.5;
-      for (int i = 0; i < 5; i++) { v += a * vnoise(p); p = p * 2.03 + vec2(1.7, 9.2); a *= 0.5; }
-      return v;
+      for (int i = 0; i < 4; i++) { v += a * vnoise(p); p = p * 2.03 + vec2(1.7, 9.2); a *= 0.5; }
+      return v * 1.07;
     }
     // blackbody-ish ramp: deep red -> orange -> yellow -> white core
     vec3 fireRamp(float f){
@@ -11904,6 +11904,16 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return id === ID.Air || id === ID.Fire || def(id).plant;
     };
     const skinned = new Set<string>();
+    // perf (A54): only the blaze around the player is dressed; the sync is
+    // re-run when the player has moved (updateFireFx), so far fires
+    // still show up as you approach.
+    const FAR = 44 * 44;
+    const far = (k: string) => {
+      const [fx, , fz] = FS.funkey(k);
+      return (fx - player.x) ** 2 + (fz - player.z) ** 2 > FAR;
+    };
+    fxSyncX = player.x;
+    fxSyncZ = player.z;
     const skinFace = (bx: number, by: number, bz: number, nx: number, ny: number, nz: number, h: number) => {
       const key = bx + "," + by + "," + bz + "," + nx + "," + ny + "," + nz;
       if (skinned.has(key)) return false;
@@ -11912,6 +11922,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       return true;
     };
     for (const k of FS.burningMap.keys()) {
+      if (far(k)) continue;
       const [x, y, z] = FS.funkey(k);
       const h = fxHash(k);
       // Real building fires: the walls wear a running SHEET of fire (the
@@ -11930,6 +11941,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       fxPush(emberFx, x + 0.5, y + 0.6, z + 0.5, (h + 0.5) % 1, 0.8);
     }
     for (const k of FS.fireCells) {
+      if (far(k)) continue;
       const [x, y, z] = FS.funkey(k);
       const h = fxHash(k) + 0.37;
       if (def(world.get(x, y - 1, z)).solid) {
@@ -12023,7 +12035,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
     }
   }
   let fxLastT = 0;
+  let fxSyncX = 0;
+  let fxSyncZ = 0;
   function updateFireFx() {
+    if ((FS.burningMap.size || FS.fireCells.size) && (player.x - fxSyncX) ** 2 + (player.z - fxSyncZ) ** 2 > 36) fireFxDirty = true;
     const t = performance.now() / 1000;
     skinFx.mat.uniforms.uTime.value = t;
     flameFx.mat.uniforms.uTime.value = t;
