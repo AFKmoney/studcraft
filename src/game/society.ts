@@ -273,7 +273,7 @@ export const CRIME: Record<CrimeKind, { rep: number; bounty: number }> = {
   pickpocket: { rep: -6, bounty: 20 },
   sabotage: { rep: -8, bounty: 25 },
   burgle: { rep: -10, bounty: 40 },
-  assault: { rep: -15, bounty: 60 },
+  assault: { rep: -17, bounty: 60 }, // + the -3 trade-rep nudge = -20 a strike (Guide §11)
 };
 export type Standing = { rep: number; bounty: number; banditRep: number };
 export const BOUNTY_ARREST = 20;

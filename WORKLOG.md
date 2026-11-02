@@ -5094,3 +5094,11 @@ Philippe: "le feu est mal fait, faudrait que le feu fasse comme du vrai feu qui 
 - **Spread**: a burning block now ignites its flammable neighbours (up ×1.6, down ×0.45), and blocks burn 5–10 s / flam instead of 2.5–6, so a structure gets wrapped in fire before it falls in.
 - Tests 373/373, tsc clean. Visual tuning still in progress in the browser rig (burning plank hut, day + dusk). *(pending Philippe's verdict on the A54)*
 - Fire pass 1b: wispier, dimmer tongues (no white slabs); tongues only at the top of a fire column, so the walls carry a running sheet of fire. Perf guard for the A54: only fire within 44 blocks of the player is dressed (re-synced after every 6 blocks of movement), and the FX noise drops to 4 octaves. Rig check: the burning hut in daylight reads as a real blaze (flames licking across the planks, big flames off the roof). The dusk shot after the fire had spread into the trees rendered too slowly in SwiftShader to capture: **check the frame rate of a large fire on the A54.**
+
+## 2026-11-01 night — Guide audit (Philippe's "Guide officiel" PDF, 28 pages) (Claude)
+Checked the guide's factual claims against the code. Already true: 15 guilds and their rank thresholds 0/10/30/70/140/260, the 11 zone bosses (HP, rules, loot) and the 10 % encounter rate, the 22 species table (archetypes, AI, HP, drops, one-for-one), the director rules (bandit = crimes only, boss quests at bossUp or level ≥ 5), edge-triggered sensors, fuel in seconds and cook % in the kiln, an atlas of 1 536 tiles for 1 269 used (the overflow in Annex A is fixed), and the player redesign (Annex A, done 2026-11-01).
+Fixed to match the guide:
+- §6 sensor **tilt protection**: a sensor leaning more than 70° (its own facing, or the tilt of the driven vehicle) cuts its output. It was missing.
+- §8 **metal cooks 1.5× slower** in the kiln (ores, raw iron, scrap, copper). It was missing.
+- §11 **striking a villager costs exactly 20 rep** (assault −17 plus the −3 trade nudge; it was −18).
+- §12 director: with rep ≤ −30 or bounty ≥ 20, holding a rare item no longer adds "find" quests, so the distrusted get only errands and diplomacy, as the rule states.

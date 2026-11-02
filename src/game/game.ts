@@ -9359,6 +9359,12 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
 
   function evalSensor(p: TechPart, kind: "dist" | "color", teksCells: Set<string>): boolean {
     const dir = rot(p.o, [1, 0, 0]);
+    // Guide §6 (P5c): tilt protection — a sensor leaning more than 70°
+    // from level cuts its output (a fuse, not a bug). Its own facing counts,
+    // and so does the tilt of the vehicle being driven.
+    const TILT_MAX = (70 * Math.PI) / 180;
+    if (Math.abs(dir[1]) > Math.sin(TILT_MAX)) return false;
+    if (vehEnt && Math.acos(Math.cos(vehEnt.v.pitch) * Math.cos(vehEnt.v.roll)) > TILT_MAX) return false;
     const a = techPartAabb(p.id, p.o, p.q);
     const c = a.c;
     const face = (Math.abs(dir[0]) * a.s[0] + Math.abs(dir[1]) * a.s[1] + Math.abs(dir[2]) * a.s[2]) / 2;
@@ -16283,6 +16289,7 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
   function smeltFor(f: { plastic?: boolean }, id: number): number {
     return (f.plastic ? PLASTIC[id] : SMELT[id]) ?? 0;
   }
+  const METAL_COOK = new Set<number>([ID.IronOre, ID.CopperOre, ID.GoldOre, ID.RawIron, ID.Scrap, ID.Copper]);
   function tickFurnaces(dt: number) {
     for (const f of furnaces.values()) {
       if (Math.hypot(f.x - player.x, f.z - player.z) > 20) continue;
@@ -16304,7 +16311,10 @@ float molBand(float wavelength, float px) { return 1.0 - smoothstep(wavelength *
       }
       if (f.burn > 0 && can) {
         f.cook += dt * cookRate(f);
-        if (f.cook >= flvl.cook * foundryCookMul()) {
+        // Guide §8: metal keeps its character to the end — ore, raw iron
+        // and scrap take 1.5× as long in the kiln as plastic.
+        const metalMul = METAL_COOK.has(f.in) ? 1.5 : 1;
+        if (f.cook >= flvl.cook * foundryCookMul() * metalMul) {
           f.cook = 0;
           const inId = f.in; // capture BEFORE the decrement zeroes it (the yield keys on the input)
           f.inN -= 1;

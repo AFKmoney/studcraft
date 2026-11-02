@@ -38,7 +38,7 @@ export function allowedFor(v: WorldView, giverKind: "chief" | "guild" | "bandit"
   else if (v.player.rep <= -30) types = ["fetch", "diplomacy"]; // distrust: errands and amends only
   else if (v.player.bounty >= 20) types = giverKind === "guild" ? ["pickpocket", "steal", "fetch"] : ["diplomacy", "fetch"];
   else types = ["kill", "fetch", "find", ...(v.bossUp || v.player.level >= 5 ? (["boss"] as QuestType[]) : [])];
-  if (v.player.rare.length && !types.includes("find") && giverKind !== "bandit") types.push("find");
+  if (v.player.rare.length && !types.includes("find") && giverKind !== "bandit" && v.player.rep > -30 && v.player.bounty < 20) types.push("find"); // Guide §12: the distrusted and the wanted get only what the rules allow
   const targets = [
     ...(types.includes("kill") ? z.mobs.slice(0, 4).map((m) => mobTag(m)) : []),
     ...(types.includes("boss") ? ["boss:" + z.boss.id] : []),
